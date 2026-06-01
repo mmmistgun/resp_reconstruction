@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
+from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from tqdm.auto import tqdm
 
@@ -58,6 +61,92 @@ def validate(
         progress.set_postfix(loss=f"{meter.summary()['loss']:.4f}")
 
     return meter.summary()
+
+
+def save_checkpoint(
+    path: str | Path,
+    *,
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    metrics: Mapping[str, float],
+    cfg: DictConfig | None = None,
+) -> None:
+    """保存模型、优化器和当前指标，供后续评价脚本加载。"""
+    payload: dict[str, Any] = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch": int(epoch),
+        "metrics": dict(metrics),
+    }
+    if cfg is not None:
+        payload["config"] = OmegaConf.to_container(cfg, resolve=True)
+    torch.save(payload, Path(path))
+
+
+@torch.no_grad()
+def collect_predictions(
+    model: nn.Module,
+    loader: Iterable[Mapping[str, Any]],
+    *,
+    device: torch.device | str,
+    max_windows: int,
+) -> dict[str, np.ndarray]:
+    """收集少量或完整验证预测，并展开 DataLoader 默认 collate 后的 meta。"""
+    if int(max_windows) <= 0:
+        raise ValueError("max_windows 必须大于 0")
+
+    resolved_device = torch.device(device)
+    model.to(resolved_device)
+    model.eval()
+    preds: list[np.ndarray] = []
+    targets: list[np.ndarray] = []
+    meta_records: list[dict[str, Any]] = []
+
+    for batch in loader:
+        if "meta" not in batch:
+            raise KeyError("batch 必须包含 meta")
+        x = batch["x"].to(resolved_device)
+        pred = model(x).detach().cpu().numpy()
+        target = batch["target"].detach().cpu().numpy()
+        preds.append(pred)
+        targets.append(target)
+
+        for idx in range(pred.shape[0]):
+            meta_records.append(_extract_meta(batch["meta"], idx))
+        if len(meta_records) >= int(max_windows):
+            break
+
+    if not preds:
+        raise RuntimeError("没有可收集的预测窗口")
+
+    pred_arr = np.concatenate(preds, axis=0)[: int(max_windows)]
+    target_arr = np.concatenate(targets, axis=0)[: int(max_windows)]
+    meta_records = meta_records[: int(max_windows)]
+    return {
+        "r_tho_hat": pred_arr,
+        "tho_ref": target_arr,
+        "dataset_row_id": np.asarray([int(m.get("dataset_row_id", -1)) for m in meta_records], dtype=np.int64),
+        "split": np.asarray([str(m.get("split", "")) for m in meta_records]),
+        "input_set": np.asarray([str(m.get("input_set", "")) for m in meta_records]),
+        "residual_quality_class": np.asarray([str(m.get("residual_quality_class", "")) for m in meta_records]),
+    }
+
+
+def _extract_meta(meta: Mapping[str, Any], idx: int) -> dict[str, Any]:
+    """从默认 collate 后的 meta 字典中取出单个样本的标量元数据。"""
+    result: dict[str, Any] = {}
+    for key, value in meta.items():
+        if torch.is_tensor(value):
+            item = value[idx].item() if value.ndim > 0 else value.item()
+        elif isinstance(value, np.ndarray):
+            item = value[idx].item() if value.ndim > 0 else value.item()
+        elif isinstance(value, (list, tuple)):
+            item = value[idx]
+        else:
+            item = value
+        result[key] = item
+    return result
 
 
 def _move_batch(batch: Mapping[str, torch.Tensor], device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
