@@ -1,0 +1,50 @@
+data:
+  dataset_root: /mnt/disk_code/marques/dataset/RespPairs/20260530_tho_ramp5_stage2_1
+  index_csv: training/dataset_index.csv
+  input_set: mixed_zscore
+  train_split: train
+  val_split: val
+  max_train_windows: 1024
+  max_val_windows: 256
+  filter_unusable: true
+  valid_ratio_min: 0.99
+  input_finite_ratio_min: 0.99
+  target_finite_ratio_min: 0.99
+  unusable_residual_classes: []
+  preload_windows: true
+
+window:
+  target_fs: 100
+  duration_samples: 18000
+  duration_sec: 180
+
+model:
+  name: unet1d_tiny
+  in_channels: 1
+  out_channels: 1
+  base_channels: 16
+
+loss:
+  envelope_weight: 1.0
+  spectrum_weight: 0.2
+  smooth_weight: 0.01
+  envelope_window_sec: 2.0
+  spectrum_low_hz: 0.05
+  spectrum_high_hz: 0.7
+
+training:
+  epochs: 3
+  batch_size: 8
+  learning_rate: 0.001
+  num_workers: 0
+  seed: 20260601
+  device: auto
+
+baseline:
+  bandpass_low_hz: 0.05
+  bandpass_high_hz: 0.7
+  filter_order: 4
+
+outputs:
+  run_root: runs/tho_small
+  max_prediction_windows: 32
