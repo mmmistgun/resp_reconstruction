@@ -71,6 +71,8 @@ resp_train/
   utils/
 
 scripts/
+  audit_tho_dataset.py
+  baseline_tho_hilbert.py
   train_tho_small.py
   eval_tho_small.py
 
@@ -87,7 +89,7 @@ runs/
 - `resp_train/metrics/`：实现评价指标。
 - `resp_train/engine/`：纯 PyTorch 训练与验证循环。
 - `resp_train/utils/`：日志、配置、随机种子、设备选择、run 目录等工具。
-- `scripts/`：提供面向用户的训练和评价入口。
+- `scripts/`：提供面向用户的数据审计、平凡基线、训练和评价入口。
 
 ## 数据加载与缓存
 
@@ -126,6 +128,42 @@ Dataset 默认读取 `training/dataset_index.csv`，并按配置过滤：
 
 `valid_sec_key` 在首版用于过滤和记录，不默认引入复杂 mask loss。若窗口有效率不足，应在 Dataset 初始化阶段过滤或记录警告。
 
+## 同步审计与数据覆盖
+
+Stage 2.1 数据集已经包含对齐与残差审计相关字段。首版不重新实现完整 cross-correlation 同步审计算法，但必须读取并汇总现有审计信息，生成 `audit.csv`，用于确认训练窗口是否来自可用的胸带弱同步片段。
+
+审计输入字段：
+
+- `split`
+- `input_set`
+- `samp_id`
+- `segment_id`
+- `valid_ratio`
+- `input_finite_ratio`
+- `target_finite_ratio`
+- `residual_quality_class`
+- `base_alignment_method`
+- `apply_decision`
+- `reason`
+
+首版 `usable` 判定规则：
+
+- `valid_ratio`、`input_finite_ratio`、`target_finite_ratio` 均满足配置阈值，默认阈值为 `0.99`。
+- `segment_decision=include_candidate`。
+- `residual_quality_class` 不属于显式不可用类别；若未来出现不可用类别，应在配置中列入 `unusable_residual_classes`。
+
+`audit.csv` 默认按 `split/input_set/samp_id/segment_id` 汇总：
+
+- 窗口数。
+- 可用窗口数。
+- 平均和最小 `valid_ratio`。
+- `residual_quality_class` 分布。
+- `base_alignment_method` 分布。
+- `apply_decision` 分布。
+- `reason` 示例。
+
+训练 Dataset 默认只使用 `usable=true` 的窗口。若过滤后窗口数低于配置下限，应 fail-fast 并在日志中报告过滤原因。
+
 ## 模型设计
 
 首版模型采用插件式注册：
@@ -159,6 +197,8 @@ L = w_env * L_envelope
   + w_spec * L_spectrum
   + w_smooth * L_smooth
 ```
+
+首版不训练 RR 辅助头，也不加入 `L_RR`。RR 和主呼吸频率仅作为评价指标从 `r_tho_hat(t)` 与 `tho_ref(t)` 派生。若后续发现频谱损失不稳定、模型节律漂移明显，再通过配置加入 RR 派生损失或轻量 RR 辅助项。
 
 `L_envelope`：
 
@@ -194,6 +234,8 @@ runs/tho_small/<timestamp>/
   config.yaml
   checkpoint.pt
   train.log
+  audit.csv
+  baseline_metrics.csv
   metrics.csv
   predictions.npz
 ```
@@ -203,6 +245,8 @@ runs/tho_small/<timestamp>/
 - `config.yaml`：本次有效配置快照。
 - `checkpoint.pt`：模型状态、优化器状态、epoch 和最佳指标。
 - `train.log`：关键入参、数据统计、每轮训练摘要。
+- `audit.csv`：同步可用性、数据覆盖和质量分层摘要。
+- `baseline_metrics.csv`：低通 + Hilbert 平凡基线在相同验证子集上的冒烟指标。
 - `metrics.csv`：窗口级和汇总评价指标。
 
 可选诊断产物：
@@ -220,10 +264,27 @@ runs/tho_small/<timestamp>/
 - loss 分解。
 - 包络相关或包络趋势误差。
 - 呼吸频带频谱相似度。
+- RR MAE / RMSE。
+- 主呼吸频率误差。
 - 输出平滑度。
 - 基础有效性统计，例如 finite ratio、窗口数量、split、input_set。
+- 数据覆盖统计，例如按 `split/input_set/samp_id/residual_quality_class` 汇总窗口数和可用率。
 
 波形相关性最多作为辅助诊断，不作为首版主指标。
+
+## 平凡基线冒烟测试
+
+在深度模型训练前，首版必须对相同的小规模验证子集运行一个平凡基线：
+
+```text
+mixed_zscore
+  -> 呼吸频带低通 / 带通滤波
+  -> Hilbert 或滑窗 RMS 包络
+  -> 频谱主峰 / RR 估计
+  -> baseline_metrics.csv
+```
+
+该基线不用于证明模型优于传统方法，只用于暴露评价管线、标签读取或频带设置中的明显问题。若平凡基线在 RR/主频评价上完全异常，应先检查数据和指标实现，再继续深度模型训练。
 
 ## 配置与依赖
 
@@ -262,10 +323,12 @@ runs/tho_small/<timestamp>/
 实现后的最小验证顺序：
 
 1. 检查 `.venv` 中依赖是否可导入。
-2. Dataset smoke test：读取 `mixed_zscore` 的少量 train/val 窗口，确认形状、finite ratio 和 key 解析正确。
-3. Forward/loss smoke test：一个 batch 能通过模型、损失和 backward。
-4. 小规模训练：完成若干 epoch，生成 run 目录。
-5. 产物检查：确认 `config.yaml`、`checkpoint.pt`、`train.log`、`metrics.csv` 存在；若开启诊断预测，确认 `predictions.npz` 只保存少量窗口。
+2. 数据审计 smoke test：读取索引并生成 `audit.csv`，确认可用窗口数量、质量分层和过滤结果合理。
+3. Dataset smoke test：读取 `mixed_zscore` 的少量 train/val 窗口，确认形状、finite ratio 和 key 解析正确。
+4. 平凡基线 smoke test：在同一验证子集生成 `baseline_metrics.csv`，确认 RR/主频和包络评价管线可用。
+5. Forward/loss smoke test：一个 batch 能通过模型、损失和 backward。
+6. 小规模训练：完成若干 epoch，生成 run 目录。
+7. 产物检查：确认 `config.yaml`、`checkpoint.pt`、`train.log`、`audit.csv`、`baseline_metrics.csv`、`metrics.csv` 存在；若开启诊断预测，确认 `predictions.npz` 只保存少量窗口。
 
 ## 扩展路径
 
@@ -275,7 +338,8 @@ runs/tho_small/<timestamp>/
 - 添加整夜推理。
 - 添加绘图脚本。
 - 添加时频输入模型。
-- 添加传统基线评价。
+- 添加完整传统基线评价，包括 EWT、IEWT、CWT/SST ridge tracking 等。
+- 若频谱损失不能稳定约束节律，再加入 RR 派生损失或轻量 RR 辅助项。
 - 在新数据集准备好后，切换到腹带参考实验。
 - 在胸带和腹带实验稳定后，再研究综合呼吸努力参考。
 
