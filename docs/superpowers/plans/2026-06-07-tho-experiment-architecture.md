@@ -50,7 +50,7 @@
 - 修改：`resp_train/config.py`
 - 修改：`tests/test_config.py`
 
-- [ ] **步骤 1：更新配置测试**
+- [x] **步骤 1：更新配置测试**
 
 在 `tests/test_config.py` 中调整默认配置断言，确保默认抽样不再是 `head`，并覆盖新增训练策略字段。
 
@@ -100,7 +100,7 @@ def test_load_config_applies_sampling_overrides():
     assert cfg.training.patience == 2
 ```
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：
 
@@ -110,7 +110,7 @@ def test_load_config_applies_sampling_overrides():
 
 预期：FAIL，失败点包含 `train_sample_strategy` 或 `patience` 字段不存在。
 
-- [ ] **步骤 3：更新 `configs/tho_small.yaml`**
+- [x] **步骤 3：更新 `configs/tho_small.yaml`**
 
 将 `data` 和 `training` 段改为：
 
@@ -149,7 +149,7 @@ training:
   use_amp: false
 ```
 
-- [ ] **步骤 4：增强配置校验**
+- [x] **步骤 4：增强配置校验**
 
 在 `resp_train/config.py` 的 `_validate_config` 中追加必需字段，并验证枚举值。
 
@@ -189,7 +189,7 @@ if lr_scheduler not in lr_schedulers:
     raise ValueError(f"training.lr_scheduler 必须是 {sorted(lr_schedulers)} 之一，当前为: {lr_scheduler}")
 ```
 
-- [ ] **步骤 5：运行配置测试验证通过**
+- [x] **步骤 5：运行配置测试验证通过**
 
 运行：
 
@@ -199,7 +199,7 @@ if lr_scheduler not in lr_schedulers:
 
 预期：PASS。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 git add configs/tho_small.yaml resp_train/config.py tests/test_config.py
@@ -214,7 +214,7 @@ git commit -m "feat(配置): 默认使用分层随机抽样"
 - 修改：`resp_train/data/index.py`
 - 修改：`tests/test_data_index_audit.py`
 
-- [ ] **步骤 1：补充抽样测试数据**
+- [x] **步骤 1：补充抽样测试数据**
 
 在 `tests/test_data_index_audit.py` 中新增一个多行样例函数，用于测试抽样策略。
 
@@ -249,7 +249,7 @@ def _sampling_rows():
     return pd.DataFrame.from_records(records)
 ```
 
-- [ ] **步骤 2：编写抽样行为测试**
+- [x] **步骤 2：编写抽样行为测试**
 
 在同一文件中新增测试：
 
@@ -354,7 +354,7 @@ def test_filter_index_rejects_missing_stratify_column():
         filter_index(_sampling_rows(), cfg, split="train", max_windows=4)
 ```
 
-- [ ] **步骤 3：运行测试验证失败**
+- [x] **步骤 3：运行测试验证失败**
 
 运行：
 
@@ -364,7 +364,7 @@ def test_filter_index_rejects_missing_stratify_column():
 
 预期：FAIL，失败点包含默认仍按 `head` 前缀返回或缺少分层列校验。
 
-- [ ] **步骤 4：实现抽样策略**
+- [x] **步骤 4：实现抽样策略**
 
 在 `resp_train/data/index.py` 中修改 `filter_index` 签名：
 
@@ -487,7 +487,7 @@ return _sample_rows(
 )
 ```
 
-- [ ] **步骤 5：运行抽样测试验证通过**
+- [x] **步骤 5：运行抽样测试验证通过**
 
 运行：
 
@@ -497,7 +497,7 @@ return _sample_rows(
 
 预期：PASS。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 git add resp_train/data/index.py tests/test_data_index_audit.py
@@ -513,7 +513,7 @@ git commit -m "feat(数据): 添加可复现分层随机抽样"
 - 修改：`resp_train/data/__init__.py`
 - 创建：`tests/test_data_factory.py`
 
-- [ ] **步骤 1：编写数据工厂测试**
+- [x] **步骤 1：编写数据工厂测试**
 
 创建 `tests/test_data_factory.py`。测试文件中提供临时数据集构造函数：
 
@@ -655,7 +655,7 @@ def test_build_tho_data_rejects_empty_train_split(tmp_path: Path):
         build_tho_data(cfg)
 ```
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：
 
@@ -665,7 +665,7 @@ def test_build_tho_data_rejects_empty_train_split(tmp_path: Path):
 
 预期：FAIL，报错包含 `No module named 'resp_train.data.factory'`。
 
-- [ ] **步骤 3：实现 `resp_train/data/factory.py`**
+- [x] **步骤 3：实现 `resp_train/data/factory.py`**
 
 创建数据容器：
 
@@ -784,7 +784,7 @@ def build_tho_data(cfg: DictConfig) -> ThoDataBundle:
     return ThoDataBundle(train=train, val=val, audited=audited, audit_summary=audit_summary)
 ```
 
-- [ ] **步骤 4：导出数据工厂**
+- [x] **步骤 4：导出数据工厂**
 
 更新 `resp_train/data/__init__.py`：
 
@@ -794,7 +794,7 @@ from resp_train.data.factory import ThoDataBundle, WindowDataBundle, build_tho_d
 __all__ = ["ThoDataBundle", "WindowDataBundle", "build_tho_data", "build_window_data"]
 ```
 
-- [ ] **步骤 5：运行数据工厂测试验证通过**
+- [x] **步骤 5：运行数据工厂测试验证通过**
 
 运行：
 
@@ -804,7 +804,7 @@ __all__ = ["ThoDataBundle", "WindowDataBundle", "build_tho_data", "build_window_
 
 预期：PASS。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 git add resp_train/data/factory.py resp_train/data/__init__.py tests/test_data_factory.py
@@ -820,7 +820,7 @@ git commit -m "feat(数据): 添加统一窗口数据工厂"
 - 修改：`resp_train/engine/__init__.py`
 - 修改：`tests/test_engine_smoke.py`
 
-- [ ] **步骤 1：编写引擎增强测试**
+- [x] **步骤 1：编写引擎增强测试**
 
 在 `tests/test_engine_smoke.py` 中新增梯度裁剪测试：
 
@@ -866,7 +866,7 @@ def test_collect_predictions_accepts_custom_output_keys():
     assert preds["dataset_row_id"].tolist() == [0, 1, 2]
 ```
 
-- [ ] **步骤 2：运行引擎测试验证失败**
+- [x] **步骤 2：运行引擎测试验证失败**
 
 运行：
 
@@ -876,7 +876,7 @@ def test_collect_predictions_accepts_custom_output_keys():
 
 预期：FAIL，失败点包含 `grad_clip_norm` 或 `pred_key` 参数不存在。
 
-- [ ] **步骤 3：更新 `train_one_epoch` 签名和实现**
+- [x] **步骤 3：更新 `train_one_epoch` 签名和实现**
 
 将 `train_one_epoch` 签名扩展为：
 
@@ -918,7 +918,7 @@ else:
 
 保持 CPU 默认路径不变。
 
-- [ ] **步骤 4：更新 `collect_predictions` 键名参数**
+- [x] **步骤 4：更新 `collect_predictions` 键名参数**
 
 将签名扩展为：
 
@@ -947,11 +947,11 @@ return {
 }
 ```
 
-- [ ] **步骤 5：确认导出**
+- [x] **步骤 5：确认导出**
 
 检查 `resp_train/engine/__init__.py`，确保导出 `collect_predictions`、`save_checkpoint`、`train_one_epoch`、`validate`。
 
-- [ ] **步骤 6：运行引擎测试验证通过**
+- [x] **步骤 6：运行引擎测试验证通过**
 
 运行：
 
@@ -961,7 +961,7 @@ return {
 
 预期：PASS。
 
-- [ ] **步骤 7：Commit**
+- [x] **步骤 7：Commit**
 
 ```bash
 git add resp_train/engine/train.py resp_train/engine/__init__.py tests/test_engine_smoke.py
@@ -975,9 +975,10 @@ git commit -m "feat(训练): 支持梯度裁剪和预测键名配置"
 **文件：**
 - 创建：`resp_train/experiments/__init__.py`
 - 创建：`resp_train/experiments/base.py`
+- 修改：`resp_train/engine/__init__.py`
 - 创建：`tests/test_base_experiment.py`
 
-- [ ] **步骤 1：编写公共实验基类测试**
+- [x] **步骤 1：编写公共实验基类测试**
 
 创建 `tests/test_base_experiment.py`：
 
@@ -1080,7 +1081,7 @@ def test_base_experiment_early_stopping_records_reason(tmp_path: Path):
     assert (run_dir / "train.log").read_text(encoding="utf-8").find("early_stop") >= 0
 ```
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：
 
@@ -1090,7 +1091,7 @@ def test_base_experiment_early_stopping_records_reason(tmp_path: Path):
 
 预期：FAIL，报错包含 `No module named 'resp_train.experiments'`。
 
-- [ ] **步骤 3：实现 `resp_train/experiments/base.py`**
+- [x] **步骤 3：实现 `resp_train/experiments/base.py`**
 
 创建数据容器和基类：
 
@@ -1227,7 +1228,7 @@ class BaseExperiment:
         raise NotImplementedError
 ```
 
-- [ ] **步骤 4：导出实验层**
+- [x] **步骤 4：导出实验层**
 
 创建 `resp_train/experiments/__init__.py`：
 
@@ -1237,7 +1238,9 @@ from resp_train.experiments.base import BaseExperiment, ExperimentData
 __all__ = ["BaseExperiment", "ExperimentData"]
 ```
 
-- [ ] **步骤 5：运行公共实验基类测试验证通过**
+同时确认 `resp_train/engine/__init__.py` 公开导出 `save_checkpoint`，供公共实验基类复用训练引擎入口。
+
+- [x] **步骤 5：运行公共实验基类测试验证通过**
 
 运行：
 
@@ -1247,7 +1250,7 @@ __all__ = ["BaseExperiment", "ExperimentData"]
 
 预期：PASS。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 git add resp_train/experiments/__init__.py resp_train/experiments/base.py tests/test_base_experiment.py
@@ -1262,7 +1265,7 @@ git commit -m "feat(实验): 添加公共实验基类"
 - 修改：`resp_train/metrics/baseline.py`
 - 修改：`tests/test_eval_metrics.py` 或新增 `tests/test_baseline_metrics.py`
 
-- [ ] **步骤 1：新增 baseline dataset 评价测试**
+- [x] **步骤 1：新增 baseline dataset 评价测试**
 
 新增 `tests/test_baseline_metrics.py`：
 
@@ -1313,7 +1316,7 @@ def test_evaluate_baseline_dataset_returns_metrics_frame():
     assert set(frame.columns) >= {"method", "dataset_row_id", "rr_spec_abs_error", "spectrum_similarity"}
 ```
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：
 
@@ -1323,7 +1326,7 @@ def test_evaluate_baseline_dataset_returns_metrics_frame():
 
 预期：FAIL，报错包含 `cannot import name 'evaluate_baseline_dataset'`。
 
-- [ ] **步骤 3：抽出 `evaluate_baseline_dataset`**
+- [x] **步骤 3：抽出 `evaluate_baseline_dataset`**
 
 在 `resp_train/metrics/baseline.py` 中新增：
 
@@ -1357,7 +1360,7 @@ bundle = build_window_data(
 df = evaluate_baseline_dataset(bundle.dataset, cfg)
 ```
 
-- [ ] **步骤 4：运行 baseline 测试验证通过**
+- [x] **步骤 4：运行 baseline 测试验证通过**
 
 运行：
 
@@ -1367,7 +1370,7 @@ df = evaluate_baseline_dataset(bundle.dataset, cfg)
 
 预期：PASS。
 
-- [ ] **步骤 5：Commit**
+- [x] **步骤 5：Commit**
 
 ```bash
 git add resp_train/metrics/baseline.py tests/test_baseline_metrics.py
@@ -1383,7 +1386,7 @@ git commit -m "refactor(指标): 复用数据集计算平凡基线"
 - 修改：`resp_train/experiments/__init__.py`
 - 创建：`tests/test_tho_experiment.py`
 
-- [ ] **步骤 1：编写 THO 实验 smoke 测试**
+- [x] **步骤 1：编写 THO 实验 smoke 测试**
 
 创建 `tests/test_tho_experiment.py`，复用任务 3 的临时数据思路，但配置补齐模型、loss 和输出。
 
@@ -1510,7 +1513,7 @@ def test_tho_experiment_smoke_writes_run_outputs(tmp_path: Path):
     assert (run_dir / "predictions.npz").exists()
 ```
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：
 
@@ -1520,7 +1523,7 @@ def test_tho_experiment_smoke_writes_run_outputs(tmp_path: Path):
 
 预期：FAIL，报错包含 `No module named 'resp_train.experiments.tho'`。
 
-- [ ] **步骤 3：实现 `ThoExperiment`**
+- [x] **步骤 3：实现 `ThoExperiment`**
 
 创建 `resp_train/experiments/tho.py`：
 
@@ -1577,7 +1580,7 @@ class ThoExperiment(BaseExperiment):
         np.savez(run_dir / "predictions.npz", **diag_preds)
 ```
 
-- [ ] **步骤 4：导出 `ThoExperiment`**
+- [x] **步骤 4：导出 `ThoExperiment`**
 
 更新 `resp_train/experiments/__init__.py`：
 
@@ -1588,7 +1591,7 @@ from resp_train.experiments.tho import ThoExperiment
 __all__ = ["BaseExperiment", "ExperimentData", "ThoExperiment"]
 ```
 
-- [ ] **步骤 5：运行 THO 实验测试验证通过**
+- [x] **步骤 5：运行 THO 实验测试验证通过**
 
 运行：
 
@@ -1598,7 +1601,7 @@ __all__ = ["BaseExperiment", "ExperimentData", "ThoExperiment"]
 
 预期：PASS。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 git add resp_train/experiments/__init__.py resp_train/experiments/tho.py tests/test_tho_experiment.py
@@ -1614,7 +1617,7 @@ git commit -m "feat(实验): 添加 THO 实验编排"
 - 修改：`scripts/eval_tho_small.py`
 - 修改：`tests/test_diagnostics_scripts.py`
 
-- [ ] **步骤 1：补充脚本结构测试**
+- [x] **步骤 1：补充脚本结构测试**
 
 在 `tests/test_diagnostics_scripts.py` 中增加静态测试：
 
@@ -1635,7 +1638,7 @@ def test_eval_script_delegates_to_tho_checkpoint_evaluator():
     assert "filter_index" not in source
 ```
 
-- [ ] **步骤 2：运行脚本结构测试验证失败**
+- [x] **步骤 2：运行脚本结构测试验证失败**
 
 运行：
 
@@ -1645,7 +1648,7 @@ def test_eval_script_delegates_to_tho_checkpoint_evaluator():
 
 预期：FAIL，当前脚本仍直接编排训练和评价。
 
-- [ ] **步骤 3：在 `resp_train/experiments/tho.py` 增加 checkpoint 评价入口**
+- [x] **步骤 3：在 `resp_train/experiments/tho.py` 增加 checkpoint 评价入口**
 
 实现：
 
@@ -1698,7 +1701,7 @@ def evaluate_checkpoint(self, checkpoint_path: Path, *, output: Path, metrics_ou
         evaluate_prediction_dict(eval_preds, self.cfg, method=str(self.cfg.model.name)).to_csv(metrics_output, index=False)
 ```
 
-- [ ] **步骤 4：瘦身训练脚本**
+- [x] **步骤 4：瘦身训练脚本**
 
 将 `scripts/train_tho_small.py` 主体改为：
 
@@ -1736,7 +1739,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **步骤 5：瘦身评价脚本**
+- [x] **步骤 5：瘦身评价脚本**
 
 将 `scripts/eval_tho_small.py` 主体改为：
 
@@ -1777,7 +1780,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **步骤 6：运行脚本结构测试验证通过**
+- [x] **步骤 6：运行脚本结构测试验证通过**
 
 运行：
 
@@ -1787,7 +1790,7 @@ if __name__ == "__main__":
 
 预期：PASS。
 
-- [ ] **步骤 7：Commit**
+- [x] **步骤 7：Commit**
 
 ```bash
 git add scripts/train_tho_small.py scripts/eval_tho_small.py resp_train/experiments/tho.py tests/test_diagnostics_scripts.py
@@ -1804,7 +1807,7 @@ git commit -m "refactor(脚本): 训练评价入口委托实验层"
 - 修改：`scripts/README.md`
 - 修改：`tests/test_diagnostics_scripts.py`
 
-- [ ] **步骤 1：补充脚本复用测试**
+- [x] **步骤 1：补充脚本复用测试**
 
 在 `tests/test_diagnostics_scripts.py` 中新增：
 
@@ -1817,7 +1820,7 @@ def test_audit_and_baseline_scripts_use_data_factory():
     assert "build_window_data" in baseline_source or "build_tho_data" in baseline_source
 ```
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：
 
@@ -1827,7 +1830,7 @@ def test_audit_and_baseline_scripts_use_data_factory():
 
 预期：FAIL，当前脚本未复用数据工厂。
 
-- [ ] **步骤 3：更新审计脚本**
+- [x] **步骤 3：更新审计脚本**
 
 将 `scripts/audit_tho_dataset.py` 改为加载配置后调用 `build_tho_data(cfg)`，并输出 `data.audit_summary`：
 
@@ -1845,7 +1848,7 @@ print(f"写出审计: {output}")
 
 保留原有 `--config`、`--output` 和 `--set` 参数。
 
-- [ ] **步骤 4：更新 baseline 脚本**
+- [x] **步骤 4：更新 baseline 脚本**
 
 将 `scripts/baseline_tho_hilbert.py` 改为使用 `build_tho_data(cfg)` 和 `evaluate_baseline_dataset(data.val.dataset, cfg)`：
 
@@ -1863,7 +1866,7 @@ frame.to_csv(output, index=False)
 print(f"写出 baseline: {output}")
 ```
 
-- [ ] **步骤 5：运行脚本复用测试验证通过**
+- [x] **步骤 5：运行脚本复用测试验证通过**
 
 运行：
 
@@ -1873,7 +1876,7 @@ print(f"写出 baseline: {output}")
 
 预期：PASS。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 git add scripts/audit_tho_dataset.py scripts/baseline_tho_hilbert.py tests/test_diagnostics_scripts.py
@@ -1889,7 +1892,7 @@ git commit -m "refactor(脚本): 审计和基线复用数据工厂"
 - 修改：`scripts/README.md`
 - 修改：`docs/experiments/tho_small_mixed_zscore_20260607.md`
 
-- [ ] **步骤 1：更新训练说明**
+- [x] **步骤 1：更新训练说明**
 
 在 `docs/tho_small_training.md` 中更新以下内容：
 
@@ -1911,7 +1914,7 @@ git commit -m "refactor(脚本): 审计和基线复用数据工厂"
   --set outputs.max_prediction_windows=4
 ```
 
-- [ ] **步骤 2：更新脚本索引**
+- [x] **步骤 2：更新脚本索引**
 
 在 `scripts/README.md` 中说明：
 
@@ -1920,7 +1923,7 @@ git commit -m "refactor(脚本): 审计和基线复用数据工厂"
 - `audit_tho_dataset.py` 和 `baseline_tho_hilbert.py` 复用数据工厂口径。
 - 脚本仍暂时平铺，不移动目录。
 
-- [ ] **步骤 3：更新实验记录**
+- [x] **步骤 3：更新实验记录**
 
 在 `docs/experiments/tho_small_mixed_zscore_20260607.md` 的「当前判断」或「下一步」前加入：
 
@@ -1934,7 +1937,7 @@ git commit -m "refactor(脚本): 审计和基线复用数据工厂"
 
 将「下一步」改为先重跑默认 loss 与 `smooth_weight=0.001` 的分层随机对照，不继续扩大旧前缀采样结论。
 
-- [ ] **步骤 4：运行文档检查**
+- [x] **步骤 4：运行文档检查**
 
 运行：
 
@@ -1948,7 +1951,7 @@ git diff --check
 - `rg` 不应再命中把 `data.sample_strategy` 或默认 `head` 当作当前配置的内容。
 - `git diff --check` exit 0。
 
-- [ ] **步骤 5：Commit**
+- [x] **步骤 5：Commit**
 
 ```bash
 git add docs/tho_small_training.md scripts/README.md docs/experiments/tho_small_mixed_zscore_20260607.md
@@ -1962,7 +1965,7 @@ git commit -m "docs(实验): 更新分层随机实验口径"
 **文件：**
 - 只产生被 `.gitignore` 忽略的 `runs/` 输出。
 
-- [ ] **步骤 1：运行重点测试**
+- [x] **步骤 1：运行重点测试**
 
 运行：
 
@@ -1972,7 +1975,7 @@ git commit -m "docs(实验): 更新分层随机实验口径"
 
 预期：PASS。
 
-- [ ] **步骤 2：运行全量测试**
+- [x] **步骤 2：运行全量测试**
 
 运行：
 
@@ -1982,7 +1985,7 @@ git commit -m "docs(实验): 更新分层随机实验口径"
 
 预期：PASS。
 
-- [ ] **步骤 3：运行真实数据小 smoke**
+- [x] **步骤 3：运行真实数据小 smoke**
 
 运行：
 
@@ -2003,7 +2006,7 @@ git commit -m "docs(实验): 更新分层随机实验口径"
 - 命令打印 `runs/tho_small/<timestamp>`。
 - run 目录包含 `config.yaml`、`audit.csv`、`baseline_metrics.csv`、`checkpoint.pt`、`train_history.csv`、`metrics.csv`、`predictions.npz`、`train.log`。
 
-- [ ] **步骤 4：检查 run 配置记录**
+- [x] **步骤 4：检查 run 配置记录**
 
 运行：
 
@@ -2018,7 +2021,7 @@ run_dir=$(ls -td runs/tho_small/* | head -1)
 stratified_random stratified_random 1 2
 ```
 
-- [ ] **步骤 5：提交最终验证相关代码**
+- [x] **步骤 5：提交最终验证相关代码**
 
 如果前面任务已经逐步提交，且 smoke run 只产生忽略文件，本步骤不需要新 commit。若验证过程中修复了代码或文档，按修改文件提交：
 
@@ -2031,13 +2034,13 @@ git commit -m "fix(实验): 修正实验骨架验证问题"
 
 ## 最终验收清单
 
-- [ ] 默认训练和验证抽样策略均为 `stratified_random`。
-- [ ] `head` 只能通过显式配置启用。
-- [ ] train 和 val 抽样 seed 独立记录。
-- [ ] 训练支持 best checkpoint 和 early stopping。
-- [ ] 训练和评价复用同一数据工厂。
-- [ ] `BaseExperiment` 只承担公共生命周期，不包含 THO 专属指标。
-- [ ] `ThoExperiment` 承担 THO 任务数据、baseline、loss 和评价。
-- [ ] 训练、评价、审计、baseline 脚本均为薄入口或复用数据工厂。
-- [ ] 旧实验记录标注为前缀采样下的 smoke/现象记录。
-- [ ] 重点测试、全量测试和真实数据小 smoke 均通过。
+- [x] 默认训练和验证抽样策略均为 `stratified_random`。
+- [x] `head` 只能通过显式配置启用。
+- [x] train 和 val 抽样 seed 独立记录。
+- [x] 训练支持 best checkpoint 和 early stopping。
+- [x] 训练和评价复用同一数据工厂。
+- [x] `BaseExperiment` 只承担公共生命周期，不包含 THO 专属指标。
+- [x] `ThoExperiment` 承担 THO 任务数据、baseline、loss 和评价。
+- [x] 训练、评价、审计、baseline 脚本均为薄入口或复用数据工厂。
+- [x] 旧实验记录标注为前缀采样下的 smoke/现象记录。
+- [x] 重点测试、全量测试和真实数据小 smoke 均通过。
