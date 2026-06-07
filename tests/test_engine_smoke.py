@@ -5,7 +5,7 @@ import torch
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, Dataset, Subset
 
-from resp_train.engine import collect_predictions, train_one_epoch, validate
+from resp_train.engine import collect_predictions, save_checkpoint, train_one_epoch, validate
 from resp_train.losses.weak import WeakSyncLoss
 from resp_train.models.registry import build_model
 from resp_train.utils.run import create_run_dir, setup_logger
@@ -121,6 +121,10 @@ def test_collect_predictions_accepts_custom_output_keys():
     assert preds["custom_pred"].shape[0] == 3
     assert preds["custom_target"].shape[0] == 3
     assert preds["dataset_row_id"].tolist() == [0, 1, 2]
+
+
+def test_engine_public_api_exports_checkpoint_saver():
+    assert callable(save_checkpoint)
 
 
 def test_create_run_dir_allows_multiple_runs_in_same_second(tmp_path):
