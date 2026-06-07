@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 from omegaconf import OmegaConf
@@ -206,6 +207,38 @@ def test_filter_index_ignores_configured_head_without_explicit_debug_strategy():
 
     assert len(filtered) == 4
     assert filtered["dataset_row_id"].tolist() != [1, 2, 3, 4]
+    assert filtered["dataset_row_id"].tolist() == sorted(filtered["dataset_row_id"].tolist())
+
+
+def test_filter_index_stratified_random_handles_mixed_missing_strata_without_duplicates():
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "input_set": "mixed_zscore",
+                "filter_unusable": True,
+                "train_sample_strategy": "stratified_random",
+                "train_sample_seed": 0,
+                "stratify_column": "residual_quality_class",
+            }
+        }
+    )
+    rows = _sampling_rows().head(6).copy()
+    rows["residual_quality_class"] = pd.Series(
+        [
+            None,
+            np.nan,
+            pd.NA,
+            "near_zero_residual",
+            "stable_nonzero_residual",
+            "high_residual",
+        ],
+        dtype="object",
+    )
+
+    filtered = filter_index(rows, cfg, split="train", max_windows=4)
+
+    assert len(filtered) == 4
+    assert filtered["dataset_row_id"].is_unique
     assert filtered["dataset_row_id"].tolist() == sorted(filtered["dataset_row_id"].tolist())
 
 

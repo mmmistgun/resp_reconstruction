@@ -32,6 +32,7 @@ REQUIRED_INDEX_COLUMNS = [
 ]
 
 SAMPLE_STRATEGIES = {"head", "random", "stratified_random"}
+MISSING_STRATUM_VALUE = "__MISSING__"
 
 
 def read_index(dataset_root: str | Path, index_csv: str | Path) -> pd.DataFrame:
@@ -129,7 +130,8 @@ def _stratified_random_sample(df: pd.DataFrame, cfg: DictConfig, *, n: int, seed
     if column not in df.columns:
         raise ValueError(f"分层抽样列不存在: {column}")
 
-    counts = df[column].value_counts(dropna=False, sort=False)
+    strata = df[column].astype("object").where(df[column].notna(), MISSING_STRATUM_VALUE)
+    counts = strata.value_counts(dropna=False, sort=False)
     total = len(df)
     buckets = []
     for order, (value, count) in enumerate(counts.items()):
@@ -174,10 +176,7 @@ def _stratified_random_sample(df: pd.DataFrame, cfg: DictConfig, *, n: int, seed
         if quota <= 0:
             continue
         value = bucket["value"]
-        if pd.isna(value):
-            layer = df[df[column].isna()]
-        else:
-            layer = df[df[column] == value]
+        layer = df[strata == value]
         samples.append(layer.sample(n=quota, random_state=seed + offset))
 
     if not samples:
