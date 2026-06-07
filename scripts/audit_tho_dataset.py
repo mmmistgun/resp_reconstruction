@@ -9,24 +9,22 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from resp_train.config import load_config
-from resp_train.data.audit import add_usable_flag, summarize_audit
-from resp_train.data.index import read_index
+from resp_train.data.factory import build_tho_data
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="生成胸带小规模训练数据审计表")
     parser.add_argument("--config", default="configs/tho_small.yaml")
     parser.add_argument("--output", default="audit.csv")
+    parser.add_argument("--set", dest="overrides", action="append", default=[], help="OmegaConf dotlist 覆盖，可重复传入")
     args = parser.parse_args()
 
-    cfg = load_config(args.config)
-    df = read_index(cfg.data.dataset_root, cfg.data.index_csv)
-    audited = add_usable_flag(df, cfg)
-    summary = summarize_audit(audited)
+    cfg = load_config(args.config, overrides=args.overrides)
+    data = build_tho_data(cfg)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    summary.to_csv(output, index=False)
-    print(f"写出审计摘要: {output} rows={len(summary)}")
+    data.audit_summary.to_csv(output, index=False)
+    print(f"写出审计: {output}")
 
 
 if __name__ == "__main__":

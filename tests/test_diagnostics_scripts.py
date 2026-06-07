@@ -111,3 +111,11 @@ def test_eval_script_delegates_to_tho_checkpoint_evaluator():
     assert "evaluate_tho_checkpoint" in source
     assert "RespWindowDataset" not in source
     assert "filter_index" not in source
+
+
+def test_audit_and_baseline_scripts_use_data_factory():
+    audit_source = Path("scripts/audit_tho_dataset.py").read_text(encoding="utf-8")
+    baseline_source = Path("scripts/baseline_tho_hilbert.py").read_text(encoding="utf-8")
+
+    assert "build_tho_data" in audit_source
+    assert "build_window_data" in baseline_source or "build_tho_data" in baseline_source
