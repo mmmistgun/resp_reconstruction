@@ -2,6 +2,31 @@
 
 本目录暂时保持脚本平铺，不移动文件。当前数量还少，平铺能减少命令路径变化；等腹带、消融、整夜推理和更多诊断脚本加入后，再考虑按子目录分类。
 
+当前脚本以 THO 小规模实验为主，默认配置来自 `configs/tho_small.yaml`：
+
+- 默认输入集：`mixed_zscore`
+- 默认训练抽样：`data.train_sample_strategy=stratified_random`
+- 默认验证抽样：`data.val_sample_strategy=stratified_random`
+- 默认固定验证 seed：`data.val_sample_seed=20260602`
+- `head` 抽样只建议临时 debug，不作为正式实验口径
+
+所有支持 `--set` 的脚本都使用 OmegaConf dotlist 覆盖配置，例如：
+
+```bash
+--set data.train_sample_seed=1 --set loss.smooth_weight=0.001
+```
+
+训练入口会检查必要依赖；如需新增第三方库，先确认再安装。
+
+## 推荐工作流
+
+1. 先审计本次配置对应的数据子集，确认抽样数量和质量分层。
+2. 跑平凡基线，给模型指标一个参照。
+3. 跑训练脚本，保存完整 run 目录。
+4. 必要时从 checkpoint 重新评价，或导出不同数量的诊断预测。
+5. 绘制预测图，检查主频、峰谷、包络同步和失败样本。
+6. 汇总多个 run，比较 loss、seed 和采样策略变化。
+
 ## 数据检查
 
 ### `audit_tho_dataset.py`
@@ -13,6 +38,8 @@
   --config configs/tho_small.yaml \
   --output /tmp/tho_audit.csv
 ```
+
+常用：固定验证 seed、改变训练 seed 时，审计命令也应传入同样覆盖项，确保审计和训练口径一致。
 
 ## 训练与评价
 
@@ -32,6 +59,27 @@
   --set outputs.max_prediction_windows=4
 ```
 
+正式小规模对照建议固定验证 seed，只改变训练 seed 或 loss 参数：
+
+```bash
+./.venv/bin/python scripts/train_tho_small.py \
+  --config configs/tho_small.yaml \
+  --set data.train_sample_seed=1 \
+  --set data.val_sample_seed=20260602 \
+  --set training.epochs=10
+```
+
+每个 run 输出到 `runs/tho_small/<timestamp>/`，常见产物包括：
+
+- `config.yaml`：本次 resolved config 快照。
+- `audit.csv`：训练数据工厂生成的数据审计摘要。
+- `baseline_metrics.csv`：val 子集平凡基线指标。
+- `train_history.csv`：每轮训练和验证损失。
+- `metrics.csv`：best checkpoint 在 val 子集上的逐窗口指标。
+- `checkpoint.pt`：验证损失最优 checkpoint。
+- `predictions.npz`：少量诊断预测，不作为完整预测归档。
+- `train.log`：训练日志。
+
 ### `eval_tho_small.py`
 
 从 `checkpoint.pt` 重新生成诊断预测和可选指标。脚本委托 checkpoint 评价函数执行加载、配置一致性校验、指标计算和预测导出。默认读取 checkpoint 同目录的 `config.yaml`。
@@ -42,6 +90,8 @@
   --output /tmp/tho_predictions.npz \
   --metrics-output /tmp/tho_metrics.csv
 ```
+
+注意：显式传入 `--config` 或 `--set` 时，会校验模型结构、验证集定义、窗口参数和评价频带等关键字段，避免用不一致配置误评 checkpoint。
 
 ## 诊断分析
 
@@ -55,6 +105,8 @@
   --output /tmp/baseline_metrics.csv
 ```
 
+BCG 频谱主峰法和峰谷检测法只是诊断参照，不是训练目标。质量好的片段可能能靠规则法读出合理结果，质量差的片段规则法失败也不等同于模型路线失败。
+
 ### `plot_tho_predictions.py`
 
 读取一个 run 的 `predictions.npz` 和 `metrics.csv`，生成预测/参考波形诊断图。默认输出到 `<run-dir>/plots/`。
@@ -62,6 +114,15 @@
 ```bash
 ./.venv/bin/python scripts/plot_tho_predictions.py \
   --run-dir runs/tho_small/<timestamp> \
+  --max-plots 8
+```
+
+默认按 `rr_peak_abs_error` 从大到小优先绘制，便于先看峰谷形态最差的窗口。也可以改为：
+
+```bash
+./.venv/bin/python scripts/plot_tho_predictions.py \
+  --run-dir runs/tho_small/<timestamp> \
+  --sort-by spectrum_similarity \
   --max-plots 8
 ```
 
@@ -74,6 +135,8 @@
   --runs-root runs/tho_small \
   --output /tmp/tho_runs_summary.csv
 ```
+
+汇总表适合先筛查趋势，但不能替代诊断图。尤其是当前数据量小、窗口间相关性强，单个 run 的数值差异需要配合固定验证集和多训练 seed 才能形成更稳的判断。
 
 ## 分类建议
 
