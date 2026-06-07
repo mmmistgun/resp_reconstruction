@@ -5,7 +5,7 @@ import torch
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, Dataset, Subset
 
-from resp_train.engine import train_one_epoch, validate
+from resp_train.engine import collect_predictions, train_one_epoch, validate
 from resp_train.losses.weak import WeakSyncLoss
 from resp_train.models.registry import build_model
 from resp_train.utils.run import create_run_dir, setup_logger
@@ -64,6 +64,26 @@ def test_train_one_epoch_returns_positive_average_loss():
     assert summary["loss"] > 0
 
 
+def test_train_one_epoch_accepts_grad_clip_norm():
+    cfg = _cfg()
+    loader = DataLoader(DictDataset(), batch_size=2, shuffle=False)
+    model = build_model(cfg)
+    loss_fn = WeakSyncLoss(cfg)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    summary = train_one_epoch(
+        model,
+        loader,
+        loss_fn,
+        optimizer,
+        torch.device("cpu"),
+        grad_clip_norm=0.1,
+        use_amp=False,
+    )
+
+    assert summary["loss"] > 0
+
+
 def test_train_one_epoch_rejects_empty_loader():
     cfg = _cfg()
     loader = DataLoader(Subset(DictDataset(), []), batch_size=2, shuffle=False)
@@ -83,6 +103,24 @@ def test_validate_rejects_empty_loader():
 
     with pytest.raises(ValueError, match="没有可用 batch"):
         validate(model, loader, loss_fn, torch.device("cpu"))
+
+
+def test_collect_predictions_accepts_custom_output_keys():
+    loader = DataLoader(DictDataset(), batch_size=2, shuffle=False)
+    model = torch.nn.Identity()
+
+    preds = collect_predictions(
+        model,
+        loader,
+        device=torch.device("cpu"),
+        max_windows=3,
+        pred_key="custom_pred",
+        target_key="custom_target",
+    )
+
+    assert preds["custom_pred"].shape[0] == 3
+    assert preds["custom_target"].shape[0] == 3
+    assert preds["dataset_row_id"].tolist() == [0, 1, 2]
 
 
 def test_create_run_dir_allows_multiple_runs_in_same_second(tmp_path):

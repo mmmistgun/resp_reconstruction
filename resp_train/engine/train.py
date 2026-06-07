@@ -17,9 +17,14 @@ def train_one_epoch(
     loss_fn: nn.Module,
     optimizer: torch.optim.Optimizer,
     device: torch.device | str,
+    *,
+    grad_clip_norm: float | None = None,
+    use_amp: bool = False,
 ) -> dict[str, float]:
     """执行一个训练 epoch，并返回平均 loss 摘要。"""
     resolved_device = torch.device(device)
+    amp_enabled = bool(use_amp and resolved_device.type == "cuda")
+    scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
     model.to(resolved_device)
     model.train()
     meter = _LossMeter()
@@ -28,10 +33,21 @@ def train_one_epoch(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device)
         optimizer.zero_grad(set_to_none=True)
-        pred = model(sensor)
-        loss, parts = loss_fn(pred, target)
-        loss.backward()
-        optimizer.step()
+        with torch.cuda.amp.autocast(enabled=amp_enabled):
+            pred = model(sensor)
+            loss, parts = loss_fn(pred, target)
+        if amp_enabled:
+            scaler.scale(loss).backward()
+            if grad_clip_norm is not None:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), float(grad_clip_norm))
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            if grad_clip_norm is not None:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), float(grad_clip_norm))
+            optimizer.step()
 
         meter.update(loss, parts, batch_size=sensor.size(0))
         progress.set_postfix(loss=f"{meter.summary()['loss']:.4f}")
@@ -91,6 +107,8 @@ def collect_predictions(
     *,
     device: torch.device | str,
     max_windows: int,
+    pred_key: str = "r_tho_hat",
+    target_key: str = "tho_ref",
 ) -> dict[str, np.ndarray]:
     """收集少量或完整验证预测，并展开 DataLoader 默认 collate 后的 meta。"""
     if int(max_windows) <= 0:
@@ -124,8 +142,8 @@ def collect_predictions(
     target_arr = np.concatenate(targets, axis=0)[: int(max_windows)]
     meta_records = meta_records[: int(max_windows)]
     return {
-        "r_tho_hat": pred_arr,
-        "tho_ref": target_arr,
+        pred_key: pred_arr,
+        target_key: target_arr,
         "dataset_row_id": np.asarray([int(m.get("dataset_row_id", -1)) for m in meta_records], dtype=np.int64),
         "split": np.asarray([str(m.get("split", "")) for m in meta_records]),
         "input_set": np.asarray([str(m.get("input_set", "")) for m in meta_records]),
