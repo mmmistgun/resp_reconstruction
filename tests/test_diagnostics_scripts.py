@@ -95,3 +95,19 @@ def test_summarize_runs_writes_one_row_per_run(tmp_path):
     assert frame["val_loss"].tolist() == [1.0, 0.8]
     assert frame["model_rr_spec_abs_error_mean"].tolist() == [1.5, 1.5]
     assert frame["baseline_spectrum_similarity_mean"].tolist() == [0.9, 0.9]
+
+
+def test_train_script_delegates_to_tho_experiment():
+    source = Path("scripts/train_tho_small.py").read_text(encoding="utf-8")
+
+    assert "ThoExperiment" in source
+    assert "train_one_epoch" not in source
+    assert "run_baseline" not in source
+
+
+def test_eval_script_delegates_to_tho_checkpoint_evaluator():
+    source = Path("scripts/eval_tho_small.py").read_text(encoding="utf-8")
+
+    assert "evaluate_tho_checkpoint" in source
+    assert "RespWindowDataset" not in source
+    assert "filter_index" not in source
