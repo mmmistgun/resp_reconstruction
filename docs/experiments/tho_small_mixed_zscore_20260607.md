@@ -35,6 +35,13 @@ baseline（同一 val 子集）：
 | ---: | ---: | ---: | ---: |
 | 3.2387 | 1.8141 | 0.4867 | 0.9370 |
 
+## 采样口径修正
+
+这 4 个 run 使用首版前缀采样口径。真实索引检查显示，前缀窗口会集中到少数 `samp_id` 和片段，
+因此这些结果只作为 smoke test 和现象记录，不作为正式消融结论。
+
+后续消融应基于新实验骨架的 `stratified_random` 默认策略，并固定 `val_sample_seed`，再做多 seed 比较。
+
 ## 当前判断
 
 1. 当前模型能学到主频线索。所有模型 run 的 `rr_spec_abs_error` 均明显低于平凡基线。
@@ -45,11 +52,13 @@ baseline（同一 val 子集）：
 
 ## 下一步
 
-优先沿着 `smooth_weight` 继续做窄范围消融：
+先重跑基于 `stratified_random` 的分层随机对照，不继续扩大旧前缀采样结论：
 
+- 固定 `data.val_sample_strategy=stratified_random` 和 `data.val_sample_seed`。
+- 保持相同 train/val 窗口规模，先重跑默认 loss 与 `smooth_weight=0.001` 两组。
+- 每组再做多 `data.train_sample_seed` 比较，确认现象是否稳定。
 - 保持 `training.learning_rate=0.001`。
 - 保持 `training.epochs=10`。
-- 试 `smooth_weight=0`、`0.0003`、`0.001`、`0.003`。
 - 重点看 `spectrum_similarity`、`rr_peak_abs_error` 和诊断图中的峰谷形态。
 
 暂不加入 RR 头或 RR 派生损失。当前问题更像是波形形态和峰谷结构没有保住，应先确认 smooth 与频谱/包络 loss 的权衡。

@@ -13,17 +13,29 @@
 - 默认输入集：`mixed_zscore`
 - 默认窗口：180 秒，100 Hz，18000 点
 - 默认模型：`unet1d_tiny`
+- 训练抽样：`data.train_sample_strategy=stratified_random`
+- 验证抽样：`data.val_sample_strategy=stratified_random`
+
+`head` 抽样只用于 debug，不作为当前默认或正式实验口径。训练集和验证集的抽样 seed 相互独立：`data.train_sample_seed` 只影响训练窗口抽样，`data.val_sample_seed` 只影响验证窗口抽样。做多 run 对照时应固定 `data.val_sample_seed`，避免验证集变化掩盖模型或 loss 差异。
+
+## 实验骨架
+
+`BaseExperiment` 接收已经加载好的配置，负责通用实验生命周期，包括输出目录、日志、随机 seed、配置快照、训练/验证循环、best checkpoint、early stopping 和运行产物写出等与具体任务无关的流程。
+
+`ThoExperiment` 负责胸带小规模训练的任务逻辑，包括构建数据集和 DataLoader、生成 THO 平凡基线、构建模型与 loss，并在最佳 checkpoint 上导出指标和诊断预测。
 
 ## 快速 Smoke Test
 
 ```bash
 ./.venv/bin/python scripts/train_tho_small.py \
   --config configs/tho_small.yaml \
+  --set data.train_sample_seed=1 \
+  --set data.val_sample_seed=2 \
   --set data.max_train_windows=16 \
   --set data.max_val_windows=8 \
   --set training.epochs=1 \
   --set model.base_channels=4 \
-  --set outputs.max_prediction_windows=8
+  --set outputs.max_prediction_windows=4
 ```
 
 命令成功后会打印本次 run 目录，例如 `runs/tho_small/20260602_000725_068311`。

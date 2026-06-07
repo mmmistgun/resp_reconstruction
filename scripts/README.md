@@ -6,7 +6,7 @@
 
 ### `audit_tho_dataset.py`
 
-生成胸带小规模训练数据审计表，检查 split、input_set、残差质量分层和可用窗口数量。
+生成胸带小规模训练数据审计表，检查 split、input_set、残差质量分层和可用窗口数量。脚本复用训练数据工厂的过滤和抽样口径，避免审计结果与训练入口不一致。
 
 ```bash
 ./.venv/bin/python scripts/audit_tho_dataset.py \
@@ -18,21 +18,23 @@
 
 ### `train_tho_small.py`
 
-训练胸带参考小规模模型，并输出 run 目录。默认使用 `configs/tho_small.yaml`，可用 `--set` 覆盖配置。
+训练胸带参考小规模模型，并输出 run 目录。该脚本是薄入口，负责解析命令行并委托 `ThoExperiment` 执行实验流程。默认使用 `configs/tho_small.yaml`，可用 `--set` 覆盖配置。
 
 ```bash
 ./.venv/bin/python scripts/train_tho_small.py \
   --config configs/tho_small.yaml \
+  --set data.train_sample_seed=1 \
+  --set data.val_sample_seed=2 \
   --set data.max_train_windows=16 \
   --set data.max_val_windows=8 \
   --set training.epochs=1 \
   --set model.base_channels=4 \
-  --set outputs.max_prediction_windows=8
+  --set outputs.max_prediction_windows=4
 ```
 
 ### `eval_tho_small.py`
 
-从 `checkpoint.pt` 重新生成诊断预测和可选指标。默认读取 checkpoint 同目录的 `config.yaml`，并校验关键配置一致性。
+从 `checkpoint.pt` 重新生成诊断预测和可选指标。脚本委托 checkpoint 评价函数执行加载、配置一致性校验、指标计算和预测导出。默认读取 checkpoint 同目录的 `config.yaml`。
 
 ```bash
 ./.venv/bin/python scripts/eval_tho_small.py \
@@ -45,7 +47,7 @@
 
 ### `baseline_tho_hilbert.py`
 
-在 val 子集运行平凡基线，输出逐窗口 RR/主频、峰谷、包络相关和频谱相似度指标。
+在 val 子集运行平凡基线，输出逐窗口 RR/主频、峰谷、包络相关和频谱相似度指标。脚本复用训练数据工厂口径，保证 baseline 与训练验证子集一致。
 
 ```bash
 ./.venv/bin/python scripts/baseline_tho_hilbert.py \
