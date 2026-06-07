@@ -12,6 +12,11 @@ data:
   target_finite_ratio_min: 0.99
   unusable_residual_classes: []
   preload_windows: true
+  train_sample_strategy: stratified_random
+  val_sample_strategy: stratified_random
+  train_sample_seed: 20260601
+  val_sample_seed: 20260602
+  stratify_column: residual_quality_class
 
 window:
   target_fs: 100
@@ -39,6 +44,11 @@ training:
   num_workers: 0
   seed: 20260601
   device: auto
+  patience: 5
+  min_delta: 0.0
+  lr_scheduler: none
+  grad_clip_norm: null
+  use_amp: false
 
 baseline:
   bandpass_low_hz: 0.05

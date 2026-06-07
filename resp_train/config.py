@@ -48,11 +48,31 @@ def _validate_config(cfg: Any) -> None:
         "data.dataset_root",
         "data.index_csv",
         "data.input_set",
+        "data.train_sample_strategy",
+        "data.val_sample_strategy",
+        "data.train_sample_seed",
+        "data.val_sample_seed",
+        "data.stratify_column",
         "window.duration_samples",
         "model.name",
         "training.epochs",
+        "training.patience",
+        "training.min_delta",
+        "training.lr_scheduler",
+        "training.use_amp",
         "outputs.run_root",
     ]
     for key in required:
         if OmegaConf.select(cfg, key) is None:
             raise ValueError(f"配置缺少必需字段: {key}")
+
+    sample_strategies = {"head", "random", "stratified_random"}
+    for key in ("data.train_sample_strategy", "data.val_sample_strategy"):
+        value = OmegaConf.select(cfg, key)
+        if value not in sample_strategies:
+            raise ValueError(f"{key} 必须是 {sorted(sample_strategies)} 之一，当前为: {value}")
+
+    lr_schedulers = {"none", "cosine"}
+    lr_scheduler = OmegaConf.select(cfg, "training.lr_scheduler")
+    if lr_scheduler not in lr_schedulers:
+        raise ValueError(f"training.lr_scheduler 必须是 {sorted(lr_schedulers)} 之一，当前为: {lr_scheduler}")

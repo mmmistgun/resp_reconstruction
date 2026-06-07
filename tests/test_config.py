@@ -10,8 +10,18 @@ def test_load_default_config_has_expected_values():
     assert cfg.data.input_set == "mixed_zscore"
     assert cfg.data.max_train_windows == 1024
     assert cfg.data.max_val_windows == 256
+    assert cfg.data.train_sample_strategy == "stratified_random"
+    assert cfg.data.val_sample_strategy == "stratified_random"
+    assert cfg.data.train_sample_seed == 20260601
+    assert cfg.data.val_sample_seed == 20260602
+    assert cfg.data.stratify_column == "residual_quality_class"
     assert bool(cfg.data.filter_unusable) is True
     assert cfg.training.epochs == 3
+    assert cfg.training.patience == 5
+    assert cfg.training.min_delta == 0.0
+    assert cfg.training.lr_scheduler == "none"
+    assert cfg.training.grad_clip_norm is None
+    assert bool(cfg.training.use_amp) is False
     assert cfg.model.name == "unet1d_tiny"
     assert cfg.outputs.max_prediction_windows == 32
 
@@ -54,3 +64,22 @@ def test_load_config_applies_dotlist_overrides():
     assert cfg.data.max_train_windows == 16
     assert cfg.data.max_val_windows == 8
     assert cfg.training.epochs == 1
+
+
+def test_load_config_applies_sampling_overrides():
+    cfg = load_config(
+        "configs/tho_small.yaml",
+        overrides=[
+            "data.train_sample_strategy=random",
+            "data.val_sample_strategy=head",
+            "data.train_sample_seed=7",
+            "data.val_sample_seed=8",
+            "training.patience=2",
+        ],
+    )
+
+    assert cfg.data.train_sample_strategy == "random"
+    assert cfg.data.val_sample_strategy == "head"
+    assert cfg.data.train_sample_seed == 7
+    assert cfg.data.val_sample_seed == 8
+    assert cfg.training.patience == 2
