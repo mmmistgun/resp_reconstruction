@@ -177,6 +177,24 @@ def test_filter_index_head_is_debug_prefix_only_when_explicit():
             "data": {
                 "input_set": "mixed_zscore",
                 "filter_unusable": True,
+                "train_sample_strategy": "stratified_random",
+                "train_sample_seed": 42,
+                "stratify_column": "residual_quality_class",
+            }
+        }
+    )
+
+    filtered = filter_index(_sampling_rows(), cfg, split="train", max_windows=4, sample_strategy="head")
+
+    assert filtered["dataset_row_id"].tolist() == [1, 2, 3, 4]
+
+
+def test_filter_index_ignores_configured_head_without_explicit_debug_strategy():
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "input_set": "mixed_zscore",
+                "filter_unusable": True,
                 "train_sample_strategy": "head",
                 "train_sample_seed": 42,
                 "stratify_column": "residual_quality_class",
@@ -186,7 +204,9 @@ def test_filter_index_head_is_debug_prefix_only_when_explicit():
 
     filtered = filter_index(_sampling_rows(), cfg, split="train", max_windows=4)
 
-    assert filtered["dataset_row_id"].tolist() == [1, 2, 3, 4]
+    assert len(filtered) == 4
+    assert filtered["dataset_row_id"].tolist() != [1, 2, 3, 4]
+    assert filtered["dataset_row_id"].tolist() == sorted(filtered["dataset_row_id"].tolist())
 
 
 def test_filter_index_uses_independent_val_strategy_and_seed():

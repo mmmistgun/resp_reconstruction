@@ -77,6 +77,8 @@ def _resolve_sample_strategy(cfg: DictConfig, split: str, explicit: str | None) 
         strategy = "stratified_random"
 
     strategy = str(strategy)
+    if explicit is None and strategy == "head":
+        strategy = "stratified_random"
     if strategy not in SAMPLE_STRATEGIES:
         raise ValueError(f"sample_strategy 必须是 {sorted(SAMPLE_STRATEGIES)} 之一，当前为: {strategy}")
     return strategy
