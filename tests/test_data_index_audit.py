@@ -61,6 +61,40 @@ def _rows():
     )
 
 
+def _sampling_rows():
+    base = _rows().iloc[0].to_dict()
+    classes = [
+        "near_zero_residual",
+        "near_zero_residual",
+        "near_zero_residual",
+        "near_zero_residual",
+        "near_zero_residual",
+        "stable_nonzero_residual",
+        "stable_nonzero_residual",
+        "stable_nonzero_residual",
+        "stable_nonzero_residual",
+        "high_residual",
+        "high_residual",
+        "high_residual",
+    ]
+    rows = []
+    for index, residual_class in enumerate(classes, start=1):
+        row = base.copy()
+        row.update(
+            {
+                "dataset_row_id": index,
+                "split": "train",
+                "window_id_in_segment": index,
+                "window_start_sample": (index - 1) * 18000,
+                "window_end_sample": index * 18000,
+                "residual_quality_class": residual_class,
+                "usable": True,
+            }
+        )
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def test_validate_index_columns_accepts_required_columns():
     validate_index_columns(_rows())
 
@@ -91,6 +125,109 @@ def test_filter_index_filters_unusable_before_limit_when_configured():
     filtered = filter_index(rows, cfg, split="train", max_windows=2)
 
     assert filtered["dataset_row_id"].tolist() == [2, 3]
+
+
+def test_filter_index_defaults_to_stratified_random():
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "input_set": "mixed_zscore",
+                "filter_unusable": True,
+                "train_sample_strategy": "stratified_random",
+                "train_sample_seed": 42,
+                "stratify_column": "residual_quality_class",
+            }
+        }
+    )
+
+    filtered = filter_index(_sampling_rows(), cfg, split="train", max_windows=5)
+
+    assert len(filtered) == 5
+    assert set(filtered["residual_quality_class"]) == {
+        "near_zero_residual",
+        "stable_nonzero_residual",
+        "high_residual",
+    }
+    assert filtered["dataset_row_id"].tolist() == sorted(filtered["dataset_row_id"].tolist())
+
+
+def test_filter_index_random_is_reproducible():
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "input_set": "mixed_zscore",
+                "filter_unusable": True,
+                "train_sample_strategy": "random",
+                "train_sample_seed": 123,
+                "stratify_column": "residual_quality_class",
+            }
+        }
+    )
+
+    first = filter_index(_sampling_rows(), cfg, split="train", max_windows=4)
+    second = filter_index(_sampling_rows(), cfg, split="train", max_windows=4)
+
+    assert first["dataset_row_id"].tolist() == second["dataset_row_id"].tolist()
+    assert first["dataset_row_id"].tolist() != [1, 2, 3, 4]
+
+
+def test_filter_index_head_is_debug_prefix_only_when_explicit():
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "input_set": "mixed_zscore",
+                "filter_unusable": True,
+                "train_sample_strategy": "head",
+                "train_sample_seed": 42,
+                "stratify_column": "residual_quality_class",
+            }
+        }
+    )
+
+    filtered = filter_index(_sampling_rows(), cfg, split="train", max_windows=4)
+
+    assert filtered["dataset_row_id"].tolist() == [1, 2, 3, 4]
+
+
+def test_filter_index_uses_independent_val_strategy_and_seed():
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "input_set": "mixed_zscore",
+                "filter_unusable": True,
+                "train_sample_strategy": "random",
+                "val_sample_strategy": "random",
+                "train_sample_seed": 1,
+                "val_sample_seed": 2,
+                "stratify_column": "residual_quality_class",
+            }
+        }
+    )
+    train_rows = _sampling_rows().assign(split="train")
+    val_rows = _sampling_rows().assign(split="val")
+    rows = pd.concat([train_rows, val_rows], ignore_index=True)
+
+    train = filter_index(rows, cfg, split="train", max_windows=4)
+    val = filter_index(rows, cfg, split="val", max_windows=4)
+
+    assert train["dataset_row_id"].tolist() != val["dataset_row_id"].tolist()
+
+
+def test_filter_index_rejects_missing_stratify_column():
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "input_set": "mixed_zscore",
+                "filter_unusable": True,
+                "train_sample_strategy": "stratified_random",
+                "train_sample_seed": 42,
+                "stratify_column": "missing_column",
+            }
+        }
+    )
+
+    with pytest.raises(ValueError, match="missing_column"):
+        filter_index(_sampling_rows(), cfg, split="train", max_windows=5)
 
 
 def test_add_usable_flag_uses_thresholds_and_classes():
