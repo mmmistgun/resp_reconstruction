@@ -24,7 +24,7 @@ def train_one_epoch(
     """执行一个训练 epoch，并返回平均 loss 摘要。"""
     resolved_device = torch.device(device)
     amp_enabled = bool(use_amp and resolved_device.type == "cuda")
-    scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
+    scaler = torch.amp.GradScaler(resolved_device.type, enabled=amp_enabled)
     model.to(resolved_device)
     model.train()
     meter = _LossMeter()
@@ -33,7 +33,7 @@ def train_one_epoch(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device)
         optimizer.zero_grad(set_to_none=True)
-        with torch.cuda.amp.autocast(enabled=amp_enabled):
+        with torch.amp.autocast(resolved_device.type, enabled=amp_enabled):
             pred = model(sensor)
             loss, parts = loss_fn(pred, target)
         if amp_enabled:

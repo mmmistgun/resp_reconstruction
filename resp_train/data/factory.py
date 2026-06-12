@@ -10,13 +10,18 @@ from torch.utils.data import DataLoader
 from resp_train.data.audit import add_usable_flag, summarize_audit
 from resp_train.data.dataset import RespWindowDataset
 from resp_train.data.index import filter_index, read_index
+from resp_train.data.research_v2 import (
+    ResearchV2WindowDataset,
+    read_research_v2_index,
+    summarize_research_v2_audit,
+)
 
 
 @dataclass(frozen=True)
 class WindowDataBundle:
     index_path: Path
     rows: pd.DataFrame
-    dataset: RespWindowDataset
+    dataset: RespWindowDataset | ResearchV2WindowDataset
     loader: DataLoader
     audited: pd.DataFrame
     audit_summary: pd.DataFrame
@@ -42,7 +47,7 @@ def build_window_data(
 ) -> WindowDataBundle:
     index_path = _index_path(cfg)
     audited_frame = _read_audited_index(cfg) if audited is None else audited
-    audit_summary = summarize_audit(audited_frame)
+    audit_summary = _summarize_audit(audited_frame, cfg)
     return _build_window_bundle(
         cfg,
         index_path=index_path,
@@ -59,7 +64,7 @@ def build_window_data(
 def build_tho_data(cfg: DictConfig) -> ThoDataBundle:
     index_path = _index_path(cfg)
     audited = _read_audited_index(cfg)
-    audit_summary = summarize_audit(audited)
+    audit_summary = _summarize_audit(audited, cfg)
     train = _build_window_bundle(
         cfg,
         index_path=index_path,
@@ -108,7 +113,8 @@ def _build_window_bundle(
         sample_strategy=sample_strategy,
         sample_seed=sample_seed,
     )
-    dataset = RespWindowDataset(
+    dataset_cls = ResearchV2WindowDataset if _is_research_v2(cfg) else RespWindowDataset
+    dataset = dataset_cls(
         index_path,
         rows,
         cfg,
@@ -137,4 +143,16 @@ def _index_path(cfg: DictConfig) -> Path:
 
 
 def _read_audited_index(cfg: DictConfig) -> pd.DataFrame:
+    if _is_research_v2(cfg):
+        return read_research_v2_index(cfg.data.dataset_root, cfg.data.index_csv, cfg)
     return add_usable_flag(read_index(cfg.data.dataset_root, cfg.data.index_csv), cfg)
+
+
+def _summarize_audit(audited: pd.DataFrame, cfg: DictConfig) -> pd.DataFrame:
+    if _is_research_v2(cfg):
+        return summarize_research_v2_audit(audited)
+    return summarize_audit(audited)
+
+
+def _is_research_v2(cfg: DictConfig) -> bool:
+    return str(cfg.data.get("format", "stage2_1")) == "research_v2"

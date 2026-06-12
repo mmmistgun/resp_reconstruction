@@ -1,0 +1,62 @@
+data:
+  format: research_v2
+  dataset_root: /mnt/disk_code/marques/resp_prepare/dataset/20260611_research_v2_stage2_1
+  index_csv: training/dataset_index.csv
+  input_set: research_v2_waveform
+  train_split: train
+  val_split: val
+  target_task: waveform
+  bcg_input_key: bcg_input_aligned_key
+  target_key: target_waveform_key
+  max_train_windows: 1024
+  max_val_windows: 256
+  filter_unusable: true
+  preload_windows: true
+  train_sample_strategy: stratified_random
+  val_sample_strategy: stratified_random
+  train_sample_seed: 20260610
+  val_sample_seed: 20260611
+  stratify_column: allowed_losses
+  min_hard_valid_ratio: 0.80
+  min_state_alignment_valid_ratio: 0.80
+
+window:
+  target_fs: 100
+  duration_samples: 18000
+  duration_sec: 180
+
+model:
+  name: unet1d_tiny
+  in_channels: 1
+  out_channels: 1
+  base_channels: 16
+
+loss:
+  envelope_weight: 1.0
+  spectrum_weight: 0.2
+  smooth_weight: 0.10
+  envelope_window_sec: 2.0
+  spectrum_low_hz: 0.05
+  spectrum_high_hz: 0.7
+
+training:
+  epochs: 3
+  batch_size: 8
+  learning_rate: 0.001
+  num_workers: 0
+  seed: 20260610
+  device: auto
+  patience: 5
+  min_delta: 0.0
+  lr_scheduler: none
+  grad_clip_norm: null
+  use_amp: false
+
+baseline:
+  bandpass_low_hz: 0.05
+  bandpass_high_hz: 0.7
+  filter_order: 4
+
+outputs:
+  run_root: runs/tho_research_v2
+  max_prediction_windows: 32

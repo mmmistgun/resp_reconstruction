@@ -83,3 +83,14 @@ def test_load_config_applies_sampling_overrides():
     assert cfg.data.train_sample_seed == 7
     assert cfg.data.val_sample_seed == 8
     assert cfg.training.patience == 2
+
+
+def test_load_research_v2_config_has_expected_format():
+    cfg = load_config("configs/tho_research_v2.yaml")
+
+    assert cfg.data.format == "research_v2"
+    assert cfg.data.target_task == "waveform"
+    assert cfg.data.bcg_input_key == "bcg_input_aligned_key"
+    assert cfg.data.target_key == "target_waveform_key"
+    assert cfg.data.stratify_column == "allowed_losses"
+    assert cfg.loss.smooth_weight == 0.10
