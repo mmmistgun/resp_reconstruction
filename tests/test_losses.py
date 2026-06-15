@@ -13,6 +13,7 @@ def _cfg():
                 "envelope_weight": 1.0,
                 "spectrum_weight": 0.2,
                 "smooth_weight": 0.01,
+                "high_freq_weight": 0.0,
                 "envelope_window_sec": 2.0,
                 "spectrum_low_hz": 0.05,
                 "spectrum_high_hz": 0.7,
@@ -30,9 +31,25 @@ def test_weak_sync_loss_returns_components_and_scalar():
     total, parts = loss_fn(pred, target)
 
     assert total.ndim == 0
-    assert set(parts) == {"envelope", "spectrum", "smooth"}
+    assert set(parts) == {"envelope", "spectrum", "smooth", "high_freq"}
     total.backward()
     assert pred.grad is not None
+
+
+def test_weak_sync_loss_penalizes_prediction_high_frequency_energy():
+    cfg = _cfg()
+    cfg.loss.high_freq_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 10, 1 / fs)
+    low = torch.sin(2 * torch.pi * 0.2 * time).reshape(1, 1, -1)
+    high = 0.5 * torch.sin(2 * torch.pi * 5.0 * time).reshape(1, 1, -1)
+
+    _, low_parts = loss_fn(low, low)
+    _, mixed_parts = loss_fn(low + high, low)
+
+    assert "high_freq" in mixed_parts
+    assert mixed_parts["high_freq"] > low_parts["high_freq"] * 100
 
 
 def test_weak_sync_loss_rejects_mismatched_or_multichannel_shapes():

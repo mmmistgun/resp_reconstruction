@@ -15,6 +15,7 @@ class WeakSyncLoss(torch.nn.Module):
         self.env_weight = float(cfg.loss.envelope_weight)
         self.spec_weight = float(cfg.loss.spectrum_weight)
         self.smooth_weight = float(cfg.loss.smooth_weight)
+        self.high_freq_weight = float(cfg.loss.get("high_freq_weight", 0.0))
         self.low_hz = float(cfg.loss.spectrum_low_hz)
         self.high_hz = float(cfg.loss.spectrum_high_hz)
 
@@ -23,8 +24,19 @@ class WeakSyncLoss(torch.nn.Module):
         env = self._envelope_loss(pred, target)
         spec = self._spectrum_loss(pred, target)
         smooth = torch.mean(torch.abs(pred[..., 1:] - pred[..., :-1]))
-        total = self.env_weight * env + self.spec_weight * spec + self.smooth_weight * smooth
-        return total, {"envelope": env.detach(), "spectrum": spec.detach(), "smooth": smooth.detach()}
+        high_freq = self._high_frequency_energy(pred)
+        total = (
+            self.env_weight * env
+            + self.spec_weight * spec
+            + self.smooth_weight * smooth
+            + self.high_freq_weight * high_freq
+        )
+        return total, {
+            "envelope": env.detach(),
+            "spectrum": spec.detach(),
+            "smooth": smooth.detach(),
+            "high_freq": high_freq.detach(),
+        }
 
     @staticmethod
     def _validate_inputs(pred: torch.Tensor, target: torch.Tensor) -> None:
@@ -63,6 +75,17 @@ class WeakSyncLoss(torch.nn.Module):
             )
         band = power[:, mask]
         return band / torch.clamp(band.sum(dim=-1, keepdim=True), min=1e-8)
+
+    def _high_frequency_energy(self, pred: torch.Tensor) -> torch.Tensor:
+        """惩罚预测中高于呼吸频带上限的相对频谱能量。"""
+        centered = pred - pred.mean(dim=-1, keepdim=True)
+        power = torch.fft.rfft(centered, dim=-1).abs().square().squeeze(1)
+        freqs = torch.fft.rfftfreq(pred.shape[-1], d=1.0 / self.fs).to(pred.device)
+        mask = freqs > self.high_hz
+        if not bool(mask.any()):
+            return power.new_tensor(0.0)
+        total = torch.clamp(power.sum(dim=-1), min=1e-8)
+        return torch.mean(power[:, mask].sum(dim=-1) / total)
 
     @staticmethod
     def _zscore(x: torch.Tensor) -> torch.Tensor:
