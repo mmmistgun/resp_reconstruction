@@ -16,6 +16,8 @@ class WeakSyncLoss(torch.nn.Module):
         self.spec_weight = float(cfg.loss.spectrum_weight)
         self.smooth_weight = float(cfg.loss.smooth_weight)
         self.high_freq_weight = float(cfg.loss.get("high_freq_weight", 0.0))
+        self.relative_env_weight = float(cfg.loss.get("relative_envelope_weight", 0.0))
+        self.relative_env_trend_window = max(self.envelope_window, int(round(self.fs * 20.0)))
         self.low_hz = float(cfg.loss.spectrum_low_hz)
         self.high_hz = float(cfg.loss.spectrum_high_hz)
 
@@ -25,17 +27,20 @@ class WeakSyncLoss(torch.nn.Module):
         spec = self._spectrum_loss(pred, target)
         smooth = torch.mean(torch.abs(pred[..., 1:] - pred[..., :-1]))
         high_freq = self._high_frequency_energy(pred)
+        relative_env = self._relative_envelope_loss(pred, target)
         total = (
             self.env_weight * env
             + self.spec_weight * spec
             + self.smooth_weight * smooth
             + self.high_freq_weight * high_freq
+            + self.relative_env_weight * relative_env
         )
         return total, {
             "envelope": env.detach(),
             "spectrum": spec.detach(),
             "smooth": smooth.detach(),
             "high_freq": high_freq.detach(),
+            "relative_envelope": relative_env.detach(),
         }
 
     @staticmethod
@@ -86,6 +91,24 @@ class WeakSyncLoss(torch.nn.Module):
             return power.new_tensor(0.0)
         total = torch.clamp(power.sum(dim=-1), min=1e-8)
         return torch.mean(power[:, mask].sum(dim=-1) / total)
+
+    def _relative_envelope_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_rel = self._relative_envelope_trace(pred)
+        target_rel = self._relative_envelope_trace(target)
+        return torch.mean(torch.abs(pred_rel - target_rel))
+
+    def _relative_envelope_trace(self, x: torch.Tensor) -> torch.Tensor:
+        env = self._rms_envelope(x)
+        trend_window = min(self.relative_env_trend_window, env.shape[-1])
+        # avg_pool1d 要求 padding 不超过半个 kernel；偶数窗口短序列时使用奇数窗口更稳。
+        if trend_window > 1 and trend_window % 2 == 0:
+            trend_window -= 1
+        pad = trend_window // 2
+        trend = F.avg_pool1d(env, kernel_size=trend_window, stride=1, padding=pad)
+        if trend.shape[-1] > env.shape[-1]:
+            trend = trend[..., : env.shape[-1]]
+        rel = torch.log(torch.clamp(env, min=1e-8)) - torch.log(torch.clamp(trend, min=1e-8))
+        return rel - rel.mean(dim=-1, keepdim=True)
 
     @staticmethod
     def _zscore(x: torch.Tensor) -> torch.Tensor:

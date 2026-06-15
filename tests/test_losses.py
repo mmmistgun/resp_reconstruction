@@ -31,9 +31,46 @@ def test_weak_sync_loss_returns_components_and_scalar():
     total, parts = loss_fn(pred, target)
 
     assert total.ndim == 0
-    assert set(parts) == {"envelope", "spectrum", "smooth", "high_freq"}
+    assert set(parts) == {"envelope", "spectrum", "smooth", "high_freq", "relative_envelope"}
     total.backward()
     assert pred.grad is not None
+
+
+def test_relative_envelope_weight_zero_keeps_total_loss_unchanged():
+    cfg = _cfg()
+    cfg.loss.relative_envelope_weight = 0.0
+    loss_fn = WeakSyncLoss(cfg)
+    pred = torch.randn(2, 1, 1800)
+    target = torch.randn(2, 1, 1800)
+
+    total, parts = loss_fn(pred, target)
+    expected = (
+        cfg.loss.envelope_weight * parts["envelope"]
+        + cfg.loss.spectrum_weight * parts["spectrum"]
+        + cfg.loss.smooth_weight * parts["smooth"]
+        + cfg.loss.high_freq_weight * parts["high_freq"]
+    )
+
+    assert torch.allclose(total, expected)
+
+
+def test_relative_envelope_loss_penalizes_missing_relative_boost():
+    cfg = _cfg()
+    cfg.loss.relative_envelope_weight = 0.01
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 60, 1 / fs)
+    carrier = torch.sin(2 * torch.pi * 0.25 * time)
+    boost = torch.ones_like(time)
+    boost[(time >= 20) & (time <= 40)] = 1.8
+    target = (boost * carrier).reshape(1, 1, -1)
+    good = (3.0 * target).clone()
+    bad = carrier.reshape(1, 1, -1)
+
+    _, good_parts = loss_fn(good, target)
+    _, bad_parts = loss_fn(bad, target)
+
+    assert bad_parts["relative_envelope"] > good_parts["relative_envelope"] + 0.05
 
 
 def test_weak_sync_loss_penalizes_prediction_high_frequency_energy():

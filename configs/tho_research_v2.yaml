@@ -35,6 +35,7 @@ loss:
   envelope_weight: 1.0
   spectrum_weight: 0.2
   smooth_weight: 0.10
+  relative_envelope_weight: 0.0
   envelope_window_sec: 2.0
   spectrum_low_hz: 0.05
   spectrum_high_hz: 0.7
