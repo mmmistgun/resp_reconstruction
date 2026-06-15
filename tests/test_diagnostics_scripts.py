@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from omegaconf import OmegaConf
 
-from scripts.plot_tho_predictions import plot_run_predictions
+from scripts.plot_tho_predictions import _load_input_lookup, _load_npz, plot_run_predictions
 from scripts.summarize_tho_runs import summarize_runs
 
 
@@ -34,6 +34,10 @@ def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
                 "rr_peak_abs_error": 2.5,
                 "envelope_corr": 0.25,
                 "spectrum_similarity": 0.8,
+                "pred_rr_spec_bpm": 18.0,
+                "target_rr_spec_bpm": 16.0,
+                "pred_rr_peak_bpm": 19.0,
+                "target_rr_peak_bpm": 17.0,
             }
         ]
     ).to_csv(run_dir / "metrics.csv", index=False)
@@ -70,6 +74,79 @@ def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
     )
 
 
+def _write_research_v2_run(run_dir: Path, dataset_root: Path) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    training_dir = dataset_root / "training"
+    align_dir = dataset_root / "whole_night" / "alignment" / "88"
+    bank_dir = dataset_root / "whole_night" / "signal_bank" / "88"
+    training_dir.mkdir(parents=True, exist_ok=True)
+    align_dir.mkdir(parents=True, exist_ok=True)
+    bank_dir.mkdir(parents=True, exist_ok=True)
+
+    base = np.arange(80, dtype=np.float32)
+    np.savez(
+        align_dir / "research_v2_alignment.npz",
+        bcg_resp_band_state_aligned=base + 100,
+    )
+    np.savez(
+        bank_dir / "research_v2_signal_bank.npz",
+        tho_waveform_ref=base * 2,
+    )
+    pd.DataFrame(
+        [
+            {
+                "dataset_row_id": 1,
+                "split": "val",
+                "samp_id": 88,
+                "coupling_state_id": 1,
+                "window_start_s": 0.1,
+                "window_end_s": 0.5,
+                "source_npz": "../whole_night/alignment/88/research_v2_alignment.npz",
+                "target_source_npz": "../whole_night/signal_bank/88/research_v2_signal_bank.npz",
+                "bcg_input_key": "bcg_resp_band_state_aligned",
+                "bcg_input_aligned_key": "bcg_resp_band_state_aligned",
+                "target_waveform_key": "tho_waveform_ref",
+                "hard_valid_ratio": 1.0,
+                "state_alignment_valid_ratio": 1.0,
+                "allowed_losses": "waveform",
+                "supervision_confidence_level": "high",
+                "state_alignment_method": "constant_shift",
+                "reason": "",
+            }
+        ]
+    ).to_csv(training_dir / "dataset_index.csv", index=False)
+    np.savez(
+        run_dir / "predictions.npz",
+        r_tho_hat=np.zeros((1, 1, 40), dtype=np.float32),
+        tho_ref=np.zeros((1, 1, 40), dtype=np.float32),
+        dataset_row_id=np.asarray([1]),
+        split=np.asarray(["val"]),
+        input_set=np.asarray(["research_v2_waveform"]),
+        residual_quality_class=np.asarray(["waveform"]),
+    )
+    OmegaConf.save(
+        OmegaConf.create(
+            {
+                "data": {
+                    "format": "research_v2",
+                    "dataset_root": str(dataset_root),
+                    "index_csv": "training/dataset_index.csv",
+                    "input_set": "research_v2_waveform",
+                    "target_task": "waveform",
+                    "bcg_input_key": "bcg_input_aligned_key",
+                    "target_key": "target_waveform_key",
+                    "filter_unusable": True,
+                    "preload_windows": False,
+                    "min_hard_valid_ratio": 0.8,
+                    "min_state_alignment_valid_ratio": 0.8,
+                },
+                "window": {"target_fs": 100, "duration_samples": 40},
+            }
+        ),
+        run_dir / "config.yaml",
+    )
+
+
 def test_plot_run_predictions_writes_png(tmp_path):
     run_dir = tmp_path / "run"
     _write_minimal_run(run_dir)
@@ -80,6 +157,45 @@ def test_plot_run_predictions_writes_png(tmp_path):
     assert written[0].suffix == ".png"
     assert written[0].exists()
     assert written[0].stat().st_size > 0
+
+
+def test_plot_run_predictions_writes_diagnostic_four_panel_png(tmp_path):
+    run_dir = tmp_path / "run"
+    _write_minimal_run(run_dir)
+
+    written = plot_run_predictions(run_dir, max_plots=1)
+
+    from PIL import Image
+
+    width, height = Image.open(written[0]).size
+    assert width >= 1800
+    assert height >= 1400
+
+
+def test_plot_title_includes_rr_metric_values(tmp_path):
+    run_dir = tmp_path / "run"
+    _write_minimal_run(run_dir)
+    predictions = _load_npz(run_dir / "predictions.npz")
+    metrics = pd.read_csv(run_dir / "metrics.csv")
+
+    from scripts.plot_tho_predictions import _metric_text
+
+    text = _metric_text(_metric_row=metrics.iloc[0].to_dict(), predictions=predictions, pred_idx=0)
+
+    assert "rr_spec=18.0/16.0 bpm" in text
+    assert "rr_peak=19.0/17.0 bpm" in text
+
+
+def test_plot_input_lookup_supports_research_v2_format(tmp_path):
+    run_dir = tmp_path / "run"
+    dataset_root = tmp_path / "research_v2_dataset"
+    _write_research_v2_run(run_dir, dataset_root)
+    predictions = _load_npz(run_dir / "predictions.npz")
+    cfg = OmegaConf.load(run_dir / "config.yaml")
+
+    lookup = _load_input_lookup(run_dir, predictions, cfg)
+
+    assert lookup[1].tolist() == np.arange(110, 150, dtype=np.float32).tolist()
 
 
 def test_summarize_runs_writes_one_row_per_run(tmp_path):
