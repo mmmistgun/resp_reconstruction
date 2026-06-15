@@ -41,6 +41,8 @@ def test_evaluate_prediction_dict_returns_window_metrics():
     assert frame.loc[0, "dataset_row_id"] == 1
     assert frame.loc[0, "rr_spec_abs_error"] < 1.0
     assert frame.loc[0, "spectrum_similarity"] > 0.99
+    assert frame.loc[0, "relative_envelope_corr"] > 0.99
+    assert frame.loc[0, "relative_envelope_mae"] < 0.01
 
 
 def test_evaluate_prediction_dict_rejects_empty_predictions():
