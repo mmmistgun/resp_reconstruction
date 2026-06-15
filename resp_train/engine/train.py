@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from pathlib import Path
+import sys
 from typing import Any
 
 import numpy as np
@@ -20,6 +21,7 @@ def train_one_epoch(
     *,
     grad_clip_norm: float | None = None,
     use_amp: bool = False,
+    show_progress: bool | None = None,
 ) -> dict[str, float]:
     """执行一个训练 epoch，并返回平均 loss 摘要。"""
     resolved_device = torch.device(device)
@@ -29,7 +31,7 @@ def train_one_epoch(
     model.train()
     meter = _LossMeter()
 
-    progress = tqdm(dataloader, desc="train", leave=False)
+    progress = tqdm(dataloader, desc="train", leave=False, disable=not _should_show_progress(show_progress))
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device)
         optimizer.zero_grad(set_to_none=True)
@@ -61,6 +63,8 @@ def validate(
     dataloader: Iterable[Mapping[str, torch.Tensor]],
     loss_fn: nn.Module,
     device: torch.device | str,
+    *,
+    show_progress: bool | None = None,
 ) -> dict[str, float]:
     """执行验证循环，并返回平均 loss 摘要。"""
     resolved_device = torch.device(device)
@@ -68,7 +72,7 @@ def validate(
     model.eval()
     meter = _LossMeter()
 
-    progress = tqdm(dataloader, desc="val", leave=False)
+    progress = tqdm(dataloader, desc="val", leave=False, disable=not _should_show_progress(show_progress))
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device)
         pred = model(sensor)
@@ -174,6 +178,13 @@ def _move_batch(batch: Mapping[str, torch.Tensor], device: torch.device) -> tupl
     except KeyError as exc:
         raise KeyError("batch 必须包含 x 和 target") from exc
     return sensor.to(device), target.to(device)
+
+
+def _should_show_progress(show_progress: bool | None) -> bool:
+    """默认只在交互式终端展示进度条，避免日志系统被 tqdm 刷屏。"""
+    if show_progress is not None:
+        return bool(show_progress)
+    return sys.stderr.isatty()
 
 
 class _LossMeter:

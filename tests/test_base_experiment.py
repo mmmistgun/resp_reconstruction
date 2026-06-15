@@ -94,3 +94,10 @@ def test_base_experiment_early_stopping_records_reason(tmp_path: Path):
 
     assert history["epoch"].max() < 5
     assert (run_dir / "train.log").read_text(encoding="utf-8").find("early_stop") >= 0
+
+
+def test_base_experiment_epoch_log_includes_train_and_val_metric_parts(tmp_path: Path):
+    run_dir = ToyExperiment(_cfg(tmp_path)).train()
+    log_text = (run_dir / "train.log").read_text(encoding="utf-8")
+
+    assert "epoch=1 | train: loss=1.000000 constant=1.000000 | val: loss=1.000000 constant=1.000000" in log_text

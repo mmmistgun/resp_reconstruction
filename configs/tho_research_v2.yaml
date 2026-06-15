@@ -51,6 +51,7 @@ training:
   lr_scheduler: none
   grad_clip_norm: null
   use_amp: false
+  show_progress: auto
 
 baseline:
   bandpass_low_hz: 0.05

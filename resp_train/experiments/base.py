@@ -61,6 +61,7 @@ class BaseExperiment:
         stale_epochs = 0
         patience = int(self.cfg.training.get("patience", 0))
         min_delta = float(self.cfg.training.get("min_delta", 0.0))
+        show_progress = self._resolve_show_progress()
 
         # 训练循环只关注通用 loss，不包含具体任务指标或数据逻辑。
         for epoch in range(1, int(self.cfg.training.epochs) + 1):
@@ -72,8 +73,9 @@ class BaseExperiment:
                 device=device,
                 grad_clip_norm=self.cfg.training.get("grad_clip_norm"),
                 use_amp=bool(self.cfg.training.get("use_amp", False)),
+                show_progress=show_progress,
             )
-            val_metrics = validate(model, data.val_loader, loss_fn, device=device)
+            val_metrics = validate(model, data.val_loader, loss_fn, device=device, show_progress=show_progress)
             record = {
                 "epoch": epoch,
                 "train_loss": train_metrics["loss"],
@@ -82,7 +84,7 @@ class BaseExperiment:
                 **{f"val_{k}": v for k, v in val_metrics.items() if k != "loss"},
             }
             history_records.append(record)
-            logger.info("epoch=%s train_loss=%.6f val_loss=%.6f", epoch, record["train_loss"], record["val_loss"])
+            logger.info(self._format_epoch_log(record))
 
             improved = record["val_loss"] < (best_loss - min_delta)
             if improved:
@@ -137,3 +139,39 @@ class BaseExperiment:
 
     def evaluate_best(self, model: torch.nn.Module, data: ExperimentData, run_dir: Path) -> None:
         raise NotImplementedError
+
+    def _format_epoch_log(self, record: dict[str, Any]) -> str:
+        """构造每个 epoch 的核心 loss 和训练/验证分项指标日志。"""
+        return (
+            f"epoch={int(record['epoch'])} | "
+            f"train: {self._format_metric_group(record, prefix='train')} | "
+            f"val: {self._format_metric_group(record, prefix='val')}"
+        )
+
+    def _format_metric_group(self, record: dict[str, Any], *, prefix: str) -> str:
+        """按 loss 优先、分项指标排序的形式格式化一个训练阶段。"""
+        parts = [f"loss={float(record[f'{prefix}_loss']):.6f}"]
+        metric_prefix = f"{prefix}_"
+        metric_keys = sorted(
+            key
+            for key in record
+            if key.startswith(metric_prefix) and key != f"{prefix}_loss"
+        )
+        for key in metric_keys:
+            display_key = key.removeprefix(metric_prefix)
+            parts.append(f"{display_key}={float(record[key]):.6f}")
+        return " ".join(parts)
+
+    def _resolve_show_progress(self) -> bool | None:
+        """解析训练进度条开关；None 表示由训练引擎按终端类型自动判断。"""
+        value = self.cfg.training.get("show_progress", None)
+        if value in (None, "auto"):
+            return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "off"}:
+                return False
+            raise ValueError(f"training.show_progress 只能是 true/false/auto，当前为: {value}")
+        return bool(value)
