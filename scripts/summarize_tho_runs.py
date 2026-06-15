@@ -17,6 +17,8 @@ METRIC_COLUMNS = [
     "rr_spec_abs_error",
     "rr_peak_abs_error",
     "envelope_corr",
+    "relative_envelope_corr",
+    "relative_envelope_mae",
     "spectrum_similarity",
 ]
 

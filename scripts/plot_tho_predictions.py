@@ -288,7 +288,14 @@ def _metric_text(*, _metric_row: dict[str, Any], predictions: dict[str, np.ndarr
         parts.append(
             f"rr_peak={_format_bpm(_metric_row['pred_rr_peak_bpm'])}/{_format_bpm(_metric_row['target_rr_peak_bpm'])} bpm"
         )
-    for key in ("rr_spec_abs_error", "rr_peak_abs_error", "envelope_corr", "spectrum_similarity"):
+    for key in (
+        "rr_spec_abs_error",
+        "rr_peak_abs_error",
+        "envelope_corr",
+        "relative_envelope_corr",
+        "relative_envelope_mae",
+        "spectrum_similarity",
+    ):
         if key in _metric_row:
             parts.append(f"{key}={_format_metric(_metric_row[key])}")
     return " | ".join(parts)

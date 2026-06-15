@@ -33,6 +33,8 @@ def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
                 "rr_spec_abs_error": 1.5,
                 "rr_peak_abs_error": 2.5,
                 "envelope_corr": 0.25,
+                "relative_envelope_corr": 0.42,
+                "relative_envelope_mae": 0.18,
                 "spectrum_similarity": 0.8,
                 "pred_rr_spec_bpm": 18.0,
                 "target_rr_spec_bpm": 16.0,
@@ -186,6 +188,22 @@ def test_plot_title_includes_rr_metric_values(tmp_path):
     assert "rr_peak=19.0/17.0 bpm" in text
 
 
+def test_metric_text_includes_relative_envelope_metrics():
+    from scripts.plot_tho_predictions import _metric_text
+
+    text = _metric_text(
+        _metric_row={
+            "relative_envelope_corr": 0.42,
+            "relative_envelope_mae": 0.18,
+        },
+        predictions={},
+        pred_idx=0,
+    )
+
+    assert "relative_envelope_corr=0.420" in text
+    assert "relative_envelope_mae=0.180" in text
+
+
 def test_plot_input_lookup_supports_research_v2_format(tmp_path):
     run_dir = tmp_path / "run"
     dataset_root = tmp_path / "research_v2_dataset"
@@ -211,6 +229,17 @@ def test_summarize_runs_writes_one_row_per_run(tmp_path):
     assert frame["val_loss"].tolist() == [1.0, 0.8]
     assert frame["model_rr_spec_abs_error_mean"].tolist() == [1.5, 1.5]
     assert frame["baseline_spectrum_similarity_mean"].tolist() == [0.9, 0.9]
+
+
+def test_summarize_runs_includes_relative_envelope_metrics(tmp_path):
+    root = tmp_path / "runs"
+    _write_minimal_run(root / "run_a")
+    output = tmp_path / "summary.csv"
+
+    frame = summarize_runs(root, output)
+
+    assert frame["model_relative_envelope_corr_mean"].tolist() == [0.42]
+    assert frame["model_relative_envelope_mae_median"].tolist() == [0.18]
 
 
 def test_train_script_delegates_to_tho_experiment():
