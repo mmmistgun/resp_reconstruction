@@ -50,7 +50,7 @@
   - 第二阶段才新增 `relative_envelope_loss`，默认权重 `0.0`。
 - 修改：`tests/test_losses.py`
   - 第二阶段才覆盖新增 loss 分量和默认不改变行为。
-- 修改：`configs/tho_research_v2_patch_mixer.yaml`
+- 修改：`configs/tho_research_v2.yaml`
   - 第二阶段才加入 `relative_envelope_weight: 0.0` 默认项。
 
 ---
@@ -464,7 +464,7 @@ git commit -m "docs: record relative envelope diagnostic decision"
 
 **文件：**
 - 修改：`resp_train/losses/weak.py`
-- 修改：`configs/tho_research_v2_patch_mixer.yaml`
+- 修改：`configs/tho_research_v2.yaml`
 - 测试：`tests/test_losses.py`
 
 - [ ] **步骤 1：编写失败测试：默认返回新分量但权重为 0 不改变总损失**
@@ -577,7 +577,7 @@ def test_relative_envelope_loss_penalizes_missing_relative_boost():
 
 - [ ] **步骤 5：配置默认值保持关闭**
 
-在 `configs/tho_research_v2_patch_mixer.yaml` 的 `loss` 下加入：
+在 `configs/tho_research_v2.yaml` 的 `loss` 下加入：
 
 ```yaml
   relative_envelope_weight: 0.0
@@ -596,14 +596,14 @@ def test_relative_envelope_loss_penalizes_missing_relative_boost():
 - [ ] **步骤 7：Commit**
 
 ```bash
-git add resp_train/losses/weak.py configs/tho_research_v2_patch_mixer.yaml tests/test_losses.py
+git add resp_train/losses/weak.py configs/tho_research_v2.yaml tests/test_losses.py
 git commit -m "feat: add optional relative envelope loss"
 ```
 
 ### 任务 6：跑小权重实验并比较
 
 **文件：**
-- 输入：`configs/tho_research_v2_patch_mixer.yaml`
+- 输入：`runs/tho_research_v2_patch_mixer_rawish_hfpenalty_gpu_es50/20260614_171417_631400/config.yaml`
 - 输出：`runs/tho_research_v2_patch_mixer_rawish_relenv001/`
 
 - [ ] **步骤 1：启动小权重实验**
@@ -612,11 +612,10 @@ git commit -m "feat: add optional relative envelope loss"
 
 ```bash
 /home/marques/.conda/envs/lighting/bin/python scripts/train_tho_small.py \
-  --config configs/tho_research_v2_patch_mixer.yaml \
+  --config runs/tho_research_v2_patch_mixer_rawish_hfpenalty_gpu_es50/20260614_171417_631400/config.yaml \
   --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_relenv001 \
   --set loss.relative_envelope_weight=0.01 \
-  --set training.epochs=50 \
-  --set training.patience=8
+  --set training.device=cuda:0
 ```
 
 预期：生成新的 run 目录，包含 `metrics.csv`、`train_history.csv`、`plots_diagnostic/`。
@@ -719,3 +718,18 @@ git commit -m "docs: record relative envelope loss experiment"
 - `relative_envelope_mae` p75：0.288078
 - 最差诊断图人工判断：未通过。按 `relative_envelope_mae` 排序重画后，rows 7949、7953、7954、7952、7951、7946 等样本显示目标存在局部相对增强/下降或异常强段，而预测仍偏规整窄带。
 - 决策：进入第二阶段。触发依据是 `relative_envelope_mae` p75 高于 0.20，且最差诊断图中超过 5 张支持“相对包络变化未充分跟随”的人工判断。
+
+### 阶段二实验结论
+
+- 训练命令：
+  `/home/marques/.conda/envs/lighting/bin/python scripts/train_tho_small.py --config /mnt/disk_code/marques/resp_reconstruction/runs/tho_research_v2_patch_mixer_rawish_hfpenalty_gpu_es50/20260614_171417_631400/config.yaml --set outputs.run_root=/mnt/disk_code/marques/resp_reconstruction/runs/tho_research_v2_patch_mixer_rawish_relenv001 --set loss.relative_envelope_weight=0.01 --set training.device=cuda:0`
+- 对比基线 run：`runs/tho_research_v2_patch_mixer_rawish_hfpenalty_gpu_es50/20260614_171417_631400`
+- 新 run：`runs/tho_research_v2_patch_mixer_rawish_relenv001/20260616_005516_616320`
+- 训练结果：epoch 14 early stop，best_epoch=6，best_val_loss=0.625069。
+- 产物检查：有效 run 包含 `metrics.csv`、`train_history.csv`、`plots_diagnostic/`、`config.yaml`；`runs/tho_research_v2_patch_mixer_rawish_relenv001/summary.csv` 已生成。注意同一 run_root 下还存在一次沙箱 CUDA 不可用失败启动留下的空目录 `20260616_005456_420797`，指标比较只使用有效 run。
+- `relative_envelope_corr` mean/median：0.444623/0.458991 -> 0.440967/0.457596，变化 -0.003656/-0.001395。
+- `relative_envelope_mae` mean/median：0.222915/0.188702 -> 0.219451/0.184972，变化 -0.003464/-0.003730。
+- `rr_peak_abs_error` mean：0.469880 -> 0.651706，变化 +0.181825 bpm。
+- `spectrum_similarity` mean：0.974992 -> 0.975401，变化 +0.000409。
+- 验收判断：相对包络 MAE median 下降，频谱相似度未下降；但 `rr_peak_abs_error` mean 恶化 +0.181825 bpm，超过 0.15 bpm 阈值，因此 `relative_envelope_weight=0.01` 不通过完整验收。
+- 决策：降到 `relative_envelope_weight=0.005` 再试；不建议保留 0.01。
