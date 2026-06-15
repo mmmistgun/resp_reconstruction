@@ -1,9 +1,11 @@
 import numpy as np
+import pytest
 
 from resp_train.metrics.signal import (
     bandpass_filter,
     estimate_peak_rate_bpm,
     estimate_spectral_rate_bpm,
+    relative_envelope_metrics,
     rms_envelope,
     spectrum_similarity,
 )
@@ -21,6 +23,55 @@ def test_rms_envelope_保持长度():
 
     assert env.shape == x.shape
     assert np.isfinite(env).all()
+
+
+def test_relative_envelope_metrics_忽略绝对幅度缩放():
+    fs = 100.0
+    t = np.arange(0, 120, 1 / fs)
+    carrier = np.sin(2 * np.pi * 0.25 * t)
+    mod = 1.0 + 0.5 * np.sin(2 * np.pi * 0.02 * t)
+    target = mod * carrier
+    pred = 5.0 * target
+
+    metrics = relative_envelope_metrics(pred, target, fs=fs, envelope_window_sec=2.0, trend_window_sec=20.0)
+
+    assert metrics["relative_envelope_corr"] > 0.99
+    assert metrics["relative_envelope_mae"] < 0.01
+
+
+def test_relative_envelope_metrics_识别相对增强缺失():
+    fs = 100.0
+    t = np.arange(0, 120, 1 / fs)
+    carrier = np.sin(2 * np.pi * 0.25 * t)
+    target_mod = np.ones_like(t)
+    target_mod[(t >= 45) & (t <= 75)] = 1.8
+    target = target_mod * carrier
+    pred = carrier.copy()
+
+    metrics = relative_envelope_metrics(pred, target, fs=fs, envelope_window_sec=2.0, trend_window_sec=20.0)
+
+    assert metrics["relative_envelope_corr"] < 0.8
+    assert metrics["relative_envelope_mae"] > 0.05
+
+
+def test_relative_envelope_metrics_拒绝长度小于2的信号():
+    with pytest.raises(ValueError, match="长度至少为 2"):
+        relative_envelope_metrics(np.array([1.0]), np.array([1.0]), fs=100.0)
+
+
+def test_relative_envelope_metrics_拒绝非正采样率():
+    with pytest.raises(ValueError, match="fs 必须为正数"):
+        relative_envelope_metrics(np.ones(10), np.ones(10), fs=0.0)
+
+
+def test_relative_envelope_metrics_拒绝非正包络窗口():
+    with pytest.raises(ValueError, match="envelope_window_sec 必须为正数"):
+        relative_envelope_metrics(np.ones(10), np.ones(10), fs=100.0, envelope_window_sec=0.0)
+
+
+def test_relative_envelope_metrics_拒绝非正趋势窗口():
+    with pytest.raises(ValueError, match="trend_window_sec 必须为正数"):
+        relative_envelope_metrics(np.ones(10), np.ones(10), fs=100.0, trend_window_sec=0.0)
 
 
 def test_spectral_rate_识别正弦主频():

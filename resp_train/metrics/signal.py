@@ -27,6 +27,84 @@ def rms_envelope(signal: np.ndarray, window_samples: int) -> np.ndarray:
     return np.sqrt(np.convolve(padded, kernel, mode="valid"))
 
 
+def relative_envelope_metrics(
+    pred: np.ndarray,
+    target: np.ndarray,
+    *,
+    fs: float,
+    envelope_window_sec: float = 2.0,
+    trend_window_sec: float = 20.0,
+) -> dict[str, float]:
+    """比较包络相对自身趋势的变化，用于诊断增强/下降是否被模型捕捉。"""
+    fs = float(fs)
+    envelope_window_sec = float(envelope_window_sec)
+    trend_window_sec = float(trend_window_sec)
+    if fs <= 0:
+        raise ValueError(f"fs 必须为正数，当前={fs}")
+    if envelope_window_sec <= 0:
+        raise ValueError(f"envelope_window_sec 必须为正数，当前={envelope_window_sec}")
+    if trend_window_sec <= 0:
+        raise ValueError(f"trend_window_sec 必须为正数，当前={trend_window_sec}")
+
+    pred_x = np.asarray(pred, dtype=np.float64)
+    target_x = np.asarray(target, dtype=np.float64)
+    if pred_x.size < 2 or target_x.size < 2:
+        raise ValueError("相对包络指标的信号长度至少为 2")
+    pred_x = _as_1d_float(pred)
+    target_x = _as_1d_float(target)
+    if pred_x.shape != target_x.shape:
+        raise ValueError(f"pred 和 target 长度必须一致，当前 {pred_x.shape} != {target_x.shape}")
+
+    env_window = max(1, int(round(fs * envelope_window_sec)))
+    trend_window = max(env_window, int(round(fs * trend_window_sec)))
+    pred_rel = _relative_envelope_trace(pred_x, env_window, trend_window)
+    target_rel = _relative_envelope_trace(target_x, env_window, trend_window)
+    if not np.isfinite(pred_rel).all() or not np.isfinite(target_rel).all():
+        return {"relative_envelope_corr": float("nan"), "relative_envelope_mae": float("nan")}
+    corr = _corrcoef_or_nan(pred_rel, target_rel)
+    mae = float(np.mean(np.abs(pred_rel - target_rel)))
+    return {"relative_envelope_corr": corr, "relative_envelope_mae": mae}
+
+
+def _relative_envelope_trace(signal: np.ndarray, env_window: int, trend_window: int) -> np.ndarray:
+    """返回 RMS 包络除以局部趋势后的相对包络轨迹。"""
+    env = rms_envelope(signal, env_window)
+    # 趋势窗口加宽后不易把几十秒级增强直接吸收到基线里。
+    trend = _moving_average_reflect(env, trend_window * 2)
+    floor = np.finfo(np.float64).eps
+    # 使用对数比例，使增强与下降在相对尺度上对称，同时消除绝对幅度缩放影响。
+    return np.log(np.maximum(env, floor) / np.maximum(trend, floor))
+
+
+def _moving_average_reflect(signal: np.ndarray, window_samples: int) -> np.ndarray:
+    """使用反射填充计算等长移动平均。"""
+    x = _as_1d_float(signal)
+    window = int(window_samples)
+    if window <= 0:
+        raise ValueError(f"window_samples 必须为正数，当前={window_samples}")
+    kernel = np.ones(window, dtype=np.float64) / float(window)
+    padded = np.pad(x, (window // 2, window - 1 - window // 2), mode="reflect")
+    return np.convolve(padded, kernel, mode="valid")
+
+
+def _corrcoef_or_nan(x: np.ndarray, y: np.ndarray) -> float:
+    """计算相关系数；仅一侧无波动时返回 0，表示无法跟随另一侧变化。"""
+    a = _as_1d_float(x)
+    b = _as_1d_float(y)
+    if a.shape != b.shape:
+        raise ValueError(f"相关系数输入长度必须一致，当前 {a.shape} != {b.shape}")
+    if a.size < 2:
+        return float("nan")
+    a_std = float(np.std(a))
+    b_std = float(np.std(b))
+    eps = np.finfo(np.float64).eps
+    if a_std <= eps and b_std <= eps:
+        return float("nan")
+    if a_std <= eps or b_std <= eps:
+        return 0.0
+    return float(np.corrcoef(a, b)[0, 1])
+
+
 def bandpass_filter(
     signal: np.ndarray,
     *,
