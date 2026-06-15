@@ -708,3 +708,14 @@ git commit -m "docs: record relative envelope loss experiment"
 - 如果相对包络 loss 改善了诊断指标但损害呼吸率指标，应优先降低权重到 `0.005` 或放弃 loss。
 - 如果坏例集中在少数 `samp_id` 或数据质量类别，应优先处理数据/对齐问题，而不是扩大 loss。
 - 如果相对包络指标和现有 `envelope_corr` 高度一致，说明新增 loss 价值有限，只保留诊断指标即可。
+
+## 执行记录
+
+### 阶段一诊断结论
+
+- run：`runs/tho_research_v2_patch_mixer_rawish_hfpenalty_gpu_es50/20260614_171417_631400`
+- 执行环境：在隔离 worktree 使用 `--set training.device=cpu` 复算主工作区 run；首次按原配置评估失败，根因是当前环境 CUDA 不可用。
+- `relative_envelope_corr` median：0.458991
+- `relative_envelope_mae` p75：0.288078
+- 最差诊断图人工判断：未通过。按 `relative_envelope_mae` 排序重画后，rows 7949、7953、7954、7952、7951、7946 等样本显示目标存在局部相对增强/下降或异常强段，而预测仍偏规整窄带。
+- 决策：进入第二阶段。触发依据是 `relative_envelope_mae` p75 高于 0.20，且最差诊断图中超过 5 张支持“相对包络变化未充分跟随”的人工判断。
