@@ -736,3 +736,22 @@ git commit -m "docs: record relative envelope loss experiment"
 - 真正全量最差图目录：`runs/tho_research_v2_patch_mixer_rawish_relenv001/20260616_005516_616320/plots_diagnostic_relenv_worst/`，代表 row 为 12430、12431、15210、15209、12909、12914、15208、12754。
 - 真正坏例人工判断：未通过。row 12430/15210 等样本中，预测在强事件附近响应明显，但目标中较稳定的呼吸振荡段仍被抹平或错配，说明 `0.01` 没有以可接受代价解决相对包络跟随问题。
 - 决策：降到 `relative_envelope_weight=0.005` 再试；不建议保留 0.01。
+
+### 阶段二降权实验结论
+
+- 训练命令：
+  `/home/marques/.conda/envs/lighting/bin/python scripts/train_tho_small.py --config runs/tho_research_v2_patch_mixer_rawish_hfpenalty_gpu_es50/20260614_171417_631400/config.yaml --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_relenv0005 --set loss.relative_envelope_weight=0.005 --set training.device=cuda:0`
+- 对比基线 run：`runs/tho_research_v2_patch_mixer_rawish_hfpenalty_gpu_es50/20260614_171417_631400`
+- 对比 `0.01` run：`runs/tho_research_v2_patch_mixer_rawish_relenv001/20260616_005516_616320`
+- 新 run：`runs/tho_research_v2_patch_mixer_rawish_relenv0005/20260616_220652_976917`
+- 训练结果：epoch 26 early stop，best_epoch=18，best_val_loss=0.618409。
+- `relative_envelope_corr` mean/median：0.444623/0.458991 -> 0.442177/0.457183，变化 -0.002447/-0.001808。
+- `relative_envelope_mae` mean/median：0.222915/0.188702 -> 0.222391/0.188642，变化 -0.000524/-0.000059。
+- `rr_peak_abs_error` mean/median：0.469880/0.208348 -> 0.466059/0.207346，变化 -0.003821/-0.001002 bpm。
+- `rr_spec_abs_error` mean/median：0.482934/0.000000 -> 0.477779/0.000000，变化 -0.005156/0.000000 bpm。
+- `spectrum_similarity` mean/median：0.974992/0.985910 -> 0.975085/0.985955，变化 +0.000093/+0.000044。
+- 产物检查：`metrics.csv` 2557 行，`summary.csv` 已生成；诊断图目录为 `runs/tho_research_v2_patch_mixer_rawish_relenv0005/20260616_220652_976917/plots_diagnostic_relenv_worst/`。
+- 最差相对包络 row：12430、12431、15210、15209、12909、15208、12914、8273。
+- 最差图人工判断：未通过。row 12430、15210 仍显示预测更偏事件/强段响应，目标中稳定呼吸振荡段仍有明显错配；相对包络最差样本未得到实质改善。
+- 验收判断：`0.005` 没有造成 `0.01` 的 peak RR 明显恶化，频谱指标也未恶化；但相对包络收益几乎为零，不足以证明该 loss 有训练价值。
+- 决策：不建议继续保留 `relative_envelope_loss` 作为默认训练分量；建议保留诊断指标，下一步优先查坏例数据质量、事件段/稳定呼吸段混合、以及目标/输入对齐，而不是继续调大相对包络 loss。
