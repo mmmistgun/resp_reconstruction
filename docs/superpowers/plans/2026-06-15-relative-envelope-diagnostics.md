@@ -732,4 +732,8 @@ git commit -m "docs: record relative envelope loss experiment"
 - `rr_peak_abs_error` mean：0.469880 -> 0.651706，变化 +0.181825 bpm。
 - `spectrum_similarity` mean：0.974992 -> 0.975401，变化 +0.000409。
 - 验收判断：相对包络 MAE median 下降，频谱相似度未下降；但 `rr_peak_abs_error` mean 恶化 +0.181825 bpm，超过 0.15 bpm 阈值，因此 `relative_envelope_weight=0.01` 不通过完整验收。
+- 复核修正：最初的 `predictions.npz` 只含 `outputs.max_prediction_windows=32` 个窗口，而 `metrics.csv` 含 2557 个窗口，导致 `plots_diagnostic/` 只能从已保存的 32 个窗口里选坏例，不能代表全量最差样本。已修正 `evaluate_checkpoint`：当显式写出 `metrics.csv` 时，`predictions.npz` 与 `metrics.csv` 使用同一份全量验证预测。
+- 重新评估产物：`predictions.npz` 与 `metrics.csv` 均为 2557 行，`dataset_row_id` 顺序一致；全量预测文件大小约 352M。
+- 真正全量最差图目录：`runs/tho_research_v2_patch_mixer_rawish_relenv001/20260616_005516_616320/plots_diagnostic_relenv_worst/`，代表 row 为 12430、12431、15210、15209、12909、12914、15208、12754。
+- 真正坏例人工判断：未通过。row 12430/15210 等样本中，预测在强事件附近响应明显，但目标中较稳定的呼吸振荡段仍被抹平或错配，说明 `0.01` 没有以可接受代价解决相对包络跟随问题。
 - 决策：降到 `relative_envelope_weight=0.005` 再试；不建议保留 0.01。

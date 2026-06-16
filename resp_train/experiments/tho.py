@@ -77,6 +77,21 @@ class ThoExperiment(BaseExperiment):
         data = self.build_data()
         tho_data = data.extras["tho_data"]
         output.parent.mkdir(parents=True, exist_ok=True)
+        if metrics_output is not None:
+            eval_preds = collect_predictions(
+                model,
+                tho_data.val.loader,
+                device=device,
+                max_windows=len(tho_data.val.dataset),
+            )
+            np.savez(output, **eval_preds)
+            metrics_output.parent.mkdir(parents=True, exist_ok=True)
+            evaluate_prediction_dict(eval_preds, self.cfg, method=str(self.cfg.model.name)).to_csv(
+                metrics_output,
+                index=False,
+            )
+            return
+
         diag_preds = collect_predictions(
             model,
             tho_data.val.loader,
@@ -84,18 +99,6 @@ class ThoExperiment(BaseExperiment):
             max_windows=int(self.cfg.outputs.max_prediction_windows),
         )
         np.savez(output, **diag_preds)
-        if metrics_output is not None:
-            metrics_output.parent.mkdir(parents=True, exist_ok=True)
-            eval_preds = collect_predictions(
-                model,
-                tho_data.val.loader,
-                device=device,
-                max_windows=len(tho_data.val.dataset),
-            )
-            evaluate_prediction_dict(eval_preds, self.cfg, method=str(self.cfg.model.name)).to_csv(
-                metrics_output,
-                index=False,
-            )
 
 
 def evaluate_tho_checkpoint(

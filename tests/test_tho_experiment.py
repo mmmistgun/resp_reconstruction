@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from omegaconf import OmegaConf
 
-from resp_train.experiments.tho import ThoExperiment
+from resp_train.experiments.tho import ThoExperiment, evaluate_tho_checkpoint
 
 
 def _prepare_dataset(root: Path):
@@ -114,3 +114,22 @@ def test_tho_experiment_smoke_writes_run_outputs(tmp_path: Path):
     assert (run_dir / "train_history.csv").exists()
     assert (run_dir / "metrics.csv").exists()
     assert (run_dir / "predictions.npz").exists()
+
+
+def test_eval_checkpoint_with_metrics_writes_matching_full_predictions(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    run_dir = ThoExperiment(cfg).train()
+    output = tmp_path / "eval_predictions.npz"
+    metrics_output = tmp_path / "eval_metrics.csv"
+
+    evaluate_tho_checkpoint(
+        checkpoint_path=run_dir / "checkpoint.pt",
+        config_path=run_dir / "config.yaml",
+        output_path=output,
+        metrics_output_path=metrics_output,
+    )
+
+    metrics = pd.read_csv(metrics_output)
+    with np.load(output) as predictions:
+        assert predictions["r_tho_hat"].shape[0] == len(metrics)
+        assert predictions["r_tho_hat"].shape[0] == cfg.data.max_val_windows
