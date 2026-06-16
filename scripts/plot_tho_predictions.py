@@ -22,6 +22,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from resp_train.utils.run import resolve_device
+
 
 def plot_run_predictions(
     run_dir: str | Path,
@@ -140,7 +142,7 @@ def _infer_prediction_lookup(run_path: Path, cfg, row_ids: list[int]) -> dict[in
     from resp_train.engine import collect_predictions
     from resp_train.models.registry import build_model
 
-    device = torch.device("cpu")
+    device = resolve_device(OmegaConf.select(cfg, "training.device", default="auto"))
     model = build_model(cfg).to(device)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])

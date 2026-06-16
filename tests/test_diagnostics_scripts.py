@@ -221,6 +221,48 @@ def test_plot_run_predictions_requires_checkpoint(tmp_path):
         plot_run_predictions(run_dir, max_plots=1)
 
 
+def test_plot_inference_uses_configured_device(tmp_path, monkeypatch):
+    import torch
+
+    from scripts import plot_tho_predictions
+
+    run_dir = tmp_path / "run"
+    _write_minimal_run(run_dir)
+    (run_dir / "checkpoint.pt").write_bytes(b"placeholder")
+    cfg = OmegaConf.create({"training": {"device": "cuda:0"}})
+    observed: dict[str, object] = {}
+
+    class _DummyModel:
+        def to(self, device):
+            observed["model_device"] = str(device)
+            return self
+
+        def load_state_dict(self, state):
+            observed["state"] = state
+
+    def fake_collect(model, loader, *, device, max_windows):
+        del model, loader, max_windows
+        observed["collect_device"] = str(device)
+        return {
+            "r_tho_hat": np.zeros((1, 1, 16), dtype=np.float32),
+            "tho_ref": np.zeros((1, 1, 16), dtype=np.float32),
+            "dataset_row_id": np.asarray([7]),
+        }
+
+    monkeypatch.setattr(plot_tho_predictions, "resolve_device", lambda value: torch.device(value))
+    monkeypatch.setattr(plot_tho_predictions, "_load_dataset_for_rows", lambda cfg, row_ids: [object()])
+    monkeypatch.setattr(plot_tho_predictions, "_load_input_lookup", lambda run_path, predictions, cfg: {})
+    monkeypatch.setattr("resp_train.models.registry.build_model", lambda cfg: _DummyModel())
+    monkeypatch.setattr("resp_train.engine.collect_predictions", fake_collect)
+    monkeypatch.setattr(torch, "load", lambda path, map_location: {"model_state_dict": {"ok": True}})
+
+    lookup = plot_tho_predictions._infer_prediction_lookup(run_dir, cfg, [7])
+
+    assert observed["model_device"] == "cuda:0"
+    assert observed["collect_device"] == "cuda:0"
+    assert lookup[7]["pred"].shape == (16,)
+
+
 def test_plot_run_predictions_writes_diagnostic_four_panel_png(tmp_path, monkeypatch):
     run_dir = tmp_path / "run"
     _write_minimal_run(run_dir)
