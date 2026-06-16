@@ -2,10 +2,31 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from omegaconf import OmegaConf
 
 from scripts.plot_tho_predictions import _load_input_lookup, _load_npz, plot_run_predictions
 from scripts.summarize_tho_runs import summarize_runs
+
+
+def _patch_plot_inference(monkeypatch, rows: dict[int, dict] | None = None) -> None:
+    def fake_infer(run_path, cfg, row_ids):
+        del run_path, cfg
+        t = np.linspace(0, 2 * np.pi, 128, dtype=np.float32)
+        defaults = {
+            int(row_id): {
+                "pred": np.sin(t),
+                "target": np.cos(t),
+                "x": None,
+                "meta": {"split": "val", "input_set": "mixed_zscore", "residual_quality_class": "near_zero_residual"},
+            }
+            for row_id in row_ids
+        }
+        if rows:
+            defaults.update(rows)
+        return defaults
+
+    monkeypatch.setattr("scripts.plot_tho_predictions._infer_prediction_lookup", fake_infer)
 
 
 def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
@@ -149,9 +170,10 @@ def _write_research_v2_run(run_dir: Path, dataset_root: Path) -> None:
     )
 
 
-def test_plot_run_predictions_writes_png(tmp_path):
+def test_plot_run_predictions_writes_png(tmp_path, monkeypatch):
     run_dir = tmp_path / "run"
     _write_minimal_run(run_dir)
+    _patch_plot_inference(monkeypatch)
 
     written = plot_run_predictions(run_dir, max_plots=1)
 
@@ -161,9 +183,48 @@ def test_plot_run_predictions_writes_png(tmp_path):
     assert written[0].stat().st_size > 0
 
 
-def test_plot_run_predictions_writes_diagnostic_four_panel_png(tmp_path):
+def test_plot_run_predictions_infers_metric_selected_rows(tmp_path, monkeypatch):
     run_dir = tmp_path / "run"
     _write_minimal_run(run_dir)
+    metrics = pd.read_csv(run_dir / "metrics.csv")
+    metrics.loc[len(metrics)] = {
+        **metrics.iloc[0].to_dict(),
+        "dataset_row_id": 9,
+        "relative_envelope_mae": 0.99,
+    }
+    metrics.to_csv(run_dir / "metrics.csv", index=False)
+
+    def fake_infer(run_path, cfg, row_ids):
+        assert run_path == run_dir
+        assert row_ids == [9]
+        t = np.linspace(0, 2 * np.pi, 128, dtype=np.float32)
+        return {
+            9: {
+                "pred": np.sin(t),
+                "target": np.cos(t),
+                "meta": {"split": "val", "input_set": "mixed_zscore", "residual_quality_class": "near_zero_residual"},
+            }
+        }
+
+    monkeypatch.setattr("scripts.plot_tho_predictions._infer_prediction_lookup", fake_infer)
+
+    written = plot_run_predictions(run_dir, max_plots=1, sort_by="relative_envelope_mae")
+
+    assert written[0].name.endswith("_row_9.png")
+
+
+def test_plot_run_predictions_requires_checkpoint(tmp_path):
+    run_dir = tmp_path / "run"
+    _write_minimal_run(run_dir)
+
+    with pytest.raises(FileNotFoundError, match="checkpoint.pt"):
+        plot_run_predictions(run_dir, max_plots=1)
+
+
+def test_plot_run_predictions_writes_diagnostic_four_panel_png(tmp_path, monkeypatch):
+    run_dir = tmp_path / "run"
+    _write_minimal_run(run_dir)
+    _patch_plot_inference(monkeypatch)
 
     written = plot_run_predictions(run_dir, max_plots=1)
 

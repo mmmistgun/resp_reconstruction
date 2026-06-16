@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
 
@@ -60,15 +59,8 @@ class ThoExperiment(BaseExperiment):
             run_dir / "metrics.csv",
             index=False,
         )
-        diag_preds = collect_predictions(
-            model,
-            tho_data.val.loader,
-            device=self.device,
-            max_windows=int(self.cfg.outputs.max_prediction_windows),
-        )
-        np.savez(run_dir / "predictions.npz", **diag_preds)
 
-    def evaluate_checkpoint(self, checkpoint_path: Path, *, output: Path, metrics_output: Path | None) -> None:
+    def evaluate_checkpoint(self, checkpoint_path: Path, *, metrics_output: Path | None) -> None:
         device = self.device or resolve_device(str(self.cfg.training.device))
         model = self.build_model().to(device)
         checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -76,36 +68,24 @@ class ThoExperiment(BaseExperiment):
         model.load_state_dict(checkpoint["model_state_dict"])
         data = self.build_data()
         tho_data = data.extras["tho_data"]
-        output.parent.mkdir(parents=True, exist_ok=True)
         if metrics_output is not None:
+            metrics_output.parent.mkdir(parents=True, exist_ok=True)
             eval_preds = collect_predictions(
                 model,
                 tho_data.val.loader,
                 device=device,
                 max_windows=len(tho_data.val.dataset),
             )
-            np.savez(output, **eval_preds)
-            metrics_output.parent.mkdir(parents=True, exist_ok=True)
             evaluate_prediction_dict(eval_preds, self.cfg, method=str(self.cfg.model.name)).to_csv(
                 metrics_output,
                 index=False,
             )
-            return
-
-        diag_preds = collect_predictions(
-            model,
-            tho_data.val.loader,
-            device=device,
-            max_windows=int(self.cfg.outputs.max_prediction_windows),
-        )
-        np.savez(output, **diag_preds)
 
 
 def evaluate_tho_checkpoint(
     *,
     checkpoint_path: str | Path,
     config_path: str | Path | None,
-    output_path: str | Path,
     metrics_output_path: str | Path | None,
     overrides: list[str] | None = None,
 ) -> Path:
@@ -115,10 +95,9 @@ def evaluate_tho_checkpoint(
     experiment = ThoExperiment(cfg)
     experiment.evaluate_checkpoint(
         resolved_checkpoint,
-        output=Path(output_path),
         metrics_output=Path(metrics_output_path) if metrics_output_path else None,
     )
-    return Path(output_path)
+    return Path(metrics_output_path) if metrics_output_path else resolved_checkpoint.parent / "metrics.csv"
 
 
 def _resolve_config_path(config_path: str | Path | None, checkpoint_path: Path) -> Path:

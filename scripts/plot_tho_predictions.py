@@ -16,6 +16,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from omegaconf import OmegaConf
 from scipy import signal as scipy_signal
+from torch.utils.data import DataLoader
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -29,16 +30,12 @@ def plot_run_predictions(
     output_dir: str | Path | None = None,
     sort_by: str = "rr_peak_abs_error",
 ) -> list[Path]:
-    """为一个 run 的诊断预测生成 PNG 图。"""
+    """为一个 run 的诊断预测生成 PNG 图，按需从 checkpoint 重新推理选中窗口。"""
     run_path = Path(run_dir)
-    predictions_path = run_path / "predictions.npz"
     metrics_path = run_path / "metrics.csv"
-    if not predictions_path.exists():
-        raise FileNotFoundError(f"预测文件不存在: {predictions_path}")
     if not metrics_path.exists():
         raise FileNotFoundError(f"指标文件不存在: {metrics_path}")
 
-    predictions = _load_npz(predictions_path)
     metrics = pd.read_csv(metrics_path)
     if int(max_plots) <= 0:
         raise ValueError("max_plots 必须大于 0")
@@ -48,22 +45,22 @@ def plot_run_predictions(
     cfg = _load_config(run_path)
     fs = float(OmegaConf.select(cfg, "window.target_fs", default=100.0))
     spectrum_high_hz = float(OmegaConf.select(cfg, "loss.spectrum_high_hz", default=0.7))
-    input_lookup = _load_input_lookup(run_path, predictions, cfg)
 
-    selected = _select_prediction_indices(predictions, metrics, max_plots=int(max_plots), sort_by=sort_by)
+    selected_row_ids = _select_metric_row_ids(metrics, max_plots=int(max_plots), sort_by=sort_by)
+    prediction_lookup = _infer_prediction_lookup(run_path, cfg, selected_row_ids)
     written: list[Path] = []
-    for pred_idx in selected:
-        row_id = int(np.asarray(predictions["dataset_row_id"])[pred_idx])
+    for plot_idx, row_id in enumerate(selected_row_ids):
         metric_row = _metric_row(metrics, row_id)
-        output = out_dir / f"window_{pred_idx:03d}_row_{row_id}.png"
+        prediction = prediction_lookup[row_id]
+        output = out_dir / f"window_{plot_idx:03d}_row_{row_id}.png"
         _plot_one_window(
             output,
-            pred=np.asarray(predictions["r_tho_hat"][pred_idx]).reshape(-1),
-            target=np.asarray(predictions["tho_ref"][pred_idx]).reshape(-1),
-            x=input_lookup.get(row_id),
+            pred=np.asarray(prediction["pred"]).reshape(-1),
+            target=np.asarray(prediction["target"]).reshape(-1),
+            x=None if prediction.get("x") is None else np.asarray(prediction["x"]).reshape(-1),
             fs=fs,
             spectrum_high_hz=spectrum_high_hz,
-            meta={key: _prediction_meta(predictions, key, pred_idx) for key in ("split", "input_set", "residual_quality_class")},
+            meta={key: str(prediction.get("meta", {}).get(key, "")) for key in ("split", "input_set", "residual_quality_class")},
             metrics=metric_row,
             row_id=row_id,
         )
@@ -103,6 +100,16 @@ def _select_prediction_indices(
     return order[:max_plots]
 
 
+def _select_metric_row_ids(metrics: pd.DataFrame, *, max_plots: int, sort_by: str) -> list[int]:
+    """从 metrics 中选择需要绘制的 dataset_row_id。"""
+    if "dataset_row_id" not in metrics.columns:
+        raise KeyError("metrics.csv 必须包含 dataset_row_id")
+    ranked = metrics.copy()
+    if sort_by in ranked.columns:
+        ranked = ranked.sort_values(sort_by, ascending=False, na_position="last")
+    return [int(row_id) for row_id in ranked["dataset_row_id"].head(max_plots).tolist()]
+
+
 def _metric_row(metrics: pd.DataFrame, dataset_row_id: int) -> dict[str, Any]:
     if "dataset_row_id" not in metrics.columns:
         return {}
@@ -117,6 +124,65 @@ def _prediction_meta(predictions: dict[str, np.ndarray], key: str, idx: int) -> 
     if values is None:
         return ""
     return str(np.asarray(values)[idx])
+
+
+def _infer_prediction_lookup(run_path: Path, cfg, row_ids: list[int]) -> dict[int, dict[str, Any]]:
+    """只对选中的窗口重新推理，避免保存全量 predictions.npz。"""
+    checkpoint_path = run_path / "checkpoint.pt"
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"checkpoint.pt 不存在，无法重新推理诊断图: {checkpoint_path}")
+    dataset = _load_dataset_for_rows(cfg, row_ids)
+    if len(dataset) == 0:
+        raise ValueError(f"未在数据索引中找到待绘制 row: {row_ids}")
+
+    import torch
+
+    from resp_train.engine import collect_predictions
+    from resp_train.models.registry import build_model
+
+    device = torch.device("cpu")
+    model = build_model(cfg).to(device)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    loader = DataLoader(dataset, batch_size=min(len(dataset), 16), shuffle=False, num_workers=0)
+    predictions = collect_predictions(model, loader, device=device, max_windows=len(dataset))
+    input_lookup = _load_input_lookup(run_path, predictions, cfg)
+    lookup: dict[int, dict[str, Any]] = {}
+    for idx, row_id in enumerate(np.asarray(predictions["dataset_row_id"], dtype=np.int64).tolist()):
+        row_key = int(row_id)
+        lookup[row_key] = {
+            "pred": np.asarray(predictions["r_tho_hat"][idx]).reshape(-1),
+            "target": np.asarray(predictions["tho_ref"][idx]).reshape(-1),
+            "x": input_lookup.get(row_key),
+            "meta": {key: _prediction_meta(predictions, key, idx) for key in ("split", "input_set", "residual_quality_class")},
+        }
+    missing = [row_id for row_id in row_ids if row_id not in lookup]
+    if missing:
+        raise ValueError(f"重新推理后仍缺少待绘制 row: {missing}")
+    return lookup
+
+
+def _load_dataset_for_rows(cfg, row_ids: list[int]):
+    from resp_train.data.audit import add_usable_flag
+    from resp_train.data.dataset import RespWindowDataset
+    from resp_train.data.index import read_index
+    from resp_train.data.research_v2 import ResearchV2WindowDataset, read_research_v2_index
+
+    dataset_root = OmegaConf.select(cfg, "data.dataset_root")
+    index_csv = OmegaConf.select(cfg, "data.index_csv")
+    if not dataset_root or not index_csv:
+        raise ValueError("配置缺少 data.dataset_root 或 data.index_csv，无法重新推理诊断图")
+    if str(OmegaConf.select(cfg, "data.format", default="stage2_1")) == "research_v2":
+        df = read_research_v2_index(dataset_root, index_csv, cfg)
+        dataset_cls = ResearchV2WindowDataset
+    else:
+        df = add_usable_flag(read_index(dataset_root, index_csv), cfg)
+        dataset_cls = RespWindowDataset
+    selected = df[df["dataset_row_id"].isin(set(row_ids))].copy()
+    order = {int(row_id): idx for idx, row_id in enumerate(row_ids)}
+    selected["_plot_order"] = selected["dataset_row_id"].map(lambda value: order[int(value)])
+    selected = selected.sort_values("_plot_order").drop(columns=["_plot_order"])
+    return dataset_cls(Path(str(dataset_root)) / str(index_csv), selected, cfg, preload_windows=False)
 
 
 def _load_input_lookup(run_path: Path, predictions: dict[str, np.ndarray], cfg) -> dict[int, np.ndarray]:
