@@ -47,7 +47,10 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 
 ## L1
 
-尚未执行。
+| run | model | data windows | band waveform | phase lag | rel env | high freq | best val loss | band_limited_corr mean | best_lag_corr mean | abs(best_lag_sec) mean | 相对 L0 判断 |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `20260617_153802_524411` | `patch_mixer1d` | full | 0.05 | 0.00 | 0.01 | 0.20 | 0.650255 | 0.789400 | 0.841062 | 0.165209 | 待任务 5 汇总判断。 |
+| `20260617_155532_175711` | `patch_mixer1d` | full | 0.10 | 0.00 | 0.01 | 0.20 | 0.665458 | 0.794815 | 0.844943 | 0.160113 | 待任务 5 汇总判断。 |
 
 ## 阶段判断
 
