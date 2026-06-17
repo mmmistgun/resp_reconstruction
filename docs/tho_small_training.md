@@ -109,6 +109,8 @@ L1 阶段已经补齐三类实验基础设施：
 
 推荐先跑 research v2 口径的 L0/L1 pilot，固定验证 seed，只改变 `loss.band_waveform_weight`。具体命令见 `scripts/README.md` 的 “L1 低频波形与 lag-aware 对照”。
 
+首轮 `4096/1024` pilot 中，匹配训练口径的 split 审计没有发现 `samp_id` 或 segment 重叠。`loss.band_waveform_weight=0.2` 相比 `0.0` 未改善 `band_limited_corr` 或 `best_lag_corr`，不建议下一轮直接加大权重；应优先尝试更小权重、降低 spectrum 权重，或结合诊断图判断是否需要 lag-tolerant training loss。
+
 ## 常用检查命令
 
 ```bash

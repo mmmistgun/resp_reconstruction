@@ -16,7 +16,18 @@
 - 已完成：lag-aware 评价指标，提交 `1ea3ee2 feat: 增加 lag-aware 呼吸评价指标`。
 - 已完成：默认关闭的 band-limited waveform loss，提交 `b239473 feat: 增加带限波形损失`。
 - 已完成：L1 实验命令、阶段说明和 run 汇总指标接入。
-- 待完成：完整验证与 L0/L1 pilot run。正式 pilot 前应先运行 split 独立性审计；每完成一次实验 run 后单独 git 提交。
+- 已完成：完整测试、pilot 同口径 split 审计、L0/L1 pilot run。
+
+### Pilot 结果摘要
+
+pilot 口径：`4096/1024` 窗口、`3` epoch、固定 `train_sample_seed=20260610` 和 `val_sample_seed=20260611`。匹配 pilot 的 split 审计显示 `overlap_samp_id_count=0`、`overlap_segment_count=0`。
+
+| run | band_waveform_weight | val_loss | band_limited_corr_mean | best_lag_corr_mean | best_lag_sec_mean |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `20260617_120905_055953` | 0.0 | 0.611827 | 0.783169 | 0.843794 | 0.109170 |
+| `20260617_121328_250481` | 0.2 | 0.714597 | 0.778134 | 0.841708 | 0.121895 |
+
+初步结论：`band_waveform_weight=0.2` 没有改善低频相关或 lag-aware 相关，且加权 `val_loss` 上升。下一轮不建议直接加大该权重；更合理的是尝试更小权重、降低 spectrum 权重，或把 lag tolerance 引入训练目标前先看诊断图确认失败形态。
 
 ---
 
