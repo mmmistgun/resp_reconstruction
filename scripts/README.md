@@ -41,6 +41,19 @@
 
 常用：固定验证 seed、改变训练 seed 时，审计命令也应传入同样覆盖项，确保审计和训练口径一致。
 
+## Split 独立性审计
+
+在解释 L1 或模型实验前，先检查 train/val 是否共享 `samp_id` 或 `(samp_id, segment_id)`：
+
+```bash
+./.venv/bin/python scripts/audit_split_independence.py \
+  --config configs/tho_research_v2.yaml \
+  --output-dir runs/audits/split_independence_research_v2
+```
+
+脚本会输出 `summary.csv`、重叠明细和分布对照表。若 `summary.csv` 中 `overlap_samp_id_count` 或
+`overlap_segment_count` 大于 0，当前结果只能作为 within-subject / within-dataset 开发指标，不应作为跨个体泛化结论。
+
 ## 训练与评价
 
 ### `train_tho_small.py`
