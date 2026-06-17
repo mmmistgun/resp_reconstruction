@@ -248,3 +248,53 @@ RR peak worst 前 8 个窗口的跳变诊断：
   但 peak RR 被局部毛刺污染。下一步模型方向可以分成两条：PatchMixer 先修
   weighted overlap-add；PeriodicUNet 先加输出带限/抗毛刺约束，再看 peak RR
   是否回落。
+
+## M0/M1 模型结构实验
+
+本轮冻结当前 N3 loss，只改模型结构：
+
+- M0：`patch_mixer1d` 使用 `model.overlap_window=hann`，验证 weighted
+  overlap-add 是否能消除 patch boundary 伪影。
+- M1：`periodic_unet1d_tiny` 使用 `model.output_smoothing_kernel=51`，验证输出
+  平滑是否能降低局部毛刺对 peak RR 的污染。
+
+| label | run | epochs | best val loss | `rr_peak_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `patch_uniform` | `20260617_220245_852336` | 47 | 0.628330 | 0.752053 / 0.279525 | 0.464602 | 0.217530 | 0.444300 | -0.793033 | 0.334928 | 当前 N3 对照；RR peak 最稳，但低频反相和 patch boundary 伪影明显。 |
+| `patch_hann` | `20260618_004519_403378` | 21 | 0.615959 | 3.588456 / 0.563851 | 0.433094 | 0.214250 | 0.459107 | 0.796677 | 0.848886 | 消除边界伪影并修正低频方向，但 peak RR 明显恶化。 |
+| `periodic_base` | `20260617_233658_899316` | 30 | 0.603853 | 4.406477 / 1.024590 | 0.436531 | 0.206196 | 0.459925 | 0.787739 | 0.849838 | 低频方向好，但局部毛刺导致 peak RR 高估。 |
+| `periodic_smooth51` | `20260618_004523_162304` | 22 | 0.697770 | 2.413637 / 0.534640 | 0.696617 | 0.211167 | 0.382533 | 0.707788 | 0.779738 | peak RR 有改善，但平滑过强，频谱 RR 和相对包络明显受损。 |
+
+RR peak worst 前 8 个窗口的跳变诊断：
+
+| label | `rr_peak_abs_error` mean | pred `diff` p95 mean | pred/target p95 ratio | max `diff` mean | 1.28s grid ratio | top30 hits on 1.28s grid | `>0.7Hz` energy mean | lowpass corr mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `patch_uniform` | 9.093811 | 0.082576 | 3.673612 | 2.088198 | 3.389985 | 27.000 | 0.026022 | -0.602639 |
+| `patch_hann` | 13.407430 | 0.142145 | 5.487226 | 0.544715 | 1.030292 | 1.125 | 0.010306 | 0.851602 |
+| `periodic_base` | 14.027085 | 0.228895 | 8.785184 | 1.175888 | 1.098700 | 1.625 | 0.075132 | 0.761595 |
+| `periodic_smooth51` | 13.189241 | 0.072611 | 3.068617 | 0.296188 | 1.020515 | 2.000 | 0.067513 | 0.507030 |
+
+`row=10196` 复核：
+
+| label | `rr_peak_abs_error` | pred/target p95 ratio | 1.28s grid ratio | top30 hits on 1.28s grid | `>0.7Hz` energy | lowpass corr | 结论 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `patch_uniform` | 8.887147 | 3.447927 | 2.860660 | 30 | 0.012040 | -0.846348 | 原始尖峰严格锁定 patch boundary，且低频反相。 |
+| `patch_hann` | 10.415269 | 7.010955 | 0.995784 | 0 | 0.011174 | 0.766121 | 边界锁定消失，低频方向转正，但普通局部毛刺仍会多计峰。 |
+| `periodic_base` | 12.820038 | 15.114666 | 1.077991 | 1 | 0.127785 | 0.823838 | 低频方向正确，但毛刺很强。 |
+| `periodic_smooth51` | 10.506466 | 5.549697 | 0.978932 | 1 | 0.063921 | 0.929730 | 毛刺下降、低频相关更高，但 peak RR 仍偏高。 |
+
+阶段判断：
+
+- M0 验证成立：Hann weighted overlap-add 能消除 PatchMixer 的 patch boundary
+  伪影。`row=10196` 的 top30 boundary hits 从 `30` 降到 `0`，worst8 的
+  1.28s grid ratio 从 `3.39` 降到 `1.03`。
+- M0 同时改变了模型优化区域：低频相关从负转正，但 peak RR 变差。说明原来的
+  PatchMixer 虽然有边界伪影，但它的 peak RR 稳定性可能部分来自反相/特定形态；
+  不能只以边界伪影消失判定通过。
+- M1 的 `output_smoothing_kernel=51` 太重：它降低了局部跳变和 peak RR 均值，
+  但 `rr_spec_abs_error` 从 `0.436531` 恶化到 `0.696617`，相对包络相关也下降。
+- 下一步不建议继续扩大 loss 实验。更合理的是继续模型线：
+  1. PatchMixer 保留 Hann overlap-add，再尝试更温和的 peak 稳定机制或轻量输出
+     平滑，目标是在保住正低频相关的同时拉回 `rr_peak_abs_error`。
+  2. PeriodicUNet 把平滑核从 `51` 降到 `11/21` 做小网格，或改成只惩罚尖峰的
+     二阶差分/robust anti-spike，而不是直接强平滑输出。
