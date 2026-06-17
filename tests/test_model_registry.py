@@ -1,8 +1,10 @@
 import pytest
 from omegaconf import OmegaConf
 import torch
+from torch import nn
 
 from resp_train.models import build_model, list_models
+from resp_train.models.timeseries import PatchMixer1D, PeriodicUNet1DTiny
 
 
 def test_unet1d_tiny_is_registered():
@@ -108,6 +110,52 @@ def test_build_time_series_library_inspired_models_preserve_waveform_shape(model
     y = model(torch.randn(2, 2, 1025))
 
     assert y.shape == (2, 1, 1025)
+
+
+def test_patch_mixer_hann_overlap_add_reduces_patch_boundary_step():
+    uniform = PatchMixer1D(in_channels=1, out_channels=1, patch_len=8, patch_stride=4, overlap_window="uniform")
+    hann = PatchMixer1D(in_channels=1, out_channels=1, patch_len=8, patch_stride=4, overlap_window="hann")
+    patches = torch.zeros(1, 2, 1, 8)
+    patches[:, 1] = 1.0
+
+    uniform_out = uniform._overlap_add(patches, length=12, padded_length=12)
+    hann_out = hann._overlap_add(patches, length=12, padded_length=12)
+
+    uniform_step = torch.abs(uniform_out[..., 4] - uniform_out[..., 3])
+    hann_step = torch.abs(hann_out[..., 4] - hann_out[..., 3])
+    assert hann_step.item() < uniform_step.item()
+
+
+def test_patch_mixer_hann_overlap_add_preserves_constant_signal():
+    hann = PatchMixer1D(in_channels=1, out_channels=1, patch_len=8, patch_stride=4, overlap_window="hann")
+    patches = torch.ones(1, 2, 1, 8)
+
+    y = hann._overlap_add(patches, length=12, padded_length=12)
+
+    assert torch.allclose(y, torch.ones_like(y))
+
+
+def test_periodic_unet_output_smoothing_reduces_local_jitter():
+    class ZeroResidual(nn.Module):
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device)
+
+    model = PeriodicUNet1DTiny(
+        in_channels=1,
+        out_channels=1,
+        base_channels=4,
+        lowpass_kernel=3,
+        output_smoothing_kernel=5,
+    )
+    model.smoother = nn.Identity()
+    model.periodic_frontend = ZeroResidual()
+    model.backbone = nn.Identity()
+
+    x = torch.tensor([[[1.0, -1.0] * 16]])
+    y = model(x)
+
+    assert y.shape == x.shape
+    assert torch.mean(torch.abs(y[..., 1:] - y[..., :-1])).item() < torch.mean(torch.abs(x[..., 1:] - x[..., :-1])).item()
 
 
 def test_build_model_unknown_name_lists_available_models():

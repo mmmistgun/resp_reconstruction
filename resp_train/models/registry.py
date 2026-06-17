@@ -27,6 +27,7 @@ _REGISTRY: dict[str, ModelFactory] = {
         out_channels=int(cfg.model.out_channels),
         base_channels=int(cfg.model.base_channels),
         lowpass_kernel=int(cfg.model.get("lowpass_kernel", cfg.model.get("moving_avg", 101))),
+        output_smoothing_kernel=int(cfg.model.get("output_smoothing_kernel", 1)),
     ),
     "patch_mixer1d": lambda cfg: PatchMixer1D(
         in_channels=int(cfg.model.in_channels),
@@ -35,6 +36,7 @@ _REGISTRY: dict[str, ModelFactory] = {
         patch_len=int(cfg.model.get("patch_len", 256)),
         patch_stride=int(cfg.model.get("patch_stride", 128)),
         mixer_layers=int(cfg.model.get("mixer_layers", 2)),
+        overlap_window=str(cfg.model.get("overlap_window", "uniform")),
     ),
     "dlinear_waveform": lambda cfg: DLinearWaveform(
         in_channels=int(cfg.model.in_channels),

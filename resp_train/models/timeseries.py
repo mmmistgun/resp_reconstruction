@@ -51,6 +51,7 @@ class PeriodicUNet1DTiny(nn.Module):
         out_channels: int = 1,
         base_channels: int = 16,
         lowpass_kernel: int = 101,
+        output_smoothing_kernel: int = 1,
     ) -> None:
         super().__init__()
         self.smoother = MovingAverage1D(in_channels, lowpass_kernel)
@@ -62,11 +63,16 @@ class PeriodicUNet1DTiny(nn.Module):
             nn.Conv1d(base_channels, in_channels, kernel_size=1),
         )
         self.backbone = UNet1DTiny(in_channels=in_channels, out_channels=out_channels, base_channels=base_channels)
+        self.output_smoother: nn.Module
+        if int(output_smoothing_kernel) > 1:
+            self.output_smoother = MovingAverage1D(out_channels, int(output_smoothing_kernel))
+        else:
+            self.output_smoother = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         smooth = self.smoother(x)
         residual = self.periodic_frontend(torch.cat([x, smooth], dim=1))
-        return self.backbone(smooth + residual)
+        return self.output_smoother(self.backbone(smooth + residual))
 
 
 class PatchMixerBlock(nn.Module):
@@ -103,10 +109,17 @@ class PatchMixer1D(nn.Module):
         patch_len: int = 256,
         patch_stride: int = 128,
         mixer_layers: int = 2,
+        overlap_window: str = "uniform",
     ) -> None:
         super().__init__()
         self.patch_len = max(int(patch_len), 8)
         self.patch_stride = max(int(patch_stride), 1)
+        self.overlap_window = str(overlap_window)
+        self.register_buffer(
+            "overlap_weight",
+            self._build_overlap_weight(self.patch_len, self.overlap_window),
+            persistent=False,
+        )
         self.patch_embed = nn.Linear(in_channels * self.patch_len, base_channels)
         self.blocks = nn.ModuleList(
             [PatchMixerBlock(base_channels, patch_count=1, hidden_channels=base_channels * 2) for _ in range(mixer_layers)]
@@ -138,13 +151,30 @@ class PatchMixer1D(nn.Module):
         batch, patch_count, channels, _ = patches.shape
         out = patches.new_zeros(batch, channels, padded_length)
         weight = patches.new_zeros(batch, channels, padded_length)
+        patch_weight = self.overlap_weight.to(device=patches.device, dtype=patches.dtype).view(1, 1, -1)
         for idx in range(patch_count):
             start = idx * self.patch_stride
             end = start + self.patch_len
-            out[..., start:end] = out[..., start:end] + patches[:, idx]
-            weight[..., start:end] = weight[..., start:end] + 1
-        out = out / weight.clamp_min(1)
+            out[..., start:end] = out[..., start:end] + patches[:, idx] * patch_weight
+            weight[..., start:end] = weight[..., start:end] + patch_weight
+        out = out / weight.clamp_min(1e-8)
         return out[..., :length]
+
+    @staticmethod
+    def _build_overlap_weight(patch_len: int, overlap_window: str) -> torch.Tensor:
+        name = str(overlap_window).lower()
+        if name in {"uniform", "none", "flat"}:
+            return torch.ones(patch_len, dtype=torch.float32)
+        if name == "hann":
+            window = torch.hann_window(patch_len, periodic=False, dtype=torch.float32)
+        elif name in {"triangular", "triangle"}:
+            pos = torch.arange(patch_len, dtype=torch.float32)
+            center = (patch_len - 1) / 2.0
+            window = 1.0 - torch.abs((pos - center) / max(center, 1e-6))
+        else:
+            raise ValueError(f"未知 overlap_window={overlap_window!r}，可选: uniform, hann, triangular")
+        # 首尾保留极小权重，避免窗口边缘无人覆盖时被置零。
+        return window.clamp_min(1e-3)
 
 
 class DLinearWaveform(nn.Module):
