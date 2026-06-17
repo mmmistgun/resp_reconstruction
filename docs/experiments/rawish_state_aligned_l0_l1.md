@@ -1,8 +1,8 @@
 # Rawish State-Aligned L0/L1 实验记录
 
 本文档记录 `bcg_rawish_wideband_state_aligned -> tho_waveform_ref` 口径下的
-L0/L1 结果。原始 run、checkpoint、metrics 和图片保留在本地 `runs/`，不进入
-Git。
+全量 `patch_mixer1d` L0/L1 对齐实验。原始 run、checkpoint、metrics 和图片
+保留在本地 `runs/`，不进入 Git。
 
 ## 实验假设
 
@@ -14,26 +14,27 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 
 - 输入：`bcg_rawish_wideband_state_aligned`
 - 目标：`tho_waveform_ref`
-- 训练窗口：`4096`
-- 验证窗口：`1024`
-- 训练 seed：`20260610`
-- 验证 seed：`20260611`
-- L0：`loss.band_waveform_weight=0.0`
+- 数据窗口：全量（`data.max_train_windows=null`，`data.max_val_windows=null`）
+- 模型：`patch_mixer1d`
+- Patch 参数：`patch_len=256`，`patch_stride=128`，`mixer_layers=2`
+- 训练：`epochs=50`，`batch_size=8`，`learning_rate=0.001`
+- 早停：`patience=8`，`min_delta=0.001`
+- seed：`training.seed=20260610`，`data.train_sample_seed=20260610`，`data.val_sample_seed=20260611`
+- L0 anchor：`runs/tho_research_v2_patch_mixer_rawish_relenv001/20260616_005516_616320`
+- L0：历史 anchor，`loss.band_waveform_weight=0.0`
 - L1a：`loss.band_waveform_weight=0.05`
 - L1b：`loss.band_waveform_weight=0.10`
+- `loss.high_freq_weight=0.2`
+- `loss.relative_envelope_weight=0.01`
 - `loss.phase_lag_weight=0.0`
 
 ## Split 独立性审计
 
-- 口径：`4096/1024`
-- 输入：`bcg_rawish_wideband_state_aligned`
-- train/val `samp_id` 重叠：`0`
-- train/val `segment` 重叠：`0`
-- 结论：本轮 pilot 可作为 leave-samp_id-out 开发指标。
+尚未按全量对齐口径重新执行。
 
 ## L0
 
-尚未执行。
+尚未按历史 anchor 重新记录。
 
 ## L1
 
