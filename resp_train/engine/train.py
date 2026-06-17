@@ -30,10 +30,11 @@ def train_one_epoch(
     model.to(resolved_device)
     model.train()
     meter = _LossMeter()
+    non_blocking = resolved_device.type == "cuda"
 
     progress = tqdm(dataloader, desc="train", leave=False, disable=not _should_show_progress(show_progress))
     for batch in progress:
-        sensor, target = _move_batch(batch, resolved_device)
+        sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         optimizer.zero_grad(set_to_none=True)
         with torch.amp.autocast(resolved_device.type, enabled=amp_enabled):
             pred = model(sensor)
@@ -71,10 +72,11 @@ def validate(
     model.to(resolved_device)
     model.eval()
     meter = _LossMeter()
+    non_blocking = resolved_device.type == "cuda"
 
     progress = tqdm(dataloader, desc="val", leave=False, disable=not _should_show_progress(show_progress))
     for batch in progress:
-        sensor, target = _move_batch(batch, resolved_device)
+        sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         pred = model(sensor)
         loss, parts = loss_fn(pred, target)
         meter.update(loss, parts, batch_size=sensor.size(0))
@@ -124,11 +126,12 @@ def collect_predictions(
     preds: list[np.ndarray] = []
     targets: list[np.ndarray] = []
     meta_records: list[dict[str, Any]] = []
+    non_blocking = resolved_device.type == "cuda"
 
     for batch in loader:
         if "meta" not in batch:
             raise KeyError("batch 必须包含 meta")
-        x = batch["x"].to(resolved_device)
+        x = batch["x"].to(resolved_device, non_blocking=non_blocking)
         pred = model(x).detach().cpu().numpy()
         target = batch["target"].detach().cpu().numpy()
         preds.append(pred)
@@ -171,13 +174,18 @@ def _extract_meta(meta: Mapping[str, Any], idx: int) -> dict[str, Any]:
     return result
 
 
-def _move_batch(batch: Mapping[str, torch.Tensor], device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+def _move_batch(
+    batch: Mapping[str, torch.Tensor],
+    device: torch.device,
+    *,
+    non_blocking: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
     try:
         sensor = batch["x"]
         target = batch["target"]
     except KeyError as exc:
         raise KeyError("batch 必须包含 x 和 target") from exc
-    return sensor.to(device), target.to(device)
+    return sensor.to(device, non_blocking=non_blocking), target.to(device, non_blocking=non_blocking)
 
 
 def _should_show_progress(show_progress: bool | None) -> bool:

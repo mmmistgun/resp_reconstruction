@@ -92,6 +92,13 @@ L1 阶段先不改模型结构，只验证“低频呼吸波形约束 + lag-awar
 4. 先按任务指标筛选：`rr_peak_abs_error` 和 `rr_spec_abs_error` 不应明显恶化；再看 `relative_envelope_mae`、`relative_envelope_corr` 和 `spectrum_similarity`。
 5. `band_limited_corr`、`best_lag_corr`、`best_lag_sec` 用于解释低频波形形态和小范围时移，不能单独作为通过标准。
 
+效率口径建议：正式对照实验仍应显式记录 `training.batch_size`。当前
+`patch_mixer1d + WeakSyncLoss` 在 RTX 4070 Ti SUPER 上建议先用
+`training.batch_size=128`；它比历史 `batch_size=8` 明显减少小 step 调度开销，
+同时比 `256` 保留更多每 epoch 更新步。`training.use_amp=true` 已支持 18000 点
+非 2 次幂窗口，但当前模型在 `batch_size=128` 下 AMP 吞吐收益不明显，可作为显存
+余量不足或更大 batch 的备用选项。
+
 注意：2026-06-17 首轮 L0/L1/L2 run 已作废，因为默认配置曾使用
 `bcg_input_aligned_key`，实际读到的是 `bcg_resp_band_state_aligned`。
 新的 L0/L1 主线使用 `bcg_rawish_wideband_state_aligned`。这一步先忽略由两台

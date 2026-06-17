@@ -6,6 +6,7 @@ from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, Dataset, Subset
 
 from resp_train.engine import collect_predictions, save_checkpoint, train_one_epoch, validate
+from resp_train.engine.train import _move_batch
 from resp_train.losses.weak import WeakSyncLoss
 from resp_train.models.registry import build_model
 from resp_train.utils.run import create_run_dir, setup_logger
@@ -28,6 +29,15 @@ class DictDataset(Dataset):
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         sample = self.samples[idx]
         return {"x": sample["sensor"], "target": sample["target"], "meta": {"dataset_row_id": idx}}
+
+
+class _FakeTensor:
+    def __init__(self) -> None:
+        self.to_calls = []
+
+    def to(self, device, *, non_blocking=False):
+        self.to_calls.append({"device": device, "non_blocking": non_blocking})
+        return self
 
 
 def _cfg():
@@ -62,6 +72,23 @@ def test_train_one_epoch_returns_positive_average_loss():
     summary = train_one_epoch(model, loader, loss_fn, optimizer, torch.device("cpu"))
 
     assert summary["loss"] > 0
+
+
+def test_move_batch_passes_non_blocking_to_tensor_to():
+    sensor = _FakeTensor()
+    target = _FakeTensor()
+    device = torch.device("cuda:0")
+
+    moved_sensor, moved_target = _move_batch(
+        {"x": sensor, "target": target},
+        device,
+        non_blocking=True,
+    )
+
+    assert moved_sensor is sensor
+    assert moved_target is target
+    assert sensor.to_calls == [{"device": device, "non_blocking": True}]
+    assert target.to_calls == [{"device": device, "non_blocking": True}]
 
 
 def test_train_one_epoch_accepts_grad_clip_norm():

@@ -36,16 +36,20 @@ class WeakSyncLoss(torch.nn.Module):
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         self._validate_inputs(pred, target)
-        env = self._envelope_loss(pred, target)
-        spec = self._spectrum_loss(pred, target)
-        smooth = torch.mean(torch.abs(pred[..., 1:] - pred[..., :-1]))
-        high_freq = self._high_frequency_energy(pred)
-        relative_env = self._relative_envelope_loss(pred, target)
-        band_waveform = self._band_waveform_loss(pred, target)
+        # AMP 下模型输出可能是 float16；cuFFT 对非 2 次幂长度的 half FFT
+        # 有限制，因此损失内部统一用 float32 做频域和包络计算。
+        pred_loss = pred.float()
+        target_loss = target.float()
+        env = self._envelope_loss(pred_loss, target_loss)
+        spec = self._spectrum_loss(pred_loss, target_loss)
+        smooth = torch.mean(torch.abs(pred_loss[..., 1:] - pred_loss[..., :-1]))
+        high_freq = self._high_frequency_energy(pred_loss)
+        relative_env = self._relative_envelope_loss(pred_loss, target_loss)
+        band_waveform = self._band_waveform_loss(pred_loss, target_loss)
         if self.phase_lag_weight > 0:
-            phase_lag = self._phase_lag_loss(pred, target)
+            phase_lag = self._phase_lag_loss(pred_loss, target_loss)
         else:
-            phase_lag = pred.new_tensor(0.0)
+            phase_lag = pred_loss.new_tensor(0.0)
         total = (
             self.env_weight * env
             + self.spec_weight * spec

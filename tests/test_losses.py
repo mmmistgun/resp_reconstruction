@@ -44,6 +44,25 @@ def test_weak_sync_loss_returns_components_and_scalar():
     assert pred.grad is not None
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="需要 CUDA 复现 AMP + cuFFT 行为")
+def test_weak_sync_loss_supports_amp_with_non_power_of_two_window():
+    cfg = _cfg()
+    cfg.loss.high_freq_weight = 0.2
+    cfg.loss.band_waveform_weight = 0.1
+    loss_fn = WeakSyncLoss(cfg).cuda()
+    pred = torch.randn(2, 1, 18000, device="cuda", dtype=torch.float16, requires_grad=True)
+    target = torch.randn(2, 1, 18000, device="cuda")
+
+    with torch.amp.autocast("cuda", enabled=True):
+        total, parts = loss_fn(pred, target)
+    total.backward()
+
+    assert torch.isfinite(total)
+    assert torch.isfinite(pred.grad).all()
+    assert parts["spectrum"].dtype == torch.float32
+    assert parts["band_waveform"].dtype == torch.float32
+
+
 def test_optional_loss_weights_zero_keep_total_loss_unchanged():
     cfg = _cfg()
     cfg.loss.relative_envelope_weight = 0.0

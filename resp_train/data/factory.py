@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 from omegaconf import DictConfig
+import torch
 from torch.utils.data import DataLoader
 
 from resp_train.data.audit import add_usable_flag, summarize_audit
@@ -127,6 +128,7 @@ def _build_window_bundle(
         batch_size=int(cfg.training.batch_size),
         shuffle=bool(shuffle),
         num_workers=int(cfg.training.num_workers),
+        pin_memory=_should_pin_memory(cfg),
     )
     return WindowDataBundle(
         index_path=index_path,
@@ -156,3 +158,9 @@ def _summarize_audit(audited: pd.DataFrame, cfg: DictConfig) -> pd.DataFrame:
 
 def _is_research_v2(cfg: DictConfig) -> bool:
     return str(cfg.data.get("format", "stage2_1")) == "research_v2"
+
+
+def _should_pin_memory(cfg: DictConfig) -> bool:
+    """CUDA 训练时启用 pinned memory，加速 CPU 到 GPU 的异步拷贝。"""
+    device = str(cfg.training.get("device", "auto"))
+    return device.startswith("cuda") or (device == "auto" and torch.cuda.is_available())
