@@ -25,7 +25,11 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 
 ## Split 独立性审计
 
-尚未执行。
+- 口径：`4096/1024`
+- 输入：`bcg_rawish_wideband_state_aligned`
+- train/val `samp_id` 重叠：`0`
+- train/val `segment` 重叠：`0`
+- 结论：本轮 pilot 可作为 leave-samp_id-out 开发指标。
 
 ## L0
 
