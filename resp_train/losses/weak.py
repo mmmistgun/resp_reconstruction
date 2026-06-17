@@ -22,6 +22,16 @@ class WeakSyncLoss(torch.nn.Module):
         self.phase_lag_max_sec = float(cfg.loss.get("phase_lag_max_sec", 1.0))
         self.phase_lag_step_sec = float(cfg.loss.get("phase_lag_step_sec", 0.1))
         self.phase_lag_temperature = float(cfg.loss.get("phase_lag_temperature", 0.05))
+        self.stft_mag_weight = float(cfg.loss.get("stft_mag_weight", 0.0))
+        self.stft_phase_weight = float(cfg.loss.get("stft_phase_weight", 0.0))
+        self.stft_complex_weight = float(cfg.loss.get("stft_complex_weight", 0.0))
+        self.stft_window_sec = float(cfg.loss.get("stft_window_sec", 32.0))
+        self.stft_hop_sec = float(cfg.loss.get("stft_hop_sec", 4.0))
+        self.stft_n_fft_sec = float(cfg.loss.get("stft_n_fft_sec", 64.0))
+        self.stft_low_hz = float(cfg.loss.get("stft_low_hz", cfg.loss.spectrum_low_hz))
+        self.stft_high_hz = float(cfg.loss.get("stft_high_hz", cfg.loss.spectrum_high_hz))
+        self.stft_log_magnitude = bool(cfg.loss.get("stft_log_magnitude", True))
+        self.stft_eps = float(cfg.loss.get("stft_eps", 1e-6))
         if self.phase_lag_weight < 0:
             raise ValueError(f"phase_lag_weight 必须非负，当前={self.phase_lag_weight}")
         if self.phase_lag_max_sec < 0:
@@ -30,6 +40,23 @@ class WeakSyncLoss(torch.nn.Module):
             raise ValueError(f"phase_lag_step_sec 必须为正数，当前={self.phase_lag_step_sec}")
         if self.phase_lag_temperature <= 0:
             raise ValueError(f"phase_lag_temperature 必须为正数，当前={self.phase_lag_temperature}")
+        for name, value in (
+            ("stft_mag_weight", self.stft_mag_weight),
+            ("stft_phase_weight", self.stft_phase_weight),
+            ("stft_complex_weight", self.stft_complex_weight),
+        ):
+            if value < 0:
+                raise ValueError(f"{name} 必须非负，当前={value}")
+        if self.stft_window_sec <= 0:
+            raise ValueError(f"stft_window_sec 必须为正数，当前={self.stft_window_sec}")
+        if self.stft_hop_sec <= 0:
+            raise ValueError(f"stft_hop_sec 必须为正数，当前={self.stft_hop_sec}")
+        if self.stft_n_fft_sec <= 0:
+            raise ValueError(f"stft_n_fft_sec 必须为正数，当前={self.stft_n_fft_sec}")
+        if not 0 < self.stft_low_hz < self.stft_high_hz < self.fs / 2:
+            raise ValueError(f"STFT 频带非法: low={self.stft_low_hz} high={self.stft_high_hz} fs={self.fs}")
+        if self.stft_eps <= 0:
+            raise ValueError(f"stft_eps 必须为正数，当前={self.stft_eps}")
         self.relative_env_trend_window = max(self.envelope_window, int(round(self.fs * 20.0)))
         self.low_hz = float(cfg.loss.spectrum_low_hz)
         self.high_hz = float(cfg.loss.spectrum_high_hz)
@@ -50,6 +77,15 @@ class WeakSyncLoss(torch.nn.Module):
             phase_lag = self._phase_lag_loss(pred_loss, target_loss)
         else:
             phase_lag = pred_loss.new_tensor(0.0)
+        if self.stft_mag_weight > 0 or self.stft_phase_weight > 0 or self.stft_complex_weight > 0:
+            pred_stft, target_stft = self._low_frequency_stft_pair(pred_loss, target_loss)
+            stft_magnitude = self._stft_magnitude_loss(pred_stft, target_stft)
+            stft_phase = self._stft_phase_loss(pred_stft, target_stft)
+            stft_complex = self._stft_complex_loss(pred_stft, target_stft)
+        else:
+            stft_magnitude = pred_loss.new_tensor(0.0)
+            stft_phase = pred_loss.new_tensor(0.0)
+            stft_complex = pred_loss.new_tensor(0.0)
         total = (
             self.env_weight * env
             + self.spec_weight * spec
@@ -58,6 +94,9 @@ class WeakSyncLoss(torch.nn.Module):
             + self.relative_env_weight * relative_env
             + self.band_waveform_weight * band_waveform
             + self.phase_lag_weight * phase_lag
+            + self.stft_mag_weight * stft_magnitude
+            + self.stft_phase_weight * stft_phase
+            + self.stft_complex_weight * stft_complex
         )
         return total, {
             "envelope": env.detach(),
@@ -67,6 +106,9 @@ class WeakSyncLoss(torch.nn.Module):
             "relative_envelope": relative_env.detach(),
             "band_waveform": band_waveform.detach(),
             "phase_lag": phase_lag.detach(),
+            "stft_magnitude": stft_magnitude.detach(),
+            "stft_phase": stft_phase.detach(),
+            "stft_complex": stft_complex.detach(),
         }
 
     @staticmethod
@@ -151,6 +193,57 @@ class WeakSyncLoss(torch.nn.Module):
         weights = torch.softmax(corr / self.phase_lag_temperature, dim=-1)
         soft_best_corr = torch.sum(weights * corr, dim=-1)
         return torch.mean(1.0 - soft_best_corr)
+
+    def _low_frequency_stft_pair(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        pred_stft = self._low_frequency_stft(pred)
+        target_stft = self._low_frequency_stft(target)
+        return pred_stft, target_stft
+
+    def _low_frequency_stft(self, x: torch.Tensor) -> torch.Tensor:
+        centered = self._center(x).squeeze(1)
+        n_samples = centered.shape[-1]
+        n_fft = min(n_samples, max(16, int(round(self.stft_n_fft_sec * self.fs))))
+        win_length = min(n_fft, max(8, int(round(self.stft_window_sec * self.fs))))
+        hop_length = max(1, int(round(self.stft_hop_sec * self.fs)))
+        window = torch.hann_window(win_length, device=x.device, dtype=centered.dtype)
+        spectrum = torch.stft(
+            centered,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            win_length=win_length,
+            window=window,
+            center=True,
+            return_complex=True,
+        )
+        freqs = torch.fft.rfftfreq(n_fft, d=1.0 / self.fs).to(x.device)
+        mask = (freqs >= self.stft_low_hz) & (freqs <= self.stft_high_hz)
+        if not bool(mask.any()):
+            raise ValueError(
+                f"STFT 频带为空: low_hz={self.stft_low_hz} high_hz={self.stft_high_hz} "
+                f"fs={self.fs} n_fft={n_fft}"
+            )
+        return spectrum[:, mask, :]
+
+    def _stft_magnitude_loss(self, pred_stft: torch.Tensor, target_stft: torch.Tensor) -> torch.Tensor:
+        pred_mag = pred_stft.abs()
+        target_mag = target_stft.abs()
+        if self.stft_log_magnitude:
+            pred_mag = torch.log1p(pred_mag)
+            target_mag = torch.log1p(target_mag)
+        return torch.mean(torch.abs(pred_mag - target_mag))
+
+    def _stft_phase_loss(self, pred_stft: torch.Tensor, target_stft: torch.Tensor) -> torch.Tensor:
+        target_mag = target_stft.abs()
+        weights = target_mag / torch.clamp(target_mag.sum(dim=(1, 2), keepdim=True), min=self.stft_eps)
+        phase_diff = torch.angle(pred_stft * target_stft.conj())
+        return torch.mean(torch.sum(weights * (1.0 - torch.cos(phase_diff)), dim=(1, 2)))
+
+    def _stft_complex_loss(self, pred_stft: torch.Tensor, target_stft: torch.Tensor) -> torch.Tensor:
+        pred_scale = torch.clamp(pred_stft.abs().mean(dim=(1, 2), keepdim=True), min=self.stft_eps)
+        target_scale = torch.clamp(target_stft.abs().mean(dim=(1, 2), keepdim=True), min=self.stft_eps)
+        pred_norm = pred_stft / pred_scale
+        target_norm = target_stft / target_scale
+        return torch.mean(torch.abs(pred_norm - target_norm))
 
     def _band_mask(self, n_samples: int, device: torch.device) -> torch.Tensor:
         freqs = torch.fft.rfftfreq(n_samples, d=1.0 / self.fs).to(device)
