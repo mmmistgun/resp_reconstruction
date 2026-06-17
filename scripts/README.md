@@ -164,6 +164,75 @@ done
 本轮 L0/L1 不开启 `phase_lag_weight`。`best_lag_corr` 和 `best_lag_sec` 只用于
 确认 state-aligned 后是否仍有残余 lag，而不是放松训练目标。
 
+### L2/L3 Phase-aware 与 STFT loss
+
+L2/L3 继续使用 `bcg_rawish_wideband_state_aligned` 全量 batch128 口径。
+模型选择仍以 `rr_peak_abs_error` 为主护栏；STFT、phase、complex loss 只允许
+在不破坏 RR 任务指标的情况下改善低频形态。
+
+L2 先复用现有 lag-tolerant loss：
+
+```bash
+for w in 0.01 0.03; do
+  ./.venv/bin/python scripts/train_tho_small.py \
+    --config configs/tho_research_v2.yaml \
+    --set data.max_train_windows=null \
+    --set data.max_val_windows=null \
+    --set data.train_sample_seed=20260610 \
+    --set data.val_sample_seed=20260611 \
+    --set model.name=patch_mixer1d \
+    --set model.patch_len=256 \
+    --set model.patch_stride=128 \
+    --set model.mixer_layers=2 \
+    --set loss.high_freq_weight=0.2 \
+    --set loss.relative_envelope_weight=0.01 \
+    --set loss.band_waveform_weight=0.0 \
+    --set loss.phase_lag_weight="$w" \
+    --set loss.phase_lag_max_sec=1.0 \
+    --set loss.phase_lag_step_sec=0.2 \
+    --set loss.phase_lag_temperature=0.10 \
+    --set training.epochs=50 \
+    --set training.batch_size=128 \
+    --set training.patience=8 \
+    --set training.min_delta=0.001 \
+    --set training.use_amp=false \
+    --set training.device=cuda:0 \
+    --set training.show_progress=false \
+    --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_phase_stft_l2_l3
+done
+```
+
+L3 再开启低频 STFT。先只跑 magnitude，若未触发 `rr_peak_abs_error` 主护栏，
+再分别尝试小权重 phase 或 complex：
+
+```bash
+./.venv/bin/python scripts/train_tho_small.py \
+  --config configs/tho_research_v2.yaml \
+  --set data.max_train_windows=null \
+  --set data.max_val_windows=null \
+  --set data.train_sample_seed=20260610 \
+  --set data.val_sample_seed=20260611 \
+  --set model.name=patch_mixer1d \
+  --set model.patch_len=256 \
+  --set model.patch_stride=128 \
+  --set model.mixer_layers=2 \
+  --set loss.high_freq_weight=0.2 \
+  --set loss.relative_envelope_weight=0.01 \
+  --set loss.band_waveform_weight=0.0 \
+  --set loss.phase_lag_weight=0.0 \
+  --set loss.stft_mag_weight=0.02 \
+  --set loss.stft_phase_weight=0.0 \
+  --set loss.stft_complex_weight=0.0 \
+  --set training.epochs=50 \
+  --set training.batch_size=128 \
+  --set training.patience=8 \
+  --set training.min_delta=0.001 \
+  --set training.use_amp=false \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_phase_stft_l2_l3
+```
+
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
 `runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
 

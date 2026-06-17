@@ -76,3 +76,19 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 - 相对包络：L1a 的 `relative_envelope_mae` 从 `0.218097` 降到 `0.215319`，`relative_envelope_corr` 从 `0.442228` 升到 `0.453016`；L1b 也略优于 L0。说明带限波形约束确实强化了低频相对形态，但没有保护峰值呼吸率任务。
 - 当前判断：L1 证明带限波形损失能显著改变低频形态和 lag-aware 波形诊断，但在当前权重下会破坏 `rr_peak_abs_error` 主护栏。L1a/L1b 不应作为通过实验进入模型结构结论；若继续 L1c，应只尝试更小权重或改成不主导 RR 峰检测的弱约束，并继续以任务指标优先选择模型。
 - 工程备注：全量评价曾卡在包络/lag 指标计算，已将 moving average 和 lag correlation 改为前缀和/相关序列实现；本批 run 的最终 `metrics.csv` 均已导出。
+
+## L2/L3 预注册
+
+下一轮实验输出到 `runs/tho_research_v2_patch_mixer_rawish_phase_stft_l2_l3`。
+L2 复用 `phase_lag_loss`，L3 新增低频 STFT magnitude / phase / complex loss。
+候选 run 只有在 `rr_peak_abs_error` 主护栏不明显恶化时，才允许根据波形诊断继续比较。
+
+预注册候选：
+
+- L2a：`phase_lag_weight=0.01`，`band_waveform_weight=0.0`
+- L2b：`phase_lag_weight=0.03`，`band_waveform_weight=0.0`
+- L2c：`phase_lag_weight=0.01`，`band_waveform_weight=0.005`
+- L3a：`stft_mag_weight=0.02`
+- L3b：`stft_mag_weight=0.05`
+- L3c：`stft_mag_weight=0.02`，`stft_phase_weight=0.005`
+- L3d：`stft_mag_weight=0.02`，`stft_complex_weight=0.005`
