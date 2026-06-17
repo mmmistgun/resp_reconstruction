@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from resp_train.metrics.signal import (
+    _moving_average_reflect,
     band_limited_corr,
     bandpass_filter,
     best_lag_correlation,
@@ -34,6 +35,18 @@ def _advance_with_zero_fill(signal: np.ndarray, samples: int) -> np.ndarray:
     advanced = np.zeros_like(signal)
     advanced[:-samples] = signal[samples:]
     return advanced
+
+
+def test_moving_average_reflect_matches_convolve_reference():
+    x = np.linspace(-1.0, 1.0, 257, dtype=np.float64)
+    window = 41
+    kernel = np.ones(window, dtype=np.float64) / float(window)
+    padded = np.pad(x, (window // 2, window - 1 - window // 2), mode="reflect")
+    expected = np.convolve(padded, kernel, mode="valid")
+
+    actual = _moving_average_reflect(x, window)
+
+    assert np.allclose(actual, expected)
 
 
 def test_rms_envelope_保持长度():

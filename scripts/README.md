@@ -104,46 +104,60 @@ L1 阶段先不改模型结构，只验证“低频呼吸波形约束 + lag-awar
 新的 L0/L1 主线使用 `bcg_rawish_wideband_state_aligned`。这一步先忽略由两台
 采集设备采样率或时钟漂移带来的相位偏差，不把它误当作生理相位差来训练。
 
-L0 对照使用 research v2 配置但保持 `band_waveform_weight=0.0`：
+L0 对照使用 research v2 配置但保持 `band_waveform_weight=0.0`。正式对照
+使用全量窗口和 batch128 效率口径：
 
 ```bash
 ./.venv/bin/python scripts/train_tho_small.py \
   --config configs/tho_research_v2.yaml \
-  --set data.max_train_windows=4096 \
-  --set data.max_val_windows=1024 \
+  --set data.max_train_windows=null \
+  --set data.max_val_windows=null \
   --set data.train_sample_seed=20260610 \
   --set data.val_sample_seed=20260611 \
+  --set model.name=patch_mixer1d \
+  --set model.patch_len=256 \
+  --set model.patch_stride=128 \
+  --set model.mixer_layers=2 \
+  --set loss.high_freq_weight=0.2 \
+  --set loss.relative_envelope_weight=0.01 \
   --set loss.band_waveform_weight=0.0 \
-  --set training.epochs=3
+  --set loss.phase_lag_weight=0.0 \
+  --set training.epochs=50 \
+  --set training.batch_size=128 \
+  --set training.patience=8 \
+  --set training.min_delta=0.001 \
+  --set training.use_amp=false \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_eff_l0_l1
 ```
 
-L1 pilot 只打开带限波形损失。`0.2` 是保守起点，不是固定结论；若 `val_band_waveform` 降低但 `best_lag_sec` 变大，应优先检查诊断图和 lag 分布，而不是直接加大权重。
-
-```bash
-./.venv/bin/python scripts/train_tho_small.py \
-  --config configs/tho_research_v2.yaml \
-  --set data.max_train_windows=4096 \
-  --set data.max_val_windows=1024 \
-  --set data.train_sample_seed=20260610 \
-  --set data.val_sample_seed=20260611 \
-  --set loss.band_waveform_weight=0.2 \
-  --set training.epochs=3
-```
-
-更稳妥的 L1 网格建议从小权重开始：
+L1 只打开带限波形损失。更稳妥的 L1 网格建议从小权重开始：
 
 ```bash
 for w in 0.05 0.10; do
   ./.venv/bin/python scripts/train_tho_small.py \
     --config configs/tho_research_v2.yaml \
-    --set data.max_train_windows=4096 \
-    --set data.max_val_windows=1024 \
+    --set data.max_train_windows=null \
+    --set data.max_val_windows=null \
     --set data.train_sample_seed=20260610 \
     --set data.val_sample_seed=20260611 \
+    --set model.name=patch_mixer1d \
+    --set model.patch_len=256 \
+    --set model.patch_stride=128 \
+    --set model.mixer_layers=2 \
+    --set loss.high_freq_weight=0.2 \
+    --set loss.relative_envelope_weight=0.01 \
     --set loss.band_waveform_weight="$w" \
     --set loss.phase_lag_weight=0.0 \
-    --set training.epochs=3 \
-    --set training.device=cuda:0
+    --set training.epochs=50 \
+    --set training.batch_size=128 \
+    --set training.patience=8 \
+    --set training.min_delta=0.001 \
+    --set training.use_amp=false \
+    --set training.device=cuda:0 \
+    --set training.show_progress=false \
+    --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_eff_l0_l1
 done
 ```
 

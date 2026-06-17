@@ -21,10 +21,7 @@ def rms_envelope(signal: np.ndarray, window_samples: int) -> np.ndarray:
     window = int(window_samples)
     if window <= 0:
         raise ValueError(f"window_samples 必须为正数，当前={window_samples}")
-    kernel = np.ones(window, dtype=np.float64) / float(window)
-    # reflect padding 能减少窗口边缘能量骤降，同时保持长度稳定。
-    padded = np.pad(x * x, (window // 2, window - 1 - window // 2), mode="reflect")
-    return np.sqrt(np.convolve(padded, kernel, mode="valid"))
+    return np.sqrt(_moving_average_reflect(x * x, window))
 
 
 def relative_envelope_metrics(
@@ -82,9 +79,11 @@ def _moving_average_reflect(signal: np.ndarray, window_samples: int) -> np.ndarr
     window = int(window_samples)
     if window <= 0:
         raise ValueError(f"window_samples 必须为正数，当前={window_samples}")
-    kernel = np.ones(window, dtype=np.float64) / float(window)
+    # 保持原有 np.pad(..., mode="reflect") + np.convolve(..., mode="valid")
+    # 的边界语义，但用累积和避免大窗口卷积在全量评价时成为瓶颈。
     padded = np.pad(x, (window // 2, window - 1 - window // 2), mode="reflect")
-    return np.convolve(padded, kernel, mode="valid")
+    cumsum = np.cumsum(np.insert(padded, 0, 0.0))
+    return (cumsum[window:] - cumsum[:-window]) / float(window)
 
 
 def _corrcoef_or_nan(x: np.ndarray, y: np.ndarray) -> float:
@@ -168,23 +167,23 @@ def best_lag_correlation(
     period_samples = max(2, int(round(fs / float(low_hz))))
     min_overlap_samples = min(n_samples, period_samples)
     max_lag_samples = min(int(round(max_lag_sec * fs)), max(0, n_samples - min_overlap_samples))
+    pred_prefix = _prefix_sums(pred_filtered)
+    target_prefix = _prefix_sums(target_filtered)
+    pred_sq_prefix = _prefix_sums(pred_filtered * pred_filtered)
+    target_sq_prefix = _prefix_sums(target_filtered * target_filtered)
+    cross_corr = scipy_signal.correlate(pred_filtered, target_filtered, mode="full", method="auto")
     best_corr = float("-inf")
     best_lag_samples: int | None = None
     for lag_samples in range(-max_lag_samples, max_lag_samples + 1):
-        if lag_samples > 0:
-            # pred 滞后时，丢弃 pred 开头与 target 结尾后再对齐。
-            pred_slice = pred_filtered[lag_samples:]
-            target_slice = target_filtered[:-lag_samples]
-        elif lag_samples < 0:
-            lead_samples = -lag_samples
-            pred_slice = pred_filtered[:-lead_samples]
-            target_slice = target_filtered[lead_samples:]
-        else:
-            pred_slice = pred_filtered
-            target_slice = target_filtered
-        if pred_slice.size < 2:
-            continue
-        corr = _corrcoef_or_nan(pred_slice, target_slice)
+        corr = _lagged_corr_from_prefix(
+            lag_samples,
+            n_samples=n_samples,
+            pred_prefix=pred_prefix,
+            target_prefix=target_prefix,
+            pred_sq_prefix=pred_sq_prefix,
+            target_sq_prefix=target_sq_prefix,
+            cross_corr=cross_corr,
+        )
         if not np.isfinite(corr):
             continue
         if best_lag_samples is None or _is_better_lag_candidate(corr, lag_samples, best_corr, best_lag_samples):
@@ -194,6 +193,56 @@ def best_lag_correlation(
     if best_lag_samples is None:
         return {"best_lag_corr": float("nan"), "best_lag_sec": float("nan")}
     return {"best_lag_corr": float(best_corr), "best_lag_sec": float(best_lag_samples / fs)}
+
+
+def _prefix_sums(x: np.ndarray) -> np.ndarray:
+    """返回前缀和，首元素为 0，便于 O(1) 计算任意半开区间求和。"""
+    return np.concatenate(([0.0], np.cumsum(np.asarray(x, dtype=np.float64))))
+
+
+def _range_sum(prefix: np.ndarray, start: int, end: int) -> float:
+    return float(prefix[int(end)] - prefix[int(start)])
+
+
+def _lagged_corr_from_prefix(
+    lag_samples: int,
+    *,
+    n_samples: int,
+    pred_prefix: np.ndarray,
+    target_prefix: np.ndarray,
+    pred_sq_prefix: np.ndarray,
+    target_sq_prefix: np.ndarray,
+    cross_corr: np.ndarray,
+) -> float:
+    """按原始重叠切片定义计算指定 lag 的相关系数。"""
+    if lag_samples > 0:
+        pred_start, pred_end = lag_samples, n_samples
+        target_start, target_end = 0, n_samples - lag_samples
+    elif lag_samples < 0:
+        lead_samples = -lag_samples
+        pred_start, pred_end = 0, n_samples - lead_samples
+        target_start, target_end = lead_samples, n_samples
+    else:
+        pred_start, pred_end = 0, n_samples
+        target_start, target_end = 0, n_samples
+
+    n_overlap = pred_end - pred_start
+    if n_overlap < 2:
+        return float("nan")
+    sum_pred = _range_sum(pred_prefix, pred_start, pred_end)
+    sum_target = _range_sum(target_prefix, target_start, target_end)
+    sum_pred_sq = _range_sum(pred_sq_prefix, pred_start, pred_end)
+    sum_target_sq = _range_sum(target_sq_prefix, target_start, target_end)
+    sum_cross = float(cross_corr[n_samples - 1 + lag_samples])
+    numerator = sum_cross - (sum_pred * sum_target / n_overlap)
+    pred_var = sum_pred_sq - (sum_pred * sum_pred / n_overlap)
+    target_var = sum_target_sq - (sum_target * sum_target / n_overlap)
+    eps = np.finfo(np.float64).eps
+    if pred_var <= eps and target_var <= eps:
+        return float("nan")
+    if pred_var <= eps or target_var <= eps:
+        return 0.0
+    return float(numerator / np.sqrt(pred_var * target_var))
 
 
 def _is_better_lag_candidate(corr: float, lag_samples: int, best_corr: float, best_lag_samples: int) -> bool:
