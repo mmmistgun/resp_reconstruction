@@ -6,7 +6,7 @@ data:
   train_split: train
   val_split: val
   target_task: waveform
-  bcg_input_key: bcg_rawish_wideband_to_tho_timebase
+  bcg_input_key: bcg_rawish_wideband_state_aligned
   target_key: target_waveform_key
   max_train_windows: 1024
   max_val_windows: 256

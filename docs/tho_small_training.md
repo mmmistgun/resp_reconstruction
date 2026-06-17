@@ -110,9 +110,13 @@ L1 阶段已经补齐三类实验基础设施：
 旧的 2026-06-17 L0/L1/L2 pilot 已作废：这些 run 的 `data.bcg_input_key`
 实际指向 `bcg_input_aligned_key`，在 research v2 索引中会解析到
 `bcg_resp_band_state_aligned`，即呼吸频段且 state-aligned 的 BCG 表征，
-不是 rawish wideband 主输入。后续重新建立 L0/L1 前，需要先明确主线输入
-信号；当前 `configs/tho_research_v2.yaml` 已暂定为
-`bcg_rawish_wideband_to_tho_timebase`。
+不是 rawish wideband 主输入。
+
+新的 L0/L1 主线使用 `bcg_rawish_wideband_state_aligned`。这样做的原因是：
+当前主要相位偏差来自两台采集设备的采样率或时钟漂移，不应作为 BCG 到胸带
+呼吸之间的生理相位差来建模。L0/L1 先固定 state-aligned rawish 输入，隔离
+「宽频 BCG 到胸带波形恢复」这个问题；`best_lag_corr` 和 `best_lag_sec` 保留
+为诊断指标，但 `phase_lag_weight` 在本轮不作为训练目标。
 
 ## 常用检查命令
 

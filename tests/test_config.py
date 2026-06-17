@@ -90,7 +90,7 @@ def test_load_research_v2_config_has_expected_format():
 
     assert cfg.data.format == "research_v2"
     assert cfg.data.target_task == "waveform"
-    assert cfg.data.bcg_input_key == "bcg_rawish_wideband_to_tho_timebase"
+    assert cfg.data.bcg_input_key == "bcg_rawish_wideband_state_aligned"
     assert cfg.data.target_key == "target_waveform_key"
     assert cfg.data.stratify_column == "allowed_losses"
     assert cfg.loss.smooth_weight == 0.10
