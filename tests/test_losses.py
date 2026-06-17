@@ -14,6 +14,16 @@ def _cfg():
                 "spectrum_weight": 0.2,
                 "smooth_weight": 0.01,
                 "high_freq_weight": 0.0,
+                "stft_mag_weight": 0.0,
+                "stft_phase_weight": 0.0,
+                "stft_complex_weight": 0.0,
+                "stft_window_sec": 32.0,
+                "stft_hop_sec": 4.0,
+                "stft_n_fft_sec": 64.0,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 0.7,
+                "stft_log_magnitude": True,
+                "stft_eps": 1e-6,
                 "envelope_window_sec": 2.0,
                 "spectrum_low_hz": 0.05,
                 "spectrum_high_hz": 0.7,
@@ -39,6 +49,9 @@ def test_weak_sync_loss_returns_components_and_scalar():
         "relative_envelope",
         "band_waveform",
         "phase_lag",
+        "stft_magnitude",
+        "stft_phase",
+        "stft_complex",
     }
     total.backward()
     assert pred.grad is not None
@@ -68,6 +81,9 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
     cfg.loss.relative_envelope_weight = 0.0
     cfg.loss.band_waveform_weight = 0.0
     cfg.loss.phase_lag_weight = 0.0
+    cfg.loss.stft_mag_weight = 0.0
+    cfg.loss.stft_phase_weight = 0.0
+    cfg.loss.stft_complex_weight = 0.0
     loss_fn = WeakSyncLoss(cfg)
     pred = torch.randn(2, 1, 1800)
     target = torch.randn(2, 1, 1800)
@@ -81,6 +97,9 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
         + cfg.loss.relative_envelope_weight * parts["relative_envelope"]
         + cfg.loss.band_waveform_weight * parts["band_waveform"]
         + cfg.loss.phase_lag_weight * parts["phase_lag"]
+        + cfg.loss.stft_mag_weight * parts["stft_magnitude"]
+        + cfg.loss.stft_phase_weight * parts["stft_phase"]
+        + cfg.loss.stft_complex_weight * parts["stft_complex"]
     )
 
     assert torch.allclose(total, expected)
@@ -251,6 +270,62 @@ def test_phase_lag_loss_is_differentiable_when_enabled():
     total.backward()
 
     assert parts["phase_lag"] >= 0
+    assert pred.grad is not None
+    assert torch.isfinite(pred.grad).all()
+
+
+def test_stft_magnitude_loss_ignores_high_frequency_noise_when_band_limited():
+    cfg = _cfg()
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.high_freq_weight = 0.0
+    cfg.loss.stft_mag_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 180, 1 / fs)
+    target = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    pred_low_ok = target + 0.5 * torch.sin(2 * torch.pi * 8.0 * time).reshape(1, 1, -1)
+    pred_low_bad = torch.sin(2 * torch.pi * 0.35 * time).reshape(1, 1, -1)
+
+    _, ok_parts = loss_fn(pred_low_ok, target)
+    _, bad_parts = loss_fn(pred_low_bad, target)
+
+    assert ok_parts["stft_magnitude"] < bad_parts["stft_magnitude"] * 0.5
+
+
+def test_stft_phase_loss_penalizes_same_frequency_phase_shift():
+    cfg = _cfg()
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.high_freq_weight = 0.0
+    cfg.loss.stft_phase_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 180, 1 / fs)
+    target = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    same = target.clone()
+    shifted = torch.sin(2 * torch.pi * 0.25 * time + torch.pi / 2).reshape(1, 1, -1)
+
+    _, same_parts = loss_fn(same, target)
+    _, shifted_parts = loss_fn(shifted, target)
+
+    assert same_parts["stft_phase"] < 0.05
+    assert shifted_parts["stft_phase"] > same_parts["stft_phase"] + 0.2
+
+
+def test_stft_complex_loss_is_differentiable_when_enabled():
+    cfg = _cfg()
+    cfg.loss.stft_complex_weight = 0.01
+    loss_fn = WeakSyncLoss(cfg)
+    pred = torch.randn(2, 1, 18000, requires_grad=True)
+    target = torch.randn(2, 1, 18000)
+
+    total, parts = loss_fn(pred, target)
+    total.backward()
+
+    assert parts["stft_complex"] >= 0
     assert pred.grad is not None
     assert torch.isfinite(pred.grad).all()
 
