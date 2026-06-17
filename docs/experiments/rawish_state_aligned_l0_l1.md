@@ -92,3 +92,18 @@ L2 复用 `phase_lag_loss`，L3 新增低频 STFT magnitude / phase / complex lo
 - L3b：`stft_mag_weight=0.05`
 - L3c：`stft_mag_weight=0.02`，`stft_phase_weight=0.005`
 - L3d：`stft_mag_weight=0.02`，`stft_complex_weight=0.005`
+
+## L2 Phase-Aware / Lag-Tolerant
+
+| run | label | phase lag | band waveform | best val loss | `rr_peak_abs_error` mean / median | `rr_spec_abs_error` mean / median | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | `abs(best_lag_sec)` mean | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `20260617_193555_606596` | L2a | 0.01 | 0.000 | 0.622132 | 0.738865 / 0.274892 | 0.458301 / 0.000000 | 0.217473 | 0.444611 | -0.792417 | 0.336866 | 0.999992 | 通过主护栏；RR peak 优于 L0，频域 RR 基本持平，但波形诊断未改善。 |
+| `20260617_193601_991523` | L2b | 0.03 | 0.000 | 0.627500 | 4.075785 / 0.827036 | 0.443979 / 0.000000 | 0.215211 | 0.453139 | 0.796337 | 0.845213 | 0.158185 | 不通过；波形诊断显著改善，但 `rr_peak_abs_error` 主护栏明显恶化。 |
+| `20260617_194044_644417` | L2c | 0.01 | 0.005 | 0.630026 | 0.795458 / 0.286958 | 0.460592 / 0.000000 | 0.217264 | 0.444784 | -0.792669 | 0.336207 | 0.999992 | 通过主护栏；相对 L2a 无明显收益，弱 band waveform 没有改善波形诊断。 |
+
+阶段判断：
+
+- L2a 是当前最稳的 phase-aware 候选：`rr_peak_abs_error` mean 从 L0 的 `0.962277` 降到 `0.738865`，median 从 `0.315239` 降到 `0.274892`，未触发主护栏。
+- L2b 说明 phase lag 权重不能简单加大；`phase_lag_weight=0.03` 会把模型推向与 L1 类似的“低频波形相关更好，但 peak RR 明显变坏”的区域。
+- L2c 没有证明 `band_waveform_weight=0.005` 有额外价值；它保住了 RR，但波形诊断仍接近 L0。
+- 下一步 L3 只应先跑 low-frequency STFT magnitude，phase/complex 仍需小权重和主护栏控制。
