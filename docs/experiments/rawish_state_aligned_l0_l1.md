@@ -107,3 +107,17 @@ L2 复用 `phase_lag_loss`，L3 新增低频 STFT magnitude / phase / complex lo
 - L2b 说明 phase lag 权重不能简单加大；`phase_lag_weight=0.03` 会把模型推向与 L1 类似的“低频波形相关更好，但 peak RR 明显变坏”的区域。
 - L2c 没有证明 `band_waveform_weight=0.005` 有额外价值；它保住了 RR，但波形诊断仍接近 L0。
 - 下一步 L3 只应先跑 low-frequency STFT magnitude，phase/complex 仍需小权重和主护栏控制。
+
+## L3 Low-Frequency STFT
+
+| run | label | STFT mag | STFT phase | STFT complex | best val loss | `rr_peak_abs_error` mean / median | `rr_spec_abs_error` mean / median | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `20260617_194914_779721` | L3a | 0.02 | 0.000 | 0.000 | 0.631131 | 3.756982 / 0.949931 | 0.464030 / 0.000000 | 0.215847 | 0.444725 | -0.790244 | 0.338834 | 不通过；低频 STFT magnitude 降低了局部频谱损失，但 `rr_peak_abs_error` 主护栏明显恶化。 |
+| `20260617_194917_548266` | L3b | 0.05 | 0.000 | 0.000 | 0.645123 | 3.810567 / 1.031564 | 0.482362 / 0.000000 | 0.213820 | 0.451230 | -0.791732 | 0.333499 | 不通过；权重加大后 peak RR 仍严重恶化，summary 未保留 model 聚合，已按 `metrics.csv` 手工聚合。 |
+
+阶段判断：
+
+- L3a/L3b 都没有守住 L0 主护栏：L0 的 `rr_peak_abs_error` mean / median 为 `0.962277 / 0.315239`，L3a 恶化到 `3.756982 / 0.949931`，L3b 恶化到 `3.810567 / 1.031564`。
+- `rr_spec_abs_error` 没有补偿性收益：L3a `0.464030`、L3b `0.482362`，均不优于 L0 的 `0.457155`。
+- 波形诊断也没有解决相位问题：`band_limited_corr` 仍为负，`best_lag_corr` 仍接近 L0。说明仅用低频 STFT magnitude 约束没有把模型推向更合理的低频相位结构。
+- 按预注册规则，L3c/L3d 暂停，不继续叠加 phase/complex STFT 分支；下一步若继续 loss 线，应回到 L2a 作为候选，在极小权重下尝试 phase-aware 约束，或先改成只参与模型诊断而不参与主训练目标。
