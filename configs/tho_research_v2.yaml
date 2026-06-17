@@ -37,6 +37,10 @@ loss:
   smooth_weight: 0.10
   relative_envelope_weight: 0.0
   band_waveform_weight: 0.0
+  phase_lag_weight: 0.0
+  phase_lag_max_sec: 1.0
+  phase_lag_step_sec: 0.1
+  phase_lag_temperature: 0.05
   envelope_window_sec: 2.0
   spectrum_low_hz: 0.05
   spectrum_high_hz: 0.7

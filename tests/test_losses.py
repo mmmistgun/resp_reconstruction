@@ -31,7 +31,15 @@ def test_weak_sync_loss_returns_components_and_scalar():
     total, parts = loss_fn(pred, target)
 
     assert total.ndim == 0
-    assert set(parts) == {"envelope", "spectrum", "smooth", "high_freq", "relative_envelope", "band_waveform"}
+    assert set(parts) == {
+        "envelope",
+        "spectrum",
+        "smooth",
+        "high_freq",
+        "relative_envelope",
+        "band_waveform",
+        "phase_lag",
+    }
     total.backward()
     assert pred.grad is not None
 
@@ -40,6 +48,7 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
     cfg = _cfg()
     cfg.loss.relative_envelope_weight = 0.0
     cfg.loss.band_waveform_weight = 0.0
+    cfg.loss.phase_lag_weight = 0.0
     loss_fn = WeakSyncLoss(cfg)
     pred = torch.randn(2, 1, 1800)
     target = torch.randn(2, 1, 1800)
@@ -52,6 +61,7 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
         + cfg.loss.high_freq_weight * parts["high_freq"]
         + cfg.loss.relative_envelope_weight * parts["relative_envelope"]
         + cfg.loss.band_waveform_weight * parts["band_waveform"]
+        + cfg.loss.phase_lag_weight * parts["phase_lag"]
     )
 
     assert torch.allclose(total, expected)
@@ -108,6 +118,124 @@ def test_band_waveform_loss_is_differentiable_when_enabled():
     assert torch.isfinite(pred.grad).all()
 
 
+def test_phase_lag_loss_tolerates_small_time_shift():
+    cfg = _cfg()
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.high_freq_weight = 0.0
+    cfg.loss.band_waveform_weight = 0.0
+    cfg.loss.phase_lag_weight = 1.0
+    cfg.loss.phase_lag_max_sec = 1.0
+    cfg.loss.phase_lag_step_sec = 0.1
+    cfg.loss.phase_lag_temperature = 0.05
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 60, 1 / fs)
+    target = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    pred = torch.roll(target, shifts=int(round(0.5 * fs)), dims=-1)
+
+    total, parts = loss_fn(pred, target)
+
+    assert parts["phase_lag"] < 0.05
+    assert total < 0.05
+
+
+def test_phase_lag_loss_disabled_skips_phase_lag_computation(monkeypatch):
+    loss_fn = WeakSyncLoss(_cfg())
+
+    def raise_if_called(pred, target):
+        raise AssertionError("_phase_lag_loss 不应在 phase_lag_weight=0 时被调用")
+
+    monkeypatch.setattr(loss_fn, "_phase_lag_loss", raise_if_called)
+    pred = torch.randn(2, 1, 1800)
+    target = torch.randn(2, 1, 1800)
+
+    _, parts = loss_fn(pred, target)
+
+    assert torch.equal(parts["phase_lag"], pred.new_tensor(0.0))
+
+
+def test_phase_lag_samples_are_symmetric_when_step_does_not_divide_max_lag():
+    cfg = _cfg()
+    cfg.loss.phase_lag_max_sec = 1.0
+    cfg.loss.phase_lag_step_sec = 0.3
+    loss_fn = WeakSyncLoss(cfg)
+
+    lags = loss_fn._phase_lag_samples(n_samples=1000)
+
+    assert -100 in lags
+    assert 0 in lags
+    assert 100 in lags
+    assert all(-lag in lags for lag in lags)
+
+
+def test_phase_lag_loss_penalizes_shift_outside_tolerance():
+    cfg = _cfg()
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.high_freq_weight = 0.0
+    cfg.loss.band_waveform_weight = 0.0
+    cfg.loss.phase_lag_weight = 1.0
+    cfg.loss.phase_lag_max_sec = 0.5
+    cfg.loss.phase_lag_step_sec = 0.1
+    cfg.loss.phase_lag_temperature = 0.05
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 60, 1 / fs)
+    target = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    pred = torch.roll(target, shifts=int(round(1.5 * fs)), dims=-1)
+
+    _, parts = loss_fn(pred, target)
+
+    assert parts["phase_lag"] > 0.2
+
+
+def test_phase_lag_loss_penalizes_shift_outside_default_tolerance():
+    cfg = _cfg()
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.high_freq_weight = 0.0
+    cfg.loss.band_waveform_weight = 0.0
+    cfg.loss.phase_lag_weight = 1.0
+    cfg.loss.phase_lag_step_sec = 0.1
+    cfg.loss.phase_lag_temperature = 0.05
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 60, 1 / fs)
+    target = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    pred = torch.roll(target, shifts=int(round(1.5 * fs)), dims=-1)
+
+    _, parts = loss_fn(pred, target)
+
+    assert parts["phase_lag"] > 0.2
+
+
+def test_phase_lag_loss_is_differentiable_when_enabled():
+    cfg = _cfg()
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.high_freq_weight = 0.0
+    cfg.loss.band_waveform_weight = 0.0
+    cfg.loss.phase_lag_weight = 0.5
+    cfg.loss.phase_lag_max_sec = 0.5
+    cfg.loss.phase_lag_step_sec = 0.1
+    cfg.loss.phase_lag_temperature = 0.05
+    loss_fn = WeakSyncLoss(cfg)
+    pred = torch.randn(2, 1, 1800, requires_grad=True)
+    target = torch.randn(2, 1, 1800)
+
+    total, parts = loss_fn(pred, target)
+    total.backward()
+
+    assert parts["phase_lag"] >= 0
+    assert pred.grad is not None
+    assert torch.isfinite(pred.grad).all()
+
+
 def test_weak_sync_loss_penalizes_prediction_high_frequency_energy():
     cfg = _cfg()
     cfg.loss.high_freq_weight = 1.0
@@ -132,6 +260,14 @@ def test_weak_sync_loss_rejects_mismatched_or_multichannel_shapes():
 
     with pytest.raises(ValueError, match="必须为 \\[B, 1, T\\]"):
         loss_fn(torch.randn(2, 2, 1800), torch.randn(2, 2, 1800))
+
+
+def test_weak_sync_loss_rejects_negative_phase_lag_weight():
+    cfg = _cfg()
+    cfg.loss.phase_lag_weight = -0.1
+
+    with pytest.raises(ValueError, match="phase_lag_weight 必须非负"):
+        WeakSyncLoss(cfg)
 
 
 def test_weak_sync_loss_rejects_empty_spectrum_band():

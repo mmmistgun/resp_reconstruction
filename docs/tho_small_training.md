@@ -113,6 +113,12 @@ L1 阶段已经补齐三类实验基础设施：
 
 L1 收尾诊断见 `runs/tho_research_v2/l1_closeout_20260617/`。逐窗对照显示，L1 在个别窗口可以小幅提升低频相关，但没有同步改善 `best_lag_corr`；变差窗口通常伴随更大的相位偏移或局部事件段残差。当前阶段建议停止围绕 `band_waveform_weight=0.2` 做扩展实验，下一步推进 phase / lag-aware training loss。
 
+## 2026-06-17 L2 计划口径：phase-aware training loss
+
+L1 的 `band_waveform_weight=0.2` 没有提升整体 `band_limited_corr` 或 `best_lag_corr`，说明固定相位的带限波形约束会惩罚合理的小范围时移。L2 因此转向可微的 soft-lag phase loss：在呼吸频带内搜索 ±1 秒内的相关性，并用 softmax 聚合形成训练损失。
+
+L2 第一轮只验证 `phase_lag_weight`，不改模型结构；`band_waveform_weight` 只作为后续小权重辅助项候选。
+
 ## 常用检查命令
 
 ```bash
