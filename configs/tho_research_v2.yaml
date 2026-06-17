@@ -41,6 +41,13 @@ loss:
   phase_lag_max_sec: 1.0
   phase_lag_step_sec: 0.1
   phase_lag_temperature: 0.05
+  phase_alignment_weight: 0.0
+  phase_alignment_zero_weight: 0.5
+  phase_alignment_lag_weight: 0.5
+  phase_alignment_lag_penalty_weight: 0.1
+  phase_alignment_max_sec: 0.5
+  phase_alignment_step_sec: 0.1
+  phase_alignment_temperature: 0.05
   stft_mag_weight: 0.0
   stft_phase_weight: 0.0
   stft_complex_weight: 0.0

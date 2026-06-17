@@ -22,6 +22,13 @@ class WeakSyncLoss(torch.nn.Module):
         self.phase_lag_max_sec = float(cfg.loss.get("phase_lag_max_sec", 1.0))
         self.phase_lag_step_sec = float(cfg.loss.get("phase_lag_step_sec", 0.1))
         self.phase_lag_temperature = float(cfg.loss.get("phase_lag_temperature", 0.05))
+        self.phase_alignment_weight = float(cfg.loss.get("phase_alignment_weight", 0.0))
+        self.phase_alignment_zero_weight = float(cfg.loss.get("phase_alignment_zero_weight", 0.5))
+        self.phase_alignment_lag_weight = float(cfg.loss.get("phase_alignment_lag_weight", 0.5))
+        self.phase_alignment_lag_penalty_weight = float(cfg.loss.get("phase_alignment_lag_penalty_weight", 0.1))
+        self.phase_alignment_max_sec = float(cfg.loss.get("phase_alignment_max_sec", 0.5))
+        self.phase_alignment_step_sec = float(cfg.loss.get("phase_alignment_step_sec", 0.1))
+        self.phase_alignment_temperature = float(cfg.loss.get("phase_alignment_temperature", 0.05))
         self.stft_mag_weight = float(cfg.loss.get("stft_mag_weight", 0.0))
         self.stft_phase_weight = float(cfg.loss.get("stft_phase_weight", 0.0))
         self.stft_complex_weight = float(cfg.loss.get("stft_complex_weight", 0.0))
@@ -40,6 +47,20 @@ class WeakSyncLoss(torch.nn.Module):
             raise ValueError(f"phase_lag_step_sec 必须为正数，当前={self.phase_lag_step_sec}")
         if self.phase_lag_temperature <= 0:
             raise ValueError(f"phase_lag_temperature 必须为正数，当前={self.phase_lag_temperature}")
+        for name, value in (
+            ("phase_alignment_weight", self.phase_alignment_weight),
+            ("phase_alignment_zero_weight", self.phase_alignment_zero_weight),
+            ("phase_alignment_lag_weight", self.phase_alignment_lag_weight),
+            ("phase_alignment_lag_penalty_weight", self.phase_alignment_lag_penalty_weight),
+        ):
+            if value < 0:
+                raise ValueError(f"{name} 必须非负，当前={value}")
+        if self.phase_alignment_max_sec < 0:
+            raise ValueError(f"phase_alignment_max_sec 必须非负，当前={self.phase_alignment_max_sec}")
+        if self.phase_alignment_step_sec <= 0:
+            raise ValueError(f"phase_alignment_step_sec 必须为正数，当前={self.phase_alignment_step_sec}")
+        if self.phase_alignment_temperature <= 0:
+            raise ValueError(f"phase_alignment_temperature 必须为正数，当前={self.phase_alignment_temperature}")
         for name, value in (
             ("stft_mag_weight", self.stft_mag_weight),
             ("stft_phase_weight", self.stft_phase_weight),
@@ -77,6 +98,10 @@ class WeakSyncLoss(torch.nn.Module):
             phase_lag = self._phase_lag_loss(pred_loss, target_loss)
         else:
             phase_lag = pred_loss.new_tensor(0.0)
+        if self.phase_alignment_weight > 0:
+            phase_alignment = self._phase_alignment_loss(pred_loss, target_loss)
+        else:
+            phase_alignment = pred_loss.new_tensor(0.0)
         if self.stft_mag_weight > 0 or self.stft_phase_weight > 0 or self.stft_complex_weight > 0:
             pred_stft, target_stft = self._low_frequency_stft_pair(pred_loss, target_loss)
             stft_magnitude = self._stft_magnitude_loss(pred_stft, target_stft)
@@ -94,6 +119,7 @@ class WeakSyncLoss(torch.nn.Module):
             + self.relative_env_weight * relative_env
             + self.band_waveform_weight * band_waveform
             + self.phase_lag_weight * phase_lag
+            + self.phase_alignment_weight * phase_alignment
             + self.stft_mag_weight * stft_magnitude
             + self.stft_phase_weight * stft_phase
             + self.stft_complex_weight * stft_complex
@@ -106,6 +132,7 @@ class WeakSyncLoss(torch.nn.Module):
             "relative_envelope": relative_env.detach(),
             "band_waveform": band_waveform.detach(),
             "phase_lag": phase_lag.detach(),
+            "phase_alignment": phase_alignment.detach(),
             "stft_magnitude": stft_magnitude.detach(),
             "stft_phase": stft_phase.detach(),
             "stft_complex": stft_complex.detach(),
@@ -156,8 +183,11 @@ class WeakSyncLoss(torch.nn.Module):
         return torch.fft.irfft(filtered, n=x.shape[-1], dim=-1)
 
     def _phase_lag_samples(self, n_samples: int) -> list[int]:
-        max_lag = int(round(self.phase_lag_max_sec * self.fs))
-        step = max(1, int(round(self.phase_lag_step_sec * self.fs)))
+        return self._lag_samples(n_samples, self.phase_lag_max_sec, self.phase_lag_step_sec)
+
+    def _lag_samples(self, n_samples: int, max_sec: float, step_sec: float) -> list[int]:
+        max_lag = int(round(max_sec * self.fs))
+        step = max(1, int(round(step_sec * self.fs)))
         max_lag = min(max_lag, max(0, n_samples - 2))
         non_negative_lags = list(range(0, max_lag + 1, step))
         if max_lag not in non_negative_lags:
@@ -193,6 +223,26 @@ class WeakSyncLoss(torch.nn.Module):
         weights = torch.softmax(corr / self.phase_lag_temperature, dim=-1)
         soft_best_corr = torch.sum(weights * corr, dim=-1)
         return torch.mean(1.0 - soft_best_corr)
+
+    def _phase_alignment_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_band = self._band_limited_waveform(pred)
+        target_band = self._band_limited_waveform(target)
+        zero_corr = self._lagged_corr(pred_band, target_band, 0)
+        lags = self._lag_samples(pred.shape[-1], self.phase_alignment_max_sec, self.phase_alignment_step_sec)
+        lag_corrs = [self._lagged_corr(pred_band, target_band, lag) for lag in lags]
+        corr = torch.stack(lag_corrs, dim=-1)
+        weights = torch.softmax(corr / self.phase_alignment_temperature, dim=-1)
+        soft_best_corr = torch.sum(weights * corr, dim=-1)
+        lag_sec = pred.new_tensor(lags, dtype=pred.dtype) / self.fs
+        soft_abs_lag_sec = torch.sum(weights * lag_sec.abs(), dim=-1)
+        max_lag_sec = max(self.phase_alignment_max_sec, 1.0 / self.fs)
+        lag_penalty = soft_abs_lag_sec / max_lag_sec
+        loss = (
+            self.phase_alignment_zero_weight * (1.0 - zero_corr)
+            + self.phase_alignment_lag_weight * (1.0 - soft_best_corr)
+            + self.phase_alignment_lag_penalty_weight * lag_penalty
+        )
+        return torch.mean(loss)
 
     def _low_frequency_stft_pair(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         pred_stft = self._low_frequency_stft(pred)
