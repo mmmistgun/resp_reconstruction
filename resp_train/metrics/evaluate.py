@@ -7,6 +7,8 @@ import pandas as pd
 from omegaconf import DictConfig
 
 from resp_train.metrics.signal import (
+    band_limited_corr,
+    best_lag_correlation,
     estimate_peak_rate_bpm,
     estimate_spectral_rate_bpm,
     relative_envelope_metrics,
@@ -22,6 +24,9 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
     low_hz = float(cfg.loss.spectrum_low_hz)
     high_hz = float(cfg.loss.spectrum_high_hz)
     env_window = max(1, int(round(fs * float(cfg.loss.envelope_window_sec))))
+    evaluation_cfg = cfg.get("evaluation", {})
+    max_lag_sec = float(evaluation_cfg.get("max_lag_sec", 1.0))
+    lag_bandpass_order = int(evaluation_cfg.get("lag_bandpass_order", 4))
 
     preds = np.asarray(predictions["r_tho_hat"])
     targets = np.asarray(predictions["tho_ref"])
@@ -41,6 +46,15 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
             fs=fs,
             envelope_window_sec=float(cfg.loss.envelope_window_sec),
         )
+        lag_metrics = best_lag_correlation(
+            pred,
+            target,
+            fs=fs,
+            max_lag_sec=max_lag_sec,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            order=lag_bandpass_order,
+        )
 
         records.append(
             {
@@ -59,6 +73,16 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
                 "relative_envelope_corr": rel_env["relative_envelope_corr"],
                 "relative_envelope_mae": rel_env["relative_envelope_mae"],
                 "spectrum_similarity": spectrum_similarity(pred, target, fs=fs, low_hz=low_hz, high_hz=high_hz),
+                "band_limited_corr": band_limited_corr(
+                    pred,
+                    target,
+                    fs=fs,
+                    low_hz=low_hz,
+                    high_hz=high_hz,
+                    order=lag_bandpass_order,
+                ),
+                "best_lag_corr": lag_metrics["best_lag_corr"],
+                "best_lag_sec": lag_metrics["best_lag_sec"],
             }
         )
     return pd.DataFrame.from_records(records)

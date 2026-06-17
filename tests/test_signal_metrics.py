@@ -2,7 +2,9 @@ import numpy as np
 import pytest
 
 from resp_train.metrics.signal import (
+    band_limited_corr,
     bandpass_filter,
+    best_lag_correlation,
     estimate_peak_rate_bpm,
     estimate_spectral_rate_bpm,
     relative_envelope_metrics,
@@ -14,6 +16,24 @@ from resp_train.metrics.signal import (
 def _sine(freq_hz: float, fs: float, duration_sec: float) -> np.ndarray:
     t = np.arange(int(fs * duration_sec), dtype=np.float64) / fs
     return np.sin(2 * np.pi * freq_hz * t)
+
+
+def _modulated_breath_signal(fs: float, duration_sec: float) -> np.ndarray:
+    t = np.arange(int(fs * duration_sec), dtype=np.float64) / fs
+    envelope = 1.0 + 0.25 * np.sin(2 * np.pi * 0.03 * t)
+    return envelope * np.sin(2 * np.pi * 0.23 * t + 0.15)
+
+
+def _delay_with_zero_fill(signal: np.ndarray, samples: int) -> np.ndarray:
+    delayed = np.zeros_like(signal)
+    delayed[samples:] = signal[:-samples]
+    return delayed
+
+
+def _advance_with_zero_fill(signal: np.ndarray, samples: int) -> np.ndarray:
+    advanced = np.zeros_like(signal)
+    advanced[:-samples] = signal[samples:]
+    return advanced
 
 
 def test_rms_envelope_保持长度():
@@ -129,3 +149,69 @@ def test_bandpass_filter_shape_不变():
 
     assert filtered.shape == x.shape
     assert np.isfinite(filtered).all()
+
+
+def test_band_limited_corr_ignores_high_frequency_noise():
+    fs = 100.0
+    t = np.arange(0, 60, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t)
+    pred = target + 0.5 * np.sin(2 * np.pi * 8.0 * t)
+
+    corr = band_limited_corr(pred, target, fs=fs, low_hz=0.05, high_hz=0.7, order=4)
+
+    assert corr > 0.99
+
+
+def test_best_lag_correlation_recovers_positive_delay_seconds():
+    fs = 100.0
+    t = np.arange(0, 60, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t)
+    pred = np.roll(target, int(round(0.5 * fs)))
+
+    metrics = best_lag_correlation(pred, target, fs=fs, max_lag_sec=1.0, low_hz=0.05, high_hz=0.7, order=4)
+
+    assert metrics["best_lag_corr"] > 0.99
+    assert abs(metrics["best_lag_sec"] - 0.5) < 1 / fs
+
+
+def test_best_lag_correlation_recovers_non_circular_positive_delay():
+    fs = 100.0
+    target = _modulated_breath_signal(fs, 80.0)
+    pred = _delay_with_zero_fill(target, int(round(0.5 * fs)))
+
+    metrics = best_lag_correlation(pred, target, fs=fs, max_lag_sec=1.0, low_hz=0.05, high_hz=0.7, order=4)
+
+    assert metrics["best_lag_corr"] > 0.99
+    assert abs(metrics["best_lag_sec"] - 0.5) < 1 / fs
+
+
+def test_best_lag_correlation_recovers_non_circular_negative_delay():
+    fs = 100.0
+    target = _modulated_breath_signal(fs, 80.0)
+    pred = _advance_with_zero_fill(target, int(round(0.4 * fs)))
+
+    metrics = best_lag_correlation(pred, target, fs=fs, max_lag_sec=1.0, low_hz=0.05, high_hz=0.7, order=4)
+
+    assert metrics["best_lag_corr"] > 0.99
+    assert abs(metrics["best_lag_sec"] + 0.4) < 1 / fs
+
+
+def test_best_lag_correlation_prefers_zero_for_identical_signal_with_large_max_lag():
+    fs = 100.0
+    target = _modulated_breath_signal(fs, 60.0)
+
+    metrics = best_lag_correlation(target.copy(), target, fs=fs, max_lag_sec=120.0, low_hz=0.05, high_hz=0.7, order=4)
+
+    assert metrics["best_lag_corr"] > 0.99
+    assert abs(metrics["best_lag_sec"]) < 1e-6
+
+
+def test_best_lag_correlation_limits_overlap_for_periodic_signal_with_large_max_lag():
+    fs = 100.0
+    t = np.arange(0, 60, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t)
+
+    metrics = best_lag_correlation(target.copy(), target, fs=fs, max_lag_sec=120.0, low_hz=0.05, high_hz=0.7, order=4)
+
+    assert metrics["best_lag_corr"] > 0.99
+    assert abs(metrics["best_lag_sec"]) < 1e-6

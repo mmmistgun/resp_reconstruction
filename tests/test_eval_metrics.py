@@ -22,6 +22,12 @@ def _cfg():
     )
 
 
+def _modulated_breath_signal(fs: float, duration_sec: float) -> np.ndarray:
+    t = np.arange(int(fs * duration_sec), dtype=np.float64) / fs
+    envelope = 1.0 + 0.25 * np.sin(2 * np.pi * 0.03 * t)
+    return envelope * np.sin(2 * np.pi * 0.23 * t + 0.15)
+
+
 def test_evaluate_prediction_dict_returns_window_metrics():
     fs = 100
     t = np.arange(0, 60, 1 / fs)
@@ -43,6 +49,28 @@ def test_evaluate_prediction_dict_returns_window_metrics():
     assert frame.loc[0, "spectrum_similarity"] > 0.99
     assert frame.loc[0, "relative_envelope_corr"] > 0.99
     assert frame.loc[0, "relative_envelope_mae"] < 0.01
+    assert frame.loc[0, "band_limited_corr"] > 0.99
+    assert frame.loc[0, "best_lag_corr"] > 0.99
+    assert abs(frame.loc[0, "best_lag_sec"]) < 1e-6
+
+
+def test_evaluate_prediction_dict_reports_best_lag_for_shifted_prediction():
+    fs = 100
+    target = _modulated_breath_signal(fs, 80.0).astype(np.float32)
+    delay_samples = int(round(0.5 * fs))
+    pred = np.zeros_like(target)
+    pred[delay_samples:] = target[:-delay_samples]
+    cfg = _cfg()
+    cfg.evaluation = {"max_lag_sec": 1.0, "lag_bandpass_order": 4}
+    preds = {
+        "r_tho_hat": pred.reshape(1, 1, -1),
+        "tho_ref": target.reshape(1, 1, -1),
+    }
+
+    frame = evaluate_prediction_dict(preds, cfg, method="model")
+
+    assert frame.loc[0, "best_lag_corr"] > 0.99
+    assert abs(frame.loc[0, "best_lag_sec"] - 0.5) < 1 / fs
 
 
 def test_evaluate_prediction_dict_rejects_empty_predictions():

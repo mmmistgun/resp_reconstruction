@@ -40,6 +40,10 @@ loss:
   spectrum_low_hz: 0.05
   spectrum_high_hz: 0.7
 
+evaluation:
+  max_lag_sec: 1.0
+  lag_bandpass_order: 4
+
 training:
   epochs: 3
   batch_size: 8

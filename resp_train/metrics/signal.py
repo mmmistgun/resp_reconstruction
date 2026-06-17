@@ -126,6 +126,89 @@ def bandpass_filter(
     return scipy_signal.sosfiltfilt(sos, x)
 
 
+def band_limited_corr(
+    pred: np.ndarray,
+    target: np.ndarray,
+    *,
+    fs: float,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+    order: int = 4,
+) -> float:
+    """先限制到呼吸低频带，再计算预测与目标的相关系数。"""
+    pred_filtered = bandpass_filter(pred, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    target_filtered = bandpass_filter(target, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    return _corrcoef_or_nan(pred_filtered, target_filtered)
+
+
+def best_lag_correlation(
+    pred: np.ndarray,
+    target: np.ndarray,
+    *,
+    fs: float,
+    max_lag_sec: float = 1.0,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+    order: int = 4,
+) -> dict[str, float]:
+    """在低频带内搜索最佳时延；正 lag 表示 pred 相对 target 滞后。"""
+    fs = float(fs)
+    max_lag_sec = float(max_lag_sec)
+    if fs <= 0:
+        raise ValueError(f"fs 必须为正数，当前={fs}")
+    if max_lag_sec < 0:
+        raise ValueError(f"max_lag_sec 必须非负，当前={max_lag_sec}")
+
+    pred_filtered = bandpass_filter(pred, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    target_filtered = bandpass_filter(target, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    if pred_filtered.shape != target_filtered.shape:
+        raise ValueError(f"pred 和 target 长度必须一致，当前 {pred_filtered.shape} != {target_filtered.shape}")
+
+    n_samples = int(pred_filtered.size)
+    period_samples = max(2, int(round(fs / float(low_hz))))
+    min_overlap_samples = min(n_samples, period_samples)
+    max_lag_samples = min(int(round(max_lag_sec * fs)), max(0, n_samples - min_overlap_samples))
+    best_corr = float("-inf")
+    best_lag_samples: int | None = None
+    for lag_samples in range(-max_lag_samples, max_lag_samples + 1):
+        if lag_samples > 0:
+            # pred 滞后时，丢弃 pred 开头与 target 结尾后再对齐。
+            pred_slice = pred_filtered[lag_samples:]
+            target_slice = target_filtered[:-lag_samples]
+        elif lag_samples < 0:
+            lead_samples = -lag_samples
+            pred_slice = pred_filtered[:-lead_samples]
+            target_slice = target_filtered[lead_samples:]
+        else:
+            pred_slice = pred_filtered
+            target_slice = target_filtered
+        if pred_slice.size < 2:
+            continue
+        corr = _corrcoef_or_nan(pred_slice, target_slice)
+        if not np.isfinite(corr):
+            continue
+        if best_lag_samples is None or _is_better_lag_candidate(corr, lag_samples, best_corr, best_lag_samples):
+            best_corr = corr
+            best_lag_samples = lag_samples
+
+    if best_lag_samples is None:
+        return {"best_lag_corr": float("nan"), "best_lag_sec": float("nan")}
+    return {"best_lag_corr": float(best_corr), "best_lag_sec": float(best_lag_samples / fs)}
+
+
+def _is_better_lag_candidate(corr: float, lag_samples: int, best_corr: float, best_lag_samples: int) -> bool:
+    """比较 lag 候选；相关近似相同则优先选择更靠近 0 的时延。"""
+    if corr > best_corr and not np.isclose(corr, best_corr, rtol=1e-10, atol=1e-12):
+        return True
+    if not np.isclose(corr, best_corr, rtol=1e-10, atol=1e-12):
+        return False
+    abs_lag = abs(lag_samples)
+    best_abs_lag = abs(best_lag_samples)
+    if abs_lag != best_abs_lag:
+        return abs_lag < best_abs_lag
+    return lag_samples < best_lag_samples
+
+
 def estimate_spectral_rate_bpm(
     signal: np.ndarray,
     *,
