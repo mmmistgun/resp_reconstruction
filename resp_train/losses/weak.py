@@ -17,6 +17,7 @@ class WeakSyncLoss(torch.nn.Module):
         self.smooth_weight = float(cfg.loss.smooth_weight)
         self.high_freq_weight = float(cfg.loss.get("high_freq_weight", 0.0))
         self.relative_env_weight = float(cfg.loss.get("relative_envelope_weight", 0.0))
+        self.band_waveform_weight = float(cfg.loss.get("band_waveform_weight", 0.0))
         self.relative_env_trend_window = max(self.envelope_window, int(round(self.fs * 20.0)))
         self.low_hz = float(cfg.loss.spectrum_low_hz)
         self.high_hz = float(cfg.loss.spectrum_high_hz)
@@ -28,12 +29,14 @@ class WeakSyncLoss(torch.nn.Module):
         smooth = torch.mean(torch.abs(pred[..., 1:] - pred[..., :-1]))
         high_freq = self._high_frequency_energy(pred)
         relative_env = self._relative_envelope_loss(pred, target)
+        band_waveform = self._band_waveform_loss(pred, target)
         total = (
             self.env_weight * env
             + self.spec_weight * spec
             + self.smooth_weight * smooth
             + self.high_freq_weight * high_freq
             + self.relative_env_weight * relative_env
+            + self.band_waveform_weight * band_waveform
         )
         return total, {
             "envelope": env.detach(),
@@ -41,6 +44,7 @@ class WeakSyncLoss(torch.nn.Module):
             "smooth": smooth.detach(),
             "high_freq": high_freq.detach(),
             "relative_envelope": relative_env.detach(),
+            "band_waveform": band_waveform.detach(),
         }
 
     @staticmethod
@@ -69,17 +73,33 @@ class WeakSyncLoss(torch.nn.Module):
         return torch.mean(torch.sum(torch.abs(pred_dist - target_dist), dim=-1))
 
     def _band_distribution(self, x: torch.Tensor) -> torch.Tensor:
-        centered = x - x.mean(dim=-1, keepdim=True)
+        centered = self._center(x)
         power = torch.fft.rfft(centered, dim=-1).abs().square().squeeze(1)
-        freqs = torch.fft.rfftfreq(x.shape[-1], d=1.0 / self.fs).to(x.device)
+        mask = self._band_mask(x.shape[-1], x.device)
+        band = power[:, mask]
+        return band / torch.clamp(band.sum(dim=-1, keepdim=True), min=1e-8)
+
+    def _band_waveform_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_band = self._zscore(self._band_limited_waveform(pred))
+        target_band = self._zscore(self._band_limited_waveform(target))
+        return torch.mean(torch.abs(pred_band - target_band))
+
+    def _band_limited_waveform(self, x: torch.Tensor) -> torch.Tensor:
+        centered = self._center(x)
+        spectrum = torch.fft.rfft(centered, dim=-1)
+        mask = self._band_mask(x.shape[-1], x.device).view(1, 1, -1)
+        filtered = torch.where(mask, spectrum, torch.zeros_like(spectrum))
+        return torch.fft.irfft(filtered, n=x.shape[-1], dim=-1)
+
+    def _band_mask(self, n_samples: int, device: torch.device) -> torch.Tensor:
+        freqs = torch.fft.rfftfreq(n_samples, d=1.0 / self.fs).to(device)
         mask = (freqs >= self.low_hz) & (freqs <= self.high_hz)
         if not bool(mask.any()):
             raise ValueError(
                 f"频谱损失频带为空: low_hz={self.low_hz} high_hz={self.high_hz} "
-                f"fs={self.fs} n={x.shape[-1]}"
+                f"fs={self.fs} n={n_samples}"
             )
-        band = power[:, mask]
-        return band / torch.clamp(band.sum(dim=-1, keepdim=True), min=1e-8)
+        return mask
 
     def _high_frequency_energy(self, pred: torch.Tensor) -> torch.Tensor:
         """惩罚预测中高于呼吸频带上限的相对频谱能量。"""
@@ -109,6 +129,10 @@ class WeakSyncLoss(torch.nn.Module):
             trend = trend[..., : env.shape[-1]]
         rel = torch.log(torch.clamp(env, min=1e-8)) - torch.log(torch.clamp(trend, min=1e-8))
         return rel - rel.mean(dim=-1, keepdim=True)
+
+    @staticmethod
+    def _center(x: torch.Tensor) -> torch.Tensor:
+        return x - x.mean(dim=-1, keepdim=True)
 
     @staticmethod
     def _zscore(x: torch.Tensor) -> torch.Tensor:

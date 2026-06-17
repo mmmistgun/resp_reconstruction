@@ -31,14 +31,15 @@ def test_weak_sync_loss_returns_components_and_scalar():
     total, parts = loss_fn(pred, target)
 
     assert total.ndim == 0
-    assert set(parts) == {"envelope", "spectrum", "smooth", "high_freq", "relative_envelope"}
+    assert set(parts) == {"envelope", "spectrum", "smooth", "high_freq", "relative_envelope", "band_waveform"}
     total.backward()
     assert pred.grad is not None
 
 
-def test_relative_envelope_weight_zero_keeps_total_loss_unchanged():
+def test_optional_loss_weights_zero_keep_total_loss_unchanged():
     cfg = _cfg()
     cfg.loss.relative_envelope_weight = 0.0
+    cfg.loss.band_waveform_weight = 0.0
     loss_fn = WeakSyncLoss(cfg)
     pred = torch.randn(2, 1, 1800)
     target = torch.randn(2, 1, 1800)
@@ -49,6 +50,8 @@ def test_relative_envelope_weight_zero_keeps_total_loss_unchanged():
         + cfg.loss.spectrum_weight * parts["spectrum"]
         + cfg.loss.smooth_weight * parts["smooth"]
         + cfg.loss.high_freq_weight * parts["high_freq"]
+        + cfg.loss.relative_envelope_weight * parts["relative_envelope"]
+        + cfg.loss.band_waveform_weight * parts["band_waveform"]
     )
 
     assert torch.allclose(total, expected)
@@ -71,6 +74,38 @@ def test_relative_envelope_loss_penalizes_missing_relative_boost():
     _, bad_parts = loss_fn(bad, target)
 
     assert bad_parts["relative_envelope"] > good_parts["relative_envelope"] + 0.05
+
+
+def test_band_waveform_loss_penalizes_phase_shift_in_respiratory_band():
+    cfg = _cfg()
+    cfg.loss.band_waveform_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 60, 1 / fs)
+    target = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    same_phase = (3.0 * target).clone()
+    shifted = torch.sin(2 * torch.pi * 0.25 * time + torch.pi / 2).reshape(1, 1, -1)
+
+    _, same_parts = loss_fn(same_phase, target)
+    _, shifted_parts = loss_fn(shifted, target)
+
+    assert same_parts["band_waveform"] < 1e-4
+    assert shifted_parts["band_waveform"] > same_parts["band_waveform"] + 0.5
+
+
+def test_band_waveform_loss_is_differentiable_when_enabled():
+    cfg = _cfg()
+    cfg.loss.band_waveform_weight = 0.5
+    loss_fn = WeakSyncLoss(cfg)
+    pred = torch.randn(2, 1, 1800, requires_grad=True)
+    target = torch.randn(2, 1, 1800)
+
+    total, parts = loss_fn(pred, target)
+    total.backward()
+
+    assert parts["band_waveform"] >= 0
+    assert pred.grad is not None
+    assert torch.isfinite(pred.grad).all()
 
 
 def test_weak_sync_loss_penalizes_prediction_high_frequency_energy():
