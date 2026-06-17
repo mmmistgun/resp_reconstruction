@@ -121,3 +121,27 @@ L2 复用 `phase_lag_loss`，L3 新增低频 STFT magnitude / phase / complex lo
 - `rr_spec_abs_error` 没有补偿性收益：L3a `0.464030`、L3b `0.482362`，均不优于 L0 的 `0.457155`。
 - 波形诊断也没有解决相位问题：`band_limited_corr` 仍为负，`best_lag_corr` 仍接近 L0。说明仅用低频 STFT magnitude 约束没有把模型推向更合理的低频相位结构。
 - 按预注册规则，L3c/L3d 暂停，不继续叠加 phase/complex STFT 分支；下一步若继续 loss 线，应回到 L2a 作为候选，在极小权重下尝试 phase-aware 约束，或先改成只参与模型诊断而不参与主训练目标。
+
+## N1-N4 Signed Phase Alignment
+
+本轮把旧 `phase_lag_weight` 置零，单独评估 state-aligned 前提下的 signed
+phase alignment。该损失由零延迟相关、小范围 soft best-lag 相关和 lag 惩罚组成，
+目标是约束低频相位方向，而不是复制胸带绝对波形。
+
+| run | label | relative envelope | phase alignment | best val loss | `rr_peak_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | `best_lag_sec` mean | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `20260617_214224_840961` | N1 | 0.03 | 0.000 | 0.622188 | 0.953758 / 0.313205 | 0.463457 | 0.217557 | 0.442286 | -0.790206 | 0.337028 | 0.231897 | 接近 L0，单独提高 relative envelope 没有明显收益。 |
+| `20260617_214227_262687` | N2 | 0.03 | 0.003 | 0.627833 | 0.967694 / 0.328634 | 0.469185 | 0.216980 | 0.441607 | -0.790659 | 0.335838 | 0.224075 | 不优于 N1；phase alignment 权重过弱时只增加训练目标复杂度。 |
+| `20260617_214228_595099` | N3 | 0.03 | 0.005 | 0.628607 | 0.756761 / 0.270270 | 0.465748 | 0.217560 | 0.444018 | -0.792856 | 0.334920 | 0.208443 | 通过主护栏，RR peak 接近 L2a；但低频相关仍为负，没有解决相位方向。 |
+| `20260617_214228_454909` | N4 | 0.05 | 0.003 | 0.631633 | 0.970258 / 0.322040 | 0.472050 | 0.216573 | 0.441233 | -0.790920 | 0.335469 | 0.214693 | 提高 relative envelope 权重略降 MAE，但 RR 与相关指标无收益。 |
+
+阶段判断：
+
+- N3 是本轮唯一值得保留的候选：`rr_peak_abs_error` mean / median 为
+  `0.756761 / 0.270270`，接近 L2a 的 `0.738865 / 0.274892`。
+- signed phase alignment 没有修复低频相位方向：N1-N4 的 `band_limited_corr`
+  仍在 `-0.79` 附近，说明弱权重相关项不足以把模型从反向/错相区域拉出来。
+- `relative_envelope_weight=0.05` 不值得继续加大；N4 的 `relative_envelope_mae`
+  仅小幅下降，但 RR 和相关指标没有同步改善。
+- 下一步 loss 线应以 N3 为新候选，但如果目标是解决 state-aligned 后低频相位方向，
+  需要更强或更直接的 signed phase 机制；继续保留旧 `phase_lag`/STFT 主线价值不高。
