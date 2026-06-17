@@ -360,6 +360,21 @@ def test_summarize_runs_includes_lag_aware_metrics(tmp_path):
     assert frame["model_best_lag_sec_mean"].tolist() == [0.25]
 
 
+def test_summarize_runs_marks_task_selection_metrics(tmp_path):
+    root = tmp_path / "runs"
+    _write_minimal_run(root / "run_a")
+    output = tmp_path / "summary.csv"
+
+    frame = summarize_runs(root, output)
+
+    assert frame["selection_primary_metric"].tolist() == ["rr_peak_abs_error_mean"]
+    assert frame["selection_secondary_metric"].tolist() == ["rr_spec_abs_error_mean"]
+    assert frame["selection_waveform_role"].tolist() == ["diagnostic"]
+    assert frame["selection_task_rr_peak_abs_error_mean"].tolist() == [2.5]
+    assert frame["selection_task_relative_envelope_mae_median"].tolist() == [0.18]
+    assert frame["selection_waveform_band_limited_corr_mean"].tolist() == [0.62]
+
+
 def test_train_script_delegates_to_tho_experiment():
     source = Path("scripts/train_tho_small.py").read_text(encoding="utf-8")
 

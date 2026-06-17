@@ -28,6 +28,20 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 - `loss.relative_envelope_weight=0.01`
 - `loss.phase_lag_weight=0.0`
 
+## 模型选择口径
+
+本项目当前仍用胸带波形作为监督信号，但实验选择不能只按波形恢复判断。
+波形形态是任务证据链的一部分，尤其用于解释低频相位、形态和对齐问题；
+最终是否进入下一阶段，应优先看呼吸任务指标是否稳定。
+
+优先级如下：
+
+1. `rr_peak_abs_error`：主护栏，均值和中位数不应明显恶化。
+2. `rr_spec_abs_error`：频域呼吸率护栏，不应明显恶化。
+3. `relative_envelope_mae` / `relative_envelope_corr`：相对呼吸强弱变化的任务指标。
+4. `spectrum_similarity`：频谱一致性辅助护栏。
+5. `band_limited_corr`、`best_lag_corr`、`best_lag_sec`：波形诊断指标，用于解释低频形态和时移，不能单独判定通过。
+
 ## Split 独立性审计
 
 - 口径：全量（`data.max_train_windows=null`，`data.max_val_windows=null`）
@@ -41,21 +55,21 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 
 ## L0
 
-| run | source | model | data windows | band waveform | phase lag | rel env | high freq | best val loss | band_limited_corr mean | best_lag_corr mean | abs(best_lag_sec) mean | 结论 |
-|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `20260616_005516_616320` | history anchor | `patch_mixer1d` | full | 0.00 | 0.00 | 0.01 | 0.20 | 0.624477 | -0.790210 | 0.331171 | 1.000000 | L0 anchor，作为 L1 对照。 |
+| run | source | model | data windows | band waveform | best val loss | `rr_peak_abs_error` mean / median | `rr_spec_abs_error` mean / median | `relative_envelope_mae` mean / median | `spectrum_similarity` mean | `band_limited_corr` mean | 结论 |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `20260616_005516_616320` | history anchor | `patch_mixer1d` | full | 0.00 | 0.624477 | 0.651706 / 0.278480 | 0.443979 / 0.000000 | 0.219451 / 0.184972 | 0.975401 | -0.790210 | L0 anchor，作为 L1 任务指标对照。 |
 
 ## L1
 
-| run | model | data windows | band waveform | phase lag | rel env | high freq | best val loss | band_limited_corr mean | best_lag_corr mean | abs(best_lag_sec) mean | 相对 L0 判断 |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `20260617_153802_524411` | `patch_mixer1d` | full | 0.05 | 0.00 | 0.01 | 0.20 | 0.650255 | 0.789400 | 0.841062 | 0.165209 | 待任务 5 汇总判断。 |
-| `20260617_155532_175711` | `patch_mixer1d` | full | 0.10 | 0.00 | 0.01 | 0.20 | 0.665458 | 0.794815 | 0.844943 | 0.160113 | 待任务 5 汇总判断。 |
+| run | model | data windows | band waveform | best val loss | `rr_peak_abs_error` mean / median | `rr_spec_abs_error` mean / median | `relative_envelope_mae` mean / median | `spectrum_similarity` mean | `band_limited_corr` mean | 相对 L0 判断 |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `20260617_153802_524411` | `patch_mixer1d` | full | 0.05 | 0.650255 | 2.060745 / 0.445540 | 0.430803 / 0.000000 | 0.222524 / 0.190867 | 0.974725 | 0.789400 | 波形诊断改善，但 `rr_peak_abs_error` 明显恶化，不通过。 |
+| `20260617_155532_175711` | `patch_mixer1d` | full | 0.10 | 0.665458 | 0.932913 / 0.260365 | 0.471477 / 0.000000 | 0.222588 / 0.190387 | 0.974869 | 0.794815 | 波形诊断改善，但 RR 与相对包络整体不优于 L0，不通过。 |
 
 ## 阶段判断
 
-- L1a 相对 L0：`band_limited_corr` 从 `-0.790210` 上升到 `0.789400`，差值 `+1.579610`；`best_lag_corr` 从 `0.331171` 上升到 `0.841062`，差值 `+0.509891`；`abs(best_lag_sec)` 从 `1.000000` 变小到 `0.165209`，差值 `-0.834791`。
-- L1b 相对 L0：`band_limited_corr` 从 `-0.790210` 上升到 `0.794815`，差值 `+1.585025`；`best_lag_corr` 从 `0.331171` 上升到 `0.844943`，差值 `+0.513772`；`abs(best_lag_sec)` 从 `1.000000` 变小到 `0.160113`，差值 `-0.839887`。
-- 相对包络：L1a 的 `relative_envelope_corr` 从 `0.440967` 上升到 `0.444807`，差值 `+0.003840`，但 `relative_envelope_mae` 从 `0.219451` 变大到 `0.222524`，差值 `+0.003073`；L1b 的 `relative_envelope_corr` 上升到 `0.445248`，差值 `+0.004281`，但 `relative_envelope_mae` 变大到 `0.222588`，差值 `+0.003137`。因此当前数值不显示相对包络相关性被牺牲，但 MAE 有轻微退化。
+- 波形诊断：L1a 的 `band_limited_corr` 从 `-0.790210` 上升到 `0.789400`，`best_lag_corr` 从 `0.331171` 上升到 `0.841062`，`abs(best_lag_sec)` 从 `1.000000` 变小到 `0.165209`。L1b 也有类似改善，`band_limited_corr=0.794815`，`best_lag_corr=0.844943`，`abs(best_lag_sec)=0.160113`。
+- RR 任务指标：L1a 的 `rr_peak_abs_error` mean 从 `0.651706` 恶化到 `2.060745`，L1b 恶化到 `0.932913`。虽然 L1a 的 `rr_spec_abs_error` mean 小幅下降到 `0.430803`，但 peak RR 恶化幅度过大，不能视为任务收益。
+- 相对包络：L1a 的 `relative_envelope_corr` 从 `0.440967` 上升到 `0.444807`，但 `relative_envelope_mae` 从 `0.219451` 变大到 `0.222524`；L1b 的 `relative_envelope_corr` 上升到 `0.445248`，但 `relative_envelope_mae` 变大到 `0.222588`。这说明相关性略有改善，但误差没有同步改善。
 - 诊断图结论：尚未生成诊断图，证据不足。
-- 下一步：L1b 的 `band_limited_corr` 和 `best_lag_corr` 略高于 L1a，`abs(best_lag_sec)` 也略小，但 `best_val_loss=0.665458` 明显差于 L1a 的 `0.650255`，且两者都差于 L0 的 `0.624477`。建议保守处理：优先保留 L1a 作为较稳妥候选，同时可追加 L1c 小权重或中间权重实验；现阶段不直接进入模型结构结论。
+- 当前判断：L1 证明带限波形损失能显著改变低频形态，但没有证明它改善了当前任务目标。L1a/L1b 都不应作为通过实验进入模型结构结论；后续若继续做 L1c，应把 `rr_peak_abs_error` 设为主护栏，且只尝试更小权重或改成不主导 RR 峰检测的弱约束。

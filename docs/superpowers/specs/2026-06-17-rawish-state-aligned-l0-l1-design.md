@@ -62,37 +62,38 @@ L1b：
 L1c 可选：
 
 - `loss.band_waveform_weight=0.20`
-- 触发条件：L1a 或 L1b 至少一个提升 `band_limited_corr`，且没有明显恶化
-  `best_lag_corr` 或 `abs(best_lag_sec)`。
+- 触发条件：L1a 或 L1b 在 RR、相对包络和频谱一致性上没有明显恶化，同时波形诊断显示低频形态有收益。
 
 ## 指标与判定
 
 主指标：
 
-- `band_limited_corr`：应提升。
-- `best_lag_corr`：不应下降。
-- `abs(best_lag_sec)`：不应明显变大。
+- `rr_peak_abs_error`：主护栏，均值和中位数不应明显恶化。
+- `rr_spec_abs_error`：频域呼吸率护栏，不应明显恶化。
+- `relative_envelope_mae` / `relative_envelope_corr`：用于判断相对呼吸强弱变化。
+- `spectrum_similarity`：用于判断频谱一致性。
 
 辅助指标：
 
 - `envelope_corr`
-- `spectrum_similarity`
-- `rr_peak_abs_error`
-- `rr_spec_abs_error`
+- `band_limited_corr`
+- `best_lag_corr`
+- `abs(best_lag_sec)`
 - 诊断图中的低频波形形态
 
 通过标准：
 
-- L1 相比 L0 的 `band_limited_corr` 提升，且 `best_lag_corr` 不下降。
-- 诊断图中预测低频形态更接近胸带，而不是只变平滑或只匹配频谱。
-- 如果 L1 改善仅来自 spectrum 或 envelope，而波形仍不像胸带，不进入完整训练。
+- L1 相比 L0 的 `rr_peak_abs_error` 和 `rr_spec_abs_error` 不明显恶化。
+- `relative_envelope_mae` / `relative_envelope_corr` 至少不显示整体退化。
+- `spectrum_similarity` 保持稳定。
+- 诊断图和波形诊断指标支持低频形态解释，而不是只靠训练 loss 下降。
 
 失败标准：
 
-- `band_limited_corr` 无提升或下降。
-- `best_lag_corr` 下降。
-- `abs(best_lag_sec)` 明显变大。
-- 可视化显示预测仍主要保留 BCG 尖峰结构。
+- `rr_peak_abs_error` 明显恶化，即使 `band_limited_corr` 提升也不通过。
+- `rr_spec_abs_error`、相对包络或频谱一致性出现系统性退化。
+- 波形诊断改善无法转化为任务指标收益。
+- 可视化显示预测仍主要保留 BCG 尖峰结构，或只变平滑而没有呼吸任务收益。
 
 ## 独立性与记录
 
@@ -109,4 +110,3 @@ L1c 可选：
 - L1c：`band_waveform_weight=0.20`
 - 更小 spectrum 权重的组合实验
 - L2：phase-aware loss，但仅在 state-aligned 后仍有稳定残余 lag 时进入
-

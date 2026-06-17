@@ -25,6 +25,20 @@ METRIC_COLUMNS = [
     "best_lag_sec",
 ]
 
+TASK_SELECTION_METRICS = [
+    "rr_peak_abs_error",
+    "rr_spec_abs_error",
+    "relative_envelope_mae",
+    "relative_envelope_corr",
+    "spectrum_similarity",
+]
+
+WAVEFORM_DIAGNOSTIC_METRICS = [
+    "band_limited_corr",
+    "best_lag_corr",
+    "best_lag_sec",
+]
+
 
 def summarize_runs(runs_root: str | Path, output: str | Path) -> pd.DataFrame:
     """汇总 `runs/tho_small/*` 下每个 run 的核心训练和评价指标。"""
@@ -45,6 +59,7 @@ def _summarize_one_run(run_dir: Path) -> dict[str, Any]:
     _add_metrics(record, run_dir / "metrics.csv", prefix="model")
     _add_metrics(record, run_dir / "baseline_metrics.csv", prefix="baseline")
     _add_audit(record, run_dir / "audit.csv")
+    _add_selection_fields(record)
     return record
 
 
@@ -93,6 +108,23 @@ def _add_audit(record: dict[str, Any], path: Path) -> None:
 def _quality_counts(frame: pd.DataFrame) -> str:
     counts = frame["residual_quality_class"].fillna("").astype(str).value_counts().sort_index()
     return ";".join(f"{key}:{int(value)}" for key, value in counts.items())
+
+
+def _add_selection_fields(record: dict[str, Any]) -> None:
+    """显式标注模型选择口径，避免把训练 loss 或波形诊断当作唯一目标。"""
+    record["selection_primary_metric"] = "rr_peak_abs_error_mean"
+    record["selection_secondary_metric"] = "rr_spec_abs_error_mean"
+    record["selection_tertiary_metric"] = "relative_envelope_mae_mean"
+    record["selection_waveform_role"] = "diagnostic"
+    for metric in TASK_SELECTION_METRICS:
+        _copy_metric_summary(record, metric, role="task")
+    for metric in WAVEFORM_DIAGNOSTIC_METRICS:
+        _copy_metric_summary(record, metric, role="waveform")
+
+
+def _copy_metric_summary(record: dict[str, Any], metric: str, *, role: str) -> None:
+    for stat in ("mean", "median"):
+        record[f"selection_{role}_{metric}_{stat}"] = record.get(f"model_{metric}_{stat}", np.nan)
 
 
 def main() -> None:

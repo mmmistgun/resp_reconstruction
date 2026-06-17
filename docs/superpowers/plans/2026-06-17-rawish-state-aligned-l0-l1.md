@@ -2,9 +2,9 @@
 
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
-**目标：** 在与历史 `patch_mixer_rawish_relenv001` 完全可比的口径下，评估 L1 带限波形损失是否改善胸带呼吸波形恢复。
+**目标：** 在与历史 `patch_mixer_rawish_relenv001` 完全可比的口径下，评估 L1 带限波形损失是否改善当前呼吸任务指标。波形恢复是证据链的一部分，但不是唯一选择目标。
 
-**架构：** L0 使用既有历史 run 作为 anchor，不重复制造一个不同参数的基线。L1 继承历史 run 的全量数据、`patch_mixer1d`、相对包络损失、高频惩罚和训练策略，只改变 `loss.band_waveform_weight`，并保持 `loss.phase_lag_weight=0.0`。实验产物留在本地 `runs/`，只提交计划和人工台账。
+**架构：** L0 使用既有历史 run 作为 anchor，不重复制造一个不同参数的基线。L1 继承历史 run 的全量数据、`patch_mixer1d`、相对包络损失、高频惩罚和训练策略，只改变 `loss.band_waveform_weight`，并保持 `loss.phase_lag_weight=0.0`。实验产物留在本地 `runs/`，只提交计划和人工台账。最终判断优先使用 RR、相对包络和频谱一致性；`band_limited_corr`、`best_lag_corr` 和 `best_lag_sec` 只作为波形诊断指标。
 
 **技术栈：** Python、PyTorch、OmegaConf、pandas、pytest、现有 `resp_train` 训练与评价框架。
 
@@ -39,6 +39,15 @@ runs/tho_research_v2_patch_mixer_rawish_relenv001/20260616_005516_616320
 ## 科研假设
 
 本轮继续使用 `bcg_rawish_wideband_state_aligned`，因为当前主要相位偏差来自两台采集设备采样率或时钟漂移，不是 BCG 到胸带呼吸之间的生理相位差。L1 只测试带限波形重建约束，不引入 phase-tolerant training loss。
+
+## 模型选择口径
+
+- 主护栏：`rr_peak_abs_error`，均值和中位数不应明显恶化。
+- 次护栏：`rr_spec_abs_error`，用于确认频域呼吸率没有被牺牲。
+- 任务辅助：`relative_envelope_mae` / `relative_envelope_corr`，用于判断相对呼吸强弱变化。
+- 频谱辅助：`spectrum_similarity`，用于判断频谱一致性。
+- 波形诊断：`band_limited_corr`、`best_lag_corr`、`best_lag_sec`，用于解释低频形态和时移，但不能单独作为通过标准。
+- `best_val_loss` 只作为训练代理指标，不作为最终模型选择依据。
 
 ## 文件结构
 
@@ -245,8 +254,13 @@ print("best_val_loss", float(history["val_loss"].min()))
 print("band_limited_corr_mean", float(metrics["band_limited_corr"].mean()))
 print("best_lag_corr_mean", float(metrics["best_lag_corr"].mean()))
 print("abs_best_lag_sec_mean", float(metrics["best_lag_sec"].abs().mean()))
+print("rr_peak_abs_error_mean", float(metrics["rr_peak_abs_error"].mean()))
+print("rr_peak_abs_error_median", float(metrics["rr_peak_abs_error"].median()))
+print("rr_spec_abs_error_mean", float(metrics["rr_spec_abs_error"].mean()))
+print("rr_spec_abs_error_median", float(metrics["rr_spec_abs_error"].median()))
 print("relative_envelope_corr_mean", float(metrics["relative_envelope_corr"].mean()))
 print("relative_envelope_mae_mean", float(metrics["relative_envelope_mae"].mean()))
+print("spectrum_similarity_mean", float(metrics["spectrum_similarity"].mean()))
 PY
 ```
 
@@ -256,15 +270,16 @@ PY
 来自步骤 1 的打印结果：
 
 - `best val loss` 使用 `best_val_loss`
-- `band_limited_corr mean` 使用 `band_limited_corr_mean`
-- `best_lag_corr mean` 使用 `best_lag_corr_mean`
-- `abs(best_lag_sec) mean` 使用 `abs_best_lag_sec_mean`
+- `rr_peak_abs_error` 使用 `rr_peak_abs_error_mean` / `rr_peak_abs_error_median`
+- `rr_spec_abs_error` 使用 `rr_spec_abs_error_mean` / `rr_spec_abs_error_median`
+- `relative_envelope_mae`、`spectrum_similarity` 使用对应 mean
+- `band_limited_corr mean`、`best_lag_corr mean`、`abs(best_lag_sec) mean` 仅作为波形诊断字段
 
 ```markdown
 ## L0
 
-| run | source | model | data windows | band waveform | phase lag | rel env | high freq | best val loss | band_limited_corr mean | best_lag_corr mean | abs(best_lag_sec) mean | 结论 |
-|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| run | source | model | data windows | band waveform | best val loss | rr peak error | rr spec error | relative envelope MAE | spectrum similarity | band-limited corr | 结论 |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
 ```
 
 - [ ] **步骤 5：提交 L0 anchor 记录**
@@ -394,8 +409,13 @@ for run_dir in sorted(p for p in Path("runs/tho_research_v2_patch_mixer_rawish_b
         float(metrics["band_limited_corr"].mean()),
         float(metrics["best_lag_corr"].mean()),
         float(metrics["best_lag_sec"].abs().mean()),
+        float(metrics["rr_peak_abs_error"].mean()),
+        float(metrics["rr_peak_abs_error"].median()),
+        float(metrics["rr_spec_abs_error"].mean()),
+        float(metrics["rr_spec_abs_error"].median()),
         float(metrics["relative_envelope_corr"].mean()),
         float(metrics["relative_envelope_mae"].mean()),
+        float(metrics["spectrum_similarity"].mean()),
     )
 PY
 ```
@@ -405,8 +425,8 @@ PY
 ```markdown
 ## L1
 
-| run | model | data windows | band waveform | phase lag | rel env | high freq | best val loss | band_limited_corr mean | best_lag_corr mean | abs(best_lag_sec) mean | 相对 L0 判断 |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| run | model | data windows | band waveform | best val loss | rr peak error | rr spec error | relative envelope MAE | spectrum similarity | band-limited corr | 相对 L0 判断 |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
 ```
 
 - [ ] **步骤 5：提交 L1 记录**
@@ -452,11 +472,16 @@ l0 = {
     "label": "L0-history",
     "run_id": l0_dir.name,
     "best_val_loss": float(l0_history["val_loss"].min()),
+    "model_rr_peak_abs_error_mean": float(l0_metrics["rr_peak_abs_error"].mean()),
+    "model_rr_peak_abs_error_median": float(l0_metrics["rr_peak_abs_error"].median()),
+    "model_rr_spec_abs_error_mean": float(l0_metrics["rr_spec_abs_error"].mean()),
+    "model_rr_spec_abs_error_median": float(l0_metrics["rr_spec_abs_error"].median()),
+    "model_relative_envelope_mae_mean": float(l0_metrics["relative_envelope_mae"].mean()),
+    "model_relative_envelope_corr_mean": float(l0_metrics["relative_envelope_corr"].mean()),
+    "model_spectrum_similarity_mean": float(l0_metrics["spectrum_similarity"].mean()),
     "model_band_limited_corr_mean": float(l0_metrics["band_limited_corr"].mean()),
     "model_best_lag_corr_mean": float(l0_metrics["best_lag_corr"].mean()),
     "model_best_lag_sec_abs_mean": float(l0_metrics["best_lag_sec"].abs().mean()),
-    "model_relative_envelope_corr_mean": float(l0_metrics["relative_envelope_corr"].mean()),
-    "model_relative_envelope_mae_mean": float(l0_metrics["relative_envelope_mae"].mean()),
 }
 l1 = pd.read_csv("runs/tho_research_v2_patch_mixer_rawish_bandwave_l1_summary.csv")
 l1_records = []
@@ -477,11 +502,16 @@ cols = [
     "label",
     "run_id",
     "best_val_loss",
+    "model_rr_peak_abs_error_mean",
+    "model_rr_peak_abs_error_median",
+    "model_rr_spec_abs_error_mean",
+    "model_rr_spec_abs_error_median",
+    "model_relative_envelope_mae_mean",
+    "model_relative_envelope_corr_mean",
+    "model_spectrum_similarity_mean",
     "model_band_limited_corr_mean",
     "model_best_lag_corr_mean",
     "model_best_lag_sec_abs_mean",
-    "model_relative_envelope_corr_mean",
-    "model_relative_envelope_mae_mean",
 ]
 print(frame[cols].to_string(index=False))
 PY
@@ -494,13 +524,13 @@ PY
 ```markdown
 ## 阶段判断
 
-- L1a 相对 L0 的 `band_limited_corr`：写明升降方向和差值。
-- L1b 相对 L0 的 `band_limited_corr`：写明升降方向和差值。
-- L1a/L1b 相对 L0 的 `best_lag_corr`：写明是否下降和差值。
-- L1a/L1b 相对 L0 的 `abs(best_lag_sec)`：写明是否变大和差值。
+- L1a/L1b 相对 L0 的 `rr_peak_abs_error`：写明是否触发主护栏。
+- L1a/L1b 相对 L0 的 `rr_spec_abs_error`：写明频域呼吸率是否同步改善。
 - L1a/L1b 相对 L0 的 `relative_envelope_corr` 和 `relative_envelope_mae`：写明是否牺牲相对包络。
+- L1a/L1b 相对 L0 的 `spectrum_similarity`：写明是否保持频谱一致性。
+- L1a/L1b 相对 L0 的 `band_limited_corr`、`best_lag_corr`、`abs(best_lag_sec)`：作为波形诊断写明升降方向和差值。
 - 诊断图结论：写明预测低频形态更像胸带、仍像 BCG 尖峰，或证据不足。
-- 下一步：写明进入 L1c、调整带限权重，或暂停进入模型结构实验。
+- 下一步：只有任务指标未明显恶化时，才进入 L1c 或模型结构实验；若只有波形诊断改善，应暂停并重新设计 loss 权重或目标。
 ```
 
 - [ ] **步骤 4：提交汇总结论**
@@ -518,6 +548,8 @@ git commit -m "docs: 总结 rawish 对齐 L0 L1"
 - [ ] L0 anchor 和 L1 使用同一个输入：`bcg_rawish_wideband_state_aligned`。
 - [ ] L0 anchor 和 L1 使用同一个模型：`patch_mixer1d`。
 - [ ] L0 anchor 和 L1 使用全量数据：`max_train_windows=null`，`max_val_windows=null`。
+- [ ] 阶段判断优先检查 `rr_peak_abs_error`、`rr_spec_abs_error`、相对包络和频谱一致性。
+- [ ] `band_limited_corr`、`best_lag_corr`、`best_lag_sec` 只作为波形诊断指标，不单独决定通过。
 - [ ] L0 anchor 和 L1 都使用 `relative_envelope_weight=0.01` 和 `high_freq_weight=0.2`。
 - [ ] L0/L1 都保持 `phase_lag_weight=0.0`。
 - [ ] L1 只相对 L0 改变 `band_waveform_weight`。
