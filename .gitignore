@@ -21,6 +21,5 @@ __pycache__/
 # Ignore log files
 *.log
 
-# 本地实验产物和结果记录不进入 Git，避免仓库体积膨胀。
+# 本地实验产物不进入 Git，避免仓库体积膨胀。
 runs/
-docs/experiments/
