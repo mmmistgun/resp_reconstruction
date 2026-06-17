@@ -57,6 +57,9 @@ def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
                 "relative_envelope_corr": 0.42,
                 "relative_envelope_mae": 0.18,
                 "spectrum_similarity": 0.8,
+                "band_limited_corr": 0.62,
+                "best_lag_corr": 0.73,
+                "best_lag_sec": 0.25,
                 "pred_rr_spec_bpm": 18.0,
                 "target_rr_spec_bpm": 16.0,
                 "pred_rr_peak_bpm": 19.0,
@@ -343,6 +346,18 @@ def test_summarize_runs_includes_relative_envelope_metrics(tmp_path):
 
     assert frame["model_relative_envelope_corr_mean"].tolist() == [0.42]
     assert frame["model_relative_envelope_mae_median"].tolist() == [0.18]
+
+
+def test_summarize_runs_includes_lag_aware_metrics(tmp_path):
+    root = tmp_path / "runs"
+    _write_minimal_run(root / "run_a")
+    output = tmp_path / "summary.csv"
+
+    frame = summarize_runs(root, output)
+
+    assert frame["model_band_limited_corr_mean"].tolist() == [0.62]
+    assert frame["model_best_lag_corr_median"].tolist() == [0.73]
+    assert frame["model_best_lag_sec_mean"].tolist() == [0.25]
 
 
 def test_train_script_delegates_to_tho_experiment():

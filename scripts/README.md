@@ -82,7 +82,43 @@
   --set training.epochs=10
 ```
 
-每个 run 输出到 `runs/tho_small/<timestamp>/`，常见产物包括：
+### L1 低频波形与 lag-aware 对照
+
+L1 阶段先不改模型结构，只验证“低频呼吸波形约束 + lag-aware 评价”是否让预测更像胸带呼吸波形。执行顺序建议固定为：
+
+1. 先运行 split 独立性审计，确认当前结果应解释为 within-subject 开发指标，还是可以支撑跨 `samp_id` 泛化结论。
+2. 使用同一个验证 seed 跑 L0 与 L1，避免验证集变化掩盖 loss 差异。
+3. 每完成一次正式实验 run 后提交一次仓库状态，提交信息写明实验口径和关键权重。
+4. 先看 `metrics.csv` 中的 `band_limited_corr`、`best_lag_corr`、`best_lag_sec`，再配合诊断图判断低频相位和形态是否改善。
+
+L0 对照使用 research v2 配置但保持 `band_waveform_weight=0.0`：
+
+```bash
+./.venv/bin/python scripts/train_tho_small.py \
+  --config configs/tho_research_v2.yaml \
+  --set data.max_train_windows=4096 \
+  --set data.max_val_windows=1024 \
+  --set data.train_sample_seed=20260610 \
+  --set data.val_sample_seed=20260611 \
+  --set loss.band_waveform_weight=0.0 \
+  --set training.epochs=3
+```
+
+L1 pilot 只打开带限波形损失。`0.2` 是保守起点，不是固定结论；若 `val_band_waveform` 降低但 `best_lag_sec` 变大，应优先检查诊断图和 lag 分布，而不是直接加大权重。
+
+```bash
+./.venv/bin/python scripts/train_tho_small.py \
+  --config configs/tho_research_v2.yaml \
+  --set data.max_train_windows=4096 \
+  --set data.max_val_windows=1024 \
+  --set data.train_sample_seed=20260610 \
+  --set data.val_sample_seed=20260611 \
+  --set loss.band_waveform_weight=0.2 \
+  --set training.epochs=3
+```
+
+每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
+`runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
 
 - `config.yaml`：本次 resolved config 快照。
 - `audit.csv`：训练数据工厂生成的数据审计摘要。

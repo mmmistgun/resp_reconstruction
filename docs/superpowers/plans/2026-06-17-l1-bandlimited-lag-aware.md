@@ -10,6 +10,16 @@
 
 ---
 
+## 执行状态
+
+- 已完成：split 独立性审计，提交 `8943425 feat: 增加数据划分独立性审计`。
+- 已完成：lag-aware 评价指标，提交 `1ea3ee2 feat: 增加 lag-aware 呼吸评价指标`。
+- 已完成：默认关闭的 band-limited waveform loss，提交 `b239473 feat: 增加带限波形损失`。
+- 已完成：L1 实验命令、阶段说明和 run 汇总指标接入。
+- 待完成：完整验证与 L0/L1 pilot run。正式 pilot 前应先运行 split 独立性审计；每完成一次实验 run 后单独 git 提交。
+
+---
+
 ## 范围与非目标
 
 本计划包含：

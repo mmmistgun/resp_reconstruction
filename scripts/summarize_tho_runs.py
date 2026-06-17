@@ -20,6 +20,9 @@ METRIC_COLUMNS = [
     "relative_envelope_corr",
     "relative_envelope_mae",
     "spectrum_similarity",
+    "band_limited_corr",
+    "best_lag_corr",
+    "best_lag_sec",
 ]
 
 
