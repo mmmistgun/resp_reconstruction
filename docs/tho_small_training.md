@@ -107,17 +107,12 @@ L1 阶段已经补齐三类实验基础设施：
 - lag-aware 评价：`metrics.csv` 增加 `band_limited_corr`、`best_lag_corr`、`best_lag_sec`，用于区分低频形态相似度和小范围时移。
 - 带限波形损失：`loss.band_waveform_weight` 默认 `0.0`，开启后对预测和目标做 `0.05-0.7Hz` torch FFT 带限重建，z-score 后计算 L1，优先约束低频相位/形态而不是绝对幅值。
 
-推荐先跑 research v2 口径的 L0/L1 pilot，固定验证 seed，只改变 `loss.band_waveform_weight`。具体命令见 `scripts/README.md` 的 “L1 低频波形与 lag-aware 对照”。
-
-首轮 `4096/1024` pilot 中，匹配训练口径的 split 审计没有发现 `samp_id` 或 segment 重叠。`loss.band_waveform_weight=0.2` 相比 `0.0` 未改善 `band_limited_corr` 或 `best_lag_corr`，不建议下一轮直接加大权重；应优先尝试更小权重、降低 spectrum 权重，或结合诊断图判断是否需要 lag-tolerant training loss。
-
-L1 收尾诊断见 `runs/tho_research_v2/l1_closeout_20260617/`。逐窗对照显示，L1 在个别窗口可以小幅提升低频相关，但没有同步改善 `best_lag_corr`；变差窗口通常伴随更大的相位偏移或局部事件段残差。当前阶段建议停止围绕 `band_waveform_weight=0.2` 做扩展实验，下一步推进 phase / lag-aware training loss。
-
-## 2026-06-17 L2 计划口径：phase-aware training loss
-
-L1 的 `band_waveform_weight=0.2` 没有提升整体 `band_limited_corr` 或 `best_lag_corr`，说明固定相位的带限波形约束会惩罚合理的小范围时移。L2 因此转向可微的 soft-lag phase loss：在呼吸频带内搜索 ±1 秒内的相关性，并用 softmax 聚合形成训练损失。
-
-L2 第一轮只验证 `phase_lag_weight`，不改模型结构；`band_waveform_weight` 只作为后续小权重辅助项候选。
+旧的 2026-06-17 L0/L1/L2 pilot 已作废：这些 run 的 `data.bcg_input_key`
+实际指向 `bcg_input_aligned_key`，在 research v2 索引中会解析到
+`bcg_resp_band_state_aligned`，即呼吸频段且 state-aligned 的 BCG 表征，
+不是 rawish wideband 主输入。后续重新建立 L0/L1 前，需要先明确主线输入
+信号；当前 `configs/tho_research_v2.yaml` 已暂定为
+`bcg_rawish_wideband_to_tho_timebase`。
 
 ## 常用检查命令
 
