@@ -30,7 +30,14 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 
 ## Split 独立性审计
 
-尚未按全量对齐口径重新执行。
+- 口径：全量（`data.max_train_windows=null`，`data.max_val_windows=null`）
+- 输入：`bcg_rawish_wideband_state_aligned`
+- train windows：`9881`
+- val windows：`2557`
+- train/val `samp_id` 重叠：`0`
+- train/val `segment` 重叠：`0`
+- 泄漏标记：`has_samp_id_leakage=False`，`has_segment_leakage=False`
+- 结论：本轮全量对齐实验可作为 leave-samp_id-out 开发指标。
 
 ## L0
 
