@@ -29,6 +29,8 @@ pilot 口径：`4096/1024` 窗口、`3` epoch、固定 `train_sample_seed=202606
 
 初步结论：`band_waveform_weight=0.2` 没有改善低频相关或 lag-aware 相关，且加权 `val_loss` 上升。下一轮不建议直接加大该权重；更合理的是尝试更小权重、降低 spectrum 权重，或把 lag tolerance 引入训练目标前先看诊断图确认失败形态。
 
+收尾诊断已生成到 `runs/tho_research_v2/l1_closeout_20260617/`。逐窗图像复核显示，L1 仍主要贴近主频和频谱峰，但没有稳定修复相位连续性或局部波形形态；后续应推进 L2 的 phase / lag-aware training loss，而不是继续围绕当前 L1 权重做大规模实验。
+
 ---
 
 ## 范围与非目标

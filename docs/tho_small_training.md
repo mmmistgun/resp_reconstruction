@@ -111,6 +111,8 @@ L1 阶段已经补齐三类实验基础设施：
 
 首轮 `4096/1024` pilot 中，匹配训练口径的 split 审计没有发现 `samp_id` 或 segment 重叠。`loss.band_waveform_weight=0.2` 相比 `0.0` 未改善 `band_limited_corr` 或 `best_lag_corr`，不建议下一轮直接加大权重；应优先尝试更小权重、降低 spectrum 权重，或结合诊断图判断是否需要 lag-tolerant training loss。
 
+L1 收尾诊断见 `runs/tho_research_v2/l1_closeout_20260617/`。逐窗对照显示，L1 在个别窗口可以小幅提升低频相关，但没有同步改善 `best_lag_corr`；变差窗口通常伴随更大的相位偏移或局部事件段残差。当前阶段建议停止围绕 `band_waveform_weight=0.2` 做扩展实验，下一步推进 phase / lag-aware training loss。
+
 ## 常用检查命令
 
 ```bash
