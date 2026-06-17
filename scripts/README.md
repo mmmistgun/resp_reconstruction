@@ -82,12 +82,14 @@
   --set training.epochs=10
 ```
 
-### L1 低频波形与任务指标对照
+### 当前 N3 signed phase alignment 主线
 
-L1 阶段先不改模型结构，只验证“低频呼吸波形约束 + lag-aware 评价”是否带来可用的呼吸任务收益。波形是重要证据，但不是唯一选择目标。执行顺序建议固定为：
+当前阶段先不改模型结构，使用 N3 候选 loss 验证“呼吸节律 + 相对努力变化 +
+state-aligned signed phase alignment”是否带来可用的呼吸任务收益。波形是重要证据，
+但不是唯一选择目标。执行顺序建议固定为：
 
 1. 先运行 split 独立性审计，确认当前结果应解释为 within-subject 开发指标，还是可以支撑跨 `samp_id` 泛化结论。
-2. 使用同一个验证 seed 跑 L0 与 L1，避免验证集变化掩盖 loss 差异。
+2. 使用同一个验证 seed 和全量窗口，避免验证集变化掩盖 loss 差异。
 3. 每完成一次正式实验 run 后提交一次仓库状态，提交信息写明实验口径和关键权重。
 4. 先按任务指标筛选：`rr_peak_abs_error` 和 `rr_spec_abs_error` 不应明显恶化；再看 `relative_envelope_mae`、`relative_envelope_corr` 和 `spectrum_similarity`。
 5. `band_limited_corr`、`best_lag_corr`、`best_lag_sec` 用于解释低频波形形态和小范围时移，不能单独作为通过标准。
@@ -99,111 +101,13 @@ L1 阶段先不改模型结构，只验证“低频呼吸波形约束 + lag-awar
 非 2 次幂窗口，但当前模型在 `batch_size=128` 下 AMP 吞吐收益不明显，可作为显存
 余量不足或更大 batch 的备用选项。
 
-注意：2026-06-17 首轮 L0/L1/L2 run 已作废，因为默认配置曾使用
-`bcg_input_aligned_key`，实际读到的是 `bcg_resp_band_state_aligned`。
-新的 L0/L1 主线使用 `bcg_rawish_wideband_state_aligned`。这一步先忽略由两台
-采集设备采样率或时钟漂移带来的相位偏差，不把它误当作生理相位差来训练。
+注意：2026-06-17 早期 L0/L1/L2/L3 loss 分支已经完成历史评估，不再作为当前
+训练入口。当前主线使用 `bcg_rawish_wideband_state_aligned`，默认 loss 收窄为
+`envelope + spectrum + smooth + high_freq + relative_envelope + signed phase_alignment`。
+其中 `phase_alignment` 是 state-aligned 前提下的低频 signed correlation 约束，
+带小范围 lag 容忍和 lag 惩罚；它不是胸带波形复制 loss。
 
-L0 对照使用 research v2 配置但保持 `band_waveform_weight=0.0`。正式对照
-使用全量窗口和 batch128 效率口径：
-
-```bash
-./.venv/bin/python scripts/train_tho_small.py \
-  --config configs/tho_research_v2.yaml \
-  --set data.max_train_windows=null \
-  --set data.max_val_windows=null \
-  --set data.train_sample_seed=20260610 \
-  --set data.val_sample_seed=20260611 \
-  --set model.name=patch_mixer1d \
-  --set model.patch_len=256 \
-  --set model.patch_stride=128 \
-  --set model.mixer_layers=2 \
-  --set loss.high_freq_weight=0.2 \
-  --set loss.relative_envelope_weight=0.01 \
-  --set loss.band_waveform_weight=0.0 \
-  --set loss.phase_lag_weight=0.0 \
-  --set training.epochs=50 \
-  --set training.batch_size=128 \
-  --set training.patience=8 \
-  --set training.min_delta=0.001 \
-  --set training.use_amp=false \
-  --set training.device=cuda:0 \
-  --set training.show_progress=false \
-  --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_eff_l0_l1
-```
-
-L1 只打开带限波形损失。更稳妥的 L1 网格建议从小权重开始：
-
-```bash
-for w in 0.05 0.10; do
-  ./.venv/bin/python scripts/train_tho_small.py \
-    --config configs/tho_research_v2.yaml \
-    --set data.max_train_windows=null \
-    --set data.max_val_windows=null \
-    --set data.train_sample_seed=20260610 \
-    --set data.val_sample_seed=20260611 \
-    --set model.name=patch_mixer1d \
-    --set model.patch_len=256 \
-    --set model.patch_stride=128 \
-    --set model.mixer_layers=2 \
-    --set loss.high_freq_weight=0.2 \
-    --set loss.relative_envelope_weight=0.01 \
-    --set loss.band_waveform_weight="$w" \
-    --set loss.phase_lag_weight=0.0 \
-    --set training.epochs=50 \
-    --set training.batch_size=128 \
-    --set training.patience=8 \
-    --set training.min_delta=0.001 \
-    --set training.use_amp=false \
-    --set training.device=cuda:0 \
-    --set training.show_progress=false \
-    --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_eff_l0_l1
-done
-```
-
-本轮 L0/L1 不开启 `phase_lag_weight`。`best_lag_corr` 和 `best_lag_sec` 只用于
-确认 state-aligned 后是否仍有残余 lag，而不是放松训练目标。
-
-### L2/L3 Phase-aware 与 STFT loss
-
-L2/L3 继续使用 `bcg_rawish_wideband_state_aligned` 全量 batch128 口径。
-模型选择仍以 `rr_peak_abs_error` 为主护栏；STFT、phase、complex loss 只允许
-在不破坏 RR 任务指标的情况下改善低频形态。
-
-L2 先复用现有 lag-tolerant loss：
-
-```bash
-for w in 0.01 0.03; do
-  ./.venv/bin/python scripts/train_tho_small.py \
-    --config configs/tho_research_v2.yaml \
-    --set data.max_train_windows=null \
-    --set data.max_val_windows=null \
-    --set data.train_sample_seed=20260610 \
-    --set data.val_sample_seed=20260611 \
-    --set model.name=patch_mixer1d \
-    --set model.patch_len=256 \
-    --set model.patch_stride=128 \
-    --set model.mixer_layers=2 \
-    --set loss.high_freq_weight=0.2 \
-    --set loss.relative_envelope_weight=0.01 \
-    --set loss.band_waveform_weight=0.0 \
-    --set loss.phase_lag_weight="$w" \
-    --set loss.phase_lag_max_sec=1.0 \
-    --set loss.phase_lag_step_sec=0.2 \
-    --set loss.phase_lag_temperature=0.10 \
-    --set training.epochs=50 \
-    --set training.batch_size=128 \
-    --set training.patience=8 \
-    --set training.min_delta=0.001 \
-    --set training.use_amp=false \
-    --set training.device=cuda:0 \
-    --set training.show_progress=false \
-    --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_phase_stft_l2_l3
-done
-```
-
-L3 再开启低频 STFT。先只跑 magnitude，若未触发 `rr_peak_abs_error` 主护栏，
-再分别尝试小权重 phase 或 complex：
+正式训练使用全量窗口和 batch128 效率口径：
 
 ```bash
 ./.venv/bin/python scripts/train_tho_small.py \
@@ -217,12 +121,9 @@ L3 再开启低频 STFT。先只跑 magnitude，若未触发 `rr_peak_abs_error`
   --set model.patch_stride=128 \
   --set model.mixer_layers=2 \
   --set loss.high_freq_weight=0.2 \
-  --set loss.relative_envelope_weight=0.01 \
-  --set loss.band_waveform_weight=0.0 \
-  --set loss.phase_lag_weight=0.0 \
-  --set loss.stft_mag_weight=0.02 \
-  --set loss.stft_phase_weight=0.0 \
-  --set loss.stft_complex_weight=0.0 \
+  --set loss.relative_envelope_weight=0.03 \
+  --set loss.phase_alignment_weight=0.005 \
+  --set loss.phase_alignment_max_sec=0.5 \
   --set training.epochs=50 \
   --set training.batch_size=128 \
   --set training.patience=8 \
@@ -230,8 +131,13 @@ L3 再开启低频 STFT。先只跑 magnitude，若未触发 `rr_peak_abs_error`
   --set training.use_amp=false \
   --set training.device=cuda:0 \
   --set training.show_progress=false \
-  --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_phase_stft_l2_l3
+  --set outputs.run_root=runs/tho_research_v2_patch_mixer_rawish_phasealign_n1_n4
 ```
+
+历史 L0/L1/L2/L3 与 N1-N4 结果保留在
+`docs/experiments/rawish_state_aligned_l0_l1.md`。模型选择仍以
+`rr_peak_abs_error` 为主护栏，`band_limited_corr`、`best_lag_corr` 和
+`best_lag_sec` 只作为低频形态和残余时移诊断指标。
 
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
 `runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
