@@ -41,7 +41,9 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 
 ## L0
 
-尚未按历史 anchor 重新记录。
+| run | source | model | data windows | band waveform | phase lag | rel env | high freq | best val loss | band_limited_corr mean | best_lag_corr mean | abs(best_lag_sec) mean | 结论 |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `20260616_005516_616320` | history anchor | `patch_mixer1d` | full | 0.00 | 0.00 | 0.01 | 0.20 | 0.624477 | -0.790210 | 0.331171 | 1.000000 | L0 anchor，作为 L1 对照。 |
 
 ## L1
 
