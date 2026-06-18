@@ -530,3 +530,61 @@ M4 两个 seed 聚合：
   呼吸轨迹，而不是在输出端事后移动平均。候选方向包括带限 decoder、低频 basis
   decoder、frequency bottleneck 或显式平滑/节律分支，并继续用
   `rr_peak_band_abs_error_mean` 做主护栏。
+
+## M5 模型结构候选实验
+
+执行计划：`docs/superpowers/plans/2026-06-18-model-m5-structure-candidates.md`。
+
+本轮冻结当前 N3 loss、Research v2 数据口径和正式选模指标，只比较低风险模型
+结构候选：
+
+- `patch_mixer1d + overlap_window=hann + output_smoothing_kernel=1`：同 seed
+  Patch-Hann baseline。
+- `unet1d_tiny_noskip1`：去掉最浅层 skip 的历史候选。
+- `unet1d_tiny_noskip_all`：新增完全去掉两个 decoder skip 的 U-Net。
+- `patch_mixer1d_fir_frontend`：新增初始化为呼吸频带的可学习 FIR 前端，再接
+  Patch-Hann。
+
+首轮固定 `training.seed=20260650`。按预注册规则，三个新候选均未通过进入第二
+seed 的条件；因此 `training.seed=20260660` 只补跑 Patch-Hann baseline，用于确认
+baseline 自身稳定性。
+
+本地输出：
+
+- `runs/tho_research_v2_model_m5_structure_candidates/`
+- `runs/tho_research_v2_model_m5_structure_candidates_summary.csv`
+- 临时明细表：`/tmp/m5_model_candidates_table.csv`
+- 临时含 best epoch 明细表：`/tmp/m5_model_candidates_table_with_epoch.csv`
+
+核心结果：
+
+| label | run | model | seed | epochs | best epoch | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean / median | 结论 |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `M5_patch_hann_seed20260650` | `20260618_150349_945127` | `patch_mixer1d` | 20260650 | 21 | 13 | 0.627256 | 0.431143 / 0.189873 | 0.468613 | 0.215636 | 0.453012 | -0.791998 | 0.319607 | 2.147589 / 0.587406 | 同 seed baseline；带通 RR 尚可，但低频方向为负。 |
+| `M5_fir_frontend_seed20260650` | `20260618_150346_623888` | `patch_mixer1d_fir_frontend` | 20260650 | 21 | 13 | 0.620956 | 0.424903 / 0.178564 | 0.477206 | 0.217683 | 0.452910 | -0.790535 | 0.324134 | 3.180196 / 0.811103 | 带通 RR 略优于同 seed baseline，但方向护栏失败，raw peak 更差。 |
+| `M5_noskip1_seed20260650` | `20260618_150347_069377` | `unet1d_tiny_noskip1` | 20260650 | 13 | 5 | 0.842562 | 1.862619 / 0.390866 | 1.170958 | 0.215698 | 0.284147 | -0.648240 | 0.353571 | 4.729596 / 3.495199 | 方向和 RR 均不通过。 |
+| `M5_noskip_all_seed20260650` | `20260618_150345_380356` | `unet1d_tiny_noskip_all` | 20260650 | 18 | 10 | 0.829679 | 0.774305 / 0.271248 | 0.731563 | 0.214936 | 0.288875 | 0.641058 | 0.753618 | 5.158663 / 1.906501 | 低频方向转正，但 RR、频谱和相对努力指标明显变差。 |
+| `M5_patch_hann_seed20260660` | `20260618_151631_769707` | `patch_mixer1d` | 20260660 | 20 | 12 | 0.627622 | 0.445080 / 0.197455 | 0.431376 | 0.213248 | 0.456756 | -0.796528 | 0.329242 | 2.616823 / 0.734900 | 第二个 baseline seed 仍低频反向，说明 Patch-Hann 方向不稳定。 |
+
+阶段判断：
+
+- M5 不支持把 FIR 前端作为下一条主线。`patch_mixer1d_fir_frontend` 在
+  seed20260650 上把带通 RR 均值从 `0.431143` 小幅降到 `0.424903`，但
+  `band_limited_corr=-0.790535`，raw peak 从 `2.147589` 恶化到 `3.180196`。
+  它更像是在同一个反向解附近微调频带输入，而不是解决低频方向或毛刺问题。
+- M5 不支持简单去 skip 作为答案。`unet1d_tiny_noskip1` 方向和任务指标都失败；
+  `unet1d_tiny_noskip_all` 虽然把低频相关推到正值 `0.641058`，但
+  `rr_peak_band_abs_error_mean=0.774305`，`rr_spec_abs_error_mean=0.731563`，
+  `relative_envelope_corr=0.288875`，说明完全去 skip 会显著损伤呼吸节律和相对
+  努力建模能力。
+- M5 反过来暴露了 Patch-Hann baseline 的 seed 方向不稳定。M2/M4 中
+  seed20260620/20260630/20260640 的 Patch-Hann 都是正低频方向；本轮
+  seed20260650/20260660 都回到约 `-0.79` 的低频负相关，且 `best_lag_corr`
+  只有约 `0.32`，不能解释为简单小范围时延。
+- 因此，M4 的“Patch-Hann 低频方向稳定”结论需要收缩：Hann overlap-add 能消除
+  patch boundary 伪影，但不足以稳定选择正确的低频相位方向。
+- 下一步不建议直接扩大到 Mamba、完整频域 bottleneck 或复杂 dual-stream 大模型。
+  更低后悔成本的 M6 应先诊断并约束“正负方向/相位盆地”问题，例如：固定同一
+  Patch-Hann 配置做多 seed 方向稳定性统计，或加入显式 signed low-frequency
+  direction 选择机制。只有在方向稳定后，再设计低自由度、带限或 dual-stream
+  decoder 才更有解释价值。
