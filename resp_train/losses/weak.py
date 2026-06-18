@@ -18,6 +18,8 @@ class WeakSyncLoss(torch.nn.Module):
         self.high_freq_weight = float(cfg.loss.get("high_freq_weight", 0.0))
         self.relative_env_weight = float(cfg.loss.get("relative_envelope_weight", 0.0))
         self.phase_alignment_weight = float(cfg.loss.get("phase_alignment_weight", 0.0))
+        self.band_waveform_weight = float(cfg.loss.get("band_waveform_weight", 0.0))
+        self.curvature_weight = float(cfg.loss.get("curvature_weight", 0.0))
         self.phase_alignment_zero_weight = float(cfg.loss.get("phase_alignment_zero_weight", 0.5))
         self.phase_alignment_lag_weight = float(cfg.loss.get("phase_alignment_lag_weight", 0.5))
         self.phase_alignment_lag_penalty_weight = float(cfg.loss.get("phase_alignment_lag_penalty_weight", 0.1))
@@ -29,6 +31,8 @@ class WeakSyncLoss(torch.nn.Module):
             ("phase_alignment_zero_weight", self.phase_alignment_zero_weight),
             ("phase_alignment_lag_weight", self.phase_alignment_lag_weight),
             ("phase_alignment_lag_penalty_weight", self.phase_alignment_lag_penalty_weight),
+            ("band_waveform_weight", self.band_waveform_weight),
+            ("curvature_weight", self.curvature_weight),
         ):
             if value < 0:
                 raise ValueError(f"{name} 必须非负，当前={value}")
@@ -53,6 +57,8 @@ class WeakSyncLoss(torch.nn.Module):
         smooth = torch.mean(torch.abs(pred_loss[..., 1:] - pred_loss[..., :-1]))
         high_freq = self._high_frequency_energy(pred_loss)
         relative_env = self._relative_envelope_loss(pred_loss, target_loss)
+        band_waveform = self._band_waveform_loss(pred_loss, target_loss)
+        curvature = self._curvature_loss(pred_loss)
         if self.phase_alignment_weight > 0:
             phase_alignment = self._phase_alignment_loss(pred_loss, target_loss)
         else:
@@ -64,6 +70,8 @@ class WeakSyncLoss(torch.nn.Module):
             + self.high_freq_weight * high_freq
             + self.relative_env_weight * relative_env
             + self.phase_alignment_weight * phase_alignment
+            + self.band_waveform_weight * band_waveform
+            + self.curvature_weight * curvature
         )
         return total, {
             "envelope": env.detach(),
@@ -72,6 +80,8 @@ class WeakSyncLoss(torch.nn.Module):
             "high_freq": high_freq.detach(),
             "relative_envelope": relative_env.detach(),
             "phase_alignment": phase_alignment.detach(),
+            "band_waveform": band_waveform.detach(),
+            "curvature": curvature.detach(),
         }
 
     @staticmethod
@@ -158,6 +168,18 @@ class WeakSyncLoss(torch.nn.Module):
             + self.phase_alignment_lag_penalty_weight * lag_penalty
         )
         return torch.mean(loss)
+
+    def _band_waveform_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_band = self._zscore(self._band_limited_waveform(pred))
+        target_band = self._zscore(self._band_limited_waveform(target))
+        return F.smooth_l1_loss(pred_band, target_band)
+
+    def _curvature_loss(self, pred: torch.Tensor) -> torch.Tensor:
+        pred_norm = self._zscore(pred)
+        if pred_norm.shape[-1] < 3:
+            return pred_norm.new_tensor(0.0)
+        second_diff = pred_norm[..., 2:] - 2.0 * pred_norm[..., 1:-1] + pred_norm[..., :-2]
+        return torch.mean(torch.abs(second_diff))
 
     def _band_mask(self, n_samples: int, device: torch.device) -> torch.Tensor:
         freqs = torch.fft.rfftfreq(n_samples, d=1.0 / self.fs).to(device)

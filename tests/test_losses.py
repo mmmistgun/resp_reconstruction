@@ -16,6 +16,8 @@ def _cfg():
                 "high_freq_weight": 0.0,
                 "relative_envelope_weight": 0.0,
                 "phase_alignment_weight": 0.0,
+                "band_waveform_weight": 0.0,
+                "curvature_weight": 0.0,
                 "phase_alignment_zero_weight": 0.5,
                 "phase_alignment_lag_weight": 0.5,
                 "phase_alignment_lag_penalty_weight": 0.1,
@@ -46,6 +48,8 @@ def test_weak_sync_loss_returns_current_components_and_scalar():
         "high_freq",
         "relative_envelope",
         "phase_alignment",
+        "band_waveform",
+        "curvature",
     }
     total.backward()
     assert pred.grad is not None
@@ -74,6 +78,8 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
     cfg = _cfg()
     cfg.loss.relative_envelope_weight = 0.0
     cfg.loss.phase_alignment_weight = 0.0
+    cfg.loss.band_waveform_weight = 0.0
+    cfg.loss.curvature_weight = 0.0
     loss_fn = WeakSyncLoss(cfg)
     pred = torch.randn(2, 1, 1800)
     target = torch.randn(2, 1, 1800)
@@ -86,6 +92,8 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
         + cfg.loss.high_freq_weight * parts["high_freq"]
         + cfg.loss.relative_envelope_weight * parts["relative_envelope"]
         + cfg.loss.phase_alignment_weight * parts["phase_alignment"]
+        + cfg.loss.band_waveform_weight * parts["band_waveform"]
+        + cfg.loss.curvature_weight * parts["curvature"]
     )
 
     assert torch.allclose(total, expected)
@@ -170,6 +178,42 @@ def test_phase_alignment_loss_is_differentiable_when_enabled():
     assert torch.isfinite(pred.grad).all()
 
 
+def test_band_waveform_loss_penalizes_wrong_low_frequency_shape():
+    cfg = _cfg()
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.band_waveform_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 60, 1 / fs)
+    target = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    same = target.clone()
+    distorted = target + 0.4 * torch.sin(2 * torch.pi * 0.45 * time).reshape(1, 1, -1)
+
+    _, same_parts = loss_fn(same, target)
+    _, distorted_parts = loss_fn(distorted, target)
+
+    assert same_parts["band_waveform"] < 0.01
+    assert distorted_parts["band_waveform"] > same_parts["band_waveform"] + 0.05
+
+
+def test_curvature_loss_penalizes_local_spike():
+    cfg = _cfg()
+    cfg.loss.curvature_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 20, 1 / fs)
+    smooth = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    spiky = smooth.clone()
+    spiky[..., 500] += 5.0
+
+    _, smooth_parts = loss_fn(smooth, smooth)
+    _, spiky_parts = loss_fn(spiky, smooth)
+
+    assert spiky_parts["curvature"] > smooth_parts["curvature"] * 10
+
+
 def test_weak_sync_loss_penalizes_prediction_high_frequency_energy():
     cfg = _cfg()
     cfg.loss.high_freq_weight = 1.0
@@ -201,6 +245,20 @@ def test_weak_sync_loss_rejects_negative_phase_alignment_weight():
     cfg.loss.phase_alignment_weight = -0.1
 
     with pytest.raises(ValueError, match="phase_alignment_weight 必须非负"):
+        WeakSyncLoss(cfg)
+
+
+def test_weak_sync_loss_rejects_negative_waveform_regularizer_weights():
+    cfg = _cfg()
+    cfg.loss.band_waveform_weight = -0.1
+
+    with pytest.raises(ValueError, match="band_waveform_weight 必须非负"):
+        WeakSyncLoss(cfg)
+
+    cfg = _cfg()
+    cfg.loss.curvature_weight = -0.1
+
+    with pytest.raises(ValueError, match="curvature_weight 必须非负"):
         WeakSyncLoss(cfg)
 
 
