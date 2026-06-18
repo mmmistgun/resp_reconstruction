@@ -19,12 +19,19 @@ def _cfg():
                 "band_waveform_weight": 0.0,
                 "curvature_weight": 0.0,
                 "rhythm_weight": 0.0,
+                "signed_cosine_weight": 0.0,
+                "signed_corr_weight": 0.0,
+                "signed_rms_envelope_weight": 0.0,
+                "signed_mean_weight": 0.0,
+                "si_sdr_weight": 0.0,
                 "phase_alignment_zero_weight": 0.5,
                 "phase_alignment_lag_weight": 0.5,
                 "phase_alignment_lag_penalty_weight": 0.1,
                 "phase_alignment_max_sec": 0.5,
                 "phase_alignment_step_sec": 0.1,
                 "phase_alignment_temperature": 0.05,
+                "signed_env_temperature": 0.25,
+                "signed_mean_window_sec": 2.0,
                 "rhythm_min_period_sec": 2.0,
                 "rhythm_max_period_sec": 20.0,
                 "rhythm_step_sec": 0.25,
@@ -56,6 +63,11 @@ def test_weak_sync_loss_returns_current_components_and_scalar():
         "band_waveform",
         "curvature",
         "rhythm",
+        "signed_cosine",
+        "signed_corr",
+        "signed_rms_envelope",
+        "signed_mean",
+        "si_sdr",
     }
     total.backward()
     assert pred.grad is not None
@@ -87,6 +99,11 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
     cfg.loss.band_waveform_weight = 0.0
     cfg.loss.curvature_weight = 0.0
     cfg.loss.rhythm_weight = 0.0
+    cfg.loss.signed_cosine_weight = 0.0
+    cfg.loss.signed_corr_weight = 0.0
+    cfg.loss.signed_rms_envelope_weight = 0.0
+    cfg.loss.signed_mean_weight = 0.0
+    cfg.loss.si_sdr_weight = 0.0
     loss_fn = WeakSyncLoss(cfg)
     pred = torch.randn(2, 1, 1800)
     target = torch.randn(2, 1, 1800)
@@ -102,6 +119,11 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
         + cfg.loss.band_waveform_weight * parts["band_waveform"]
         + cfg.loss.curvature_weight * parts["curvature"]
         + cfg.loss.rhythm_weight * parts["rhythm"]
+        + cfg.loss.signed_cosine_weight * parts["signed_cosine"]
+        + cfg.loss.signed_corr_weight * parts["signed_corr"]
+        + cfg.loss.signed_rms_envelope_weight * parts["signed_rms_envelope"]
+        + cfg.loss.signed_mean_weight * parts["signed_mean"]
+        + cfg.loss.si_sdr_weight * parts["si_sdr"]
     )
 
     assert torch.allclose(total, expected)
@@ -184,6 +206,129 @@ def test_phase_alignment_loss_is_differentiable_when_enabled():
     assert parts["phase_alignment"] >= 0
     assert pred.grad is not None
     assert torch.isfinite(pred.grad).all()
+
+
+def _disable_base_losses(cfg):
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.high_freq_weight = 0.0
+    cfg.loss.relative_envelope_weight = 0.0
+    cfg.loss.phase_alignment_weight = 0.0
+    cfg.loss.band_waveform_weight = 0.0
+    cfg.loss.curvature_weight = 0.0
+    cfg.loss.rhythm_weight = 0.0
+
+
+def _resp_sine(cfg, seconds: float = 60.0, freq_hz: float = 0.25) -> torch.Tensor:
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, seconds, 1 / fs)
+    return torch.sin(2 * torch.pi * freq_hz * time).reshape(1, 1, -1)
+
+
+def test_signed_cosine_anchor_penalizes_inverted_band_signal_and_ignores_scale():
+    cfg = _cfg()
+    _disable_base_losses(cfg)
+    cfg.loss.signed_cosine_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    target = _resp_sine(cfg)
+    same_scaled = 3.0 * target
+    inverted = -target
+
+    _, same_parts = loss_fn(same_scaled, target)
+    _, inverted_parts = loss_fn(inverted, target)
+
+    assert same_parts["signed_cosine"] < 0.05
+    assert inverted_parts["signed_cosine"] > same_parts["signed_cosine"] + 1.5
+
+
+def test_signed_corr_anchor_penalizes_inverted_band_signal_and_is_differentiable():
+    cfg = _cfg()
+    _disable_base_losses(cfg)
+    cfg.loss.signed_corr_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    target = _resp_sine(cfg)
+    pred = (-target).clone().requires_grad_(True)
+
+    total, parts = loss_fn(pred, target)
+    total.backward()
+
+    assert parts["signed_corr"] > 1.5
+    assert pred.grad is not None
+    assert torch.isfinite(pred.grad).all()
+
+
+def test_signed_rms_envelope_anchor_combines_effort_and_low_frequency_sign():
+    cfg = _cfg()
+    _disable_base_losses(cfg)
+    cfg.loss.signed_rms_envelope_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 60, 1 / fs)
+    carrier = torch.sin(2 * torch.pi * 0.25 * time)
+    effort = torch.ones_like(time)
+    effort[(time >= 20) & (time <= 40)] = 1.8
+    target = (effort * carrier).reshape(1, 1, -1)
+    same_scaled = 2.0 * target
+    inverted = -target
+
+    _, same_parts = loss_fn(same_scaled, target)
+    _, inverted_parts = loss_fn(inverted, target)
+
+    assert same_parts["signed_rms_envelope"] < 0.05
+    assert inverted_parts["signed_rms_envelope"] > same_parts["signed_rms_envelope"] + 1.0
+
+
+def test_signed_mean_anchor_penalizes_inverted_windowed_effort():
+    cfg = _cfg()
+    _disable_base_losses(cfg)
+    cfg.loss.signed_mean_weight = 1.0
+    cfg.loss.signed_mean_window_sec = 2.0
+    loss_fn = WeakSyncLoss(cfg)
+    target = _resp_sine(cfg)
+    same = target.clone()
+    inverted = -target
+
+    _, same_parts = loss_fn(same, target)
+    _, inverted_parts = loss_fn(inverted, target)
+
+    assert same_parts["signed_mean"] < 0.05
+    assert inverted_parts["signed_mean"] > same_parts["signed_mean"] + 1.0
+
+
+def test_si_sdr_loss_is_scale_invariant_but_not_a_signed_anchor():
+    cfg = _cfg()
+    _disable_base_losses(cfg)
+    cfg.loss.si_sdr_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    target = _resp_sine(cfg)
+    same_scaled = 3.0 * target
+    inverted = -target
+    distorted = target + 0.5 * _resp_sine(cfg, freq_hz=0.45)
+
+    _, same_parts = loss_fn(same_scaled, target)
+    _, inverted_parts = loss_fn(inverted, target)
+    _, distorted_parts = loss_fn(distorted, target)
+
+    assert same_parts["si_sdr"] < 0.01
+    assert inverted_parts["si_sdr"] < 0.01
+    assert distorted_parts["si_sdr"] > same_parts["si_sdr"] + 0.1
+
+
+def test_si_sdr_with_signed_corr_can_penalize_inversion():
+    cfg = _cfg()
+    _disable_base_losses(cfg)
+    cfg.loss.si_sdr_weight = 1.0
+    cfg.loss.signed_corr_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    target = _resp_sine(cfg)
+    inverted = -target
+
+    total, parts = loss_fn(inverted, target)
+
+    assert parts["si_sdr"] < 0.01
+    assert parts["signed_corr"] > 1.5
+    assert total > 1.5
 
 
 def test_band_waveform_loss_penalizes_wrong_low_frequency_shape():
@@ -303,6 +448,19 @@ def test_weak_sync_loss_rejects_negative_waveform_regularizer_weights():
 
     with pytest.raises(ValueError, match="curvature_weight 必须非负"):
         WeakSyncLoss(cfg)
+
+    for name in (
+        "signed_cosine_weight",
+        "signed_corr_weight",
+        "signed_rms_envelope_weight",
+        "signed_mean_weight",
+        "si_sdr_weight",
+    ):
+        cfg = _cfg()
+        cfg.loss[name] = -0.1
+
+        with pytest.raises(ValueError, match=f"{name} 必须非负"):
+            WeakSyncLoss(cfg)
 
 
 def test_weak_sync_loss_rejects_invalid_rhythm_config():

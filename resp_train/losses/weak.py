@@ -21,12 +21,19 @@ class WeakSyncLoss(torch.nn.Module):
         self.band_waveform_weight = float(cfg.loss.get("band_waveform_weight", 0.0))
         self.curvature_weight = float(cfg.loss.get("curvature_weight", 0.0))
         self.rhythm_weight = float(cfg.loss.get("rhythm_weight", 0.0))
+        self.signed_cosine_weight = float(cfg.loss.get("signed_cosine_weight", 0.0))
+        self.signed_corr_weight = float(cfg.loss.get("signed_corr_weight", 0.0))
+        self.signed_rms_envelope_weight = float(cfg.loss.get("signed_rms_envelope_weight", 0.0))
+        self.signed_mean_weight = float(cfg.loss.get("signed_mean_weight", 0.0))
+        self.si_sdr_weight = float(cfg.loss.get("si_sdr_weight", 0.0))
         self.phase_alignment_zero_weight = float(cfg.loss.get("phase_alignment_zero_weight", 0.5))
         self.phase_alignment_lag_weight = float(cfg.loss.get("phase_alignment_lag_weight", 0.5))
         self.phase_alignment_lag_penalty_weight = float(cfg.loss.get("phase_alignment_lag_penalty_weight", 0.1))
         self.phase_alignment_max_sec = float(cfg.loss.get("phase_alignment_max_sec", 0.5))
         self.phase_alignment_step_sec = float(cfg.loss.get("phase_alignment_step_sec", 0.1))
         self.phase_alignment_temperature = float(cfg.loss.get("phase_alignment_temperature", 0.05))
+        self.signed_env_temperature = float(cfg.loss.get("signed_env_temperature", 0.25))
+        self.signed_mean_window = max(1, int(float(cfg.loss.get("signed_mean_window_sec", 2.0)) * self.fs))
         self.rhythm_min_period_sec = float(cfg.loss.get("rhythm_min_period_sec", 2.0))
         self.rhythm_max_period_sec = float(cfg.loss.get("rhythm_max_period_sec", 20.0))
         self.rhythm_step_sec = float(cfg.loss.get("rhythm_step_sec", 0.25))
@@ -39,6 +46,11 @@ class WeakSyncLoss(torch.nn.Module):
             ("band_waveform_weight", self.band_waveform_weight),
             ("curvature_weight", self.curvature_weight),
             ("rhythm_weight", self.rhythm_weight),
+            ("signed_cosine_weight", self.signed_cosine_weight),
+            ("signed_corr_weight", self.signed_corr_weight),
+            ("signed_rms_envelope_weight", self.signed_rms_envelope_weight),
+            ("signed_mean_weight", self.signed_mean_weight),
+            ("si_sdr_weight", self.si_sdr_weight),
         ):
             if value < 0:
                 raise ValueError(f"{name} 必须非负，当前={value}")
@@ -57,6 +69,10 @@ class WeakSyncLoss(torch.nn.Module):
             raise ValueError(f"phase_alignment_step_sec 必须为正数，当前={self.phase_alignment_step_sec}")
         if self.phase_alignment_temperature <= 0:
             raise ValueError(f"phase_alignment_temperature 必须为正数，当前={self.phase_alignment_temperature}")
+        if self.signed_env_temperature <= 0:
+            raise ValueError(f"signed_env_temperature 必须为正数，当前={self.signed_env_temperature}")
+        if self.signed_mean_window <= 0:
+            raise ValueError(f"signed_mean_window_sec 必须为正数，当前={cfg.loss.get('signed_mean_window_sec', 2.0)}")
         self.relative_env_trend_window = max(self.envelope_window, int(round(self.fs * 20.0)))
         self.low_hz = float(cfg.loss.spectrum_low_hz)
         self.high_hz = float(cfg.loss.spectrum_high_hz)
@@ -82,6 +98,25 @@ class WeakSyncLoss(torch.nn.Module):
             phase_alignment = self._phase_alignment_loss(pred_loss, target_loss)
         else:
             phase_alignment = pred_loss.new_tensor(0.0)
+        signed_cosine = (
+            self._signed_cosine_loss(pred_loss, target_loss)
+            if self.signed_cosine_weight > 0
+            else pred_loss.new_tensor(0.0)
+        )
+        signed_corr = (
+            self._signed_corr_loss(pred_loss, target_loss)
+            if self.signed_corr_weight > 0
+            else pred_loss.new_tensor(0.0)
+        )
+        signed_rms_envelope = (
+            self._signed_rms_envelope_loss(pred_loss, target_loss)
+            if self.signed_rms_envelope_weight > 0
+            else pred_loss.new_tensor(0.0)
+        )
+        signed_mean = (
+            self._signed_mean_loss(pred_loss, target_loss) if self.signed_mean_weight > 0 else pred_loss.new_tensor(0.0)
+        )
+        si_sdr = self._si_sdr_loss(pred_loss, target_loss) if self.si_sdr_weight > 0 else pred_loss.new_tensor(0.0)
         total = (
             self.env_weight * env
             + self.spec_weight * spec
@@ -92,6 +127,11 @@ class WeakSyncLoss(torch.nn.Module):
             + self.band_waveform_weight * band_waveform
             + self.curvature_weight * curvature
             + self.rhythm_weight * rhythm
+            + self.signed_cosine_weight * signed_cosine
+            + self.signed_corr_weight * signed_corr
+            + self.signed_rms_envelope_weight * signed_rms_envelope
+            + self.signed_mean_weight * signed_mean
+            + self.si_sdr_weight * si_sdr
         )
         return total, {
             "envelope": env.detach(),
@@ -103,6 +143,11 @@ class WeakSyncLoss(torch.nn.Module):
             "band_waveform": band_waveform.detach(),
             "curvature": curvature.detach(),
             "rhythm": rhythm.detach(),
+            "signed_cosine": signed_cosine.detach(),
+            "signed_corr": signed_corr.detach(),
+            "signed_rms_envelope": signed_rms_envelope.detach(),
+            "signed_mean": signed_mean.detach(),
+            "si_sdr": si_sdr.detach(),
         }
 
     @staticmethod
@@ -194,6 +239,64 @@ class WeakSyncLoss(torch.nn.Module):
         pred_band = self._zscore(self._band_limited_waveform(pred))
         target_band = self._zscore(self._band_limited_waveform(target))
         return F.smooth_l1_loss(pred_band, target_band)
+
+    def _signed_cosine_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_band = self._center(self._band_limited_waveform(pred))
+        target_band = self._center(self._band_limited_waveform(target))
+        numerator = torch.sum(pred_band * target_band, dim=-1)
+        denominator = torch.sqrt(torch.clamp(torch.sum(pred_band.square(), dim=-1), min=1e-8)) * torch.sqrt(
+            torch.clamp(torch.sum(target_band.square(), dim=-1), min=1e-8)
+        )
+        cosine = numerator / torch.clamp(denominator, min=1e-8)
+        return torch.mean(1.0 - cosine)
+
+    def _signed_corr_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_band = self._zscore(self._band_limited_waveform(pred))
+        target_band = self._zscore(self._band_limited_waveform(target))
+        return self._corr_loss(pred_band, target_band)
+
+    def _signed_rms_envelope_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_trace = self._signed_rms_envelope_trace(pred)
+        target_trace = self._signed_rms_envelope_trace(target)
+        return self._corr_loss(self._zscore(pred_trace), self._zscore(target_trace))
+
+    def _signed_rms_envelope_trace(self, x: torch.Tensor) -> torch.Tensor:
+        band = self._band_limited_waveform(x)
+        envelope = self._rms_envelope(band)
+        # 近似 sign(LPF(x))，保留梯度，避免 hard sign 阻断方向修正。
+        soft_sign = torch.tanh(self._zscore(band) / self.signed_env_temperature)
+        return envelope * soft_sign
+
+    def _signed_mean_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_trace = self._moving_average(self._band_limited_waveform(pred), self.signed_mean_window)
+        target_trace = self._moving_average(self._band_limited_waveform(target), self.signed_mean_window)
+        return self._corr_loss(self._zscore(pred_trace), self._zscore(target_trace))
+
+    def _si_sdr_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_band = self._center(self._band_limited_waveform(pred))
+        target_band = self._center(self._band_limited_waveform(target))
+        target_energy = torch.sum(target_band.square(), dim=-1, keepdim=True)
+        scale = torch.sum(pred_band * target_band, dim=-1, keepdim=True) / torch.clamp(target_energy, min=1e-8)
+        projected = scale * target_band
+        noise = pred_band - projected
+        noise_ratio = torch.sum(noise.square(), dim=-1) / torch.clamp(torch.sum(projected.square(), dim=-1), min=1e-8)
+        return torch.mean(torch.log1p(noise_ratio))
+
+    @staticmethod
+    def _corr_loss(pred_trace: torch.Tensor, target_trace: torch.Tensor) -> torch.Tensor:
+        corr = torch.mean(pred_trace * target_trace, dim=-1)
+        return torch.mean(1.0 - corr)
+
+    @staticmethod
+    def _moving_average(x: torch.Tensor, window: int) -> torch.Tensor:
+        window = min(max(int(window), 1), x.shape[-1])
+        if window > 1 and window % 2 == 0:
+            window -= 1
+        pad = window // 2
+        smoothed = F.avg_pool1d(x, kernel_size=window, stride=1, padding=pad)
+        if smoothed.shape[-1] > x.shape[-1]:
+            smoothed = smoothed[..., : x.shape[-1]]
+        return smoothed
 
     def _curvature_loss(self, pred: torch.Tensor) -> torch.Tensor:
         pred_norm = self._zscore(pred)

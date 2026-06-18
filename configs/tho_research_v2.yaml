@@ -41,12 +41,19 @@ loss:
   band_waveform_weight: 0.0
   curvature_weight: 0.0
   rhythm_weight: 0.0
+  signed_cosine_weight: 0.0
+  signed_corr_weight: 0.0
+  signed_rms_envelope_weight: 0.0
+  signed_mean_weight: 0.0
+  si_sdr_weight: 0.0
   phase_alignment_zero_weight: 0.5
   phase_alignment_lag_weight: 0.5
   phase_alignment_lag_penalty_weight: 0.1
   phase_alignment_max_sec: 0.5
   phase_alignment_step_sec: 0.1
   phase_alignment_temperature: 0.05
+  signed_env_temperature: 0.25
+  signed_mean_window_sec: 2.0
   rhythm_min_period_sec: 2.0
   rhythm_max_period_sec: 20.0
   rhythm_step_sec: 0.25
