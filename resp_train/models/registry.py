@@ -5,7 +5,7 @@ from typing import Any, Callable
 from torch import nn
 
 from resp_train.models.timeseries import DLinearWaveform, PatchMixer1D, PeriodicUNet1DTiny
-from resp_train.models.unet1d import UNet1DTiny, UNet1DTinyNoSkip1
+from resp_train.models.unet1d import UNet1DTiny, UNet1DTinyNoSkip1, UNet1DTinyNoSkipAll
 
 
 ModelFactory = Callable[[Any], nn.Module]
@@ -18,6 +18,11 @@ _REGISTRY: dict[str, ModelFactory] = {
         base_channels=int(cfg.model.base_channels),
     ),
     "unet1d_tiny_noskip1": lambda cfg: UNet1DTinyNoSkip1(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+    ),
+    "unet1d_tiny_noskip_all": lambda cfg: UNet1DTinyNoSkipAll(
         in_channels=int(cfg.model.in_channels),
         out_channels=int(cfg.model.out_channels),
         base_channels=int(cfg.model.base_channels),

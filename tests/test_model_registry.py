@@ -15,6 +15,10 @@ def test_unet1d_tiny_noskip1_is_registered():
     assert "unet1d_tiny_noskip1" in list_models()
 
 
+def test_unet1d_tiny_noskip_all_is_registered():
+    assert "unet1d_tiny_noskip_all" in list_models()
+
+
 @pytest.mark.parametrize(
     "model_name",
     [
@@ -69,6 +73,24 @@ def test_build_unet1d_tiny_noskip1_preserves_waveform_shape():
         {
             "model": {
                 "name": "unet1d_tiny_noskip1",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 4,
+            }
+        }
+    )
+    model = build_model(cfg)
+
+    y = model(torch.randn(2, 1, 18001))
+
+    assert y.shape == (2, 1, 18001)
+
+
+def test_build_unet1d_tiny_noskip_all_preserves_waveform_shape():
+    cfg = OmegaConf.create(
+        {
+            "model": {
+                "name": "unet1d_tiny_noskip_all",
                 "in_channels": 1,
                 "out_channels": 1,
                 "base_channels": 4,

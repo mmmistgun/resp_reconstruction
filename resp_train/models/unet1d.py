@@ -91,3 +91,31 @@ class UNet1DTinyNoSkip1(nn.Module):
         d1 = self.up1(d2)
         d1 = self.dec1(UNet1DTiny._match_length(d1, e1))
         return self.out(d1)
+
+
+class UNet1DTinyNoSkipAll(nn.Module):
+    """完全去掉 decoder skip 的一维 U-Net，用于验证高频细节直通假设。"""
+
+    def __init__(self, in_channels: int = 1, out_channels: int = 1, base_channels: int = 16) -> None:
+        super().__init__()
+        self.enc1 = ConvBlock(in_channels, base_channels)
+        self.down1 = nn.Conv1d(base_channels, base_channels * 2, kernel_size=4, stride=2, padding=1)
+        self.enc2 = ConvBlock(base_channels * 2, base_channels * 2)
+        self.down2 = nn.Conv1d(base_channels * 2, base_channels * 4, kernel_size=4, stride=2, padding=1)
+
+        self.bottleneck = ConvBlock(base_channels * 4, base_channels * 4)
+
+        self.up2 = nn.ConvTranspose1d(base_channels * 4, base_channels * 2, kernel_size=4, stride=2, padding=1)
+        self.dec2 = ConvBlock(base_channels * 2, base_channels * 2)
+        self.up1 = nn.ConvTranspose1d(base_channels * 2, base_channels, kernel_size=4, stride=2, padding=1)
+        self.dec1 = ConvBlock(base_channels, base_channels)
+        self.out = nn.Conv1d(base_channels, out_channels, kernel_size=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        e1 = self.enc1(x)
+        e2 = self.enc2(self.down1(e1))
+        z = self.bottleneck(self.down2(e2))
+
+        d2 = self.dec2(UNet1DTiny._match_length(self.up2(z), e2))
+        d1 = self.dec1(UNet1DTiny._match_length(self.up1(d2), e1))
+        return self.out(d1)
