@@ -1176,3 +1176,38 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
   把 `band_limited_corr > 0` 或等价方向护栏作为硬约束，再比较 RR 与 raw peak。
 - 结论：`downsampled_ssm1d` 的结构方向值得保留，但需要加入显式 polarity/direction
   修正机制或改 checkpoint gate；当前 run 不作为胜出模型。
+
+### M9 首轮汇总判断
+
+聚合口径：每个模型 2 个 seed，`usable_direction` 使用
+`band_limited_corr_mean >= 0.5` 作为可用方向门槛。这个阈值不是论文指标，只用于避免
+把接近 0 的弱相关输出误判为方向通过。
+
+| model | usable direction | best val loss | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `patch_mixer1d` | 2/2 | 0.638032 | 0.547356 | 0.441401 | 0.214224 | 0.454943 | 0.795625 | 0.845599 | 4.705204 |
+| `multiscale_decomp_mixer1d` | 1/2 | 0.695204 | 0.428564 | 0.454004 | 0.215705 | 0.452614 | 0.008560 | 0.610891 | 1.474615 |
+| `downsampled_ssm1d` | 0/2 | 0.771396 | 0.480214 | 0.450853 | 0.210391 | 0.464148 | -0.802697 | 0.327055 | 0.828715 |
+| `timesnet_lite1d` | 0/2 | 1.071846 | 1.609564 | 1.907390 | 0.339881 | 0.154605 | 0.245814 | 0.431609 | 3.876832 |
+| `frequency_bottleneck1d` | 0/2 | 1.292970 | 3.096068 | 3.436969 | 0.245270 | 0.006076 | -0.000659 | 0.103712 | 3.056620 |
+| `basis_decoder1d` | 0/2 | 1.350470 | 3.292225 | 3.164280 | 0.267442 | 0.003322 | -0.001199 | 0.085669 | 3.274349 |
+
+首轮结论：
+
+- 当前可作为稳定 baseline 的仍然是 `patch_mixer1d + Hann overlap + signed_corr`：
+  两个 seed 均方向可用，RR 指标稳定，但 raw peak 仍高。
+- `multiscale_decomp_mixer1d` 是最值得继续的结构候选：方向通过的 seed 同时保持
+  `band_limited_corr` 与 `best_lag_corr`，并显著降低 raw peak；但另一个 seed 反向，
+  所以不能直接扩 seed。
+- `downsampled_ssm1d` 是强结构信号：raw peak 最低、带通 RR 也好，但两个 seed 都反向。
+  它说明低采样 state-style decoder 可以解决局部尖峰自由度，却必须先解决方向选择。
+- `basis_decoder1d`、`frequency_bottleneck1d` 和当前 `timesnet_lite1d` 不进入下一轮。
+
+方法学修正：
+
+- 本轮暴露出当前 `checkpoint_gate.metric=val_signed_cosine` 与实际使用的
+  `signed_corr_weight=0.1` 不对齐；在 `signed_cosine_weight=0.0` 时，这个 gate 不能
+  阻止 SSM 这种低 loss 但反向的 checkpoint。
+- 下一轮模型实验应先把 checkpoint/selection 方向护栏改为与 `signed_corr` 或
+  `band_limited_corr` 对齐，再比较 `multiscale_decomp_mixer1d` 与
+  `downsampled_ssm1d` 的修正版。
