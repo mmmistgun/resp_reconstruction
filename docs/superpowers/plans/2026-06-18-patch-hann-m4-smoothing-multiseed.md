@@ -2,9 +2,9 @@
 
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
-**目标：** 复核 `patch_mixer1d + hann + output_smoothing_kernel=5/11` 是否在不同训练 seed 下稳定优于未平滑的 Patch-Hann。
+**目标：** 复核 `patch_mixer1d + hann + output_smoothing_kernel=5/11` 是否在同 seed 下稳定优于未平滑的 Patch-Hann。
 
-**架构：** 不改训练代码，只跑全量数据、多 seed 对照实验。先并行跑 `training.seed=20260630` 的 smoothing5 与 smoothing11；若主指标或护栏排序摇摆，再补 `training.seed=20260640`。
+**架构：** 不改训练代码，只跑全量数据、多 seed 对照实验。先跑 `training.seed=20260630` 的 baseline、smoothing5 与 smoothing11；若主指标或护栏排序摇摆，再补 `training.seed=20260640`。
 
 **技术栈：** Python、PyTorch、OmegaConf、pandas、现有 `resp_train` 训练与 `summarize_tho_runs.py` 汇总脚本。
 
@@ -30,6 +30,7 @@ M4 固定：
 - Loss：N3 主线，`high_freq_weight=0.2`，`relative_envelope_weight=0.03`，`phase_alignment_weight=0.005`
 - 训练：`epochs=50`，`batch_size=128`，`patience=8`，`min_delta=0.001`，`use_amp=false`
 - 数据 seed：`data.train_sample_seed=20260610`，`data.val_sample_seed=20260611`
+- 首轮候选：`output_smoothing_kernel=1/5/11`
 - 首轮训练 seed：`training.seed=20260630`
 - 条件补跑 seed：`training.seed=20260640`
 - 输出：`runs/tho_research_v2_patch_hann_m4_smoothing_multiseed`
@@ -45,6 +46,7 @@ M4 固定：
 
 补第二组 seed 的触发条件：
 
+- `smoothing5` 或 `smoothing11` 没有在同 seed 下优于 `output_smoothing_kernel=1` baseline。
 - `smoothing5` 与 `smoothing11` 在 `training.seed=20260630` 上主指标差距小于 `0.03 bpm`。
 - 任一候选出现 `band_limited_corr_mean <= 0`。
 - `smoothing5` 主指标更好但 raw peak 明显恶化，或 `smoothing11` raw peak 更好但主指标明显恶化，导致结论不稳定。
@@ -86,12 +88,45 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
 
 预期：生成一个只包含计划文档的提交。
 
-## 任务 2：并行运行首轮 smoothing5/smoothing11
+## 任务 2：运行首轮 baseline/smoothing5/smoothing11
 
 **文件：**
 - 本地生成：`runs/tho_research_v2_patch_hann_m4_smoothing_multiseed/`
 
-- [ ] **步骤 1：运行 M4 smoothing5 seed20260630**
+- [ ] **步骤 1：运行 M4 baseline seed20260630**
+
+运行：
+
+```bash
+./.venv/bin/python scripts/train_tho_small.py \
+  --config configs/tho_research_v2.yaml \
+  --set data.max_train_windows=null \
+  --set data.max_val_windows=null \
+  --set data.train_sample_seed=20260610 \
+  --set data.val_sample_seed=20260611 \
+  --set model.name=patch_mixer1d \
+  --set model.patch_len=256 \
+  --set model.patch_stride=128 \
+  --set model.mixer_layers=2 \
+  --set model.overlap_window=hann \
+  --set model.output_smoothing_kernel=1 \
+  --set loss.high_freq_weight=0.2 \
+  --set loss.relative_envelope_weight=0.03 \
+  --set loss.phase_alignment_weight=0.005 \
+  --set training.seed=20260630 \
+  --set training.epochs=50 \
+  --set training.batch_size=128 \
+  --set training.patience=8 \
+  --set training.min_delta=0.001 \
+  --set training.use_amp=false \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --set outputs.run_root=runs/tho_research_v2_patch_hann_m4_smoothing_multiseed
+```
+
+预期：写出未平滑 Patch-Hann baseline run，包含 `metrics.csv` 和 `config.yaml`。
+
+- [ ] **步骤 2：运行 M4 smoothing5 seed20260630**
 
 运行：
 
@@ -122,9 +157,9 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
   --set outputs.run_root=runs/tho_research_v2_patch_hann_m4_smoothing_multiseed
 ```
 
-预期：写出一个新的 run 目录，包含 `metrics.csv` 和 `config.yaml`。
+预期：写出 `output_smoothing_kernel=5` 的 run，包含 `metrics.csv` 和 `config.yaml`。
 
-- [ ] **步骤 2：运行 M4 smoothing11 seed20260630**
+- [ ] **步骤 3：运行 M4 smoothing11 seed20260630**
 
 运行：
 
@@ -155,7 +190,7 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
   --set outputs.run_root=runs/tho_research_v2_patch_hann_m4_smoothing_multiseed
 ```
 
-预期：写出第二个 run 目录，包含 `metrics.csv` 和 `config.yaml`。
+预期：写出 `output_smoothing_kernel=11` 的 run，包含 `metrics.csv` 和 `config.yaml`。
 
 ## 任务 3：汇总并判断是否补 seed20260640
 
@@ -173,7 +208,7 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
   --output runs/tho_research_v2_patch_hann_m4_smoothing_multiseed_summary.csv
 ```
 
-预期：summary 包含两行，并且有 `selection_task_rr_peak_band_abs_error_mean`。
+预期：summary 至少包含三行，并且有 `selection_task_rr_peak_band_abs_error_mean`。
 
 - [ ] **步骤 2：生成 M3/M4 对照表**
 
@@ -183,14 +218,14 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
 ./.venv/bin/python -c "import pandas as pd; paths=['runs/tho_research_v2_patch_hann_m3_antispike_summary.csv','runs/tho_research_v2_patch_hann_m4_smoothing_multiseed_summary.csv']; df=pd.concat([pd.read_csv(p).assign(source=p) for p in paths], ignore_index=True); cols=['source','run_id','best_val_loss','selection_task_rr_peak_band_abs_error_mean','selection_task_rr_peak_band_abs_error_median','selection_task_rr_spec_abs_error_mean','selection_task_relative_envelope_mae_mean','selection_task_relative_envelope_corr_mean','selection_waveform_band_limited_corr_mean','selection_waveform_best_lag_corr_mean','selection_waveform_rr_peak_abs_error_mean','selection_waveform_rr_peak_abs_error_median']; print(df[cols].to_string(index=False))"
 ```
 
-预期：M3 的 seed20260620 和 M4 的 seed20260630 均可直接比较。
+预期：M3 的 seed20260620、M4 baseline 和 M4 smoothing 候选均可直接比较。
 
 - [ ] **步骤 3：按触发条件决定是否补跑**
 
 判断：
 
-- 若 `smoothing5` 连续两组比较都主指标更好，且 `band_limited_corr_mean > 0`，M4 可停止。
-- 若 `smoothing11` 连续两组比较都主指标接近但 raw peak 更稳，记录为抗毛刺备选。
+- 若 `smoothing5` 或 `smoothing11` 在同 seed 下优于 baseline，且 `band_limited_corr_mean > 0`，可保留为通过候选。
+- 若 `smoothing11` 主指标接近但 raw peak 更稳，记录为抗毛刺备选。
 - 若 seed20260630 与 seed20260620 排名矛盾，进入任务 4。
 
 ## 任务 4：条件补跑 seed20260640
@@ -198,7 +233,7 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
 **文件：**
 - 本地生成：`runs/tho_research_v2_patch_hann_m4_smoothing_multiseed/`
 
-- [ ] **步骤 1：补跑 smoothing5 seed20260640**
+- [ ] **步骤 1：补跑 baseline seed20260640**
 
 运行任务 2 步骤 1 的命令，仅把：
 
@@ -212,9 +247,9 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
 --set training.seed=20260640
 ```
 
-预期：新增一个 `output_smoothing_kernel=5` 的 run。
+预期：新增一个 `output_smoothing_kernel=1` 的 baseline run。
 
-- [ ] **步骤 2：补跑 smoothing11 seed20260640**
+- [ ] **步骤 2：补跑 smoothing5 seed20260640**
 
 运行任务 2 步骤 2 的命令，仅把：
 
@@ -228,9 +263,25 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
 --set training.seed=20260640
 ```
 
+预期：新增一个 `output_smoothing_kernel=5` 的 run。
+
+- [ ] **步骤 3：补跑 smoothing11 seed20260640**
+
+运行任务 2 步骤 3 的命令，仅把：
+
+```bash
+--set training.seed=20260630
+```
+
+改为：
+
+```bash
+--set training.seed=20260640
+```
+
 预期：新增一个 `output_smoothing_kernel=11` 的 run。
 
-- [ ] **步骤 3：重新生成 summary**
+- [ ] **步骤 4：重新生成 summary**
 
 运行：
 
@@ -240,7 +291,7 @@ git commit -m "docs: 添加 M4 输出平滑多 seed 计划"
   --output runs/tho_research_v2_patch_hann_m4_smoothing_multiseed_summary.csv
 ```
 
-预期：summary 至少包含四行。
+预期：summary 至少包含六行。
 
 ## 任务 5：记录、验证与提交
 
@@ -259,7 +310,7 @@ label | run | seed | smoothing | best epoch | best val loss | rr_peak_band_abs_e
 
 判断必须覆盖：
 
-- `smoothing5` 与 `smoothing11` 在主指标上的稳定性。
+- baseline、`smoothing5` 与 `smoothing11` 在主指标上的稳定性。
 - 低频方向是否保持为正。
 - raw peak 诊断是否支持抗毛刺收益。
 - 下一步是否进入低自由度/带限输出结构设计。
@@ -289,7 +340,7 @@ git commit -m "exp: 记录 M4 输出平滑多 seed 复核"
 
 ## 验收清单
 
-- [ ] 首轮至少包含 `output_smoothing_kernel=5` 与 `11` 的同 seed 对照。
+- [ ] 首轮至少包含 `output_smoothing_kernel=1`、`5` 与 `11` 的同 seed 对照。
 - [ ] 所有正式比较均使用全量数据和相同数据 seed。
 - [ ] 主选模仍使用 `rr_peak_band_abs_error_mean`。
 - [ ] `band_limited_corr_mean` 为负的候选不得作为通过模型。
