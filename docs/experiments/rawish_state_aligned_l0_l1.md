@@ -400,3 +400,43 @@ RR peak worst 前 8 个窗口的波形诊断：
   是更合理的下一轮模型候选。
 - 后续正式实验的 summary 已改为以 `selection_task_rr_peak_band_abs_error_mean`
   作为主选择指标，原始 `rr_peak_abs_error` 进入 `selection_waveform_*` 诊断列。
+
+## M2 模型候选复核
+
+执行计划：`docs/superpowers/plans/2026-06-18-model-m2-band-rr.md`。
+
+本轮先用正式 `rr_peak_band_abs_error` 口径重评历史候选，再围绕两个候选补 seed：
+
+- `patch_mixer1d + overlap_window=hann`
+- `periodic_unet1d_tiny + output_smoothing_kernel=21`
+
+本地输出：
+
+- `runs/tho_research_v2_model_m2_band_rr/`
+- `runs/tho_research_v2_model_m2_band_rr_summary.csv`
+- 临时对照表：`/tmp/m2_model_candidates_table.csv`
+
+核心结果：
+
+| label | run | best epoch | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `periodic_smooth21_seed20260620` | `20260618_132348_839544` | 13 | 0.616427 | 0.453749 / 0.172381 | 0.443979 | 0.209745 | 0.444236 | -0.792724 | 0.349528 | 2.575073 | 带通 RR 最好，但低频反相，不能作为通过模型。 |
+| `patch_uniform_old` | `20260617_220245_852336` | 39 | 0.628330 | 0.457180 / 0.183720 | 0.464602 | 0.217530 | 0.444300 | -0.793033 | 0.334928 | 0.752053 | RR 上限锚点；低频反相。 |
+| `patch_hann_seed20260620` | `20260618_132345_623904` | 11 | 0.619316 | 0.486101 / 0.188186 | 0.436531 | 0.216116 | 0.457626 | 0.794931 | 0.846602 | 3.853268 | 新 seed 仍保持正低频方向，带通 RR 接近最优。 |
+| `patch_hann_old` | `20260618_004519_403378` | 13 | 0.615959 | 0.568421 / 0.197455 | 0.433094 | 0.214250 | 0.459107 | 0.796677 | 0.848886 | 3.588456 | 正低频方向稳定；任务指标略弱于新 seed。 |
+| `periodic_smooth21_seed20260630` | `20260618_133343_665730` | 5 | 0.621051 | 0.610902 / 0.174149 | 0.454291 | 0.213112 | 0.443119 | -0.789184 | 0.357582 | 2.362895 | 第二个新 seed 仍低频反相，说明方向不稳定。 |
+| `periodic_smooth21_old` | `20260618_105623_624928` | 8 | 0.607850 | 0.654075 / 0.171471 | 0.435386 | 0.208959 | 0.445360 | 0.783797 | 0.846181 | 3.222728 | 旧 seed 低频方向正确，但未被新 seed 复现。 |
+
+阶段判断：
+
+- `periodic_unet1d_tiny + smoothing21` 不是稳定的相位方向解决方案。三个 seed 中，
+  只有旧 seed 得到正 `band_limited_corr`；两个新 seed 均回到约 `-0.79` 的反相区域。
+- `patch_hann` 更稳定：两个 seed 都保持正 `band_limited_corr` 和高
+  `best_lag_corr`，且新 seed 的带通 RR 均值达到 `0.486101`，接近反相
+  `patch_uniform` 的 `0.457180`。
+- `patch_uniform` 和 `periodic_smooth21_seed20260620` 虽然带通 RR 最好，但低频方向为负，
+  只能作为“RR 可达上限/反相锚点”，不应作为通过模型。
+- 下一步模型主线建议转向 `patch_mixer1d + hann`，优先解决普通局部毛刺和原始
+  peak 诊断偏高；不要继续把 `periodic_unet1d_tiny` 当作已解决低频相位方向的模型。
+- 若继续 PeriodicUNet，应先引入显式极性/相位方向稳定机制或输出低自由度约束，
+  否则多 seed 不稳定会让模型选择结论不可复现。
