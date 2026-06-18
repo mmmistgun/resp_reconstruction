@@ -4,6 +4,7 @@ import torch
 from torch import nn
 
 from resp_train.models import build_model, list_models
+from resp_train.models.lowfreq import TimesNetLite1D
 from resp_train.models.timeseries import PatchMixer1D, PeriodicUNet1DTiny
 
 
@@ -213,6 +214,98 @@ def test_lowfreq_structure_models_preserve_waveform_shape(model_name, extra):
 
     assert y.shape == (2, 1, 1800)
     assert torch.isfinite(y).all()
+
+
+def test_timesnet_lite_uses_lowpass_signal_for_period_selection():
+    class RecordingTimesNetLite1D(TimesNetLite1D):
+        def __init__(self) -> None:
+            super().__init__(
+                in_channels=1,
+                out_channels=1,
+                base_channels=2,
+                period_top_k=1,
+                period_min_sec=2.0,
+                period_max_sec=20.0,
+                sample_rate=100.0,
+                lowpass_kernel=401,
+            )
+            self.period_input: torch.Tensor | None = None
+
+        def _periods(self, x: torch.Tensor) -> list[int]:
+            self.period_input = x.detach().clone()
+            return [self.min_period]
+
+    sample_rate = 100.0
+    t = torch.arange(2000, dtype=torch.float32) / sample_rate
+    slow = torch.sin(2.0 * torch.pi * 0.1 * t)
+    strong_fast = 8.0 * torch.sin(2.0 * torch.pi * 0.5 * t)
+    raw = (slow + strong_fast).view(1, 1, -1)
+
+    reference = TimesNetLite1D(
+        in_channels=1,
+        out_channels=1,
+        base_channels=2,
+        period_top_k=1,
+        period_min_sec=2.0,
+        period_max_sec=20.0,
+        sample_rate=sample_rate,
+        lowpass_kernel=401,
+    )
+    raw_period = reference._periods(raw)[0]
+    low = reference.lowpass(raw)
+    lowpass_period = reference._periods(low)[0]
+
+    assert raw_period == 200
+    assert lowpass_period == 1000
+
+    model = RecordingTimesNetLite1D()
+    model(raw)
+
+    assert model.period_input is not None
+    assert torch.allclose(model.period_input, model.lowpass(raw))
+
+
+@pytest.mark.parametrize(
+    "model_name,extra",
+    [
+        ("basis_decoder1d", {"basis_count": 32, "encoder_stride": 40}),
+        ("multiscale_decomp_mixer1d", {"downsample_factors": [1, 8, 32], "mixer_layers": 1}),
+        (
+            "timesnet_lite1d",
+            {"period_top_k": 1, "period_min_sec": 2.0, "period_max_sec": 20.0, "lowpass_kernel": 401},
+        ),
+        ("frequency_bottleneck1d", {"max_freq_hz": 0.7, "freq_bins": 64}),
+        ("downsampled_ssm1d", {"latent_stride": 40, "state_layers": 1}),
+    ],
+)
+def test_lowfreq_structure_models_support_full_window_backward(model_name, extra):
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": model_name,
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 4,
+                **extra,
+            },
+        }
+    )
+    model = build_model(cfg)
+    x = torch.randn(1, 1, 18000)
+
+    y = model(x)
+    loss = y.square().mean()
+    loss.backward()
+
+    grad_norm = sum(
+        float(param.grad.detach().abs().sum())
+        for param in model.parameters()
+        if param.requires_grad and param.grad is not None
+    )
+    assert y.shape == (1, 1, 18000)
+    assert torch.isfinite(y).all()
+    assert grad_norm > 0.0
 
 
 def test_patch_mixer_hann_overlap_add_reduces_patch_boundary_step():

@@ -200,9 +200,10 @@ class TimesNetLite1D(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         length = x.size(-1)
-        z = self.embed(self.lowpass(x))
+        low = self.lowpass(x)
+        z = self.embed(low)
         outputs = []
-        for period in self._periods(x):
+        for period in self._periods(low):
             padded_len = math.ceil(length / period) * period
             z_pad = _match_length(z, padded_len)
             grid = z_pad.view(z.size(0), z.size(1), padded_len // period, period)
