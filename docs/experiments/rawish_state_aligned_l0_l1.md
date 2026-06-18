@@ -964,3 +964,44 @@ checkpoint，避免没有 checkpoint 可评。
 - 下一步不建议继续在 warm-up/curriculum 上做大网格。更有价值的方向是降低正向
   解中的局部峰值自由度，例如模型输出带限/低自由度 decoder、轻量 anti-spike
   正则，或把 checkpoint 选择从 `val_loss` 转向 `direction gate + task RR`。
+
+## Loss 阶段收口
+
+基于 L0/L1、phase replacement、signed cosine 多 seed、权重下探和 M8
+curriculum/gate 结果，当前 loss 探索可以阶段性冻结，不再继续做大规模 loss 网格。
+
+阶段性默认候选：
+
+- `high_freq_weight=0.2`
+- `relative_env_weight=0.03`
+- `phase_alignment_weight=0.0`
+- `signed_corr_weight=0.1`
+- `signed_cosine_schedule.mode=none`
+- `training.checkpoint_gate.metric=val_signed_cosine`
+- `training.checkpoint_gate.max=0.5`
+
+保留这个组合的理由：
+
+- `signed_corr_weight=0.1` 是当前证据下唯一在多 seed 困难样本上稳定修正方向的
+  phase replacement。
+- 低权重 `0.03/0.05/0.075` 会在困难 seed 上保持反向，不能作为默认候选。
+- `0.1 -> 0.05/0.075` curriculum 能保住方向，但没有明显降低
+  `rr_peak_band_abs_error` 或 raw peak 代价，因此不作为下一阶段主线默认值。
+- checkpoint direction gate 有必要保留为安全护栏，避免验证 loss 选中反向
+  checkpoint；但它不能替代训练目标，也不能单独解决 RR 代价。
+
+当前瓶颈已经从“loss 是否能约束方向”转为“方向正确后，模型输出仍有过高局部峰值
+自由度”。因此下一阶段主线应转向模型与输出结构：
+
+- 低自由度或带限输出 decoder。
+- 降低局部尖峰自由度的模型结构，而不是继续主要依赖 loss 惩罚。
+- dual-stream / low-frequency branch 等带明确低频归纳偏置的结构。
+- 后续可以评估 `direction gate + task RR` 的 checkpoint 选择策略，但这属于
+  selection protocol，不应继续混同为新 loss 方案。
+
+例外条件：
+
+- 如果新模型仍然稳定出现明显局部尖峰，才回到 loss 侧补充轻量 anti-spike 或
+  band-limited consistency 正则。
+- 如果新输入或新 split 改变了方向统计，再重新验证 `signed_corr_weight=0.1`
+  是否仍是有效默认值。
