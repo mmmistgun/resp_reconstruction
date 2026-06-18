@@ -37,6 +37,7 @@ _REGISTRY: dict[str, ModelFactory] = {
         patch_stride=int(cfg.model.get("patch_stride", 128)),
         mixer_layers=int(cfg.model.get("mixer_layers", 2)),
         overlap_window=str(cfg.model.get("overlap_window", "uniform")),
+        output_smoothing_kernel=int(cfg.model.get("output_smoothing_kernel", 1)),
     ),
     "dlinear_waveform": lambda cfg: DLinearWaveform(
         in_channels=int(cfg.model.in_channels),

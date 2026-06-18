@@ -110,6 +110,7 @@ class PatchMixer1D(nn.Module):
         patch_stride: int = 128,
         mixer_layers: int = 2,
         overlap_window: str = "uniform",
+        output_smoothing_kernel: int = 1,
     ) -> None:
         super().__init__()
         self.patch_len = max(int(patch_len), 8)
@@ -126,6 +127,10 @@ class PatchMixer1D(nn.Module):
         )
         self.patch_head = nn.Linear(base_channels, out_channels * self.patch_len)
         self.out_channels = int(out_channels)
+        if int(output_smoothing_kernel) > 1:
+            self.output_smoother = MovingAverage1D(out_channels, int(output_smoothing_kernel))
+        else:
+            self.output_smoother = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch, _, length = x.shape
@@ -139,7 +144,7 @@ class PatchMixer1D(nn.Module):
             tokens = block(tokens)
         patch_values = self.patch_head(tokens.transpose(1, 2))
         patch_values = patch_values.view(batch, patch_count, self.out_channels, self.patch_len)
-        return self._overlap_add(patch_values, length, padded_length)
+        return self.output_smoother(self._overlap_add(patch_values, length, padded_length))
 
     def _padded_length(self, length: int) -> int:
         if length <= self.patch_len:

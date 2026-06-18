@@ -102,6 +102,7 @@ def test_build_time_series_library_inspired_models_preserve_waveform_shape(model
                 "patch_stride": 64,
                 "mixer_layers": 2,
                 "moving_avg": 101,
+                "output_smoothing_kernel": 5,
             }
         }
     )
@@ -110,6 +111,9 @@ def test_build_time_series_library_inspired_models_preserve_waveform_shape(model
     y = model(torch.randn(2, 2, 1025))
 
     assert y.shape == (2, 1, 1025)
+    if model_name == "patch_mixer1d":
+        assert isinstance(model.output_smoother, nn.Module)
+        assert not isinstance(model.output_smoother, nn.Identity)
 
 
 def test_patch_mixer_hann_overlap_add_reduces_patch_boundary_step():
@@ -133,6 +137,44 @@ def test_patch_mixer_hann_overlap_add_preserves_constant_signal():
     y = hann._overlap_add(patches, length=12, padded_length=12)
 
     assert torch.allclose(y, torch.ones_like(y))
+
+
+def test_patch_mixer_output_smoothing_reduces_local_jitter():
+    raw = PatchMixer1D(
+        in_channels=1,
+        out_channels=1,
+        base_channels=1,
+        patch_len=8,
+        patch_stride=8,
+        mixer_layers=0,
+        overlap_window="uniform",
+        output_smoothing_kernel=1,
+    )
+    smooth = PatchMixer1D(
+        in_channels=1,
+        out_channels=1,
+        base_channels=1,
+        patch_len=8,
+        patch_stride=8,
+        mixer_layers=0,
+        overlap_window="uniform",
+        output_smoothing_kernel=5,
+    )
+    smooth.load_state_dict(raw.state_dict(), strict=False)
+    for model in (raw, smooth):
+        model.patch_embed.weight.data.zero_()
+        model.patch_embed.bias.data.zero_()
+        model.patch_head.weight.data.zero_()
+        model.patch_head.bias.data.copy_(torch.tensor([1.0, -1.0] * 4))
+
+    x = torch.zeros(1, 1, 64)
+    raw_y = raw(x)
+    smooth_y = smooth(x)
+
+    assert smooth_y.shape == raw_y.shape
+    assert torch.mean(torch.abs(smooth_y[..., 1:] - smooth_y[..., :-1])).item() < torch.mean(
+        torch.abs(raw_y[..., 1:] - raw_y[..., :-1])
+    ).item()
 
 
 def test_periodic_unet_output_smoothing_reduces_local_jitter():
