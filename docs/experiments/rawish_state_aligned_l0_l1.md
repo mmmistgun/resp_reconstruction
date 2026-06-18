@@ -690,3 +690,67 @@ baseline 自身稳定性。
 - 因此，M6 的重点应是稳定低频 signed direction / polarity，而不是只扩大
   lag-tolerant search。若只做更宽 lag-tolerant loss，模型可能继续接受半周期错相
   解，反而不能保证 state-aligned 前提下的生理方向一致。
+
+## M6：Phase alignment 权重扫描
+
+基于上面的 polarity 诊断，本轮不改模型结构，只固定 `patch_mixer1d +
+overlap_window=hann`，扫描 `phase_alignment_weight`。目标是验证 signed
+low-frequency direction 能否从“诊断项”升级为稳定训练约束，同时继续用任务指标
+作为护栏。
+
+固定条件：
+
+- 输入：`bcg_rawish_wideband_state_aligned`
+- 模型：`patch_mixer1d`，`patch_len=256`，`patch_stride=128`，
+  `mixer_layers=2`，`overlap_window=hann`，`output_smoothing_kernel=1`
+- 数据：full train/val windows，`train_sample_seed=20260610`，
+  `val_sample_seed=20260611`
+- 训练：`batch_size=128`，`epochs=50`，`patience=8`，`min_delta=0.001`
+- 输出：`runs/tho_research_v2_patch_hann_m6_phase_weight_sweep/`
+- 汇总：`runs/tho_research_v2_patch_hann_m6_phase_weight_sweep_summary.csv`
+- 临时明细：`/tmp/m6_phase_weight_sweep_table.csv`
+
+核心结果：
+
+| seed | `phase_alignment_weight` | run | best epoch | best val loss | val phase alignment | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 20260650 | 0.02 | `20260618_170857_118784` | 13 | 0.651580 | 1.671082 | 0.432834 | 0.467467 | 0.215241 | 0.454097 | -0.791611 | 0.321759 | 2.198552 |
+| 20260650 | 0.05 | `20260618_171550_291071` | 13 | 0.704754 | 1.665620 | 0.435258 | 0.461738 | 0.215353 | 0.451796 | -0.787219 | 0.326138 | 2.476685 |
+| 20260650 | 0.10 | `20260618_172152_328561` | 17 | 0.643348 | 0.229674 | 0.445811 | 0.449135 | 0.213498 | 0.446414 | 0.795338 | 0.846277 | 4.061872 |
+| 20260650 | 0.20 | `20260618_172155_060655` | 14 | 0.665370 | 0.227620 | 0.473473 | 0.447416 | 0.213426 | 0.451383 | 0.798214 | 0.846289 | 4.519892 |
+| 20260660 | 0.02 | `20260618_170859_672497` | 12 | 0.628927 | 0.231462 | 0.458584 | 0.437104 | 0.220660 | 0.451728 | 0.792940 | 0.845263 | 3.851374 |
+| 20260660 | 0.05 | `20260618_171607_902218` | 12 | 0.635268 | 0.230613 | 0.459685 | 0.436531 | 0.220208 | 0.452480 | 0.794060 | 0.845636 | 3.936681 |
+| 20260690 | 0.10 | `20260618_172845_958331` | 6 | 0.646572 | 0.232608 | 0.479456 | 0.431948 | 0.223545 | 0.453749 | 0.792177 | 0.845448 | 3.451273 |
+| 20260680 | 0.10 | `20260618_172848_311726` | 16 | 0.645000 | 0.227770 | 0.477737 | 0.454291 | 0.213962 | 0.449543 | 0.796776 | 0.845828 | 3.513082 |
+
+同 seed 对照：
+
+| seed | baseline direction | baseline `rr_peak_band_abs_error` | M6 best candidate | M6 direction | M6 `rr_peak_band_abs_error` | 结论 |
+|---:|---|---:|---|---|---:|---|
+| 20260650 | negative | 0.431143 | weight 0.10 | positive | 0.445811 | `0.02/0.05` 拉不动；`0.10` 能转正且带通 RR 只小幅变差。 |
+| 20260660 | negative | 0.445080 | weight 0.02 | positive | 0.458584 | 较小权重已经转正，但 RR 轻微变差。 |
+| 20260690 | negative | 0.444933 | weight 0.10 | positive | 0.479456 | `0.10` 可把负向 seed 转正，但 RR 代价更明显。 |
+| 20260680 | positive | 0.469799 | weight 0.10 | positive | 0.477737 | 对本来正向的 seed 不会翻坏，但 RR 略退。 |
+
+阶段结论：
+
+- `phase_alignment_weight=0.02/0.05` 不是足够强的通用解法。它们可以让
+  seed20260660 转正，但 seed20260650 仍停留在 `val_phase_alignment≈1.67` 的
+  反向盆地。
+- `phase_alignment_weight=0.10` 能把顽固负向 seed20260650 转正，并在
+  seed20260690 上复现；同时保持 seed20260680 的正方向。因此当前证据支持：
+  反转问题主要是训练目标对 signed direction 约束太弱，而不是输入无法提供相位方向。
+- `phase_alignment_weight=0.20` 不是更优选择。它同样转正，但 best val loss 与
+  `rr_peak_band_abs_error` 均差于 `0.10`，说明强约束开始明显挤压任务指标。
+- `0.10` 的主要代价是 raw `rr_peak_abs_error` 上升。这更像输出局部毛刺/尖峰诊断
+  变差，而不是带通 RR 主任务失败；后续仍应把 raw peak 作为诊断，不应压过
+  `rr_peak_band_abs_error`、`rr_spec_abs_error` 和相对努力指标。
+
+建议：
+
+- 下一轮主线可把 `phase_alignment_weight=0.10` 作为 M6 候选默认，而不是直接使用
+  `0.20`。
+- 不建议继续加宽 lag-tolerant loss 作为主线，因为宽 lag 会容忍半周期错相；
+  当前更需要 signed low-frequency direction。
+- 若 `0.10` 在更多 seed 上持续带来 raw peak 毛刺，可以再考虑输出平滑、方向
+  warm-up/curriculum 或 checkpoint selection gate，而不是继续盲目加大权重。
