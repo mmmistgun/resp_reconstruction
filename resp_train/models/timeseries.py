@@ -38,6 +38,43 @@ class MovingAverage1D(nn.Module):
         return F.conv1d(padded, self.weight, groups=x.size(1))
 
 
+def _sinc_lowpass(cutoff_hz: float, kernel_size: int, sample_rate: float) -> torch.Tensor:
+    kernel_size = _odd_kernel(kernel_size)
+    half = kernel_size // 2
+    t = torch.arange(-half, half + 1, dtype=torch.float32)
+    cutoff = float(cutoff_hz) / float(sample_rate)
+    kernel = 2.0 * cutoff * torch.sinc(2.0 * cutoff * t)
+    window = torch.hamming_window(kernel_size, periodic=False, dtype=torch.float32)
+    kernel = kernel * window
+    return kernel / kernel.sum().clamp_min(1e-8)
+
+
+class FIRBandpass1D(nn.Module):
+    """初始化为呼吸频带的 depthwise FIR 前端。"""
+
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int = 401,
+        low_hz: float = 0.05,
+        high_hz: float = 0.7,
+        sample_rate: float = 100.0,
+        trainable: bool = True,
+    ) -> None:
+        super().__init__()
+        kernel_size = _odd_kernel(kernel_size)
+        high = _sinc_lowpass(high_hz, kernel_size, sample_rate)
+        low = _sinc_lowpass(low_hz, kernel_size, sample_rate)
+        band = high - low
+        weight = band.view(1, 1, kernel_size).repeat(int(channels), 1, 1)
+        self.weight = nn.Parameter(weight, requires_grad=bool(trainable))
+        self.padding = kernel_size // 2
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        padded = F.pad(x, (self.padding, self.padding), mode="reflect")
+        return F.conv1d(padded, self.weight, groups=x.size(1))
+
+
 class PeriodicUNet1DTiny(nn.Module):
     """TimesNet 周期建模启发的轻量 U-Net。
 
@@ -180,6 +217,49 @@ class PatchMixer1D(nn.Module):
             raise ValueError(f"未知 overlap_window={overlap_window!r}，可选: uniform, hann, triangular")
         # 首尾保留极小权重，避免窗口边缘无人覆盖时被置零。
         return window.clamp_min(1e-3)
+
+
+class FIRFrontendPatchMixer1D(nn.Module):
+    """先用呼吸频带 FIR 前端滤波，再交给 PatchMixer。"""
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 16,
+        patch_len: int = 256,
+        patch_stride: int = 128,
+        mixer_layers: int = 2,
+        overlap_window: str = "hann",
+        output_smoothing_kernel: int = 1,
+        fir_kernel_size: int = 401,
+        fir_low_hz: float = 0.05,
+        fir_high_hz: float = 0.7,
+        fir_sample_rate: float = 100.0,
+        fir_trainable: bool = True,
+    ) -> None:
+        super().__init__()
+        self.fir = FIRBandpass1D(
+            channels=in_channels,
+            kernel_size=fir_kernel_size,
+            low_hz=fir_low_hz,
+            high_hz=fir_high_hz,
+            sample_rate=fir_sample_rate,
+            trainable=fir_trainable,
+        )
+        self.backbone = PatchMixer1D(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            base_channels=base_channels,
+            patch_len=patch_len,
+            patch_stride=patch_stride,
+            mixer_layers=mixer_layers,
+            overlap_window=overlap_window,
+            output_smoothing_kernel=output_smoothing_kernel,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.backbone(self.fir(x))
 
 
 class DLinearWaveform(nn.Module):

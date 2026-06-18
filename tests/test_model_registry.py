@@ -31,6 +31,10 @@ def test_time_series_library_inspired_models_are_registered(model_name):
     assert model_name in list_models()
 
 
+def test_fir_frontend_patch_mixer_is_registered():
+    assert "patch_mixer1d_fir_frontend" in list_models()
+
+
 def test_build_unet1d_tiny_preserves_waveform_shape():
     cfg = OmegaConf.create(
         {
@@ -136,6 +140,34 @@ def test_build_time_series_library_inspired_models_preserve_waveform_shape(model
     if model_name == "patch_mixer1d":
         assert isinstance(model.output_smoother, nn.Module)
         assert not isinstance(model.output_smoother, nn.Identity)
+
+
+def test_build_fir_frontend_patch_mixer_preserves_waveform_shape():
+    cfg = OmegaConf.create(
+        {
+            "model": {
+                "name": "patch_mixer1d_fir_frontend",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 4,
+                "patch_len": 128,
+                "patch_stride": 64,
+                "mixer_layers": 1,
+                "overlap_window": "hann",
+                "fir_kernel_size": 401,
+                "fir_low_hz": 0.05,
+                "fir_high_hz": 0.7,
+                "fir_sample_rate": 100.0,
+                "fir_trainable": True,
+            }
+        }
+    )
+    model = build_model(cfg)
+
+    y = model(torch.randn(2, 1, 1025))
+
+    assert y.shape == (2, 1, 1025)
+    assert model.fir.weight.requires_grad
 
 
 def test_patch_mixer_hann_overlap_add_reduces_patch_boundary_step():

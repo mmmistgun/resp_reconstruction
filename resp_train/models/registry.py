@@ -4,7 +4,7 @@ from typing import Any, Callable
 
 from torch import nn
 
-from resp_train.models.timeseries import DLinearWaveform, PatchMixer1D, PeriodicUNet1DTiny
+from resp_train.models.timeseries import DLinearWaveform, FIRFrontendPatchMixer1D, PatchMixer1D, PeriodicUNet1DTiny
 from resp_train.models.unet1d import UNet1DTiny, UNet1DTinyNoSkip1, UNet1DTinyNoSkipAll
 
 
@@ -43,6 +43,21 @@ _REGISTRY: dict[str, ModelFactory] = {
         mixer_layers=int(cfg.model.get("mixer_layers", 2)),
         overlap_window=str(cfg.model.get("overlap_window", "uniform")),
         output_smoothing_kernel=int(cfg.model.get("output_smoothing_kernel", 1)),
+    ),
+    "patch_mixer1d_fir_frontend": lambda cfg: FIRFrontendPatchMixer1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        patch_len=int(cfg.model.get("patch_len", 256)),
+        patch_stride=int(cfg.model.get("patch_stride", 128)),
+        mixer_layers=int(cfg.model.get("mixer_layers", 2)),
+        overlap_window=str(cfg.model.get("overlap_window", "hann")),
+        output_smoothing_kernel=int(cfg.model.get("output_smoothing_kernel", 1)),
+        fir_kernel_size=int(cfg.model.get("fir_kernel_size", 401)),
+        fir_low_hz=float(cfg.model.get("fir_low_hz", 0.05)),
+        fir_high_hz=float(cfg.model.get("fir_high_hz", 0.7)),
+        fir_sample_rate=float(cfg.model.get("fir_sample_rate", 100.0)),
+        fir_trainable=bool(cfg.model.get("fir_trainable", True)),
     ),
     "dlinear_waveform": lambda cfg: DLinearWaveform(
         in_channels=int(cfg.model.in_channels),
