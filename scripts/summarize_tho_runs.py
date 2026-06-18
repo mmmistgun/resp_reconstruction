@@ -15,6 +15,7 @@ if str(REPO_ROOT) not in sys.path:
 
 METRIC_COLUMNS = [
     "rr_spec_abs_error",
+    "rr_peak_band_abs_error",
     "rr_peak_abs_error",
     "envelope_corr",
     "relative_envelope_corr",
@@ -26,7 +27,7 @@ METRIC_COLUMNS = [
 ]
 
 TASK_SELECTION_METRICS = [
-    "rr_peak_abs_error",
+    "rr_peak_band_abs_error",
     "rr_spec_abs_error",
     "relative_envelope_mae",
     "relative_envelope_corr",
@@ -34,6 +35,7 @@ TASK_SELECTION_METRICS = [
 ]
 
 WAVEFORM_DIAGNOSTIC_METRICS = [
+    "rr_peak_abs_error",
     "band_limited_corr",
     "best_lag_corr",
     "best_lag_sec",
@@ -112,7 +114,7 @@ def _quality_counts(frame: pd.DataFrame) -> str:
 
 def _add_selection_fields(record: dict[str, Any]) -> None:
     """显式标注模型选择口径，避免把训练 loss 或波形诊断当作唯一目标。"""
-    record["selection_primary_metric"] = "rr_peak_abs_error_mean"
+    record["selection_primary_metric"] = "rr_peak_band_abs_error_mean"
     record["selection_secondary_metric"] = "rr_spec_abs_error_mean"
     record["selection_tertiary_metric"] = "relative_envelope_mae_mean"
     record["selection_waveform_role"] = "diagnostic"

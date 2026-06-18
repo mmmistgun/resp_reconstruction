@@ -6,6 +6,7 @@ from resp_train.metrics.signal import (
     band_limited_corr,
     bandpass_filter,
     best_lag_correlation,
+    estimate_bandpassed_peak_rate_bpm,
     estimate_peak_rate_bpm,
     estimate_spectral_rate_bpm,
     relative_envelope_metrics,
@@ -134,6 +135,17 @@ def test_peak_rate_使用峰间距而不是峰数量():
     rate = estimate_peak_rate_bpm(x, fs=fs, distance_sec=10.0)
 
     assert abs(rate - 3.0) < 0.01
+
+
+def test_bandpassed_peak_rate_忽略呼吸频带外尖峰():
+    fs = 100.0
+    t = np.arange(0, 80, 1 / fs)
+    target = np.sin(2 * np.pi * 0.2 * t)
+    noisy = target + 2.0 * np.sin(2 * np.pi * 2.0 * t)
+
+    rate = estimate_bandpassed_peak_rate_bpm(noisy, fs=fs, low_hz=0.05, high_hz=0.7, order=4)
+
+    assert abs(rate - 12.0) < 0.5
 
 
 def test_flat_signal_returns_nan_for_rr_and_similarity():

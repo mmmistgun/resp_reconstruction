@@ -356,8 +356,14 @@ def _metric_text(*, _metric_row: dict[str, Any], predictions: dict[str, np.ndarr
         parts.append(
             f"rr_peak={_format_bpm(_metric_row['pred_rr_peak_bpm'])}/{_format_bpm(_metric_row['target_rr_peak_bpm'])} bpm"
         )
+    if "pred_rr_peak_band_bpm" in _metric_row and "target_rr_peak_band_bpm" in _metric_row:
+        parts.append(
+            "rr_peak_band="
+            f"{_format_bpm(_metric_row['pred_rr_peak_band_bpm'])}/{_format_bpm(_metric_row['target_rr_peak_band_bpm'])} bpm"
+        )
     for key in (
         "rr_spec_abs_error",
+        "rr_peak_band_abs_error",
         "rr_peak_abs_error",
         "envelope_corr",
         "relative_envelope_corr",

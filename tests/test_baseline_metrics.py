@@ -41,4 +41,10 @@ def test_evaluate_baseline_dataset_returns_metrics_frame():
 
     assert isinstance(frame, pd.DataFrame)
     assert len(frame) == 2
-    assert set(frame.columns) >= {"method", "dataset_row_id", "rr_spec_abs_error", "spectrum_similarity"}
+    assert set(frame.columns) >= {
+        "method",
+        "dataset_row_id",
+        "rr_spec_abs_error",
+        "rr_peak_band_abs_error",
+        "spectrum_similarity",
+    }

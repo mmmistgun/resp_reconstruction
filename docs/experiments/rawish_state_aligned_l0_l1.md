@@ -39,11 +39,17 @@ BCG 到胸带呼吸之间的生理相位差。训练输入固定为
 
 优先级如下：
 
-1. `rr_peak_abs_error`：主护栏，均值和中位数不应明显恶化。
+1. `rr_peak_band_abs_error`：当前主护栏，先对预测和目标做呼吸频带带通，再用峰间距估计呼吸率。
 2. `rr_spec_abs_error`：频域呼吸率护栏，不应明显恶化。
 3. `relative_envelope_mae` / `relative_envelope_corr`：相对呼吸强弱变化的任务指标。
 4. `spectrum_similarity`：频谱一致性辅助护栏。
-5. `band_limited_corr`、`best_lag_corr`、`best_lag_sec`：波形诊断指标，用于解释低频形态和时移，不能单独判定通过。
+5. `rr_peak_abs_error`：原始时域峰值呼吸率诊断，用于暴露尖峰、毛刺和局部双峰，不再作为唯一主护栏。
+6. `band_limited_corr`、`best_lag_corr`、`best_lag_sec`：波形诊断指标，用于解释低频形态和时移，不能单独判定通过。
+
+注：2026-06-18 前的 L0/L1/L2/L3/N3/M0/M1 结论仍按当时的
+`rr_peak_abs_error` 主护栏记录。自 2026-06-18 正式接入
+`rr_peak_band_abs_error` 后，后续实验选择应优先使用带通峰值 RR，原始 peak RR
+只用于解释局部高频尖峰或模型输出不平滑。
 
 ## Split 独立性审计
 
@@ -356,3 +362,41 @@ RR peak worst 前 8 个窗口的波形诊断：
   peak topology 的直接约束；点对点波形、二阶平滑和全窗口自相关都只能处理
   一部分症状。下一步仍应回到模型输出结构，让模型天然产生带限、低自由度、
   不易出现双峰的呼吸轨迹，再用小权重节律/曲率项做辅助。
+
+## 带通峰值 RR 口径更新
+
+2026-06-18 复核 `row=10196` 和多个模型后，确认原始
+`rr_peak_abs_error` 会被局部毛刺、额外峰和 patch 边界尖峰显著污染。该指标仍有
+诊断价值，但不适合作为当前任务的唯一主护栏。正式接入后：
+
+- `rr_peak_band_abs_error`：模型选择主指标，先带通到呼吸频带，再用峰间距估计 RR。
+- `rr_spec_abs_error`：频域 RR 辅助护栏，用于防止模型只优化局部峰形。
+- `rr_peak_abs_error`：原始输出尖峰诊断，用于定位不平滑、双峰和边界伪影。
+- `band_limited_corr` / `best_lag_corr`：低频方向、形态和残余时移诊断，不能单独作为通过标准。
+
+一次性复核输出保存在本地 `/tmp/tho_filtered_rr_summary.csv` 和
+`/tmp/tho_filtered_rr_rows.csv`，不进入 Git。核心结果如下：
+
+| label | raw peak RR mean | band peak RR mean | band peak RR median | `row=10196` band peak RR |
+|---|---:|---:|---:|---:|
+| `patch_uniform` | 0.752053 | 0.457180 | 0.183720 | 0.084515 |
+| `patch_hann` | 3.588456 | 0.568421 | 0.197455 | 0.524183 |
+| `periodic_smooth21` | 3.222728 | 0.654075 | 0.171471 | 0.286070 |
+| `periodic_curv002` | 3.773799 | 0.752821 | 0.186706 | 0.374370 |
+| `periodic_smooth51` | 2.413637 | 0.771716 | 0.241118 | 0.227850 |
+| `periodic_base` | 4.406477 | 0.798523 | 0.184324 | 0.213375 |
+| `periodic_smooth11` | 4.252718 | 0.806439 | 0.184324 | 0.315373 |
+| `periodic_rhythm002_curv002` | 3.758621 | 0.883504 | 0.186706 | 0.315373 |
+| `periodic_bandwave0005` | 3.577836 | 0.897629 | 0.181211 | 0.344806 |
+| `periodic_rhythm002` | 3.737409 | 1.243227 | 0.187309 | 0.374370 |
+| `dlinear` | 4.062325 | 1.580762 | 0.232897 | 0.539349 |
+
+阶段判断：
+
+- `row=10196` 的原始 peak RR 坏例主要来自额外尖峰；带通后
+  `periodic_smooth21` 的该窗口错误从原始 `12.279050` 降到 `0.286070`。
+- `patch_uniform` 的带通 RR 最好，但低频相关为负，仍不应单独作为更优模型结论。
+- 如果同时要求 RR 稳定和低频方向正确，`patch_hann` 与 `periodic_smooth21`
+  是更合理的下一轮模型候选。
+- 后续正式实验的 summary 已改为以 `selection_task_rr_peak_band_abs_error_mean`
+  作为主选择指标，原始 `rr_peak_abs_error` 进入 `selection_waveform_*` 诊断列。

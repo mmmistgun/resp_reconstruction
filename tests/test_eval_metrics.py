@@ -46,12 +46,30 @@ def test_evaluate_prediction_dict_returns_window_metrics():
     assert frame.loc[0, "method"] == "model"
     assert frame.loc[0, "dataset_row_id"] == 1
     assert frame.loc[0, "rr_spec_abs_error"] < 1.0
+    assert frame.loc[0, "rr_peak_band_abs_error"] < 1.0
     assert frame.loc[0, "spectrum_similarity"] > 0.99
     assert frame.loc[0, "relative_envelope_corr"] > 0.99
     assert frame.loc[0, "relative_envelope_mae"] < 0.01
     assert frame.loc[0, "band_limited_corr"] > 0.99
     assert frame.loc[0, "best_lag_corr"] > 0.99
     assert abs(frame.loc[0, "best_lag_sec"]) < 1e-6
+
+
+def test_evaluate_prediction_dict_reports_bandpassed_peak_rate_for_spiky_prediction():
+    fs = 100
+    t = np.arange(0, 80, 1 / fs)
+    target = np.sin(2 * np.pi * 0.2 * t).astype(np.float32)
+    pred = (target + 2.0 * np.sin(2 * np.pi * 2.0 * t)).astype(np.float32)
+    preds = {
+        "r_tho_hat": pred.reshape(1, 1, -1),
+        "tho_ref": target.reshape(1, 1, -1),
+    }
+
+    frame = evaluate_prediction_dict(preds, _cfg(), method="model")
+
+    assert frame.loc[0, "rr_peak_band_abs_error"] < 0.5
+    assert np.isfinite(frame.loc[0, "pred_rr_peak_band_bpm"])
+    assert np.isfinite(frame.loc[0, "target_rr_peak_band_bpm"])
 
 
 def test_evaluate_prediction_dict_reports_best_lag_for_shifted_prediction():

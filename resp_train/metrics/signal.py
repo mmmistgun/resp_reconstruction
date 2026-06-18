@@ -301,6 +301,26 @@ def estimate_peak_rate_bpm(
     return rate
 
 
+def estimate_bandpassed_peak_rate_bpm(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+    order: int = 4,
+    distance_sec: float | None = None,
+) -> float:
+    """先限制到呼吸频带，再用时域峰间距估计呼吸率。"""
+    filtered = bandpass_filter(signal, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    return estimate_peak_rate_bpm(
+        filtered,
+        fs=fs,
+        distance_sec=distance_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+
+
 def spectrum_similarity(
     pred: np.ndarray,
     target: np.ndarray,

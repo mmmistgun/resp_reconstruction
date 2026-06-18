@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from resp_train.metrics.signal import (
     band_limited_corr,
     best_lag_correlation,
+    estimate_bandpassed_peak_rate_bpm,
     estimate_peak_rate_bpm,
     estimate_spectral_rate_bpm,
     relative_envelope_metrics,
@@ -40,6 +41,22 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
         target_rr_spec = estimate_spectral_rate_bpm(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
         pred_rr_peak = estimate_peak_rate_bpm(pred, fs=fs, distance_sec=2.0, low_hz=low_hz, high_hz=high_hz)
         target_rr_peak = estimate_peak_rate_bpm(target, fs=fs, distance_sec=2.0, low_hz=low_hz, high_hz=high_hz)
+        pred_rr_peak_band = estimate_bandpassed_peak_rate_bpm(
+            pred,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            order=lag_bandpass_order,
+        )
+        target_rr_peak_band = estimate_bandpassed_peak_rate_bpm(
+            target,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            order=lag_bandpass_order,
+        )
         rel_env = relative_envelope_metrics(
             pred,
             target,
@@ -69,6 +86,9 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
                 "pred_rr_peak_bpm": pred_rr_peak,
                 "target_rr_peak_bpm": target_rr_peak,
                 "rr_peak_abs_error": _abs_error_or_nan(pred_rr_peak, target_rr_peak),
+                "pred_rr_peak_band_bpm": pred_rr_peak_band,
+                "target_rr_peak_band_bpm": target_rr_peak_band,
+                "rr_peak_band_abs_error": _abs_error_or_nan(pred_rr_peak_band, target_rr_peak_band),
                 "envelope_corr": _corrcoef_or_nan(pred_env, target_env),
                 "relative_envelope_corr": rel_env["relative_envelope_corr"],
                 "relative_envelope_mae": rel_env["relative_envelope_mae"],

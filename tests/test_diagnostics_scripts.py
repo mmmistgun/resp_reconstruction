@@ -53,6 +53,7 @@ def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
                 "residual_quality_class": "near_zero_residual",
                 "rr_spec_abs_error": 1.5,
                 "rr_peak_abs_error": 2.5,
+                "rr_peak_band_abs_error": 0.6,
                 "envelope_corr": 0.25,
                 "relative_envelope_corr": 0.42,
                 "relative_envelope_mae": 0.18,
@@ -64,6 +65,8 @@ def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
                 "target_rr_spec_bpm": 16.0,
                 "pred_rr_peak_bpm": 19.0,
                 "target_rr_peak_bpm": 17.0,
+                "pred_rr_peak_band_bpm": 16.5,
+                "target_rr_peak_band_bpm": 16.0,
             }
         ]
     ).to_csv(run_dir / "metrics.csv", index=False)
@@ -73,6 +76,7 @@ def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
                 "dataset_row_id": 7,
                 "rr_spec_abs_error": 2.0,
                 "rr_peak_abs_error": 1.0,
+                "rr_peak_band_abs_error": 0.4,
                 "envelope_corr": 0.5,
                 "spectrum_similarity": 0.9,
             }
@@ -334,6 +338,7 @@ def test_summarize_runs_writes_one_row_per_run(tmp_path):
     assert frame["run_id"].tolist() == ["run_a", "run_b"]
     assert frame["val_loss"].tolist() == [1.0, 0.8]
     assert frame["model_rr_spec_abs_error_mean"].tolist() == [1.5, 1.5]
+    assert frame["model_rr_peak_band_abs_error_mean"].tolist() == [0.6, 0.6]
     assert frame["baseline_spectrum_similarity_mean"].tolist() == [0.9, 0.9]
 
 
@@ -367,11 +372,12 @@ def test_summarize_runs_marks_task_selection_metrics(tmp_path):
 
     frame = summarize_runs(root, output)
 
-    assert frame["selection_primary_metric"].tolist() == ["rr_peak_abs_error_mean"]
+    assert frame["selection_primary_metric"].tolist() == ["rr_peak_band_abs_error_mean"]
     assert frame["selection_secondary_metric"].tolist() == ["rr_spec_abs_error_mean"]
     assert frame["selection_waveform_role"].tolist() == ["diagnostic"]
-    assert frame["selection_task_rr_peak_abs_error_mean"].tolist() == [2.5]
+    assert frame["selection_task_rr_peak_band_abs_error_mean"].tolist() == [0.6]
     assert frame["selection_task_relative_envelope_mae_median"].tolist() == [0.18]
+    assert frame["selection_waveform_rr_peak_abs_error_mean"].tolist() == [2.5]
     assert frame["selection_waveform_band_limited_corr_mean"].tolist() == [0.62]
 
 
