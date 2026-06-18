@@ -1070,3 +1070,24 @@ smoke 结果：
 - 主指标 `rr_peak_band_abs_error_mean` 约 `0.547`，作为 M9 新结构首轮比较的同口径
   baseline。
 - raw peak 均值仍约 `4.6-4.8`，保留为局部尖峰/输出自由度诊断问题。
+
+### M9 正式首轮：`basis_decoder1d`
+
+`basis_decoder1d` 用少量低频 Fourier-like basis 直接重建整段 180s 输出，是本轮
+自由度最低的候选。
+
+| label | run | model | seed | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `basis_decoder_seed20260700` | `20260618_215117_832352` | `basis_decoder1d` | 20260700 | 1.349573 | 3.218592 / 2.670940 | 3.163994 | 0.268893 | 0.002997 | -0.003746 | 0.084924 | 3.199126 |
+| `basis_decoder_seed20260710` | `20260618_215110_312709` | `basis_decoder1d` | 20260710 | 1.351367 | 3.365857 / 2.778772 | 3.164567 | 0.265992 | 0.003646 | 0.001347 | 0.086415 | 3.349572 |
+
+阶段判断：
+
+- `basis_decoder1d` 不通过。两个 seed 的 `rr_peak_band_abs_error_mean` 均超过
+  `3.2`，远差于 Patch-Hann signed baseline 的约 `0.547`。
+- `relative_envelope_corr` 接近 `0`，`best_lag_corr` 也只有约 `0.085`，说明模型
+  基本没有恢复可用的呼吸节律/相对努力结构。
+- raw peak 低于 baseline，但这是过低自由度/近似弱输出带来的副作用，不能视为
+  抗毛刺成功。
+- 结论：单一全局 basis decoder 过强地压低自由度，不进入扩 seed；后续若复用
+  basis 思路，需要改成局部/分段 basis 或与多尺度 encoder 结合。
