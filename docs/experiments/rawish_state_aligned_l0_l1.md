@@ -1265,3 +1265,54 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
 - 已重新生成
   `runs/tho_research_v2_model_m9_lowfreq_structure_summary.csv`，当前只包含 3 行有效
   formal 证据：Patch-Hann 两个 seed 与 `multiscale_decomp_mixer1d_seed20260710`。
+
+### M9 direction-fix probe：提高 `signed_corr_weight`
+
+目的：验证 M9 首轮中 `multiscale_decomp_mixer1d` 与 `downsampled_ssm1d` 的方向失败，
+究竟是结构天然反向，还是 `signed_corr_weight=0.1` 对低自由度结构不够强。
+
+固定口径：
+
+- 数据与训练参数同 M9 formal。
+- `checkpoint_gate.metric=auto_direction`，`checkpoint_gate.max=0.5`。
+- 只测试 `multiscale_decomp_mixer1d` 与 `downsampled_ssm1d`。
+- 输出目录：`runs/tho_research_v2_model_m9_direction_fix/`。
+
+结果：
+
+| model | seed | `signed_corr_weight` | run | metrics | best val loss | min `val_signed_corr` | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean / median |
+|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `multiscale_decomp_mixer1d` | 20260700 | 0.15 | `20260619_002233_751520` | yes | 0.624541 | 0.201369 | 0.933992 / 0.185510 | 0.451999 | 0.211132 | 0.452247 | 0.800133 | 0.852742 | 1.323754 / 0.333362 |
+| `multiscale_decomp_mixer1d` | 20260700 | 0.20 | `20260619_000936_322874` | yes | 0.637581 | 0.200824 | 0.859055 / 0.182623 | 0.438250 | 0.211379 | 0.450604 | 0.801535 | 0.852442 | 2.171832 / 0.415690 |
+| `multiscale_decomp_mixer1d` | 20260710 | 0.20 | `20260619_001618_933963` | yes | 0.637323 | 0.204924 | 0.466144 / 0.172117 | 0.459446 | 0.215463 | 0.450001 | 0.797208 | 0.851231 | 1.987368 / 0.395299 |
+| `downsampled_ssm1d` | 20260710 | 0.15 | `20260619_002231_993204` | no | 0.859249 | 1.772933 | - | - | - | - | - | - | - |
+| `downsampled_ssm1d` | 20260700 | 0.20 | `20260619_000946_522782` | yes | 0.621465 | 0.189964 | 0.637134 / 0.196784 | 0.460592 | 0.203242 | 0.470012 | 0.812418 | 0.857446 | 1.949801 / 0.480769 |
+| `downsampled_ssm1d` | 20260710 | 0.20 | `20260619_001619_133684` | yes | 0.604559 | 0.190954 | 1.248217 / 0.209415 | 0.436531 | 0.201328 | 0.491670 | 0.811895 | 0.856985 | 2.467473 / 0.443262 |
+
+聚合判断：
+
+| model | `signed_corr_weight` | valid n | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `patch_mixer1d` baseline | 0.10 | 2 | 0.547356 | 0.441401 | 0.214224 | 0.454943 | 0.795625 | 0.845599 | 4.705204 |
+| `multiscale_decomp_mixer1d` | 0.20 | 2 | 0.662600 | 0.448848 | 0.213421 | 0.450303 | 0.799371 | 0.851837 | 2.079600 |
+| `downsampled_ssm1d` | 0.20 | 2 | 0.942675 | 0.448562 | 0.202285 | 0.480841 | 0.812156 | 0.857215 | 2.208637 |
+
+阶段结论：
+
+- 提高到 `signed_corr_weight=0.2` 可以把两个结构都拉回正向盆地，
+  `band_limited_corr` 与 `best_lag_corr` 均略高于 Patch-Hann baseline。
+- 但 `0.2` 不是直接胜出：`multiscale_decomp_mixer1d` 的带通 RR 均值为
+  `0.662600`，差于 Patch-Hann baseline 的 `0.547356`；`downsampled_ssm1d`
+  的 RR 代价更高，均值 `0.942675`。
+- `0.15` 对 SSM 不够，困难 seed 全程未通过 gate；对 multiscale 能过 gate，
+  但 guard seed 的 RR 均值 `0.933992`，比 `0.2` 更差。
+- 两个结构都显著降低 raw peak，说明低自由度结构确实能控制局部尖峰；
+  但当前 loss/selection 下，这个收益会以 RR 代价换来。
+
+下一步建议：
+
+- 不继续单纯加大或下探 `signed_corr_weight`。
+- 优先保留 `multiscale_decomp_mixer1d` 作为结构候选，但需要新的 checkpoint selection
+  或轻量 anti-spike 策略，而不是继续只调方向权重。
+- `downsampled_ssm1d` 暂不扩 seed；它证明 state-style decoder 有降尖峰价值，但当前
+  RR 代价太高。
