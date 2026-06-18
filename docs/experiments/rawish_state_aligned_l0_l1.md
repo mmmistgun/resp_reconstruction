@@ -1052,3 +1052,21 @@ smoke 结果：
   不解释为科研结论。
 - 可以进入 M9 首轮正式训练：Patch-Hann signed baseline + 5 个新模型，
   每个模型先跑困难 seed `20260710` 与 guard seed `20260700`。
+
+### M9 正式首轮：Patch-Hann signed baseline
+
+固定 `patch_mixer1d + overlap_window=hann + output_smoothing_kernel=1`，
+使用 loss 收口组合 `signed_corr_weight=0.1`，先跑 M9 同口径 baseline。
+
+| label | run | model | seed | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `baseline_patch_hann_seed20260700` | `20260618_214430_858665` | `patch_mixer1d` | 20260700 | 0.635817 | 0.547664 / 0.194709 | 0.436531 | 0.213462 | 0.457882 | 0.798281 | 0.846291 | 4.619530 |
+| `baseline_patch_hann_seed20260710` | `20260618_214431_129136` | `patch_mixer1d` | 20260710 | 0.640246 | 0.547049 / 0.198383 | 0.446270 | 0.214987 | 0.452004 | 0.792969 | 0.844906 | 4.790879 |
+
+阶段判断：
+
+- 两个 baseline seed 均通过方向护栏，`band_limited_corr` 约 `0.79`，
+  `best_lag_corr` 约 `0.845`。
+- 主指标 `rr_peak_band_abs_error_mean` 约 `0.547`，作为 M9 新结构首轮比较的同口径
+  baseline。
+- raw peak 均值仍约 `4.6-4.8`，保留为局部尖峰/输出自由度诊断问题。
