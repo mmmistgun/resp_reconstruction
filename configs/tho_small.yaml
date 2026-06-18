@@ -33,6 +33,13 @@ loss:
   envelope_weight: 1.0
   spectrum_weight: 0.2
   smooth_weight: 0.01
+  band_waveform_weight: 0.0
+  curvature_weight: 0.0
+  rhythm_weight: 0.0
+  rhythm_min_period_sec: 2.0
+  rhythm_max_period_sec: 20.0
+  rhythm_step_sec: 0.25
+  rhythm_temperature: 0.08
   envelope_window_sec: 2.0
   spectrum_low_hz: 0.05
   spectrum_high_hz: 0.7

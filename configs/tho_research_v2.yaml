@@ -38,12 +38,19 @@ loss:
   high_freq_weight: 0.2
   relative_envelope_weight: 0.03
   phase_alignment_weight: 0.005
+  band_waveform_weight: 0.0
+  curvature_weight: 0.0
+  rhythm_weight: 0.0
   phase_alignment_zero_weight: 0.5
   phase_alignment_lag_weight: 0.5
   phase_alignment_lag_penalty_weight: 0.1
   phase_alignment_max_sec: 0.5
   phase_alignment_step_sec: 0.1
   phase_alignment_temperature: 0.05
+  rhythm_min_period_sec: 2.0
+  rhythm_max_period_sec: 20.0
+  rhythm_step_sec: 0.25
+  rhythm_temperature: 0.08
   envelope_window_sec: 2.0
   spectrum_low_hz: 0.05
   spectrum_high_hz: 0.7
