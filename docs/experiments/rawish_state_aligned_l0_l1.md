@@ -440,3 +440,37 @@ RR peak worst 前 8 个窗口的波形诊断：
   peak 诊断偏高；不要继续把 `periodic_unet1d_tiny` 当作已解决低频相位方向的模型。
 - 若继续 PeriodicUNet，应先引入显式极性/相位方向稳定机制或输出低自由度约束，
   否则多 seed 不稳定会让模型选择结论不可复现。
+
+## M3 Patch-Hann 抗毛刺小网格
+
+执行计划：`docs/superpowers/plans/2026-06-18-patch-hann-m3-antispike.md`。
+
+本轮只沿 `patch_mixer1d + overlap_window=hann` 主线推进，目标是降低普通局部毛刺
+和 raw peak 偏高，同时守住带通 RR 和正低频方向。
+
+本地输出：
+
+- `runs/tho_research_v2_patch_hann_m3_antispike/`
+- `runs/tho_research_v2_patch_hann_m3_antispike_summary.csv`
+- 临时对照表：`/tmp/m3_patch_hann_table.csv`
+
+核心结果：
+
+| label | run | best epoch | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean / median | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `M3_smoothing5` | `20260618_140038_159638` | 11 | 0.616997 | 0.460197 / 0.185325 | 0.451426 | 0.215232 | 0.453990 | 0.786820 | 0.839476 | 3.247666 / 0.545622 | 带通 RR 最好，raw peak 明显低于 M2。 |
+| `M3_smoothing11` | `20260618_140919_387087` | 15 | 0.616586 | 0.468274 / 0.183150 | 0.444552 | 0.216352 | 0.453222 | 0.790242 | 0.842341 | 3.214445 / 0.569872 | raw peak 均值最低，频谱 RR 和低频相关略优于 smoothing5。 |
+| `M2_patch_hann_seed20260620` | `20260618_132345_623904` | 11 | 0.619316 | 0.486101 / 0.188186 | 0.436531 | 0.216116 | 0.457626 | 0.794931 | 0.846602 | 3.853268 / 0.685358 | M2 对照。 |
+| `M3_stride64` | `20260618_140039_545507` | 11 | 0.620982 | 0.538696 / 0.176835 | 0.441687 | 0.218182 | 0.449991 | 0.787429 | 0.842882 | 4.157955 / 0.799066 | 更大 overlap 没有带来抗毛刺收益，raw peak 反而更差。 |
+
+阶段判断：
+
+- `patch_stride=64` 不建议继续。它没有改善 raw peak，且带通 RR 均值从 M2 的
+  `0.486101` 恶化到 `0.538696`。
+- 轻量输出平滑有效：`smoothing5` 与 `smoothing11` 都保持正低频方向，并把 raw
+  `rr_peak_abs_error` 均值从 `3.853268` 降到约 `3.2`。
+- `smoothing5` 更偏任务主指标，`rr_peak_band_abs_error_mean=0.460197`；`smoothing11`
+  更偏抗毛刺和频谱护栏，raw peak 均值最低且 `rr_spec_abs_error_mean=0.444552`。
+- 这一轮支持把 Patch-Hann 的普通局部毛刺问题先用轻量输出平滑处理；但
+  `relative_envelope_corr` 和 `band_limited_corr` 较 M2 略降，下一步不应继续加大
+  平滑核，而应对 `smoothing5/11` 做多 seed 复核。
