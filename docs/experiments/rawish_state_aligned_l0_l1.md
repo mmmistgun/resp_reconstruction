@@ -1112,3 +1112,23 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
   但 `band_limited_corr=-0.778031`，属于方向失败；这一行不能作为胜出证据。
 - 结论：`multiscale_decomp_mixer1d` 是有潜力但方向不稳定的候选。下一步若继续，应优先
   研究方向稳定机制或 checkpoint 选择口径，而不是只看 RR 数字扩 seed。
+
+### M9 正式首轮：`timesnet_lite1d`
+
+`timesnet_lite1d` 从低通输入中估计主要周期，再用简化 TimesBlock 做周期折叠建模；
+它用于测试“显式周期 inductive bias”是否能改善呼吸节律恢复。
+
+| label | run | model | seed | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `timesnet_lite1d_seed20260700` | `20260618_220553_387526` | `timesnet_lite1d` | 20260700 | 1.072838 | 1.629966 / 0.366087 | 1.893355 | 0.334103 | 0.155524 | 0.246110 | 0.432915 | 4.000236 |
+| `timesnet_lite1d_seed20260710` | `20260618_220545_156722` | `timesnet_lite1d` | 20260710 | 1.070854 | 1.589163 / 0.384504 | 1.921426 | 0.345660 | 0.153686 | 0.245518 | 0.430302 | 3.753427 |
+
+阶段判断：
+
+- `timesnet_lite1d` 不通过。两个 seed 的 `rr_peak_band_abs_error_mean` 均约
+  `1.6`，明显差于 Patch-Hann signed baseline 的约 `0.547`。
+- `band_limited_corr` 只有约 `0.246`，`best_lag_corr` 约 `0.43`，说明当前简化
+  TimesBlock 没有学到足够稳定的低频相位/方向结构。
+- raw `rr_peak_abs_error_mean` 仍在 `3.75-4.00`，也没有解决普通局部峰值问题。
+- 结论：当前轻量 TimesNet 版本不进入扩 seed。若后续重启该方向，应先改周期选择与
+  周期 folding 的表达能力，而不是直接增加训练轮数。
