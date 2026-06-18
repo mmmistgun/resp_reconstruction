@@ -588,3 +588,64 @@ baseline 自身稳定性。
   Patch-Hann 配置做多 seed 方向稳定性统计，或加入显式 signed low-frequency
   direction 选择机制。只有在方向稳定后，再设计低自由度、带限或 dual-stream
   decoder 才更有解释价值。
+
+## Patch-Hann 多 seed 方向稳定性诊断
+
+本轮固定 Patch-Hann baseline 口径，只改变 `training.seed`，用于诊断低频方向
+翻转是否来自训练随机性。新增 seed 为 `20260670`、`20260690`、`20260700`、
+`20260710`，输出到
+`runs/tho_research_v2_patch_hann_direction_multiseed/`。原计划还尝试启动
+`20260680` 与 `20260720`，但提权审批器拒绝了这两个并行请求，未产生 run。
+
+合并分析包含 M2/M4/M5 与本轮新增的 9 个可比 Patch-Hann baseline。筛选条件：
+
+- `model.name=patch_mixer1d`
+- `model.overlap_window=hann`
+- `model.output_smoothing_kernel=1`
+- `model.patch_stride=128`
+- full data、N3 loss、固定数据 seed。
+
+本地输出：
+
+- `runs/tho_research_v2_patch_hann_direction_multiseed_summary.csv`
+- 临时合并表：`/tmp/patch_hann_direction_multiseed_combined.csv`
+
+核心结果：
+
+| seed | run | epochs | best epoch | best val loss | val phase alignment | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | direction | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|
+| 20260620 | `20260618_132345_623904` | 19 | 11 | 0.619316 | 0.229988 | 0.486101 | 0.436531 | 0.216116 | 0.457626 | 0.794931 | positive | 0.846602 | 3.853268 |
+| 20260630 | `20260618_142601_305525` | 15 | 14 | 0.625545 | 0.233192 | 0.442357 | 0.429657 | 0.222684 | 0.452918 | 0.789606 | positive | 0.843318 | 4.602143 |
+| 20260640 | `20260618_143157_819337` | 18 | 10 | 0.626740 | 0.232929 | 0.418410 | 0.453145 | 0.220565 | 0.449760 | 0.791463 | positive | 0.843165 | 3.676039 |
+| 20260650 | `20260618_150349_945127` | 21 | 13 | 0.627256 | 1.672178 | 0.431143 | 0.468613 | 0.215636 | 0.453012 | -0.791998 | negative | 0.319607 | 2.147589 |
+| 20260660 | `20260618_151631_769707` | 20 | 12 | 0.627622 | 1.673372 | 0.445080 | 0.431376 | 0.213248 | 0.456756 | -0.796528 | negative | 0.329242 | 2.616823 |
+| 20260670 | `20260618_152809_698210` | 20 | 12 | 0.620683 | 0.228390 | 0.594224 | 0.445697 | 0.216391 | 0.454621 | 0.796705 | positive | 0.845614 | 4.346215 |
+| 20260690 | `20260618_152813_981274` | 26 | 18 | 0.626557 | 1.673147 | 0.444933 | 0.437104 | 0.213617 | 0.454105 | -0.796184 | negative | 0.326488 | 2.520622 |
+| 20260700 | `20260618_152811_169836` | 19 | 11 | 0.620598 | 0.230589 | 0.435927 | 0.443979 | 0.215978 | 0.453891 | 0.794646 | positive | 0.844050 | 4.289256 |
+| 20260710 | `20260618_152815_350433` | 26 | 22 | 0.628415 | 1.670164 | 0.458545 | 0.444552 | 0.215785 | 0.451463 | -0.793236 | negative | 0.327301 | 2.787340 |
+
+按方向聚合：
+
+| direction | n | `rr_peak_band_abs_error` mean / std | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | val phase alignment mean | best val loss mean | raw `rr_peak_abs_error` mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| positive | 5 | 0.475404 / 0.070943 | 0.441802 | 0.218347 | 0.453763 | 0.793470 | 0.231018 | 0.622576 | 4.153384 |
+| negative | 4 | 0.444925 / 0.011188 | 0.445411 | 0.214572 | 0.453834 | -0.794486 | 1.672215 | 0.627462 | 2.518093 |
+
+诊断结论：
+
+- Patch-Hann 的低频方向存在两个稳定盆地。9 个 seed 中，5 个进入正向盆地，
+  4 个进入反向盆地；方向不是单个 seed 的偶发结果。
+- `val_phase_alignment` 是近乎完全分离的方向诊断特征：正向 seed 在 best epoch
+  约 `0.23`，反向 seed 约 `1.67`。当前 `phase_alignment_weight=0.005` 能让
+  正向 seed 的 `best_val_loss` 平均更低，但权重太弱，不能保证训练从反向盆地
+  翻到正向盆地。
+- 方向正确与当前主任务指标并不完全一致。反向 seed 的
+  `rr_peak_band_abs_error_mean` 平均为 `0.444925`，略优于正向 seed 的
+  `0.475404`；raw `rr_peak_abs_error` 也明显更低。这说明模型可能利用反向形态
+  得到更稳定的峰间距，而不是恢复更合理的低频方向。
+- `best_lag_corr` 在正向 seed 约 `0.84`，反向 seed 约 `0.32`，说明这不是简单
+  小范围 lag 能解释的问题，而是低频极性/相位盆地问题。
+- 下一步不应继续单纯扩大模型复杂度。更合理的 M6 是把 signed low-frequency
+  direction 从诊断项升级为训练约束或选择约束，例如加大/分阶段使用
+  `phase_alignment_weight`、加入 early direction gate，或把正向方向作为模型选择
+  的硬护栏后再比较 RR 指标。
