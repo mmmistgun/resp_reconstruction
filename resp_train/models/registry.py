@@ -4,6 +4,13 @@ from typing import Any, Callable
 
 from torch import nn
 
+from resp_train.models.lowfreq import (
+    BasisDecoder1D,
+    DownsampledSSM1D,
+    FrequencyBottleneck1D,
+    MultiScaleDecompMixer1D,
+    TimesNetLite1D,
+)
 from resp_train.models.timeseries import DLinearWaveform, FIRFrontendPatchMixer1D, PatchMixer1D, PeriodicUNet1DTiny
 from resp_train.models.unet1d import UNet1DTiny, UNet1DTinyNoSkip1, UNet1DTinyNoSkipAll
 
@@ -64,6 +71,47 @@ _REGISTRY: dict[str, ModelFactory] = {
         out_channels=int(cfg.model.out_channels),
         base_channels=int(cfg.model.base_channels),
         moving_avg=int(cfg.model.get("moving_avg", 101)),
+    ),
+    "basis_decoder1d": lambda cfg: BasisDecoder1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        basis_count=int(cfg.model.get("basis_count", 96)),
+        encoder_stride=int(cfg.model.get("encoder_stride", 20)),
+        duration_samples=int(cfg.window.get("duration_samples", 18000)),
+    ),
+    "multiscale_decomp_mixer1d": lambda cfg: MultiScaleDecompMixer1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        downsample_factors=list(cfg.model.get("downsample_factors", [1, 4, 16])),
+        mixer_layers=int(cfg.model.get("mixer_layers", 2)),
+    ),
+    "timesnet_lite1d": lambda cfg: TimesNetLite1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        period_top_k=int(cfg.model.get("period_top_k", 3)),
+        period_min_sec=float(cfg.model.get("period_min_sec", 2.0)),
+        period_max_sec=float(cfg.model.get("period_max_sec", 20.0)),
+        sample_rate=float(cfg.window.get("target_fs", 100)),
+        lowpass_kernel=int(cfg.model.get("lowpass_kernel", 401)),
+    ),
+    "frequency_bottleneck1d": lambda cfg: FrequencyBottleneck1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        freq_bins=int(cfg.model.get("freq_bins", 128)),
+        max_freq_hz=float(cfg.model.get("max_freq_hz", 0.7)),
+        sample_rate=float(cfg.window.get("target_fs", 100)),
+        duration_samples=int(cfg.window.get("duration_samples", 18000)),
+    ),
+    "downsampled_ssm1d": lambda cfg: DownsampledSSM1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        latent_stride=int(cfg.model.get("latent_stride", 20)),
+        state_layers=int(cfg.model.get("state_layers", 2)),
     ),
 }
 

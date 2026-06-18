@@ -35,6 +35,20 @@ def test_fir_frontend_patch_mixer_is_registered():
     assert "patch_mixer1d_fir_frontend" in list_models()
 
 
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "basis_decoder1d",
+        "multiscale_decomp_mixer1d",
+        "timesnet_lite1d",
+        "frequency_bottleneck1d",
+        "downsampled_ssm1d",
+    ],
+)
+def test_lowfreq_structure_models_are_registered(model_name):
+    assert model_name in list_models()
+
+
 def test_build_unet1d_tiny_preserves_waveform_shape():
     cfg = OmegaConf.create(
         {
@@ -168,6 +182,37 @@ def test_build_fir_frontend_patch_mixer_preserves_waveform_shape():
 
     assert y.shape == (2, 1, 1025)
     assert model.fir.weight.requires_grad
+
+
+@pytest.mark.parametrize(
+    "model_name,extra",
+    [
+        ("basis_decoder1d", {"basis_count": 64, "encoder_stride": 20}),
+        ("multiscale_decomp_mixer1d", {"downsample_factors": [1, 4, 16], "mixer_layers": 2}),
+        ("timesnet_lite1d", {"period_top_k": 3, "period_min_sec": 2.0, "period_max_sec": 20.0}),
+        ("frequency_bottleneck1d", {"max_freq_hz": 0.7, "freq_bins": 128}),
+        ("downsampled_ssm1d", {"latent_stride": 20, "state_layers": 2}),
+    ],
+)
+def test_lowfreq_structure_models_preserve_waveform_shape(model_name, extra):
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 1800},
+            "model": {
+                "name": model_name,
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                **extra,
+            },
+        }
+    )
+    model = build_model(cfg)
+
+    y = model(torch.randn(2, 1, 1800))
+
+    assert y.shape == (2, 1, 1800)
+    assert torch.isfinite(y).all()
 
 
 def test_patch_mixer_hann_overlap_add_reduces_patch_boundary_step():
