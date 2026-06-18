@@ -474,3 +474,59 @@ RR peak worst 前 8 个窗口的波形诊断：
 - 这一轮支持把 Patch-Hann 的普通局部毛刺问题先用轻量输出平滑处理；但
   `relative_envelope_corr` 和 `band_limited_corr` 较 M2 略降，下一步不应继续加大
   平滑核，而应对 `smoothing5/11` 做多 seed 复核。
+
+## M4 Patch-Hann 输出平滑多 seed 复核
+
+执行计划：`docs/superpowers/plans/2026-06-18-patch-hann-m4-smoothing-multiseed.md`。
+
+M4 修正了 M3 的一个对照缺口：如果要判断输出平滑是否真的优于未平滑
+Patch-Hann，必须在同一训练 seed 下加入 `output_smoothing_kernel=1` baseline。
+本轮因此固定所有数据、loss、模型和训练参数，只比较 smoothing kernel：
+
+- `output_smoothing_kernel=1`：同 seed 未平滑 baseline。
+- `output_smoothing_kernel=5`：轻量输出平滑。
+- `output_smoothing_kernel=11`：更强抗毛刺输出平滑。
+
+本地输出：
+
+- `runs/tho_research_v2_patch_hann_m4_smoothing_multiseed/`
+- `runs/tho_research_v2_patch_hann_m4_smoothing_multiseed_summary.csv`
+- 临时明细表：`/tmp/m4_patch_hann_table.csv`
+- 临时聚合表：`/tmp/m4_patch_hann_agg.csv`
+
+核心结果：
+
+| label | run | seed | smoothing | best epoch | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean / median | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `M4_baseline_seed20260630` | `20260618_142601_305525` | 20260630 | 1 | 7 | 0.625545 | 0.442357 / 0.183446 | 0.429657 | 0.222684 | 0.452918 | 0.789606 | 0.843318 | 4.602143 / 0.912935 | 同 seed 主指标最好，但 raw peak 和相对包络 MAE 最差。 |
+| `M4_smoothing5_seed20260630` | `20260618_142242_572035` | 20260630 | 5 | 12 | 0.618640 | 0.451466 / 0.183150 | 0.429084 | 0.214174 | 0.450427 | 0.792442 | 0.844588 | 3.811119 / 0.763775 | 主指标轻微劣于 baseline，但 raw peak 与相对包络 MAE 改善。 |
+| `M4_smoothing11_seed20260630` | `20260618_142243_089784` | 20260630 | 11 | 12 | 0.613268 | 0.475326 / 0.187915 | 0.429657 | 0.214901 | 0.452390 | 0.793863 | 0.845206 | 3.354320 / 0.546693 | 抗毛刺最强，但主指标明显劣于 baseline。 |
+| `M4_baseline_seed20260640` | `20260618_143157_819337` | 20260640 | 1 | 10 | 0.626740 | 0.418410 / 0.170943 | 0.453145 | 0.220565 | 0.449760 | 0.791463 | 0.843165 | 3.676039 / 0.652300 | 第二个 seed 仍是主指标最好。 |
+| `M4_smoothing5_seed20260640` | `20260618_143155_840988` | 20260640 | 5 | 10 | 0.617850 | 0.438323 / 0.172840 | 0.457155 | 0.217167 | 0.449998 | 0.794162 | 0.843798 | 3.540723 / 0.626532 | raw peak 略改善，但主指标仍劣于 baseline。 |
+| `M4_smoothing11_seed20260640` | `20260618_143155_842195` | 20260640 | 11 | 10 | 0.614522 | 0.467586 / 0.178564 | 0.449708 | 0.216640 | 0.450400 | 0.795315 | 0.844187 | 3.108679 / 0.555556 | raw peak 最低，主指标仍明显劣于 baseline。 |
+
+M4 两个 seed 聚合：
+
+| smoothing | n | `rr_peak_band_abs_error` mean / std | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean / median |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 2 | 0.430384 / 0.016933 | 0.441401 | 0.221624 | 0.451339 | 0.790534 | 0.843242 | 4.139091 / 0.782617 |
+| 5 | 2 | 0.444894 / 0.009293 | 0.443120 | 0.215670 | 0.450212 | 0.793302 | 0.844193 | 3.675921 / 0.695154 |
+| 11 | 2 | 0.471456 / 0.005473 | 0.439682 | 0.215771 | 0.451395 | 0.794589 | 0.844696 | 3.231499 / 0.551124 |
+
+阶段判断：
+
+- M4 不支持把简单输出平滑设为默认主线。两个新 seed 中，未平滑
+  `output_smoothing_kernel=1` 都拿到最低 `rr_peak_band_abs_error_mean`，两 seed
+  平均为 `0.430384`；`smoothing5` 与 `smoothing11` 分别恶化到 `0.444894`
+  和 `0.471456`。
+- M3 中 `smoothing5/11` 相对 M2 的主指标收益，不能再解释为平滑机制本身稳定有效；
+  更可能混入了训练 seed 或缺少同 seed baseline 的影响。
+- 输出平滑仍有诊断价值：kernel 越大，raw `rr_peak_abs_error` 越低，且
+  `band_limited_corr` / `best_lag_corr` 略升。这说明它确实在抑制局部毛刺，
+  但代价是损伤带通 peak RR 主任务。
+- `smoothing11` 可以保留为抗毛刺诊断候选；`smoothing5` 可以作为折中备选；
+  但如果按当前正式选模口径，下一步不应继续放大 moving-average 平滑。
+- 下一步应进入更明确的模型输出结构设计：让模型天然输出低自由度、带限、连续的
+  呼吸轨迹，而不是在输出端事后移动平均。候选方向包括带限 decoder、低频 basis
+  decoder、frequency bottleneck 或显式平滑/节律分支，并继续用
+  `rr_peak_band_abs_error_mean` 做主护栏。
