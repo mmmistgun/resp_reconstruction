@@ -904,3 +904,63 @@ guard seed。合并 M7 single-seed 的 `20260650` 后，共 7 个可比 seed。
 - 方向约束已基本回答“能否替代 phase loss”；下一步重点不是继续发明新 loss，
   而是降低 `0.1` 带来的 RR/raw peak 代价，例如 warm-up/curriculum、checkpoint
   selection gate，或后续模型结构里降低局部尖峰自由度。
+
+## M8：signed cosine curriculum 与 checkpoint direction gate
+
+基于 M7c 的结论，直接从低权重 ramp-up 风险较高，因为 `0.03/0.05/0.075`
+在困难 seed 上会先进入反向盆地且难以自行翻出。因此 M8 采用反向的课程策略：
+**先用 `0.1` 做 direction bootstrap，再线性衰减到较低权重**。同时启用
+checkpoint direction gate：
+
+- `training.checkpoint_gate.metric=val_signed_cosine`
+- `training.checkpoint_gate.max=0.5`
+
+该 gate 的含义是：只有验证集 signed direction 已经进入正向区间的 epoch 才允许
+成为最终 checkpoint；如果训练全程没有通过 gate，则回退到普通 best val loss
+checkpoint，避免没有 checkpoint 可评。
+
+本地输出：
+
+- `runs/tho_research_v2_patch_hann_m8_signed_cosine_curriculum/`
+- `runs/tho_research_v2_patch_hann_m8_signed_cosine_curriculum_summary.csv`
+- 临时对照表：`/tmp/m8_curriculum_compare.csv`
+
+核心结果：
+
+| seed | label | run | best epoch | best val loss | gate passed | val signed cosine | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---:|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| 20260700 | `baseline_phase0005` | `20260618_152811_169836` | 11 | 0.620598 | none | NaN | 0.435927 | 0.443979 | 0.215978 | 0.794646 | 0.844050 | 4.289256 |
+| 20260700 | `constant_0.1` | `20260618_195800_340726` | 14 | 0.635835 | none | 0.202372 | 0.543405 | 0.436531 | 0.213555 | 0.798198 | 0.846204 | 4.616028 |
+| 20260700 | `linear_0.1_to_0.05_e8` | `20260618_203725_395386` | 14 | 0.626382 | True | 0.203238 | 0.543607 | 0.435959 | 0.213965 | 0.797349 | 0.845676 | 4.566183 |
+| 20260710 | `baseline_phase0005` | `20260618_152815_350433` | 22 | 0.628415 | none | NaN | 0.458545 | 0.444552 | 0.215785 | -0.793236 | 0.327301 | 2.787340 |
+| 20260710 | `constant_0.03` | `20260618_200510_696319` | 22 | 0.674709 | none | 1.790830 | 0.449470 | 0.454863 | 0.217223 | -0.792529 | 0.326330 | 2.731036 |
+| 20260710 | `constant_0.05` | `20260618_201121_835893` | 17 | 0.711716 | none | 1.790779 | 0.446561 | 0.447989 | 0.217680 | -0.792655 | 0.322688 | 2.730329 |
+| 20260710 | `constant_0.075` | `20260618_201720_525927` | 18 | 0.758007 | none | 1.787141 | 0.442052 | 0.460592 | 0.217878 | -0.790711 | 0.325890 | 3.071408 |
+| 20260710 | `constant_0.1` | `20260618_195217_741698` | 15 | 0.640375 | none | 0.207371 | 0.543998 | 0.451426 | 0.215190 | 0.792835 | 0.844445 | 4.760163 |
+| 20260710 | `linear_0.1_to_0.05_e8` | `20260618_203118_513376` | 15 | 0.630009 | True | 0.207636 | 0.539610 | 0.452572 | 0.215247 | 0.792714 | 0.844334 | 4.775488 |
+| 20260710 | `linear_0.1_to_0.075_e8` | `20260618_203115_098423` | 15 | 0.635060 | True | 0.207153 | 0.549920 | 0.449708 | 0.215049 | 0.793337 | 0.844964 | 4.722806 |
+
+阶段判断：
+
+- Direction bootstrap 成功：`0.1 -> 0.05` 和 `0.1 -> 0.075` 在困难 seed
+  `20260710` 上都保持正向，说明早期强 signed cosine 可以把模型推入正确 basin，
+  后续降权不会立刻掉回反向。
+- 但 curriculum 没有实质降低 RR 代价。对 `20260710`，`0.1 -> 0.05`
+  仅把 `rr_peak_band_abs_error` 从常量 `0.1` 的 `0.543998` 小幅降到
+  `0.539610`；`0.1 -> 0.075` 反而到 `0.549920`。对正向 guard seed
+  `20260700`，`0.1 -> 0.05` 的 `rr_peak_band_abs_error=0.543607`，几乎
+  等同于常量 `0.1` 的 `0.543405`。
+- checkpoint direction gate 在本轮主要是安全护栏，不是独立解法。低权重失败
+  run 的 best epoch `val_signed_cosine≈1.79`，没有可选的正向 checkpoint；
+  curriculum run 的 best epoch 本身已经通过 gate，因此 gate 没有改变最终
+  checkpoint，只保证不会保存反向 epoch。
+
+结论：
+
+- `signed_cosine_weight=0.1` 仍是当前最稳定方向约束；课程式降权可以保方向，
+  但不能明显缓解 `rr_peak_band_abs_error` 和 raw peak 代价。
+- checkpoint direction gate 应保留为后续训练的保护机制，尤其用于防止“验证 loss
+  选中反向 checkpoint”；但它不能替代训练目标本身。
+- 下一步不建议继续在 warm-up/curriculum 上做大网格。更有价值的方向是降低正向
+  解中的局部峰值自由度，例如模型输出带限/低自由度 decoder、轻量 anti-spike
+  正则，或把 checkpoint 选择从 `val_loss` 转向 `direction gate + task RR`。
