@@ -1132,3 +1132,24 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
 - raw `rr_peak_abs_error_mean` 仍在 `3.75-4.00`，也没有解决普通局部峰值问题。
 - 结论：当前轻量 TimesNet 版本不进入扩 seed。若后续重启该方向，应先改周期选择与
   周期 folding 的表达能力，而不是直接增加训练轮数。
+
+### M9 正式首轮：`frequency_bottleneck1d`
+
+`frequency_bottleneck1d` 将输出限制在低频频域系数上，再重建整段波形；它用于测试
+“频域瓶颈”能否直接抑制非呼吸高频结构。
+
+| label | run | model | seed | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `frequency_bottleneck1d_seed20260700` | `20260618_221401_396344` | `frequency_bottleneck1d` | 20260700 | 1.292045 | 2.935836 / 2.791221 | 3.164567 | 0.244966 | 0.006218 | 0.001196 | 0.104741 | 2.971419 |
+| `frequency_bottleneck1d_seed20260710` | `20260618_221400_071143` | `frequency_bottleneck1d` | 20260710 | 1.293896 | 3.256301 / 3.161118 | 3.709372 | 0.245573 | 0.005933 | -0.002514 | 0.102683 | 3.141821 |
+
+阶段判断：
+
+- `frequency_bottleneck1d` 不通过。两个 seed 的 `rr_peak_band_abs_error_mean`
+  分别约 `2.94` 与 `3.26`，远差于 Patch-Hann signed baseline。
+- `relative_envelope_corr` 与 `band_limited_corr` 都接近 `0`，说明该结构虽然把
+  high-frequency penalty 压到近似 `0`，但同时也压掉了有效呼吸节律和相对努力变化。
+- raw peak 误差低于 Patch-Hann，但这是输出自由度过低/弱输出导致的副作用，不能作为
+  任务收益。
+- 结论：当前直接频域 bottleneck 过硬，不进入扩 seed。若重启 M4 方向，需要改为
+  “time encoder + 可学习低频 mask / 局部频域块”，而不是全局低频系数直接解码。
