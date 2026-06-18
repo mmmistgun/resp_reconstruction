@@ -18,12 +18,17 @@ def _cfg():
                 "phase_alignment_weight": 0.0,
                 "band_waveform_weight": 0.0,
                 "curvature_weight": 0.0,
+                "rhythm_weight": 0.0,
                 "phase_alignment_zero_weight": 0.5,
                 "phase_alignment_lag_weight": 0.5,
                 "phase_alignment_lag_penalty_weight": 0.1,
                 "phase_alignment_max_sec": 0.5,
                 "phase_alignment_step_sec": 0.1,
                 "phase_alignment_temperature": 0.05,
+                "rhythm_min_period_sec": 2.0,
+                "rhythm_max_period_sec": 20.0,
+                "rhythm_step_sec": 0.25,
+                "rhythm_temperature": 0.08,
                 "envelope_window_sec": 2.0,
                 "spectrum_low_hz": 0.05,
                 "spectrum_high_hz": 0.7,
@@ -50,6 +55,7 @@ def test_weak_sync_loss_returns_current_components_and_scalar():
         "phase_alignment",
         "band_waveform",
         "curvature",
+        "rhythm",
     }
     total.backward()
     assert pred.grad is not None
@@ -80,6 +86,7 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
     cfg.loss.phase_alignment_weight = 0.0
     cfg.loss.band_waveform_weight = 0.0
     cfg.loss.curvature_weight = 0.0
+    cfg.loss.rhythm_weight = 0.0
     loss_fn = WeakSyncLoss(cfg)
     pred = torch.randn(2, 1, 1800)
     target = torch.randn(2, 1, 1800)
@@ -94,6 +101,7 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
         + cfg.loss.phase_alignment_weight * parts["phase_alignment"]
         + cfg.loss.band_waveform_weight * parts["band_waveform"]
         + cfg.loss.curvature_weight * parts["curvature"]
+        + cfg.loss.rhythm_weight * parts["rhythm"]
     )
 
     assert torch.allclose(total, expected)
@@ -214,6 +222,41 @@ def test_curvature_loss_penalizes_local_spike():
     assert spiky_parts["curvature"] > smooth_parts["curvature"] * 10
 
 
+def test_rhythm_loss_penalizes_wrong_period_but_tolerates_phase_shift():
+    cfg = _cfg()
+    cfg.loss.envelope_weight = 0.0
+    cfg.loss.spectrum_weight = 0.0
+    cfg.loss.smooth_weight = 0.0
+    cfg.loss.rhythm_weight = 1.0
+    loss_fn = WeakSyncLoss(cfg)
+    fs = float(cfg.window.target_fs)
+    time = torch.arange(0, 80, 1 / fs)
+    target = torch.sin(2 * torch.pi * 0.25 * time).reshape(1, 1, -1)
+    shifted_same_period = torch.sin(2 * torch.pi * 0.25 * time + torch.pi / 2).reshape(1, 1, -1)
+    wrong_period = torch.sin(2 * torch.pi * 0.42 * time).reshape(1, 1, -1)
+
+    _, shifted_parts = loss_fn(shifted_same_period, target)
+    _, wrong_parts = loss_fn(wrong_period, target)
+
+    assert shifted_parts["rhythm"] < 0.05
+    assert wrong_parts["rhythm"] > shifted_parts["rhythm"] + 0.5
+
+
+def test_rhythm_loss_is_differentiable_when_enabled():
+    cfg = _cfg()
+    cfg.loss.rhythm_weight = 0.02
+    loss_fn = WeakSyncLoss(cfg)
+    pred = torch.randn(2, 1, 1800, requires_grad=True)
+    target = torch.randn(2, 1, 1800)
+
+    total, parts = loss_fn(pred, target)
+    total.backward()
+
+    assert parts["rhythm"] >= 0
+    assert pred.grad is not None
+    assert torch.isfinite(pred.grad).all()
+
+
 def test_weak_sync_loss_penalizes_prediction_high_frequency_energy():
     cfg = _cfg()
     cfg.loss.high_freq_weight = 1.0
@@ -259,6 +302,33 @@ def test_weak_sync_loss_rejects_negative_waveform_regularizer_weights():
     cfg.loss.curvature_weight = -0.1
 
     with pytest.raises(ValueError, match="curvature_weight 必须非负"):
+        WeakSyncLoss(cfg)
+
+
+def test_weak_sync_loss_rejects_invalid_rhythm_config():
+    cfg = _cfg()
+    cfg.loss.rhythm_weight = -0.1
+
+    with pytest.raises(ValueError, match="rhythm_weight 必须非负"):
+        WeakSyncLoss(cfg)
+
+    cfg = _cfg()
+    cfg.loss.rhythm_min_period_sec = 20.0
+    cfg.loss.rhythm_max_period_sec = 2.0
+
+    with pytest.raises(ValueError, match="rhythm_min_period_sec 必须小于 rhythm_max_period_sec"):
+        WeakSyncLoss(cfg)
+
+    cfg = _cfg()
+    cfg.loss.rhythm_step_sec = 0.0
+
+    with pytest.raises(ValueError, match="rhythm_step_sec 必须为正数"):
+        WeakSyncLoss(cfg)
+
+    cfg = _cfg()
+    cfg.loss.rhythm_temperature = 0.0
+
+    with pytest.raises(ValueError, match="rhythm_temperature 必须为正数"):
         WeakSyncLoss(cfg)
 
 

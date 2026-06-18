@@ -20,12 +20,17 @@ class WeakSyncLoss(torch.nn.Module):
         self.phase_alignment_weight = float(cfg.loss.get("phase_alignment_weight", 0.0))
         self.band_waveform_weight = float(cfg.loss.get("band_waveform_weight", 0.0))
         self.curvature_weight = float(cfg.loss.get("curvature_weight", 0.0))
+        self.rhythm_weight = float(cfg.loss.get("rhythm_weight", 0.0))
         self.phase_alignment_zero_weight = float(cfg.loss.get("phase_alignment_zero_weight", 0.5))
         self.phase_alignment_lag_weight = float(cfg.loss.get("phase_alignment_lag_weight", 0.5))
         self.phase_alignment_lag_penalty_weight = float(cfg.loss.get("phase_alignment_lag_penalty_weight", 0.1))
         self.phase_alignment_max_sec = float(cfg.loss.get("phase_alignment_max_sec", 0.5))
         self.phase_alignment_step_sec = float(cfg.loss.get("phase_alignment_step_sec", 0.1))
         self.phase_alignment_temperature = float(cfg.loss.get("phase_alignment_temperature", 0.05))
+        self.rhythm_min_period_sec = float(cfg.loss.get("rhythm_min_period_sec", 2.0))
+        self.rhythm_max_period_sec = float(cfg.loss.get("rhythm_max_period_sec", 20.0))
+        self.rhythm_step_sec = float(cfg.loss.get("rhythm_step_sec", 0.25))
+        self.rhythm_temperature = float(cfg.loss.get("rhythm_temperature", 0.08))
         for name, value in (
             ("phase_alignment_weight", self.phase_alignment_weight),
             ("phase_alignment_zero_weight", self.phase_alignment_zero_weight),
@@ -33,9 +38,19 @@ class WeakSyncLoss(torch.nn.Module):
             ("phase_alignment_lag_penalty_weight", self.phase_alignment_lag_penalty_weight),
             ("band_waveform_weight", self.band_waveform_weight),
             ("curvature_weight", self.curvature_weight),
+            ("rhythm_weight", self.rhythm_weight),
         ):
             if value < 0:
                 raise ValueError(f"{name} 必须非负，当前={value}")
+        if self.rhythm_min_period_sec >= self.rhythm_max_period_sec:
+            raise ValueError(
+                "rhythm_min_period_sec 必须小于 rhythm_max_period_sec，"
+                f"当前 min={self.rhythm_min_period_sec} max={self.rhythm_max_period_sec}"
+            )
+        if self.rhythm_step_sec <= 0:
+            raise ValueError(f"rhythm_step_sec 必须为正数，当前={self.rhythm_step_sec}")
+        if self.rhythm_temperature <= 0:
+            raise ValueError(f"rhythm_temperature 必须为正数，当前={self.rhythm_temperature}")
         if self.phase_alignment_max_sec < 0:
             raise ValueError(f"phase_alignment_max_sec 必须非负，当前={self.phase_alignment_max_sec}")
         if self.phase_alignment_step_sec <= 0:
@@ -59,6 +74,10 @@ class WeakSyncLoss(torch.nn.Module):
         relative_env = self._relative_envelope_loss(pred_loss, target_loss)
         band_waveform = self._band_waveform_loss(pred_loss, target_loss)
         curvature = self._curvature_loss(pred_loss)
+        if self.rhythm_weight > 0:
+            rhythm = self._rhythm_loss(pred_loss, target_loss)
+        else:
+            rhythm = pred_loss.new_tensor(0.0)
         if self.phase_alignment_weight > 0:
             phase_alignment = self._phase_alignment_loss(pred_loss, target_loss)
         else:
@@ -72,6 +91,7 @@ class WeakSyncLoss(torch.nn.Module):
             + self.phase_alignment_weight * phase_alignment
             + self.band_waveform_weight * band_waveform
             + self.curvature_weight * curvature
+            + self.rhythm_weight * rhythm
         )
         return total, {
             "envelope": env.detach(),
@@ -82,6 +102,7 @@ class WeakSyncLoss(torch.nn.Module):
             "phase_alignment": phase_alignment.detach(),
             "band_waveform": band_waveform.detach(),
             "curvature": curvature.detach(),
+            "rhythm": rhythm.detach(),
         }
 
     @staticmethod
@@ -180,6 +201,45 @@ class WeakSyncLoss(torch.nn.Module):
             return pred_norm.new_tensor(0.0)
         second_diff = pred_norm[..., 2:] - 2.0 * pred_norm[..., 1:-1] + pred_norm[..., :-2]
         return torch.mean(torch.abs(second_diff))
+
+    def _rhythm_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_dist = self._rhythm_distribution(pred)
+        target_dist = self._rhythm_distribution(target)
+        if pred_dist.shape[-1] == 0:
+            return pred.new_tensor(0.0)
+        return torch.mean(torch.sum(torch.abs(pred_dist - target_dist), dim=-1))
+
+    def _rhythm_distribution(self, x: torch.Tensor) -> torch.Tensor:
+        x_band = self._zscore(self._band_limited_waveform(x))
+        lags = self._rhythm_lags(x_band.shape[-1], x_band.device)
+        if lags.numel() == 0:
+            return x_band.new_zeros((*x_band.shape[:-1], 0))
+
+        n_samples = x_band.shape[-1]
+        n_fft = self._next_power_of_two(2 * n_samples - 1)
+        spectrum = torch.fft.rfft(x_band, n=n_fft, dim=-1)
+        autocorr = torch.fft.irfft(spectrum.abs().square(), n=n_fft, dim=-1)[..., :n_samples]
+        zero_lag = torch.clamp(autocorr[..., :1], min=1e-8)
+        lag_corr = autocorr.index_select(dim=-1, index=lags) / zero_lag
+        overlap = (n_samples - lags).to(device=x_band.device, dtype=x_band.dtype).view(1, 1, -1)
+        lag_corr = lag_corr * (float(n_samples) / torch.clamp(overlap, min=1.0))
+        lag_corr = torch.clamp(lag_corr, min=-1.0, max=1.0)
+        return torch.softmax(lag_corr / self.rhythm_temperature, dim=-1)
+
+    def _rhythm_lags(self, n_samples: int, device: torch.device) -> torch.Tensor:
+        min_lag = max(1, int(round(self.rhythm_min_period_sec * self.fs)))
+        max_lag = min(int(round(self.rhythm_max_period_sec * self.fs)), max(0, n_samples - 2))
+        if max_lag < min_lag:
+            return torch.empty(0, dtype=torch.long, device=device)
+        step = max(1, int(round(self.rhythm_step_sec * self.fs)))
+        lags = torch.arange(min_lag, max_lag + 1, step=step, dtype=torch.long, device=device)
+        if int(lags[-1].item()) != max_lag:
+            lags = torch.cat([lags, torch.tensor([max_lag], dtype=torch.long, device=device)])
+        return lags
+
+    @staticmethod
+    def _next_power_of_two(value: int) -> int:
+        return 1 << (int(value) - 1).bit_length()
 
     def _band_mask(self, n_samples: int, device: torch.device) -> torch.Tensor:
         freqs = torch.fft.rfftfreq(n_samples, d=1.0 / self.fs).to(device)
