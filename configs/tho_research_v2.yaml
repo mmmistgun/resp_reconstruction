@@ -42,6 +42,12 @@ loss:
   curvature_weight: 0.0
   rhythm_weight: 0.0
   signed_cosine_weight: 0.0
+  signed_cosine_schedule:
+    mode: none
+    start_epoch: 1
+    end_epoch: 1
+    start_weight: 0.0
+    end_weight: 0.0
   signed_corr_weight: 0.0
   signed_rms_envelope_weight: 0.0
   signed_mean_weight: 0.0
@@ -79,6 +85,10 @@ training:
   grad_clip_norm: null
   use_amp: false
   show_progress: auto
+  checkpoint_gate:
+    metric: ""
+    min: null
+    max: null
 
 baseline:
   bandpass_low_hz: 0.05

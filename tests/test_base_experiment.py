@@ -27,6 +27,15 @@ class ConstantLoss(torch.nn.Module):
         return loss, {"constant": loss.detach()}
 
 
+class EpochAwareLoss(ConstantLoss):
+    def __init__(self):
+        super().__init__()
+        self.epochs = []
+
+    def set_epoch(self, epoch: int):
+        self.epochs.append(int(epoch))
+
+
 class ToyExperiment(BaseExperiment):
     task_name = "toy"
 
@@ -52,6 +61,12 @@ class ToyExperiment(BaseExperiment):
     def evaluate_best(self, model, data, run_dir):
         pd.DataFrame({"metric": [1.0]}).to_csv(run_dir / "metrics.csv", index=False)
         torch.save({"ok": True}, run_dir / "predictions_marker.pt")
+
+
+class EpochAwareExperiment(ToyExperiment):
+    def build_loss(self):
+        self.loss = EpochAwareLoss()
+        return self.loss
 
 
 def _cfg(tmp_path: Path):
@@ -101,3 +116,26 @@ def test_base_experiment_epoch_log_includes_train_and_val_metric_parts(tmp_path:
     log_text = (run_dir / "train.log").read_text(encoding="utf-8")
 
     assert "epoch=1 | train: loss=1.000000 constant=1.000000 | val: loss=1.000000 constant=1.000000" in log_text
+
+
+def test_base_experiment_notifies_loss_about_current_epoch(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.epochs = 3
+    cfg.training.patience = 0
+    experiment = EpochAwareExperiment(cfg)
+
+    experiment.train()
+
+    assert experiment.loss.epochs == [1, 2, 3]
+
+
+def test_checkpoint_gate_accepts_direction_metric_range(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.checkpoint_gate = {
+        "metric": "val_signed_cosine",
+        "max": 0.5,
+    }
+    experiment = ToyExperiment(cfg)
+
+    assert experiment._checkpoint_gate_allows({"val_loss": 1.0, "val_signed_cosine": 0.2})
+    assert not experiment._checkpoint_gate_allows({"val_loss": 0.8, "val_signed_cosine": 1.7})

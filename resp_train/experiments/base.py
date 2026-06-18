@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +58,9 @@ class BaseExperiment:
 
         history_records = []
         best_loss = float("inf")
+        best_checkpoint_loss = float("inf")
         best_epoch = 0
+        has_gated_checkpoint = False
         stale_epochs = 0
         patience = int(self.cfg.training.get("patience", 0))
         min_delta = float(self.cfg.training.get("min_delta", 0.0))
@@ -65,6 +68,8 @@ class BaseExperiment:
 
         # 训练循环只关注通用 loss，不包含具体任务指标或数据逻辑。
         for epoch in range(1, int(self.cfg.training.epochs) + 1):
+            if hasattr(loss_fn, "set_epoch"):
+                loss_fn.set_epoch(epoch)
             train_metrics = train_one_epoch(
                 model,
                 data.train_loader,
@@ -83,14 +88,22 @@ class BaseExperiment:
                 **{f"train_{k}": v for k, v in train_metrics.items() if k != "loss"},
                 **{f"val_{k}": v for k, v in val_metrics.items() if k != "loss"},
             }
+            record["checkpoint_gate_passed"] = self._checkpoint_gate_allows(record)
             history_records.append(record)
             logger.info(self._format_epoch_log(record))
 
             improved = record["val_loss"] < (best_loss - min_delta)
+            checkpoint_improved = record["val_loss"] < (best_checkpoint_loss - min_delta)
             if improved:
                 best_loss = record["val_loss"]
                 best_epoch = epoch
                 stale_epochs = 0
+            else:
+                stale_epochs += 1
+
+            if record["checkpoint_gate_passed"] and checkpoint_improved:
+                best_checkpoint_loss = record["val_loss"]
+                has_gated_checkpoint = True
                 save_checkpoint(
                     run_dir / "checkpoint.pt",
                     model=model,
@@ -99,11 +112,19 @@ class BaseExperiment:
                     metrics=record,
                     cfg=self.cfg,
                 )
-            else:
-                stale_epochs += 1
-                if patience > 0 and stale_epochs >= patience:
-                    logger.info("early_stop epoch=%s best_epoch=%s best_val_loss=%.6f", epoch, best_epoch, best_loss)
-                    break
+            elif improved and not has_gated_checkpoint:
+                best_checkpoint_loss = record["val_loss"]
+                save_checkpoint(
+                    run_dir / "checkpoint.pt",
+                    model=model,
+                    optimizer=optimizer,
+                    epoch=epoch,
+                    metrics=record,
+                    cfg=self.cfg,
+                )
+            if not improved and patience > 0 and stale_epochs >= patience:
+                logger.info("early_stop epoch=%s best_epoch=%s best_val_loss=%.6f", epoch, best_epoch, best_loss)
+                break
             if scheduler is not None:
                 scheduler.step()
 
@@ -175,3 +196,26 @@ class BaseExperiment:
                 return False
             raise ValueError(f"training.show_progress 只能是 true/false/auto，当前为: {value}")
         return bool(value)
+
+    def _checkpoint_gate_allows(self, record: dict[str, Any]) -> bool:
+        """根据验证分项决定当前 epoch 是否可作为最终 checkpoint。"""
+        gate = self.cfg.training.get("checkpoint_gate", None)
+        if not gate:
+            return True
+        metric = str(gate.get("metric", "")).strip()
+        if not metric:
+            return True
+        if metric not in record:
+            raise ValueError(f"checkpoint_gate.metric 不存在于训练记录: {metric}")
+        value = float(record[metric])
+        if math.isnan(value):
+            return False
+        min_value = gate.get("min", None)
+        max_value = gate.get("max", None)
+        if min_value is None and max_value is None:
+            raise ValueError("checkpoint_gate 至少需要设置 min 或 max")
+        if min_value is not None and value < float(min_value):
+            return False
+        if max_value is not None and value > float(max_value):
+            return False
+        return True

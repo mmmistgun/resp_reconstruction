@@ -26,6 +26,8 @@ class WeakSyncLoss(torch.nn.Module):
         self.signed_rms_envelope_weight = float(cfg.loss.get("signed_rms_envelope_weight", 0.0))
         self.signed_mean_weight = float(cfg.loss.get("signed_mean_weight", 0.0))
         self.si_sdr_weight = float(cfg.loss.get("si_sdr_weight", 0.0))
+        self.signed_cosine_schedule = cfg.loss.get("signed_cosine_schedule", None)
+        self.epoch = 1
         self.phase_alignment_zero_weight = float(cfg.loss.get("phase_alignment_zero_weight", 0.5))
         self.phase_alignment_lag_weight = float(cfg.loss.get("phase_alignment_lag_weight", 0.5))
         self.phase_alignment_lag_penalty_weight = float(cfg.loss.get("phase_alignment_lag_penalty_weight", 0.1))
@@ -73,9 +75,20 @@ class WeakSyncLoss(torch.nn.Module):
             raise ValueError(f"signed_env_temperature 必须为正数，当前={self.signed_env_temperature}")
         if self.signed_mean_window <= 0:
             raise ValueError(f"signed_mean_window_sec 必须为正数，当前={cfg.loss.get('signed_mean_window_sec', 2.0)}")
+        self._validate_signed_cosine_schedule()
         self.relative_env_trend_window = max(self.envelope_window, int(round(self.fs * 20.0)))
         self.low_hz = float(cfg.loss.spectrum_low_hz)
         self.high_hz = float(cfg.loss.spectrum_high_hz)
+
+    def set_epoch(self, epoch: int) -> None:
+        """更新当前 epoch，供课程式 loss 权重调度使用。"""
+        self.epoch = max(1, int(epoch))
+
+    def current_weights(self) -> dict[str, float]:
+        """返回当前 epoch 的有效 loss 权重，便于测试和实验诊断。"""
+        return {
+            "signed_cosine": self._scheduled_signed_cosine_weight(),
+        }
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         self._validate_inputs(pred, target)
@@ -98,9 +111,10 @@ class WeakSyncLoss(torch.nn.Module):
             phase_alignment = self._phase_alignment_loss(pred_loss, target_loss)
         else:
             phase_alignment = pred_loss.new_tensor(0.0)
+        signed_cosine_weight = self._scheduled_signed_cosine_weight()
         signed_cosine = (
             self._signed_cosine_loss(pred_loss, target_loss)
-            if self.signed_cosine_weight > 0
+            if signed_cosine_weight > 0
             else pred_loss.new_tensor(0.0)
         )
         signed_corr = (
@@ -127,7 +141,7 @@ class WeakSyncLoss(torch.nn.Module):
             + self.band_waveform_weight * band_waveform
             + self.curvature_weight * curvature
             + self.rhythm_weight * rhythm
-            + self.signed_cosine_weight * signed_cosine
+            + signed_cosine_weight * signed_cosine
             + self.signed_corr_weight * signed_corr
             + self.signed_rms_envelope_weight * signed_rms_envelope
             + self.signed_mean_weight * signed_mean
@@ -149,6 +163,42 @@ class WeakSyncLoss(torch.nn.Module):
             "signed_mean": signed_mean.detach(),
             "si_sdr": si_sdr.detach(),
         }
+
+    def _validate_signed_cosine_schedule(self) -> None:
+        if not self.signed_cosine_schedule:
+            return
+        mode = str(self.signed_cosine_schedule.get("mode", "none")).lower()
+        if mode in {"none", "constant"}:
+            return
+        if mode != "linear":
+            raise ValueError(f"signed_cosine_schedule.mode 未知: {mode}")
+        start_epoch = int(self.signed_cosine_schedule.get("start_epoch", 1))
+        end_epoch = int(self.signed_cosine_schedule.get("end_epoch", start_epoch))
+        start_weight = float(self.signed_cosine_schedule.get("start_weight", self.signed_cosine_weight))
+        end_weight = float(self.signed_cosine_schedule.get("end_weight", self.signed_cosine_weight))
+        if start_epoch <= 0 or end_epoch <= 0:
+            raise ValueError("signed_cosine_schedule 的 start_epoch/end_epoch 必须为正数")
+        if end_epoch < start_epoch:
+            raise ValueError("signed_cosine_schedule.end_epoch 必须大于等于 start_epoch")
+        if start_weight < 0 or end_weight < 0:
+            raise ValueError("signed_cosine_schedule 的 start_weight/end_weight 必须非负")
+
+    def _scheduled_signed_cosine_weight(self) -> float:
+        if not self.signed_cosine_schedule:
+            return self.signed_cosine_weight
+        mode = str(self.signed_cosine_schedule.get("mode", "none")).lower()
+        if mode in {"none", "constant"}:
+            return self.signed_cosine_weight
+        start_epoch = int(self.signed_cosine_schedule.get("start_epoch", 1))
+        end_epoch = int(self.signed_cosine_schedule.get("end_epoch", start_epoch))
+        start_weight = float(self.signed_cosine_schedule.get("start_weight", self.signed_cosine_weight))
+        end_weight = float(self.signed_cosine_schedule.get("end_weight", self.signed_cosine_weight))
+        if self.epoch <= start_epoch:
+            return start_weight
+        if self.epoch >= end_epoch:
+            return end_weight
+        progress = (self.epoch - start_epoch) / max(1, end_epoch - start_epoch)
+        return start_weight + progress * (end_weight - start_weight)
 
     @staticmethod
     def _validate_inputs(pred: torch.Tensor, target: torch.Tensor) -> None:
