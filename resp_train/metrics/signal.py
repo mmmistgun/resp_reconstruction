@@ -104,6 +104,77 @@ def _corrcoef_or_nan(x: np.ndarray, y: np.ndarray) -> float:
     return float(np.corrcoef(a, b)[0, 1])
 
 
+def robust_zscore(signal: np.ndarray, *, percentile: float = 95.0, target_value: float = 2.5) -> np.ndarray:
+    """面向诊断图的 robust 标准化，避免短时极端体动压扁正常呼吸区间。
+
+    这里不追求统计意义上的标准正态校准，而是把指定百分位的绝对偏差映射到
+    `target_value` 附近，让少量大尖峰不会决定整窗显示尺度。
+    """
+    x = _as_1d_float(signal)
+    percentile = float(percentile)
+    target_value = float(target_value)
+    if not 50.0 < percentile < 100.0:
+        raise ValueError(f"percentile 必须在 (50, 100) 内，当前={percentile}")
+    if target_value <= 0:
+        raise ValueError(f"target_value 必须为正数，当前={target_value}")
+    center = float(np.median(x))
+    scale = _robust_display_scale(x, percentile=percentile, target_value=target_value)
+    return (x - center) / scale
+
+
+def motion_dominance_metrics(signal: np.ndarray) -> dict[str, float | bool]:
+    """估计窗口是否被短时极端事件支配。
+
+    指标用于诊断和分层报告，不直接决定训练样本是否剔除。
+    """
+    x = _as_1d_float(signal)
+    centered = x - float(np.median(x))
+    robust_scale = _robust_display_scale(centered)
+    std_scale = float(np.std(centered))
+    abs_centered = np.abs(centered)
+    robust_floor = max(robust_scale, np.finfo(np.float64).eps)
+    extreme_fraction = float(np.mean(abs_centered > robust_floor * 8.0))
+    energy = centered * centered
+    if energy.size == 0:
+        top1pct_energy_fraction = float("nan")
+    else:
+        n_top = max(1, int(np.ceil(energy.size * 0.01)))
+        top_energy = float(np.partition(energy, -n_top)[-n_top:].sum())
+        total_energy = max(float(energy.sum()), np.finfo(np.float64).eps)
+        top1pct_energy_fraction = top_energy / total_energy
+    std_to_robust_scale = std_scale / robust_floor
+    motion_dominated = bool(
+        std_to_robust_scale >= 4.0 or top1pct_energy_fraction >= 0.35 or extreme_fraction >= 0.005
+    )
+    return {
+        "robust_scale": float(robust_scale),
+        "std_scale": std_scale,
+        "std_to_robust_scale": float(std_to_robust_scale),
+        "extreme_fraction": extreme_fraction,
+        "top1pct_energy_fraction": float(top1pct_energy_fraction),
+        "motion_dominated": motion_dominated,
+    }
+
+
+def _robust_display_scale(
+    signal: np.ndarray,
+    *,
+    percentile: float = 95.0,
+    target_value: float = 2.5,
+) -> float:
+    """返回用于诊断显示的 robust 尺度。"""
+    x = _as_1d_float(signal)
+    center = float(np.median(x))
+    abs_dev = np.abs(x - center)
+    scale = float(np.percentile(abs_dev, float(percentile))) / float(target_value)
+    if scale > np.finfo(np.float64).eps:
+        return scale
+    std = float(np.std(x))
+    if std > np.finfo(np.float64).eps:
+        return std
+    return 1.0
+
+
 def bandpass_filter(
     signal: np.ndarray,
     *,

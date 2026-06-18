@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from resp_train.metrics.signal import robust_zscore
 from resp_train.utils.run import resolve_device
 
 
@@ -31,6 +32,7 @@ def plot_run_predictions(
     max_plots: int = 8,
     output_dir: str | Path | None = None,
     sort_by: str = "rr_peak_abs_error",
+    scale_mode: str = "zscore",
 ) -> list[Path]:
     """为一个 run 的诊断预测生成 PNG 图，按需从 checkpoint 重新推理选中窗口。"""
     run_path = Path(run_dir)
@@ -41,6 +43,9 @@ def plot_run_predictions(
     metrics = pd.read_csv(metrics_path)
     if int(max_plots) <= 0:
         raise ValueError("max_plots 必须大于 0")
+    scale_mode = str(scale_mode)
+    if scale_mode not in {"zscore", "robust"}:
+        raise ValueError(f"scale_mode 必须为 zscore 或 robust，当前={scale_mode}")
 
     out_dir = Path(output_dir) if output_dir is not None else run_path / "plots"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -62,6 +67,7 @@ def plot_run_predictions(
             x=None if prediction.get("x") is None else np.asarray(prediction["x"]).reshape(-1),
             fs=fs,
             spectrum_high_hz=spectrum_high_hz,
+            scale_mode=scale_mode,
             meta={key: str(prediction.get("meta", {}).get(key, "")) for key in ("split", "input_set", "residual_quality_class")},
             metrics=metric_row,
             row_id=row_id,
@@ -227,15 +233,16 @@ def _plot_one_window(
     x: np.ndarray | None,
     fs: float,
     spectrum_high_hz: float,
+    scale_mode: str,
     meta: dict[str, str],
     metrics: dict[str, Any],
     row_id: int,
 ) -> None:
     time = np.arange(pred.size) / fs
     lowpass_high_hz = float(np.clip(spectrum_high_hz, 0.01, fs * 0.45))
-    pred_z = _zscore(pred)
-    target_z = _zscore(target)
-    pred_low_z = _zscore(_lowpass(pred, fs=fs, high_hz=lowpass_high_hz))
+    pred_z = _scale_for_display(pred, mode=scale_mode)
+    target_z = _scale_for_display(target, mode=scale_mode)
+    pred_low_z = _scale_for_display(_lowpass(pred, fs=fs, high_hz=lowpass_high_hz), mode=scale_mode)
     residual_z = pred_z - target_z
 
     n_axes = 4 if x is not None else 3
@@ -245,7 +252,13 @@ def _plot_one_window(
     axis_idx = 0
     if x is not None:
         x_time = np.arange(x.size) / fs
-        axes[axis_idx].plot(x_time, _clip_for_display(_zscore(x)), color="#666666", linewidth=0.7, label="bcg input z")
+        axes[axis_idx].plot(
+            x_time,
+            _clip_for_display(_scale_for_display(x, mode=scale_mode)),
+            color="#666666",
+            linewidth=0.7,
+            label=f"bcg input {scale_mode}",
+        )
         axes[axis_idx].set_ylabel("input")
         axes[axis_idx].set_ylim(-4, 4)
         axes[axis_idx].grid(True, alpha=0.18)
@@ -253,8 +266,8 @@ def _plot_one_window(
         axis_idx += 1
 
     wave_ax = axes[axis_idx]
-    wave_ax.plot(time, target_z, color="#1f77b4", linewidth=1.0, label="tho_ref z")
-    wave_ax.plot(time, pred_z, color="#d62728", linewidth=1.0, alpha=0.82, label="r_tho_hat z")
+    wave_ax.plot(time, target_z, color="#1f77b4", linewidth=1.0, label=f"tho_ref {scale_mode}")
+    wave_ax.plot(time, pred_z, color="#d62728", linewidth=1.0, alpha=0.82, label=f"r_tho_hat {scale_mode}")
     wave_ax.plot(time, pred_low_z, color="#2ca02c", linewidth=1.1, linestyle="--", alpha=0.9, label=f"pred lowpass <= {lowpass_high_hz:.2f}Hz")
     wave_ax.set_ylabel("waveform")
     wave_ax.set_ylim(-3.2, 3.2)
@@ -331,6 +344,14 @@ def _zscore(values: np.ndarray) -> np.ndarray:
     return (arr - float(np.mean(arr))) / std
 
 
+def _scale_for_display(values: np.ndarray, *, mode: str) -> np.ndarray:
+    if mode == "robust":
+        return robust_zscore(values)
+    if mode == "zscore":
+        return _zscore(values)
+    raise ValueError(f"未知显示尺度: {mode}")
+
+
 def _clip_for_display(values: np.ndarray, limit: float = 4.0) -> np.ndarray:
     return np.clip(values, -limit, limit)
 
@@ -401,6 +422,12 @@ def main() -> None:
     parser.add_argument("--output-dir", default="", help="PNG 输出目录，默认 <run-dir>/plots")
     parser.add_argument("--max-plots", type=int, default=8, help="最多绘制窗口数")
     parser.add_argument("--sort-by", default="rr_peak_abs_error", help="按哪个 metrics 列优先绘制")
+    parser.add_argument(
+        "--scale-mode",
+        choices=("zscore", "robust"),
+        default="zscore",
+        help="波形显示尺度；robust 可避免短时极端体动压扁正常呼吸区间",
+    )
     args = parser.parse_args()
 
     written = plot_run_predictions(
@@ -408,6 +435,7 @@ def main() -> None:
         max_plots=args.max_plots,
         output_dir=args.output_dir or None,
         sort_by=args.sort_by,
+        scale_mode=args.scale_mode,
     )
     for path in written:
         print(path)

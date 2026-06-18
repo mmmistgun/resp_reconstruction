@@ -190,6 +190,17 @@ def test_plot_run_predictions_writes_png(tmp_path, monkeypatch):
     assert written[0].stat().st_size > 0
 
 
+def test_plot_run_predictions_accepts_robust_scale_mode(tmp_path, monkeypatch):
+    run_dir = tmp_path / "run"
+    _write_minimal_run(run_dir)
+    _patch_plot_inference(monkeypatch)
+
+    written = plot_run_predictions(run_dir, max_plots=1, scale_mode="robust")
+
+    assert written[0].exists()
+    assert written[0].stat().st_size > 0
+
+
 def test_plot_run_predictions_infers_metric_selected_rows(tmp_path, monkeypatch):
     run_dir = tmp_path / "run"
     _write_minimal_run(run_dir)
