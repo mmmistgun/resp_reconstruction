@@ -1177,11 +1177,14 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
 - 结论：`downsampled_ssm1d` 的结构方向值得保留，但需要加入显式 polarity/direction
   修正机制或改 checkpoint gate；当前 run 不作为胜出模型。
 
-### M9 首轮汇总判断
+### M9 首轮汇总判断（旧 gate 口径）
 
 聚合口径：每个模型 2 个 seed，`usable_direction` 使用
 `band_limited_corr_mean >= 0.5` 作为可用方向门槛。这个阈值不是论文指标，只用于避免
 把接近 0 的弱相关输出误判为方向通过。
+
+注意：本节表格是在旧 `checkpoint_gate.metric=val_signed_cosine` 口径下生成的历史汇总。
+下方“checkpoint gate 修正”已更新有效证据范围；后续选择以修正后的判断为准。
 
 | model | usable direction | best val loss | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -1211,3 +1214,54 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
 - 下一轮模型实验应先把 checkpoint/selection 方向护栏改为与 `signed_corr` 或
   `band_limited_corr` 对齐，再比较 `multiscale_decomp_mixer1d` 与
   `downsampled_ssm1d` 的修正版。
+
+### M9 checkpoint gate 修正
+
+问题根因：
+
+- M9 首轮训练使用 `signed_corr_weight=0.1`、`signed_cosine_weight=0.0`。
+- 但 checkpoint gate 配置为 `checkpoint_gate.metric=val_signed_cosine`。
+- `signed_cosine_weight=0.0` 时，训练记录里的 `val_signed_cosine` 恒为 `0.0`，
+  gate 等价于总是通过，无法阻止反向 checkpoint。
+- 训练循环还存在一个 fallback：配置了 gate 但没有任何 epoch 通过时，会退回保存
+  ungated best checkpoint。这会让反向模型继续产生 `metrics.csv`。
+
+代码修正：
+
+- `checkpoint_gate.metric=auto_direction` 会优先选择当前启用的 signed 方向损失：
+  `signed_corr_weight>0` 时使用 `val_signed_corr`，否则使用有效的
+  `val_signed_cosine`。
+- 显式配置到未启用的 signed 分项时直接报错，避免恒为 0 的假通过。
+- 配置了 checkpoint gate 后，若没有任何 epoch 通过 gate，训练会在写出
+  `train_history.csv` 后报错，不再保存 ungated checkpoint。
+
+对 M9 首轮历史 run 的影响：
+
+| run | model | seed | old best epoch | old `val_signed_corr` | 新 gate 影响 |
+|---|---|---:|---:|---:|---|
+| `20260618_214430_858665` | `patch_mixer1d` | 20260700 | 14 | 0.202323 | 同一 checkpoint 仍有效 |
+| `20260618_214431_129136` | `patch_mixer1d` | 20260710 | 15 | 0.207389 | 同一 checkpoint 仍有效 |
+| `20260618_215659_191953` | `multiscale_decomp_mixer1d` | 20260710 | 11 | 0.208220 | 同一 checkpoint 仍有效 |
+| `20260618_215715_456449` | `multiscale_decomp_mixer1d` | 20260700 | 15 | 1.773924 | 无有效 checkpoint，应删除/重跑修正版 |
+| `20260618_221948_278851` | `downsampled_ssm1d` | 20260700 | 10 | 1.800903 | 无有效 checkpoint，应删除/重跑修正版 |
+| `20260618_221949_477007` | `downsampled_ssm1d` | 20260710 | 14 | 1.798271 | 无有效 checkpoint，应删除/重跑修正版 |
+| 其余 `basis_decoder1d` / `frequency_bottleneck1d` / `timesnet_lite1d` | 多个 | - | - | `0.76-1.00` | 无有效 checkpoint，不进入下一轮 |
+
+处理决定：
+
+- M9 首轮旧汇总中，只有 Patch-Hann 两个 seed 与
+  `multiscale_decomp_mixer1d_seed20260710` 可继续作为有效证据。
+- 其余受错误 gate 污染的 run 不再作为可用模型结果；如果保留本地目录，会继续污染
+  `summarize_tho_runs.py` 汇总，因此应从 `runs/tho_research_v2_model_m9_lowfreq_structure/`
+  删除。
+- 仅修 gate 不需要重跑所有模型；需要重跑的是下一轮“修正版模型/selection”实验，而不是
+  这些已知没有有效 checkpoint 的旧配置。
+
+本地清理结果：
+
+- 已删除 9 个新 gate 下无有效 checkpoint 的正式 run：
+  `basis_decoder1d` 2 个、`frequency_bottleneck1d` 2 个、`timesnet_lite1d` 2 个、
+  `downsampled_ssm1d` 2 个、`multiscale_decomp_mixer1d_seed20260700` 1 个。
+- 已重新生成
+  `runs/tho_research_v2_model_m9_lowfreq_structure_summary.csv`，当前只包含 3 行有效
+  formal 证据：Patch-Hann 两个 seed 与 `multiscale_decomp_mixer1d_seed20260710`。

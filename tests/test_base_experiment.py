@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 import torch
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, Dataset
@@ -139,3 +140,52 @@ def test_checkpoint_gate_accepts_direction_metric_range(tmp_path: Path):
 
     assert experiment._checkpoint_gate_allows({"val_loss": 1.0, "val_signed_cosine": 0.2})
     assert not experiment._checkpoint_gate_allows({"val_loss": 0.8, "val_signed_cosine": 1.7})
+
+
+def test_checkpoint_gate_auto_direction_uses_active_signed_corr(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.loss = {
+        "signed_corr_weight": 0.1,
+        "signed_cosine_weight": 0.0,
+    }
+    cfg.training.checkpoint_gate = {
+        "metric": "auto_direction",
+        "max": 0.5,
+    }
+    experiment = ToyExperiment(cfg)
+
+    assert experiment._checkpoint_gate_allows(
+        {"val_loss": 1.0, "val_signed_corr": 0.2, "val_signed_cosine": 0.0}
+    )
+    assert not experiment._checkpoint_gate_allows(
+        {"val_loss": 0.8, "val_signed_corr": 1.7, "val_signed_cosine": 0.0}
+    )
+
+
+def test_checkpoint_gate_rejects_inactive_signed_metric(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.loss = {
+        "signed_corr_weight": 0.1,
+        "signed_cosine_weight": 0.0,
+    }
+    cfg.training.checkpoint_gate = {
+        "metric": "val_signed_cosine",
+        "max": 0.5,
+    }
+    experiment = ToyExperiment(cfg)
+
+    with pytest.raises(ValueError, match="未启用"):
+        experiment._checkpoint_gate_allows({"val_loss": 1.0, "val_signed_cosine": 0.0})
+
+
+def test_training_with_checkpoint_gate_requires_passing_checkpoint(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.epochs = 2
+    cfg.training.patience = 0
+    cfg.training.checkpoint_gate = {
+        "metric": "val_constant",
+        "max": 0.5,
+    }
+
+    with pytest.raises(ValueError, match="没有 epoch 满足 checkpoint_gate"):
+        ToyExperiment(cfg).train()

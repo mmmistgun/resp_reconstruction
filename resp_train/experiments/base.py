@@ -65,6 +65,7 @@ class BaseExperiment:
         patience = int(self.cfg.training.get("patience", 0))
         min_delta = float(self.cfg.training.get("min_delta", 0.0))
         show_progress = self._resolve_show_progress()
+        checkpoint_gate_enabled = self._checkpoint_gate_enabled()
 
         # 训练循环只关注通用 loss，不包含具体任务指标或数据逻辑。
         for epoch in range(1, int(self.cfg.training.epochs) + 1):
@@ -103,7 +104,8 @@ class BaseExperiment:
 
             if record["checkpoint_gate_passed"] and checkpoint_improved:
                 best_checkpoint_loss = record["val_loss"]
-                has_gated_checkpoint = True
+                if checkpoint_gate_enabled:
+                    has_gated_checkpoint = True
                 save_checkpoint(
                     run_dir / "checkpoint.pt",
                     model=model,
@@ -112,7 +114,7 @@ class BaseExperiment:
                     metrics=record,
                     cfg=self.cfg,
                 )
-            elif improved and not has_gated_checkpoint:
+            elif improved and not checkpoint_gate_enabled:
                 best_checkpoint_loss = record["val_loss"]
                 save_checkpoint(
                     run_dir / "checkpoint.pt",
@@ -129,6 +131,11 @@ class BaseExperiment:
                 scheduler.step()
 
         pd.DataFrame(history_records).to_csv(run_dir / "train_history.csv", index=False)
+        if checkpoint_gate_enabled and not has_gated_checkpoint:
+            raise ValueError(
+                "没有 epoch 满足 checkpoint_gate；未保存最终 checkpoint。"
+                "请放宽 gate 或检查方向约束。"
+            )
         # 最终评价统一基于验证集最优模型，避免使用最后一个 epoch 的权重。
         checkpoint = torch.load(run_dir / "checkpoint.pt", map_location=device)
         model.load_state_dict(checkpoint["model_state_dict"])
@@ -197,12 +204,19 @@ class BaseExperiment:
             raise ValueError(f"training.show_progress 只能是 true/false/auto，当前为: {value}")
         return bool(value)
 
+    def _checkpoint_gate_enabled(self) -> bool:
+        """判断是否配置了实际生效的 checkpoint gate。"""
+        gate = self.cfg.training.get("checkpoint_gate", None)
+        if not gate:
+            return False
+        return bool(str(gate.get("metric", "")).strip())
+
     def _checkpoint_gate_allows(self, record: dict[str, Any]) -> bool:
         """根据验证分项决定当前 epoch 是否可作为最终 checkpoint。"""
         gate = self.cfg.training.get("checkpoint_gate", None)
         if not gate:
             return True
-        metric = str(gate.get("metric", "")).strip()
+        metric = self._resolve_checkpoint_gate_metric(str(gate.get("metric", "")).strip())
         if not metric:
             return True
         if metric not in record:
@@ -219,3 +233,51 @@ class BaseExperiment:
         if max_value is not None and value > float(max_value):
             return False
         return True
+
+    def _resolve_checkpoint_gate_metric(self, metric: str) -> str:
+        """解析 checkpoint gate 指标，并阻止未启用 loss 分项假通过。"""
+        if metric == "auto_direction":
+            return self._auto_checkpoint_direction_metric()
+        self._validate_checkpoint_gate_metric_is_active(metric)
+        return metric
+
+    def _auto_checkpoint_direction_metric(self) -> str:
+        """选择当前配置中真正启用的 signed 方向约束指标。"""
+        if self._loss_weight_active("signed_corr_weight"):
+            return "val_signed_corr"
+        if self._signed_cosine_active():
+            return "val_signed_cosine"
+        raise ValueError(
+            "checkpoint_gate.metric=auto_direction 需要启用 "
+            "loss.signed_corr_weight 或 loss.signed_cosine_weight"
+        )
+
+    def _validate_checkpoint_gate_metric_is_active(self, metric: str) -> None:
+        """显式 gate 到 signed 分项时，确保对应 loss 分项真的启用。"""
+        if not metric or "loss" not in self.cfg:
+            return
+        if metric == "val_signed_corr" and not self._loss_weight_active("signed_corr_weight"):
+            raise ValueError("checkpoint_gate.metric=val_signed_corr，但 loss.signed_corr_weight 未启用")
+        if metric == "val_signed_cosine" and not self._signed_cosine_active():
+            raise ValueError("checkpoint_gate.metric=val_signed_cosine，但 loss.signed_cosine_weight 未启用")
+
+    def _loss_weight_active(self, name: str) -> bool:
+        """判断一个普通 loss 权重是否为正。"""
+        loss_cfg = self.cfg.get("loss", {})
+        return float(loss_cfg.get(name, 0.0)) > 0.0
+
+    def _signed_cosine_active(self) -> bool:
+        """判断 signed cosine 是否通过固定权重或 schedule 启用。"""
+        if self._loss_weight_active("signed_cosine_weight"):
+            return True
+        loss_cfg = self.cfg.get("loss", {})
+        schedule = loss_cfg.get("signed_cosine_schedule", None)
+        if not schedule:
+            return False
+        mode = str(schedule.get("mode", "none")).strip().lower()
+        if mode == "none":
+            return False
+        return (
+            float(schedule.get("start_weight", 0.0)) > 0.0
+            or float(schedule.get("end_weight", 0.0)) > 0.0
+        )

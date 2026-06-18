@@ -15,7 +15,7 @@
 当前阶段结论：
 
 - Loss 已阶段性收口，默认候选为 `high_freq_weight=0.2`、`relative_envelope_weight=0.03`、`phase_alignment_weight=0.0`、`signed_corr_weight=0.1`。
-- checkpoint direction gate 保留：`training.checkpoint_gate.metric=val_signed_cosine`，`training.checkpoint_gate.max=0.5`。
+- checkpoint direction gate 保留：`training.checkpoint_gate.metric=auto_direction`，`training.checkpoint_gate.max=0.5`。
 - `signed_corr_weight=0.1` 能稳定解决方向，但会带来局部峰值和 raw peak 代价。
 - 下一阶段主问题是模型输出自由度过高，不是继续发明新 loss。
 
@@ -38,7 +38,7 @@ M9 固定训练口径：
   - `training.min_delta=0.001`
   - `training.use_amp=false`
   - `training.show_progress=false`
-  - `training.checkpoint_gate.metric=val_signed_cosine`
+  - `training.checkpoint_gate.metric=auto_direction`
   - `training.checkpoint_gate.max=0.5`
 - 输出：`runs/tho_research_v2_model_m9_lowfreq_structure`
 - 汇总：`runs/tho_research_v2_model_m9_lowfreq_structure_summary.csv`
@@ -50,7 +50,7 @@ M9 首轮 seed：
 
 通过条件：
 
-1. `val_signed_cosine <= 0.5`，并且 `band_limited_corr_mean > 0`。
+1. `auto_direction` 对应的验证方向分项不超过 `0.5`，并且 `band_limited_corr_mean > 0`。
 2. 主指标 `selection_task_rr_peak_band_abs_error_mean` 不明显劣于同 seed Patch-Hann baseline。
 3. `selection_task_rr_spec_abs_error_mean` 不出现明显频谱 RR 退化。
 4. `selection_task_relative_envelope_mae_mean` 不明显劣于 baseline。
@@ -766,8 +766,6 @@ git commit -m "feat: 添加 M9 低频结构模型候选"
   --set training.use_amp=false \
   --set training.device=cuda:0 \
   --set training.show_progress=false \
-  --set training.checkpoint_gate.metric=val_signed_cosine \
-  --set training.checkpoint_gate.max=0.5 \
   --set outputs.run_root=runs/tho_research_v2_model_m9_lowfreq_smoke
 ```
 
@@ -843,7 +841,7 @@ git commit -m "exp: 记录 M9 模型 smoke 结果"
   --set training.use_amp=false \
   --set training.device=cuda:0 \
   --set training.show_progress=false \
-  --set training.checkpoint_gate.metric=val_signed_cosine \
+  --set training.checkpoint_gate.metric=auto_direction \
   --set training.checkpoint_gate.max=0.5 \
   --set outputs.run_root=runs/tho_research_v2_model_m9_lowfreq_structure
 ```
