@@ -1091,3 +1091,24 @@ smoke 结果：
   抗毛刺成功。
 - 结论：单一全局 basis decoder 过强地压低自由度，不进入扩 seed；后续若复用
   basis 思路，需要改成局部/分段 basis 或与多尺度 encoder 结合。
+
+### M9 正式首轮：`multiscale_decomp_mixer1d`
+
+`multiscale_decomp_mixer1d` 使用低通分解后的多尺度分支做 token mixing，目标是保留
+Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
+
+| label | run | model | seed | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `multiscale_decomp_mixer1d_seed20260700` | `20260618_215715_456449` | `multiscale_decomp_mixer1d` | 20260700 | 0.772281 | 0.397505 / 0.170943 | 0.445697 | 0.215300 | 0.456124 | -0.778031 | 0.371425 | 1.143390 |
+| `multiscale_decomp_mixer1d_seed20260710` | `20260618_215659_191953` | `multiscale_decomp_mixer1d` | 20260710 | 0.618128 | 0.459622 / 0.174155 | 0.462311 | 0.216110 | 0.449103 | 0.795152 | 0.850356 | 1.805841 |
+
+阶段判断：
+
+- `20260710` 困难 seed 通过方向判断，`band_limited_corr=0.795152`、
+  `best_lag_corr=0.850356`，与 Patch-Hann signed baseline 同级；同时 raw
+  `rr_peak_abs_error_mean` 从 baseline 的约 `4.79` 降到 `1.81`，说明多尺度低频结构
+  确实能削弱局部尖峰自由度。
+- `20260700` guard seed 的 `rr_peak_band_abs_error_mean=0.397505` 低于 baseline，
+  但 `band_limited_corr=-0.778031`，属于方向失败；这一行不能作为胜出证据。
+- 结论：`multiscale_decomp_mixer1d` 是有潜力但方向不稳定的候选。下一步若继续，应优先
+  研究方向稳定机制或 checkpoint 选择口径，而不是只看 RR 数字扩 seed。
