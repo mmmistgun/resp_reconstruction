@@ -1153,3 +1153,26 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
   任务收益。
 - 结论：当前直接频域 bottleneck 过硬，不进入扩 seed。若重启 M4 方向，需要改为
   “time encoder + 可学习低频 mask / 局部频域块”，而不是全局低频系数直接解码。
+
+### M9 正式首轮：`downsampled_ssm1d`
+
+`downsampled_ssm1d` 先把 100 Hz 输入压到低采样 latent，再用轻量状态卷积/残差块建模；
+它用于测试低时间自由度的 state-style decoder 是否能减少局部尖峰。
+
+| label | run | model | seed | best val loss | `rr_peak_band_abs_error` mean / median | `rr_spec_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `downsampled_ssm1d_seed20260700` | `20260618_221948_278851` | `downsampled_ssm1d` | 20260700 | 0.777833 | 0.489537 / 0.196713 | 0.457728 | 0.213351 | 0.458868 | -0.803800 | 0.322486 | 0.840981 |
+| `downsampled_ssm1d_seed20260710` | `20260618_221949_477007` | `downsampled_ssm1d` | 20260710 | 0.764959 | 0.470890 / 0.199652 | 0.443979 | 0.207432 | 0.469428 | -0.801594 | 0.331623 | 0.816449 |
+
+阶段判断：
+
+- `downsampled_ssm1d` 不能按当前形态进入扩 seed。两个 seed 的
+  `rr_peak_band_abs_error_mean` 均低于 Patch-Hann signed baseline，并且 raw
+  `rr_peak_abs_error_mean` 从 baseline 的约 `4.6-4.8` 降到约 `0.82-0.84`，
+  说明低采样 state-style decoder 明显降低了局部尖峰自由度。
+- 但两个 seed 的 `band_limited_corr` 都约 `-0.80`，`best_lag_corr` 只有约
+  `0.32-0.33`，属于稳定反向输出；这不是可接受的方向/相位结果。
+- 这一组证明：仅靠 `best_val_loss` 或带通 RR 选模型会误选反向模型。后续模型选择必须
+  把 `band_limited_corr > 0` 或等价方向护栏作为硬约束，再比较 RR 与 raw peak。
+- 结论：`downsampled_ssm1d` 的结构方向值得保留，但需要加入显式 polarity/direction
+  修正机制或改 checkpoint gate；当前 run 不作为胜出模型。
