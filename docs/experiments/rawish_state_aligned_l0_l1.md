@@ -651,3 +651,42 @@ baseline 自身稳定性。
   direction 从诊断项升级为训练约束或选择约束，例如加大/分阶段使用
   `phase_alignment_weight`、加入 early direction gate，或把正向方向作为模型选择
   的硬护栏后再比较 RR 指标。
+
+## Patch-Hann 0.8 呼吸周期 lag / polarity 诊断
+
+用户追问当前方向翻转到底是“刚好反相”，还是模型输出存在不确定时延。本轮不重新
+训练，只对上述 11 个 Patch-Hann checkpoint 重新推理验证集，并在低频带上做
+动态 lag search：
+
+- 每个窗口用目标信号频谱 RR 估计呼吸周期。
+- lag search 上限设为 `0.8 * target_period_sec`，平均约 `3.10s`。
+- 同时比较 `pred` 与 `-pred`：
+  - `same_best_corr`：不翻转预测，在 `0.8` 周期内找最佳 lag。
+  - `inv_best_corr`：翻转预测后，在 `0.8` 周期内找最佳 lag。
+  - `same_abs_lag_frac` / `inv_abs_lag_frac`：最佳 lag 占目标呼吸周期的比例。
+
+为降低计算量，诊断先对 100Hz 信号做呼吸带通，再降采样到 10Hz 做 lag search。
+输出保存在本地：
+
+- `/tmp/patch_hann_cycle_lag_08_summary.csv`
+- `/tmp/patch_hann_cycle_lag_08_windows.csv`
+
+按方向聚合：
+
+| direction | n | zero corr mean | same best corr mean | same abs lag frac mean | inverted zero corr mean | inverted best corr mean | inverted abs lag frac mean | inverted winner rate | same halfcycle-like rate | inverted near-zero rate |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| positive | 6 | 0.794017 | 0.843727 | 0.040572 | -0.794017 | 0.808298 | 0.473213 | 0.316452 | 0.000130 | 0.000000 |
+| negative | 5 | -0.794556 | 0.806451 | 0.472828 | 0.794556 | 0.844418 | 0.040922 | 0.684943 | 0.719280 | 0.804771 |
+
+诊断结论：
+
+- 反向组如果不翻转预测，`same_best_corr` 可通过约 `0.47` 个呼吸周期的 lag 提升
+  到 `0.806451`。这说明从周期信号角度看，它确实接近半周期相移。
+- 但反向组把预测取负后，`inv_best_corr=0.844418`，最佳 lag 只剩约 `0.041`
+  个周期，几乎回到正向组的近零延迟形态。这说明对当前输出而言，更简洁的解释是
+  **近零延迟的极性翻转**，而不是任意、不稳定的时延。
+- 正向组相反：不翻转时最佳 lag 约 `0.041` 周期；翻转后才需要约 `0.47` 周期
+  才能找到较高相关。这与反向组形成镜像关系。
+- 因此，M6 的重点应是稳定低频 signed direction / polarity，而不是只扩大
+  lag-tolerant search。若只做更宽 lag-tolerant loss，模型可能继续接受半周期错相
+  解，反而不能保证 state-aligned 前提下的生理方向一致。
