@@ -1418,3 +1418,20 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
 - 目前不需要继续加大方向权重。下一步应以 `patch_hann_bandlimited_output1d`
   + `signed_corr_weight=0.2` 作为新的结构基线，再扩更多 seed 或进入 M11
   `dual_branch_gated_decoder`，而不是回到 M10a/M10b。
+
+补充解释：
+
+- 这里的 `checkpoint_gate` 不是模型内的门控结构，而是 checkpoint 保存过滤器。
+  当前 `checkpoint_gate.metric=auto_direction` 会在启用 `signed_corr_weight` 时检查
+  `val_signed_corr`；由于 `signed_corr = 1 - corr(bandpassed_pred, bandpassed_target)`，
+  `checkpoint_gate.max=0.5` 约等价于要求低频带通预测与参考的正向相关不低于 `0.5`。
+- 这个 gate 的作用是防止“整体 loss 看起来可接受，但低频方向反了”的 checkpoint
+  被保存和进入正式评价。gate failed 表示没有任何 epoch 同时满足方向约束和 checkpoint
+  保存条件，因此该 run 不生成可评价 checkpoint。
+- M10c 当前优于 baseline 的原因不是绝对波形复制能力更强，而是输出自由度更符合当前任务。
+  `patch_mixer1d` baseline 可以产生局部尖峰和高频结构，导致 raw peak RR 误差很高；
+  `patch_hann_bandlimited_output1d` 在输出端做低频带限投影，限制模型只在呼吸频带内表达，
+  因而显著降低 raw peak 错误，同时保留带通 RR 和呼吸次数指标。
+- 因此当前结论应表述为：M10c direction-fix 在“呼吸节律、呼吸次数、降尖峰、方向稳定”
+  上优于 Patch-Hann baseline；它不是全面胜出，因为相对努力 MAE 和相对努力相关略弱。
+  后续模型优化应优先保留带限输出，再补相对努力表达能力。

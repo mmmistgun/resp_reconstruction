@@ -260,6 +260,40 @@ class _PatchHannTokenEncoder1D(nn.Module):
         return steps * self.patch_stride + self.patch_len
 
 
+def _hard_lowpass_output(
+    y: torch.Tensor,
+    *,
+    max_freq_hz: float,
+    sample_rate: float,
+) -> torch.Tensor:
+    """对最终输出做硬低通投影，限制模型只表达呼吸低频结构。"""
+
+    length = y.size(-1)
+    spectrum = torch.fft.rfft(y.float(), dim=-1)
+    max_bin = int(math.floor(float(max_freq_hz) * length / max(float(sample_rate), 1e-8)))
+    max_bin = max(0, min(max_bin, spectrum.size(-1) - 1))
+    if max_bin + 1 < spectrum.size(-1):
+        spectrum = spectrum.clone()
+        spectrum[..., max_bin + 1 :] = 0
+    filtered = torch.fft.irfft(spectrum, n=length, dim=-1)
+    return filtered.to(dtype=y.dtype)
+
+
+class _WeightedWaveformFusion1D(nn.Module):
+    """用可学习权重融合多个同长度 waveform 分支。"""
+
+    def __init__(self, branch_count: int) -> None:
+        super().__init__()
+        self.logits = nn.Parameter(torch.zeros(max(int(branch_count), 1)))
+
+    def forward(self, outputs: list[torch.Tensor]) -> torch.Tensor:
+        if not outputs:
+            raise ValueError("至少需要一个 waveform 分支输出")
+        weights = torch.softmax(self.logits[: len(outputs)], dim=0)
+        stacked = torch.stack(outputs, dim=0)
+        return torch.sum(weights.view(-1, 1, 1, 1) * stacked, dim=0)
+
+
 class PatchHannControlPointDecoder1D(nn.Module):
     """Patch-Hann encoder + 低采样控制点输出头。
 
@@ -389,15 +423,134 @@ class PatchHannBandlimitedOutput1D(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.backbone(x)
-        length = y.size(-1)
-        spectrum = torch.fft.rfft(y.float(), dim=-1)
-        max_bin = int(math.floor(self.max_freq_hz * length / max(self.sample_rate, 1e-8)))
-        max_bin = max(0, min(max_bin, spectrum.size(-1) - 1))
-        if max_bin + 1 < spectrum.size(-1):
-            spectrum = spectrum.clone()
-            spectrum[..., max_bin + 1 :] = 0
-        filtered = torch.fft.irfft(spectrum, n=length, dim=-1)
-        return filtered.to(dtype=y.dtype)
+        return _hard_lowpass_output(y, max_freq_hz=self.max_freq_hz, sample_rate=self.sample_rate)
+
+
+class MultiScalePatchHannBandlimited1D(nn.Module):
+    """SEMixer 启发的多尺度 Patch-Hann 带限输出模型。
+
+    每个分支使用不同 patch 长度覆盖不同呼吸时间尺度，融合后仍做硬低通投影。
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 16,
+        patch_lengths: list[int] | tuple[int, ...] = (256, 512, 1024, 2048),
+        patch_stride_ratio: float = 0.5,
+        mixer_layers: int = 2,
+        max_freq_hz: float = 0.7,
+        sample_rate: float = 100.0,
+    ) -> None:
+        super().__init__()
+        lengths = [max(int(v), 8) for v in patch_lengths]
+        if not lengths:
+            raise ValueError("patch_lengths 不能为空")
+        self.max_freq_hz = float(max_freq_hz)
+        self.sample_rate = float(sample_rate)
+        self.branches = nn.ModuleList(
+            [
+                PatchMixer1D(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    base_channels=base_channels,
+                    patch_len=patch_len,
+                    patch_stride=max(1, int(round(patch_len * float(patch_stride_ratio)))),
+                    mixer_layers=mixer_layers,
+                    overlap_window="hann",
+                    output_smoothing_kernel=1,
+                )
+                for patch_len in lengths
+            ]
+        )
+        self.fusion = _WeightedWaveformFusion1D(len(self.branches))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.fusion([branch(x) for branch in self.branches])
+        return _hard_lowpass_output(y, max_freq_hz=self.max_freq_hz, sample_rate=self.sample_rate)
+
+
+class PeriodAwarePatchHannBandlimited1D(MultiScalePatchHannBandlimited1D):
+    """GFMixer 启发的周期候选 Patch-Hann 带限输出模型。"""
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 16,
+        period_secs: list[float] | tuple[float, ...] = (2.5, 4.0, 6.0, 10.0),
+        patch_stride_ratio: float = 0.5,
+        mixer_layers: int = 2,
+        max_freq_hz: float = 0.7,
+        sample_rate: float = 100.0,
+    ) -> None:
+        patch_lengths = [max(int(round(float(period_sec) * float(sample_rate))), 8) for period_sec in period_secs]
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            base_channels=base_channels,
+            patch_lengths=patch_lengths,
+            patch_stride_ratio=patch_stride_ratio,
+            mixer_layers=mixer_layers,
+            max_freq_hz=max_freq_hz,
+            sample_rate=sample_rate,
+        )
+
+
+class PolyphasePatchHannBandlimited1D(nn.Module):
+    """Time-TK 启发的 polyphase 子序列 Patch-Hann 带限输出模型。
+
+    不改变原始输入来源，只从多个采样相位/步长视角读取同一窗口，降低局部采样相位敏感性。
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 16,
+        offsets: list[int] | tuple[int, ...] = (1, 2, 4),
+        patch_len: int = 256,
+        patch_stride: int = 128,
+        mixer_layers: int = 2,
+        max_freq_hz: float = 0.7,
+        sample_rate: float = 100.0,
+    ) -> None:
+        super().__init__()
+        self.offsets = [max(int(v), 1) for v in offsets]
+        if not self.offsets:
+            raise ValueError("offsets 不能为空")
+        self.max_freq_hz = float(max_freq_hz)
+        self.sample_rate = float(sample_rate)
+        self.branches = nn.ModuleList(
+            [
+                PatchMixer1D(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    base_channels=base_channels,
+                    patch_len=max(8, int(round(int(patch_len) / offset))),
+                    patch_stride=max(1, int(round(int(patch_stride) / offset))),
+                    mixer_layers=mixer_layers,
+                    overlap_window="hann",
+                    output_smoothing_kernel=1,
+                )
+                for offset in self.offsets
+            ]
+        )
+        self.fusion = _WeightedWaveformFusion1D(len(self.branches))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        length = x.size(-1)
+        outputs = []
+        for offset, branch in zip(self.offsets, self.branches):
+            if offset == 1:
+                y = branch(x)
+            else:
+                y = branch(x[..., ::offset])
+                y = F.interpolate(y, size=length, mode="linear", align_corners=False)
+            outputs.append(y)
+        y = self.fusion(outputs)
+        return _hard_lowpass_output(y, max_freq_hz=self.max_freq_hz, sample_rate=self.sample_rate)
 
 
 class FIRFrontendPatchMixer1D(nn.Module):

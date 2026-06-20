@@ -47,6 +47,9 @@ def test_fir_frontend_patch_mixer_is_registered():
         "patch_hann_control_point_decoder1d",
         "patch_hann_basis_residual_decoder1d",
         "patch_hann_bandlimited_output1d",
+        "multiscale_patch_hann_bandlimited1d",
+        "period_aware_patch_hann_bandlimited1d",
+        "polyphase_patch_hann_bandlimited1d",
     ],
 )
 def test_lowfreq_structure_models_are_registered(model_name):
@@ -208,6 +211,18 @@ def test_build_fir_frontend_patch_mixer_preserves_waveform_shape():
             "patch_hann_bandlimited_output1d",
             {"patch_len": 128, "patch_stride": 64, "mixer_layers": 1, "max_freq_hz": 0.7},
         ),
+        (
+            "multiscale_patch_hann_bandlimited1d",
+            {"patch_lengths": [128, 256], "patch_stride_ratio": 0.5, "mixer_layers": 1, "max_freq_hz": 0.7},
+        ),
+        (
+            "period_aware_patch_hann_bandlimited1d",
+            {"period_secs": [2.5, 4.0], "patch_stride_ratio": 0.5, "mixer_layers": 1, "max_freq_hz": 0.7},
+        ),
+        (
+            "polyphase_patch_hann_bandlimited1d",
+            {"offsets": [1, 2, 4], "patch_len": 128, "patch_stride": 64, "mixer_layers": 1, "max_freq_hz": 0.7},
+        ),
     ],
 )
 def test_lowfreq_structure_models_preserve_waveform_shape(model_name, extra):
@@ -302,6 +317,18 @@ def test_timesnet_lite_uses_lowpass_signal_for_period_selection():
         (
             "patch_hann_bandlimited_output1d",
             {"patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "max_freq_hz": 0.7},
+        ),
+        (
+            "multiscale_patch_hann_bandlimited1d",
+            {"patch_lengths": [256, 512], "patch_stride_ratio": 0.5, "mixer_layers": 1, "max_freq_hz": 0.7},
+        ),
+        (
+            "period_aware_patch_hann_bandlimited1d",
+            {"period_secs": [2.5, 4.0], "patch_stride_ratio": 0.5, "mixer_layers": 1, "max_freq_hz": 0.7},
+        ),
+        (
+            "polyphase_patch_hann_bandlimited1d",
+            {"offsets": [1, 2, 4], "patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "max_freq_hz": 0.7},
         ),
     ],
 )
