@@ -1377,3 +1377,44 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
 - 下一步不应直接做 M11 dual-branch gate；更合理的是先做 M10c direction-fix probe，
   例如沿用 M9 的 `signed_corr_weight=0.2` 或更明确的方向 warm-up，验证它能否在两个
   seed 上稳定保留 M10c 的 RR 与 raw peak 收益。
+
+### M10c direction-fix probe：增强方向锚定
+
+目的：验证 M10c 首轮中另一个 seed 的方向失败，是否可以通过更强的 signed correlation
+约束修正，同时不牺牲 M10c 的低尖峰收益。
+
+固定口径：
+
+- 模型固定为 `patch_hann_bandlimited_output1d`。
+- 输入、数据 seed、全量窗口、训练参数同 M10 formal。
+- 只把 `signed_corr_weight` 从 `0.1` 提高到 `0.2`。
+- `checkpoint_gate.metric=auto_direction`，`checkpoint_gate.max=0.5`。
+- 输出目录：`runs/tho_research_v2_model_m10c_direction_fix/`。
+
+结果：
+
+| model | seed | run | metrics | best val loss | min `val_signed_corr` | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `breath_count_zero_cross_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `patch_hann_bandlimited_output1d` | 20260700 | `20260620_171450_077976` | yes | 0.647879 | 0.203142 | 0.422620 | 0.446843 | 0.958936 | 0.222056 | 0.449705 | 0.795729 | 0.843463 | 0.418777 |
+| `patch_hann_bandlimited_output1d` | 20260710 | `20260620_171449_435676` | yes | 0.647689 | 0.204352 | 0.472892 | 0.435959 | 1.015643 | 0.220538 | 0.447874 | 0.797353 | 0.844597 | 0.487113 |
+
+聚合判断：
+
+| model | `signed_corr_weight` | valid n | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `breath_count_zero_cross_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `patch_mixer1d` baseline | 0.10 | 2 | 0.547356 | 0.441401 | 1.070395 | 0.214224 | 0.454943 | 0.795625 | 0.845599 | 4.705204 |
+| `patch_hann_bandlimited_output1d` 首轮有效 seed | 0.10 | 1 | 0.433455 | 0.441114 | 1.015252 | 0.219536 | 0.443216 | 0.796872 | 0.844865 | 0.434668 |
+| `patch_hann_bandlimited_output1d` direction-fix | 0.20 | 2 | 0.447756 | 0.441401 | 0.987290 | 0.221297 | 0.448790 | 0.796541 | 0.844030 | 0.452945 |
+
+阶段结论：
+
+- `signed_corr_weight=0.2` 可以把 M10c 两个 seed 都拉回可用方向，direction gate
+  不再失败。
+- 相比 Patch-Hann baseline，M10c direction-fix 保持了更低的带通 RR 误差
+  (`0.447756` vs `0.547356`)、更低的呼吸次数误差 (`0.987290` vs `1.070395`)，
+  并把 raw peak 误差从 `4.705204` 降到 `0.452945`。
+- 代价是相对努力 MAE 略高 (`0.221297` vs `0.214224`)，相对努力相关略低
+  (`0.448790` vs `0.454943`)；这属于可接受但需要继续监控的 trade-off。
+- 目前不需要继续加大方向权重。下一步应以 `patch_hann_bandlimited_output1d`
+  + `signed_corr_weight=0.2` 作为新的结构基线，再扩更多 seed 或进入 M11
+  `dual_branch_gated_decoder`，而不是回到 M10a/M10b。
