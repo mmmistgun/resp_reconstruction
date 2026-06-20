@@ -91,6 +91,23 @@ def test_evaluate_prediction_dict_reports_best_lag_for_shifted_prediction():
     assert abs(frame.loc[0, "best_lag_sec"] - 0.5) < 1 / fs
 
 
+def test_evaluate_prediction_dict_reports_bandpassed_zero_crossing_breath_counts():
+    fs = 100
+    t = np.arange(0, 60, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t - np.pi / 2).astype(np.float32)
+    pred = np.sin(2 * np.pi * 0.30 * t - np.pi / 2).astype(np.float32)
+    preds = {
+        "r_tho_hat": pred.reshape(1, 1, -1),
+        "tho_ref": target.reshape(1, 1, -1),
+    }
+
+    frame = evaluate_prediction_dict(preds, _cfg(), method="model")
+
+    assert frame.loc[0, "pred_breath_count_zero_cross"] == 18
+    assert frame.loc[0, "target_breath_count_zero_cross"] == 15
+    assert frame.loc[0, "breath_count_zero_cross_abs_error"] == 3
+
+
 def test_evaluate_prediction_dict_rejects_empty_predictions():
     preds = {
         "r_tho_hat": np.empty((0, 1, 100), dtype=np.float32),

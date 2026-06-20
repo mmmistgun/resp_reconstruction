@@ -44,6 +44,9 @@ def test_fir_frontend_patch_mixer_is_registered():
         "timesnet_lite1d",
         "frequency_bottleneck1d",
         "downsampled_ssm1d",
+        "patch_hann_control_point_decoder1d",
+        "patch_hann_basis_residual_decoder1d",
+        "patch_hann_bandlimited_output1d",
     ],
 )
 def test_lowfreq_structure_models_are_registered(model_name):
@@ -193,6 +196,18 @@ def test_build_fir_frontend_patch_mixer_preserves_waveform_shape():
         ("timesnet_lite1d", {"period_top_k": 3, "period_min_sec": 2.0, "period_max_sec": 20.0}),
         ("frequency_bottleneck1d", {"max_freq_hz": 0.7, "freq_bins": 128}),
         ("downsampled_ssm1d", {"latent_stride": 20, "state_layers": 2}),
+        (
+            "patch_hann_control_point_decoder1d",
+            {"patch_len": 128, "patch_stride": 64, "mixer_layers": 1, "control_points": 96},
+        ),
+        (
+            "patch_hann_basis_residual_decoder1d",
+            {"patch_len": 128, "patch_stride": 64, "mixer_layers": 1, "basis_count": 64, "residual_scale": 0.05},
+        ),
+        (
+            "patch_hann_bandlimited_output1d",
+            {"patch_len": 128, "patch_stride": 64, "mixer_layers": 1, "max_freq_hz": 0.7},
+        ),
     ],
 )
 def test_lowfreq_structure_models_preserve_waveform_shape(model_name, extra):
@@ -276,6 +291,18 @@ def test_timesnet_lite_uses_lowpass_signal_for_period_selection():
         ),
         ("frequency_bottleneck1d", {"max_freq_hz": 0.7, "freq_bins": 64}),
         ("downsampled_ssm1d", {"latent_stride": 40, "state_layers": 1}),
+        (
+            "patch_hann_control_point_decoder1d",
+            {"patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "control_points": 180},
+        ),
+        (
+            "patch_hann_basis_residual_decoder1d",
+            {"patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "basis_count": 96, "residual_scale": 0.05},
+        ),
+        (
+            "patch_hann_bandlimited_output1d",
+            {"patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "max_freq_hz": 0.7},
+        ),
     ],
 )
 def test_lowfreq_structure_models_support_full_window_backward(model_name, extra):

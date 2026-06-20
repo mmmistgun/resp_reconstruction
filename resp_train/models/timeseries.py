@@ -219,6 +219,187 @@ class PatchMixer1D(nn.Module):
         return window.clamp_min(1e-3)
 
 
+class _PatchHannTokenEncoder1D(nn.Module):
+    """Patch-Hann token encoder，共享给低自由度输出头。"""
+
+    def __init__(
+        self,
+        in_channels: int,
+        base_channels: int,
+        patch_len: int,
+        patch_stride: int,
+        mixer_layers: int,
+    ) -> None:
+        super().__init__()
+        self.patch_len = max(int(patch_len), 8)
+        self.patch_stride = max(int(patch_stride), 1)
+        self.patch_embed = nn.Linear(int(in_channels) * self.patch_len, int(base_channels))
+        self.blocks = nn.ModuleList(
+            [
+                PatchMixerBlock(int(base_channels), patch_count=1, hidden_channels=int(base_channels) * 2)
+                for _ in range(max(int(mixer_layers), 0))
+            ]
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch, _, length = x.shape
+        padded_length = self._padded_length(length)
+        x_padded = _match_length(x, padded_length)
+        patches = x_padded.unfold(dimension=-1, size=self.patch_len, step=self.patch_stride)
+        patch_count = patches.size(2)
+        tokens = patches.permute(0, 2, 1, 3).reshape(batch, patch_count, -1)
+        tokens = self.patch_embed(tokens).transpose(1, 2)
+        for block in self.blocks:
+            tokens = block(tokens)
+        return tokens
+
+    def _padded_length(self, length: int) -> int:
+        if length <= self.patch_len:
+            return self.patch_len
+        steps = math.ceil((length - self.patch_len) / self.patch_stride)
+        return steps * self.patch_stride + self.patch_len
+
+
+class PatchHannControlPointDecoder1D(nn.Module):
+    """Patch-Hann encoder + 低采样控制点输出头。
+
+    decoder 只预测少量控制点，再插值回原窗口长度，直接限制输出时间自由度。
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 16,
+        patch_len: int = 256,
+        patch_stride: int = 128,
+        mixer_layers: int = 2,
+        control_points: int = 360,
+    ) -> None:
+        super().__init__()
+        self.control_points = max(int(control_points), 2)
+        self.encoder = _PatchHannTokenEncoder1D(
+            in_channels=in_channels,
+            base_channels=base_channels,
+            patch_len=patch_len,
+            patch_stride=patch_stride,
+            mixer_layers=mixer_layers,
+        )
+        self.control_head = nn.Conv1d(base_channels, out_channels, kernel_size=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        length = x.size(-1)
+        controls = self.control_head(self.encoder(x))
+        if controls.size(-1) != self.control_points:
+            controls = F.interpolate(controls, size=self.control_points, mode="linear", align_corners=False)
+        return F.interpolate(controls, size=length, mode="linear", align_corners=False)
+
+
+class PatchHannBasisResidualDecoder1D(nn.Module):
+    """Patch-Hann encoder + 低频基函数主输出 + 小 residual 输出头。"""
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 16,
+        patch_len: int = 256,
+        patch_stride: int = 128,
+        mixer_layers: int = 2,
+        basis_count: int = 96,
+        residual_points: int = 180,
+        residual_scale: float = 0.05,
+        duration_samples: int = 18000,
+    ) -> None:
+        super().__init__()
+        self.out_channels = int(out_channels)
+        self.basis_count = max(int(basis_count), 8)
+        self.residual_points = max(int(residual_points), 2)
+        self.residual_scale = float(residual_scale)
+        self.encoder = _PatchHannTokenEncoder1D(
+            in_channels=in_channels,
+            base_channels=base_channels,
+            patch_len=patch_len,
+            patch_stride=patch_stride,
+            mixer_layers=mixer_layers,
+        )
+        self.coeff_head = nn.Linear(base_channels, self.out_channels * self.basis_count)
+        self.residual_head = nn.Conv1d(base_channels, self.out_channels, kernel_size=1)
+        basis = self._build_basis(int(duration_samples), self.basis_count)
+        self.register_buffer("basis", basis, persistent=False)
+
+    @staticmethod
+    def _build_basis(length: int, basis_count: int) -> torch.Tensor:
+        t = torch.linspace(0.0, 1.0, int(length), dtype=torch.float32)
+        cols = [torch.ones_like(t)]
+        max_harmonics = max(math.ceil((int(basis_count) - 1) / 2), 1)
+        for k in range(1, max_harmonics + 1):
+            cols.append(torch.sin(2.0 * math.pi * k * t))
+            if len(cols) >= basis_count:
+                break
+            cols.append(torch.cos(2.0 * math.pi * k * t))
+            if len(cols) >= basis_count:
+                break
+        basis = torch.stack(cols[:basis_count], dim=0)
+        return basis / basis.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        length = x.size(-1)
+        tokens = self.encoder(x)
+        pooled = tokens.mean(dim=-1)
+        coeff = self.coeff_head(pooled).view(x.size(0), self.out_channels, self.basis_count)
+        basis = self.basis.to(device=x.device, dtype=x.dtype)
+        if basis.size(-1) != length:
+            basis = F.interpolate(basis.unsqueeze(0), size=length, mode="linear", align_corners=False).squeeze(0)
+        main = torch.einsum("bck,kl->bcl", coeff, basis)
+        residual = self.residual_head(tokens)
+        if residual.size(-1) != self.residual_points:
+            residual = F.interpolate(residual, size=self.residual_points, mode="linear", align_corners=False)
+        residual = F.interpolate(residual, size=length, mode="linear", align_corners=False)
+        return main + self.residual_scale * residual
+
+
+class PatchHannBandlimitedOutput1D(nn.Module):
+    """Patch-Hann baseline 后接硬低频投影，验证最终输出带限是否足够。"""
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 16,
+        patch_len: int = 256,
+        patch_stride: int = 128,
+        mixer_layers: int = 2,
+        max_freq_hz: float = 0.7,
+        sample_rate: float = 100.0,
+    ) -> None:
+        super().__init__()
+        self.max_freq_hz = float(max_freq_hz)
+        self.sample_rate = float(sample_rate)
+        self.backbone = PatchMixer1D(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            base_channels=base_channels,
+            patch_len=patch_len,
+            patch_stride=patch_stride,
+            mixer_layers=mixer_layers,
+            overlap_window="hann",
+            output_smoothing_kernel=1,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.backbone(x)
+        length = y.size(-1)
+        spectrum = torch.fft.rfft(y.float(), dim=-1)
+        max_bin = int(math.floor(self.max_freq_hz * length / max(self.sample_rate, 1e-8)))
+        max_bin = max(0, min(max_bin, spectrum.size(-1) - 1))
+        if max_bin + 1 < spectrum.size(-1):
+            spectrum = spectrum.clone()
+            spectrum[..., max_bin + 1 :] = 0
+        filtered = torch.fft.irfft(spectrum, n=length, dim=-1)
+        return filtered.to(dtype=y.dtype)
+
+
 class FIRFrontendPatchMixer1D(nn.Module):
     """先用呼吸频带 FIR 前端滤波，再交给 PatchMixer。"""
 

@@ -11,7 +11,15 @@ from resp_train.models.lowfreq import (
     MultiScaleDecompMixer1D,
     TimesNetLite1D,
 )
-from resp_train.models.timeseries import DLinearWaveform, FIRFrontendPatchMixer1D, PatchMixer1D, PeriodicUNet1DTiny
+from resp_train.models.timeseries import (
+    DLinearWaveform,
+    FIRFrontendPatchMixer1D,
+    PatchHannBandlimitedOutput1D,
+    PatchHannBasisResidualDecoder1D,
+    PatchHannControlPointDecoder1D,
+    PatchMixer1D,
+    PeriodicUNet1DTiny,
+)
 from resp_train.models.unet1d import UNet1DTiny, UNet1DTinyNoSkip1, UNet1DTinyNoSkipAll
 
 
@@ -65,6 +73,37 @@ _REGISTRY: dict[str, ModelFactory] = {
         fir_high_hz=float(cfg.model.get("fir_high_hz", 0.7)),
         fir_sample_rate=float(cfg.model.get("fir_sample_rate", 100.0)),
         fir_trainable=bool(cfg.model.get("fir_trainable", True)),
+    ),
+    "patch_hann_control_point_decoder1d": lambda cfg: PatchHannControlPointDecoder1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        patch_len=int(cfg.model.get("patch_len", 256)),
+        patch_stride=int(cfg.model.get("patch_stride", 128)),
+        mixer_layers=int(cfg.model.get("mixer_layers", 2)),
+        control_points=int(cfg.model.get("control_points", 360)),
+    ),
+    "patch_hann_basis_residual_decoder1d": lambda cfg: PatchHannBasisResidualDecoder1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        patch_len=int(cfg.model.get("patch_len", 256)),
+        patch_stride=int(cfg.model.get("patch_stride", 128)),
+        mixer_layers=int(cfg.model.get("mixer_layers", 2)),
+        basis_count=int(cfg.model.get("basis_count", 96)),
+        residual_points=int(cfg.model.get("residual_points", 180)),
+        residual_scale=float(cfg.model.get("residual_scale", 0.05)),
+        duration_samples=int(cfg.window.get("duration_samples", 18000)),
+    ),
+    "patch_hann_bandlimited_output1d": lambda cfg: PatchHannBandlimitedOutput1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        patch_len=int(cfg.model.get("patch_len", 256)),
+        patch_stride=int(cfg.model.get("patch_stride", 128)),
+        mixer_layers=int(cfg.model.get("mixer_layers", 2)),
+        max_freq_hz=float(cfg.model.get("max_freq_hz", 0.7)),
+        sample_rate=float(cfg.window.get("target_fs", 100)),
     ),
     "dlinear_waveform": lambda cfg: DLinearWaveform(
         in_channels=int(cfg.model.in_channels),

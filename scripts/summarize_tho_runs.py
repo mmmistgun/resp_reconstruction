@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 METRIC_COLUMNS = [
     "rr_spec_abs_error",
     "rr_peak_band_abs_error",
+    "breath_count_zero_cross_abs_error",
     "rr_peak_abs_error",
     "envelope_corr",
     "relative_envelope_corr",
@@ -29,6 +30,7 @@ METRIC_COLUMNS = [
 TASK_SELECTION_METRICS = [
     "rr_peak_band_abs_error",
     "rr_spec_abs_error",
+    "breath_count_zero_cross_abs_error",
     "relative_envelope_mae",
     "relative_envelope_corr",
     "spectrum_similarity",

@@ -10,6 +10,7 @@ from resp_train.metrics.signal import (
     band_limited_corr,
     best_lag_correlation,
     estimate_bandpassed_peak_rate_bpm,
+    estimate_bandpassed_zero_crossing_breath_count,
     estimate_peak_rate_bpm,
     estimate_spectral_rate_bpm,
     relative_envelope_metrics,
@@ -57,6 +58,20 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
             high_hz=high_hz,
             order=lag_bandpass_order,
         )
+        pred_breath_count_zero_cross = estimate_bandpassed_zero_crossing_breath_count(
+            pred,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            order=lag_bandpass_order,
+        )
+        target_breath_count_zero_cross = estimate_bandpassed_zero_crossing_breath_count(
+            target,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            order=lag_bandpass_order,
+        )
         rel_env = relative_envelope_metrics(
             pred,
             target,
@@ -89,6 +104,11 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
                 "pred_rr_peak_band_bpm": pred_rr_peak_band,
                 "target_rr_peak_band_bpm": target_rr_peak_band,
                 "rr_peak_band_abs_error": _abs_error_or_nan(pred_rr_peak_band, target_rr_peak_band),
+                "pred_breath_count_zero_cross": pred_breath_count_zero_cross,
+                "target_breath_count_zero_cross": target_breath_count_zero_cross,
+                "breath_count_zero_cross_abs_error": abs(
+                    pred_breath_count_zero_cross - target_breath_count_zero_cross
+                ),
                 "envelope_corr": _corrcoef_or_nan(pred_env, target_env),
                 "relative_envelope_corr": rel_env["relative_envelope_corr"],
                 "relative_envelope_mae": rel_env["relative_envelope_mae"],

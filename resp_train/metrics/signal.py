@@ -392,6 +392,42 @@ def estimate_bandpassed_peak_rate_bpm(
     )
 
 
+def estimate_bandpassed_zero_crossing_breath_count(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+    order: int = 4,
+    edge: str = "cycle",
+) -> int:
+    """先限制到呼吸频带，再用过零边沿估计窗口内呼吸个数。"""
+    filtered = bandpass_filter(signal, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    return zero_crossing_count(filtered, edge=edge)
+
+
+def zero_crossing_count(signal: np.ndarray, *, edge: str = "cycle") -> int:
+    """统计过零呼吸次数。
+
+    `cycle` 同时利用上升与下降过零，并取平均后的整数，减少窗口边界只截到半个
+    呼吸周期时的方向偏差。
+    """
+    x = _as_1d_float(signal)
+    if x.size < 2:
+        return 0
+    edge_name = str(edge).lower()
+    up = int(np.count_nonzero((x[:-1] <= 0.0) & (x[1:] > 0.0)))
+    down = int(np.count_nonzero((x[:-1] >= 0.0) & (x[1:] < 0.0)))
+    if edge_name in {"cycle", "both", "breath"}:
+        return int(np.floor(((up + down) / 2.0) + 0.5))
+    if edge_name in {"up", "rising", "rise"}:
+        return up
+    if edge_name in {"down", "falling", "fall"}:
+        return down
+    else:
+        raise ValueError(f"未知过零方向: {edge!r}，可选: cycle, up, down")
+
+
 def spectrum_similarity(
     pred: np.ndarray,
     target: np.ndarray,
