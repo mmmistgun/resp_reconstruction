@@ -1316,3 +1316,64 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
   或轻量 anti-spike 策略，而不是继续只调方向权重。
 - `downsampled_ssm1d` 暂不扩 seed；它证明 state-style decoder 有降尖峰价值，但当前
   RR 代价太高。
+
+### M10 输出受限 Patch-Hann：控制输出自由度
+
+目的：在输入不变的前提下，验证“保留 Patch-Hann 的节律提取能力，但限制输出自由度”
+是否能降低局部尖峰，同时保持带通 RR 与相对努力变化。
+
+新增模型：
+
+- `patch_hann_control_point_decoder1d`：Patch-Hann token encoder 后只预测少量控制点，
+  再插值回 100 Hz 波形。
+- `patch_hann_basis_residual_decoder1d`：Patch-Hann token encoder 后用低频 basis 生成主输出，
+  并允许一个很小的低采样 residual。
+- `patch_hann_bandlimited_output1d`：保留 Patch-Hann 输出形式，但最后做硬低频投影。
+
+新增评价指标：
+
+- `breath_count_zero_cross_abs_error`：先带通到呼吸频带，再同时统计上升/下降过零，
+  取二者平均后的整数作为窗口呼吸次数，比较预测与参考的绝对误差。
+- `best_lag_corr` 仍作为低频带内 lag-aware PCC：先带通，再在允许 lag 范围内搜索相关最高的
+  Pearson correlation。
+
+固定口径：
+
+- 输入、数据 seed、全量窗口、训练参数同 M9 formal。
+- `signed_corr_weight=0.1`，`checkpoint_gate.metric=auto_direction`，
+  `checkpoint_gate.max=0.5`。
+- 输出目录：`runs/tho_research_v2_model_m10_output_limited/`。
+
+结果：
+
+| model | seed | run | metrics | best val loss | min `val_signed_corr` | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `breath_count_zero_cross_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `patch_mixer1d` baseline | 20260700 | `20260618_214430_858665` | yes | 0.635817 | 0.202323 | 0.547664 | 0.436531 | 1.075088 | 0.213462 | 0.457882 | 0.798281 | 0.846291 | 4.619530 |
+| `patch_mixer1d` baseline | 20260710 | `20260618_214431_129136` | yes | 0.640246 | 0.205546 | 0.547049 | 0.446270 | 1.065702 | 0.214987 | 0.452004 | 0.792969 | 0.844906 | 4.790879 |
+| `patch_hann_control_point_decoder1d` | 20260700 | `20260620_164016_375744` | no | 0.920166 | 1.133016 | - | - | - | - | - | - | - | - |
+| `patch_hann_control_point_decoder1d` | 20260710 | `20260620_164015_071511` | yes | 0.757589 | 0.328125 | 0.988477 | 0.600947 | 1.482988 | 0.283431 | 0.377111 | 0.659730 | 0.705620 | 1.122953 |
+| `patch_hann_basis_residual_decoder1d` | 20260700 | `20260620_164609_001939` | yes | 0.782298 | 0.342966 | 0.671564 | 0.690888 | 1.870551 | 0.340810 | 0.365532 | 0.649765 | 0.702521 | 1.070518 |
+| `patch_hann_basis_residual_decoder1d` | 20260710 | `20260620_164610_220453` | no | 0.877523 | 0.931794 | - | - | - | - | - | - | - | - |
+| `patch_hann_bandlimited_output1d` | 20260700 | `20260620_165155_279005` | yes | 0.631442 | 0.204897 | 0.433455 | 0.441114 | 1.015252 | 0.219536 | 0.443216 | 0.796872 | 0.844865 | 0.434668 |
+| `patch_hann_bandlimited_output1d` | 20260710 | `20260620_165155_745758` | no | 0.790986 | 1.705100 | - | - | - | - | - | - | - | - |
+
+有效 run 聚合：
+
+| model | valid n | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `breath_count_zero_cross_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `patch_mixer1d` baseline | 2 | 0.547356 | 0.441401 | 1.070395 | 0.214224 | 0.454943 | 0.795625 | 0.845599 | 4.705204 |
+| `patch_hann_control_point_decoder1d` | 1 | 0.988477 | 0.600947 | 1.482988 | 0.283431 | 0.377111 | 0.659730 | 0.705620 | 1.122953 |
+| `patch_hann_basis_residual_decoder1d` | 1 | 0.671564 | 0.690888 | 1.870551 | 0.340810 | 0.365532 | 0.649765 | 0.702521 | 1.070518 |
+| `patch_hann_bandlimited_output1d` | 1 | 0.433455 | 0.441114 | 1.015252 | 0.219536 | 0.443216 | 0.796872 | 0.844865 | 0.434668 |
+
+阶段结论：
+
+- M10a/M10b 未达到进入 M11 的条件。二者各只有 1 个 seed 通过 gate，且通过 seed 的
+  RR、呼吸次数、相对包络和 lag-aware corr 都弱于 Patch-Hann baseline。
+- M10c 是当前最有价值的结构信号：通过 seed 的带通 RR 优于 baseline
+  (`0.433455` vs `0.547356`)，呼吸次数误差基本持平，raw peak 从约 `4.7`
+  降到 `0.43`。
+- 但 M10c 仍只有 1/2 seed 通过 direction gate，不能直接扩为主线结论。
+- 下一步不应直接做 M11 dual-branch gate；更合理的是先做 M10c direction-fix probe，
+  例如沿用 M9 的 `signed_corr_weight=0.2` 或更明确的方向 warm-up，验证它能否在两个
+  seed 上稳定保留 M10c 的 RR 与 raw peak 收益。
