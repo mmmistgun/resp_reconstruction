@@ -1435,3 +1435,70 @@ Patch-Hann 的节律能力，同时降低普通局部输出尖峰自由度。
 - 因此当前结论应表述为：M10c direction-fix 在“呼吸节律、呼吸次数、降尖峰、方向稳定”
   上优于 Patch-Hann baseline；它不是全面胜出，因为相对努力 MAE 和相对努力相关略弱。
   后续模型优化应优先保留带限输出，再补相对努力表达能力。
+
+### M12 reference-inspired 带限多视角 Patch-Hann
+
+目的：从 GFMixer、SEMixer、Time-TK、FSDI 四个参考仓库中抽取可迁移的结构归纳偏置，
+在不改变输入与 loss 口径的前提下，验证多尺度、周期候选和 polyphase 子序列是否能优于
+M10c direction-fix。
+
+参考仓库取舍：
+
+- SEMixer：借鉴多尺度 patch mixing 和逐级尺度融合思想，优先验证多尺度 patch。
+- GFMixer：借鉴 period-aware patch segmentation，但不引入完整 Fourier-aware attention
+  和 temporal gradient branch，避免重新放大尖峰自由度。
+- Time-TK：借鉴 offset/polyphase 子序列思想，用多个采样步长视角增强相位鲁棒性。
+- FSDI：完整 diffusion imputation 路线当前过重，本轮不进入模型主线，仅保留频率塑形思想
+  作为后续可能的 augmentation/auxiliary direction。
+
+新增模型：
+
+- `multiscale_patch_hann_bandlimited1d`：多 patch 长度分支，本轮使用
+  `patch_lengths=[256,512,1024,2048]`。
+- `period_aware_patch_hann_bandlimited1d`：周期候选 patch 分支，本轮使用
+  `period_secs=[2.5,4.0,6.0,10.0]`。
+- `polyphase_patch_hann_bandlimited1d`：polyphase 子序列分支，本轮使用
+  `offsets=[1,2,4]`。
+
+固定口径：
+
+- 输入、数据 seed、全量窗口、训练参数同 M10c direction-fix。
+- `signed_corr_weight=0.2`，`checkpoint_gate.metric=auto_direction`，
+  `checkpoint_gate.max=0.5`。
+- 三个模型都保留最终硬低通投影，`max_freq_hz=0.7`。
+- 输出目录：`runs/tho_research_v2_model_m12_reference_inspired/`。
+
+结果：
+
+| model | seed | run | best val loss | min `val_signed_corr` | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `breath_count_zero_cross_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `multiscale_patch_hann_bandlimited1d` | 20260700 | `20260620_180004_802283` | 0.640251 | 0.212121 | 0.464725 | 0.481216 | 1.043410 | 0.221935 | 0.459450 | 0.788461 | 0.836971 | 0.465031 |
+| `multiscale_patch_hann_bandlimited1d` | 20260710 | `20260620_180003_577592` | 0.639333 | 0.211371 | 0.478831 | 0.488090 | 1.128666 | 0.218866 | 0.459800 | 0.790143 | 0.839226 | 0.476875 |
+| `period_aware_patch_hann_bandlimited1d` | 20260700 | `20260620_190456_629949` | 0.657066 | 0.216100 | 0.517184 | 0.470904 | 1.165428 | 0.225156 | 0.442648 | 0.783633 | 0.835995 | 0.517403 |
+| `period_aware_patch_hann_bandlimited1d` | 20260710 | `20260620_190456_125196` | 0.657392 | 0.213342 | 0.496336 | 0.468613 | 1.134142 | 0.223078 | 0.441856 | 0.787443 | 0.837401 | 0.496387 |
+| `polyphase_patch_hann_bandlimited1d` | 20260700 | `20260620_191612_307591` | 0.649733 | 0.202804 | 0.498304 | 0.447416 | 1.070786 | 0.217813 | 0.446871 | 0.798724 | 0.846492 | 0.506837 |
+| `polyphase_patch_hann_bandlimited1d` | 20260710 | `20260620_191611_531198` | 0.649979 | 0.205803 | 0.458852 | 0.454863 | 0.944466 | 0.222905 | 0.449275 | 0.795729 | 0.843245 | 0.474081 |
+
+聚合判断：
+
+| model | valid n | `rr_peak_band_abs_error` mean | `rr_spec_abs_error` mean | `breath_count_zero_cross_abs_error` mean | `relative_envelope_mae` mean | `relative_envelope_corr` mean | `band_limited_corr` mean | `best_lag_corr` mean | raw `rr_peak_abs_error` mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `patch_hann_bandlimited_output1d` direction-fix | 2 | 0.447756 | 0.441401 | 0.987290 | 0.221297 | 0.448790 | 0.796541 | 0.844030 | 0.452945 |
+| `multiscale_patch_hann_bandlimited1d` | 2 | 0.471778 | 0.484653 | 1.086038 | 0.220400 | 0.459625 | 0.789302 | 0.838099 | 0.470953 |
+| `period_aware_patch_hann_bandlimited1d` | 2 | 0.506760 | 0.469758 | 1.149785 | 0.224117 | 0.442252 | 0.785538 | 0.836698 | 0.506895 |
+| `polyphase_patch_hann_bandlimited1d` | 2 | 0.478578 | 0.451140 | 1.007626 | 0.220359 | 0.448073 | 0.797227 | 0.844869 | 0.490459 |
+
+阶段结论：
+
+- M12 三组均通过 direction gate，没有复现 M10 首轮的方向失败。
+- M12a `multiscale_patch_hann_bandlimited1d` 提升了相对努力相关
+  (`0.459625` vs M10c `0.448790`)，但带通 RR、频谱 RR、呼吸次数、band/lag corr
+  均弱于 M10c；它适合作为“补相对努力”的结构线索，不适合作为当前主模型替换。
+- M12b `period_aware_patch_hann_bandlimited1d` 不建议继续。固定周期候选 patch
+  没有带来节律收益，反而整体弱于 M10c 和 M12a/M12c。
+- M12c `polyphase_patch_hann_bandlimited1d` 与 M10c 最接近，`best_lag_corr`
+  略高 (`0.844869` vs `0.844030`)，呼吸次数误差接近，但带通 RR 和 raw peak
+  仍弱于 M10c。
+- 当前主线仍应保留 `patch_hann_bandlimited_output1d + signed_corr_weight=0.2`。
+  下一步如果继续改模型，更合理的是把 M12a 的多尺度信息作为轻量辅助分支或相对努力分支，
+  而不是直接用 M12a/M12b/M12c 替换 M10c。
