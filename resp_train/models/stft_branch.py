@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -84,6 +85,7 @@ class STFTEncoder(nn.Module):
         high_hz: float = 8.0,
         out_channels: int = 16,
         norm: str = "n0",
+        band_scale_path: str | None = None,
         encoder_type: str = "conv1d",
     ) -> None:
         super().__init__()
@@ -96,15 +98,26 @@ class STFTEncoder(nn.Module):
         self.norm = str(norm).lower()
         self.encoder_type = str(encoder_type).lower()
 
-        if self.norm != "n0":
-            raise ValueError(f"未知 norm={norm!r}，当前 STFTEncoder 仅支持 norm='n0'")
+        if self.norm not in {"n0", "n1"}:
+            raise ValueError(f"未知 norm={norm!r}，可选: n0, n1")
 
         _validate_stft_config(self.stft_win, self.stft_hop, self.sample_rate, self.low_hz, self.high_hz)
         self.band_start, self.band_end = _band_indices(self.stft_win, self.sample_rate, self.low_hz, self.high_hz)
         freq_bins = self.band_bin_count()
 
         self.register_buffer("stft_window", torch.hann_window(self.stft_win), persistent=False)
-        self.register_buffer("band_scale", torch.ones(freq_bins, dtype=torch.float32), persistent=True)
+        if self.norm == "n1" and band_scale_path:
+            scale = np.asarray(np.load(band_scale_path), dtype=np.float32)
+            if scale.shape != (freq_bins,):
+                raise ValueError(
+                    f"band_scale 长度必须等于频带 bin 数 {freq_bins}，实际 shape={tuple(scale.shape)}"
+                )
+            if not np.isfinite(scale).all() or (scale <= 0.0).any():
+                raise ValueError("band_scale 必须全部为有限正数")
+            band_scale = torch.from_numpy(scale)
+        else:
+            band_scale = torch.ones(freq_bins, dtype=torch.float32)
+        self.register_buffer("band_scale", band_scale, persistent=True)
 
         if self.encoder_type == "conv1d":
             self.encoder = nn.Sequential(
@@ -145,8 +158,12 @@ class STFTEncoder(nn.Module):
         )
         features = torch.log1p(spectrum.abs())
         features = features[:, self.band_start : self.band_end, :]
-        encoder_dtype = next(self.encoder.parameters()).dtype
-        features = features.to(dtype=encoder_dtype)
+        encoder_param = next(self.encoder.parameters(), None)
+        if encoder_param is not None:
+            features = features.to(dtype=encoder_param.dtype)
+        if self.norm == "n1":
+            scale = self.band_scale.to(device=features.device, dtype=features.dtype).view(1, -1, 1).clamp_min(1e-6)
+            features = features / scale
 
         if self.encoder_type == "conv1d":
             return self.encoder(features)

@@ -84,9 +84,88 @@ def test_stft_encoder_rejects_non_finite_frequency_config(kwargs, match):
         STFTEncoder(**params)
 
 
-def test_stft_encoder_rejects_n1_norm_until_task6():
+def test_stft_encoder_rejects_unknown_norm():
     with pytest.raises(ValueError, match="norm"):
-        STFTEncoder(norm="n1")
+        STFTEncoder(norm="unknown")
+
+
+def test_stft_encoder_n1_divides_by_band_scale(tmp_path):
+    import numpy as np
+
+    enc = _encoder(3.0)
+    n_bins = enc.band_bin_count()
+    scale = np.full(n_bins, 2.0, dtype=np.float32)
+    scale_path = tmp_path / "band_scale_3hz.npy"
+    np.save(scale_path, scale)
+
+    enc_n1 = STFTEncoder(
+        sample_rate=100.0,
+        stft_win=3000,
+        stft_hop=500,
+        low_hz=0.05,
+        high_hz=3.0,
+        out_channels=16,
+        norm="n1",
+        band_scale_path=str(scale_path),
+    )
+
+    assert torch.allclose(enc_n1.band_scale, torch.full((n_bins,), 2.0))
+
+
+def test_stft_encoder_rejects_invalid_band_scale_values(tmp_path):
+    import numpy as np
+
+    enc = _encoder(3.0)
+    scale = np.ones(enc.band_bin_count(), dtype=np.float32)
+    scale[0] = float("nan")
+    scale_path = tmp_path / "bad_band_scale.npy"
+    np.save(scale_path, scale)
+
+    with pytest.raises(ValueError, match="band_scale"):
+        STFTEncoder(
+            sample_rate=100.0,
+            stft_win=3000,
+            stft_hop=500,
+            low_hz=0.05,
+            high_hz=3.0,
+            out_channels=16,
+            norm="n1",
+            band_scale_path=str(scale_path),
+        )
+
+
+def test_stft_encoder_n1_forward_divides_by_band_scale(tmp_path):
+    import numpy as np
+
+    n0 = STFTEncoder(
+        sample_rate=100.0,
+        stft_win=512,
+        stft_hop=128,
+        low_hz=0.5,
+        high_hz=3.0,
+        out_channels=4,
+        norm="n0",
+        encoder_type="conv1d",
+    )
+    scale = np.full(n0.band_bin_count(), 2.0, dtype=np.float32)
+    scale_path = tmp_path / "band_scale.npy"
+    np.save(scale_path, scale)
+    n1 = STFTEncoder(
+        sample_rate=100.0,
+        stft_win=512,
+        stft_hop=128,
+        low_hz=0.5,
+        high_hz=3.0,
+        out_channels=4,
+        norm="n1",
+        band_scale_path=str(scale_path),
+        encoder_type="conv1d",
+    )
+    n0.encoder = torch.nn.Identity()
+    n1.encoder = torch.nn.Identity()
+    x = torch.randn(1, 1, 4096)
+
+    assert torch.allclose(n1(x), n0(x) / 2.0, atol=1e-6, rtol=1e-5)
 
 
 @pytest.mark.parametrize("encoder_type", ["conv1d", "conv2d"])
