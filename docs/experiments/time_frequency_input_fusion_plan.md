@@ -457,6 +457,10 @@ signed_corr 等多项加权复合，不是单纯波形 MSE。为保证 val loss 
   多尺度低频类模型结构。STFT 窗长/hop/归一化按“固定实验口径”锁定，第一轮只扫频带。
 - 复数相位第一轮不参与，留到 E4/CWT 阶段验证。
 
+> 实现状态：E1 双分支训练栈与批次脚本见 `scripts/run_e1_stft_info_gain.py`，
+> N1 频带尺度预统计见 `scripts/precompute_stft_band_scale.py`，
+> 设计规格见 `docs/superpowers/specs/2026-06-21-e1-stft-info-gain-design.md`。
+
 高频心冲击信息值得验证，尤其可能反映心肺耦合；但专业上不能默认更宽频带一定更好，
 因为实测 8Hz 以上能量已很低，高频更容易引入个体心率、运动状态和设备噪声捷径。只有先证明
 STFT 输入和频带宽度带来可重复、且跨 samp_id 成立的任务增益，后续 CWT、SST、可学习频带
