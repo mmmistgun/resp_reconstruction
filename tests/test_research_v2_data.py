@@ -139,6 +139,28 @@ def test_adapt_research_v2_index_keeps_only_waveform_rows(tmp_path: Path):
     assert adapted["target_signal_key"].tolist() == ["tho_waveform_ref"] * 4
 
 
+def test_adapt_research_v2_index_supports_renamed_soft_z_columns(tmp_path: Path):
+    root = _prepare_research_v2_dataset(tmp_path)
+    cfg = _cfg(root)
+    cfg.data.bcg_input_key = "bcg_rawish_segment_soft_z_key"
+    cfg.data.target_key = "target_waveform_segment_soft_z_key"
+    raw = pd.read_csv(root / "training" / "dataset_index.csv")
+    raw = raw.rename(
+        columns={
+            "bcg_input_key": "bcg_input_observed_key",
+            "bcg_input_aligned_key": "bcg_input_segment_robust_z_key",
+            "target_waveform_key": "target_waveform_observed_key",
+        }
+    )
+    raw["bcg_rawish_segment_soft_z_key"] = "bcg_rawish_wideband_state_aligned_segment_soft_z"
+    raw["target_waveform_segment_soft_z_key"] = "tho_waveform_segment_soft_z"
+
+    adapted = adapt_research_v2_index(raw, cfg)
+
+    assert adapted["bcg_signal_key"].tolist() == ["bcg_rawish_wideband_state_aligned_segment_soft_z"] * 4
+    assert adapted["target_signal_key"].tolist() == ["tho_waveform_segment_soft_z"] * 4
+
+
 def test_research_v2_dataset_slices_alignment_and_signal_bank(tmp_path: Path):
     root = _prepare_research_v2_dataset(tmp_path)
     cfg = _cfg(root)

@@ -89,8 +89,11 @@ def test_load_research_v2_config_has_expected_format():
     cfg = load_config("configs/tho_research_v2.yaml")
 
     assert cfg.data.format == "research_v2"
+    assert Path(cfg.data.dataset_root).name == (
+        "20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf"
+    )
     assert cfg.data.target_task == "waveform"
-    assert cfg.data.bcg_input_key == "bcg_rawish_wideband_state_aligned"
-    assert cfg.data.target_key == "target_waveform_key"
+    assert cfg.data.bcg_input_key == "bcg_rawish_segment_soft_z_key"
+    assert cfg.data.target_key == "target_waveform_segment_soft_z_key"
     assert cfg.data.stratify_column == "allowed_losses"
     assert cfg.loss.smooth_weight == 0.10

@@ -1,13 +1,13 @@
 data:
   format: research_v2
-  dataset_root: /mnt/disk_code/marques/resp_prepare/dataset/20260611_research_v2_stage2_1
+  dataset_root: /mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf
   index_csv: training/dataset_index.csv
   input_set: research_v2_waveform
   train_split: train
   val_split: val
   target_task: waveform
-  bcg_input_key: bcg_rawish_wideband_state_aligned
-  target_key: target_waveform_key
+  bcg_input_key: bcg_rawish_segment_soft_z_key
+  target_key: target_waveform_segment_soft_z_key
   max_train_windows: 1024
   max_val_windows: 256
   filter_unusable: true
