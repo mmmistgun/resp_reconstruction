@@ -169,7 +169,7 @@ class PatchMixer1D(nn.Module):
         else:
             self.output_smoother = nn.Identity()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_features: bool = False) -> torch.Tensor | tuple[torch.Tensor, int]:
         batch, _, length = x.shape
         padded_length = self._padded_length(length)
         x_padded = _match_length(x, padded_length)
@@ -179,6 +179,8 @@ class PatchMixer1D(nn.Module):
         tokens = self.patch_embed(tokens).transpose(1, 2)
         for block in self.blocks:
             tokens = block(tokens)
+        if return_features:
+            return tokens, length
         patch_values = self.patch_head(tokens.transpose(1, 2))
         patch_values = patch_values.view(batch, patch_count, self.out_channels, self.patch_len)
         return self.output_smoother(self._overlap_add(patch_values, length, padded_length))

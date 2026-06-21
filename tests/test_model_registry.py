@@ -451,3 +451,26 @@ def test_build_model_unknown_name_lists_available_models():
 
     with pytest.raises(KeyError, match="未知模型.*unet1d_tiny"):
         build_model(cfg)
+
+
+def test_patch_mixer_return_features_is_backward_compatible():
+    model = PatchMixer1D(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64)
+    model.eval()
+    x = torch.randn(2, 1, 4096)
+
+    with torch.no_grad():
+        default_out = model(x)
+        explicit_out = model(x, return_features=False)
+
+    assert torch.equal(default_out, explicit_out)
+
+
+def test_patch_mixer_return_features_shape_contract():
+    model = PatchMixer1D(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64)
+    x = torch.randn(2, 1, 4096)
+
+    features, length = model(x, return_features=True)
+
+    assert features.dim() == 3
+    assert features.shape == (2, 8, 63)
+    assert length == 4096
