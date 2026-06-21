@@ -67,6 +67,11 @@ MODEL_OVERRIDES = {
         "model.downsample_factors=[1,4,16]",
         "model.mixer_layers=2",
     ],
+    "downsampled_ssm1d": [
+        "model.name=downsampled_ssm1d",
+        "model.latent_stride=20",
+        "model.state_layers=2",
+    ],
 }
 
 
@@ -77,6 +82,7 @@ DEFAULT_MODELS = [
     "multiscale_patch_hann_bandlimited1d",
     "period_aware_patch_hann_bandlimited1d",
     "multiscale_decomp_mixer1d",
+    "downsampled_ssm1d",
 ]
 
 
@@ -86,10 +92,15 @@ DEFAULT_SEEDS = [20260700, 20260710, 20260837]
 def main() -> None:
     parser = argparse.ArgumentParser(description="顺序重跑 20260620 soft-z 候选模型")
     parser.add_argument("--skip", action="append", default=[], help="跳过 model:seed，例如 patch_mixer1d:20260700")
+    parser.add_argument("--only", action="append", default=[], help="仅运行指定模型，可重复传入")
     args = parser.parse_args()
     skipped = set(args.skip)
+    model_names = args.only or DEFAULT_MODELS
+    unknown = sorted(set(model_names) - set(MODEL_OVERRIDES))
+    if unknown:
+        raise SystemExit(f"未知模型: {unknown}，可用: {sorted(MODEL_OVERRIDES)}")
 
-    for model_name in DEFAULT_MODELS:
+    for model_name in model_names:
         for seed in DEFAULT_SEEDS:
             tag = f"{model_name}:{seed}"
             if tag in skipped:
