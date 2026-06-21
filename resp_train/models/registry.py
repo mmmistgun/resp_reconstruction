@@ -23,10 +23,80 @@ from resp_train.models.timeseries import (
     PolyphasePatchHannBandlimited1D,
     PeriodicUNet1DTiny,
 )
+from resp_train.models.stft_branch import TimeStftDual1D
 from resp_train.models.unet1d import UNet1DTiny, UNet1DTinyNoSkip1, UNet1DTinyNoSkipAll
 
 
 ModelFactory = Callable[[Any], nn.Module]
+
+
+def _time_backbone_kwargs(cfg: Any) -> dict:
+    """从统一模型配置中解析时间域骨干参数。"""
+
+    name = str(cfg.model.get("time_backbone", "patch_mixer1d"))
+    if name == "patch_mixer1d":
+        return {
+            "in_channels": int(cfg.model.in_channels),
+            "out_channels": int(cfg.model.out_channels),
+            "base_channels": int(cfg.model.base_channels),
+            "patch_len": int(cfg.model.get("patch_len", 256)),
+            "patch_stride": int(cfg.model.get("patch_stride", 128)),
+            "mixer_layers": int(cfg.model.get("mixer_layers", 2)),
+            "overlap_window": str(cfg.model.get("overlap_window", "uniform")),
+            "output_smoothing_kernel": int(cfg.model.get("output_smoothing_kernel", 1)),
+        }
+    if name == "multiscale_decomp_mixer1d":
+        return {
+            "in_channels": int(cfg.model.in_channels),
+            "out_channels": int(cfg.model.out_channels),
+            "base_channels": int(cfg.model.base_channels),
+            "downsample_factors": list(cfg.model.get("downsample_factors", [1, 4, 16])),
+            "mixer_layers": int(cfg.model.get("mixer_layers", 2)),
+        }
+    raise KeyError("time_backbone 必须是 patch_mixer1d 或 multiscale_decomp_mixer1d")
+
+
+def _time_backbone_feat_channels(cfg: Any) -> int:
+    """返回时间域骨干 return_features=True 时的通道数。"""
+
+    name = str(cfg.model.get("time_backbone", "patch_mixer1d"))
+    base_channels = int(cfg.model.base_channels)
+    if name == "patch_mixer1d":
+        return base_channels
+    if name == "multiscale_decomp_mixer1d":
+        return base_channels * len(list(cfg.model.get("downsample_factors", [1, 4, 16])))
+    raise KeyError("time_backbone 必须是 patch_mixer1d 或 multiscale_decomp_mixer1d")
+
+
+def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
+    band_scale_path = cfg.model.get("stft_band_scale_path", None)
+    branch_mode = str(cfg.model.get("branch_mode", "dual")).lower()
+    use_time = branch_mode in {"time_only", "dual"}
+    use_stft = branch_mode in {"stft_only", "dual"}
+    stft_kwargs = (
+        {
+            "sample_rate": float(cfg.window.get("target_fs", 100)),
+            "stft_win": int(cfg.model.get("stft_win", 3000)),
+            "stft_hop": int(cfg.model.get("stft_hop", 500)),
+            "low_hz": float(cfg.model.get("stft_low_hz", 0.05)),
+            "high_hz": float(cfg.model.get("stft_high_hz", 3.0)),
+            "out_channels": int(cfg.model.get("stft_out_channels", 16)),
+            "norm": str(cfg.model.get("stft_norm", "n0")),
+            "encoder_type": str(cfg.model.get("stft_encoder_type", "conv1d")),
+            "band_scale_path": str(band_scale_path) if band_scale_path else None,
+        }
+        if use_stft
+        else {}
+    )
+    return TimeStftDual1D(
+        time_backbone_name=str(cfg.model.get("time_backbone", "patch_mixer1d")),
+        time_backbone_kwargs=_time_backbone_kwargs(cfg) if use_time else {},
+        time_feat_channels=_time_backbone_feat_channels(cfg) if use_time else 0,
+        branch_mode=branch_mode,
+        out_length=int(cfg.window.get("duration_samples", 18000)),
+        fuse_len=int(cfg.model.get("fuse_len", 600)),
+        stft_kwargs=stft_kwargs,
+    )
 
 
 _REGISTRY: dict[str, ModelFactory] = {
@@ -186,6 +256,7 @@ _REGISTRY: dict[str, ModelFactory] = {
         latent_stride=int(cfg.model.get("latent_stride", 20)),
         state_layers=int(cfg.model.get("state_layers", 2)),
     ),
+    "time_stft_dual1d": _build_time_stft_dual1d,
 }
 
 

@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 from omegaconf import OmegaConf
 import torch
 from torch import nn
@@ -496,3 +497,181 @@ def test_multiscale_decomp_return_features_shape_contract():
 
     assert features.shape == (2, 8 * 3, 4096)
     assert length == 4096
+
+
+def test_time_stft_dual1d_is_registered():
+    assert "time_stft_dual1d" in list_models()
+
+
+@pytest.mark.parametrize("branch_mode", ["time_only", "stft_only", "dual"])
+def test_build_time_stft_dual1d_preserves_waveform_shape(branch_mode):
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                "branch_mode": branch_mode,
+                "time_backbone": "patch_mixer1d",
+                "patch_len": 128,
+                "patch_stride": 64,
+                "mixer_layers": 1,
+                "stft_win": 3000,
+                "stft_hop": 500,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 3.0,
+                "stft_out_channels": 16,
+                "stft_norm": "n0",
+                "fuse_len": 600,
+            },
+        }
+    )
+    model = build_model(cfg)
+    y = model(torch.randn(2, 1, 18000))
+    assert y.shape == (2, 1, 18000)
+    assert torch.isfinite(y).all()
+
+
+def test_build_time_stft_dual1d_with_multiscale_backbone_preserves_waveform_shape():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                "branch_mode": "dual",
+                "time_backbone": "multiscale_decomp_mixer1d",
+                "downsample_factors": [1, 4, 16],
+                "mixer_layers": 1,
+                "stft_win": 512,
+                "stft_hop": 128,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 3.0,
+                "stft_out_channels": 16,
+                "stft_norm": "n0",
+                "fuse_len": 128,
+            },
+        }
+    )
+    model = build_model(cfg)
+    y = model(torch.randn(2, 1, 4096))
+    assert y.shape == (2, 1, 4096)
+    assert torch.isfinite(y).all()
+
+
+def test_build_time_stft_dual1d_injects_n1_band_scale(tmp_path):
+    stft_win = 512
+    sample_rate = 100.0
+    freqs = torch.fft.rfftfreq(stft_win, d=1.0 / sample_rate)
+    start = int(torch.searchsorted(freqs, torch.tensor(0.05), right=False).item())
+    end = int(torch.searchsorted(freqs, torch.tensor(3.0), right=True).item())
+    scale = np.linspace(1.0, 2.0, end - start, dtype=np.float32)
+    scale_path = tmp_path / "band_scale.npy"
+    np.save(scale_path, scale)
+
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": sample_rate, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                "branch_mode": "stft_only",
+                "time_backbone": "patch_mixer1d",
+                "stft_win": stft_win,
+                "stft_hop": 128,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 3.0,
+                "stft_out_channels": 16,
+                "stft_norm": "n1",
+                "stft_band_scale_path": str(scale_path),
+                "fuse_len": 128,
+            },
+        }
+    )
+
+    model = build_model(cfg)
+
+    assert torch.allclose(model.stft_encoder.band_scale, torch.from_numpy(scale))
+
+
+def test_build_time_stft_dual1d_uses_stft_encoder_type_field():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                "branch_mode": "stft_only",
+                "time_backbone": "patch_mixer1d",
+                "stft_win": 512,
+                "stft_hop": 128,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 3.0,
+                "stft_out_channels": 16,
+                "stft_norm": "n0",
+                "stft_encoder_type": "conv2d",
+                "fuse_len": 128,
+            },
+        }
+    )
+
+    model = build_model(cfg)
+
+    assert model.stft_encoder.encoder_type == "conv2d"
+
+
+def test_build_time_stft_dual1d_stft_only_does_not_require_time_backbone_fields():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_dual1d",
+                "branch_mode": "stft_only",
+                "stft_win": 512,
+                "stft_hop": 128,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 3.0,
+                "stft_out_channels": 16,
+                "stft_norm": "n0",
+                "fuse_len": 128,
+            },
+        }
+    )
+
+    model = build_model(cfg)
+    y = model(torch.randn(1, 1, 4096))
+
+    assert y.shape == (1, 1, 4096)
+
+
+def test_build_time_stft_dual1d_time_only_ignores_unused_stft_fields():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                "branch_mode": "time_only",
+                "time_backbone": "patch_mixer1d",
+                "patch_len": 128,
+                "patch_stride": 64,
+                "stft_high_hz": "unused-invalid",
+                "fuse_len": 128,
+            },
+        }
+    )
+
+    model = build_model(cfg)
+    y = model(torch.randn(1, 1, 4096))
+
+    assert y.shape == (1, 1, 4096)
