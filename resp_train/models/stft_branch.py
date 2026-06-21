@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+import math
+
+import torch
+from torch import nn
+
+
+def _band_indices(stft_win: int, sample_rate: float, low_hz: float, high_hz: float) -> tuple[int, int]:
+    """计算 rFFT 频点中指定频带的左闭右开切片范围。"""
+
+    freqs = torch.fft.rfftfreq(int(stft_win), d=1.0 / float(sample_rate))
+    start = int(torch.searchsorted(freqs, torch.tensor(float(low_hz)), right=False).item())
+    end = int(torch.searchsorted(freqs, torch.tensor(float(high_hz)), right=True).item())
+    if start >= end:
+        raise ValueError("STFT 频带内没有可用 rFFT 频点，请增大 stft_win 或调整 low_hz/high_hz")
+    return start, end
+
+
+def _validate_stft_config(stft_win: int, stft_hop: int, sample_rate: float, low_hz: float, high_hz: float) -> None:
+    """提前拒绝无效频带，避免后续索引计算静默裁剪配置错误。"""
+
+    if int(stft_win) <= 0:
+        raise ValueError("stft_win 必须大于 0")
+    if int(stft_hop) <= 0:
+        raise ValueError("stft_hop 必须大于 0")
+    if not math.isfinite(float(sample_rate)):
+        raise ValueError("sample_rate 必须是有限数值")
+    if not math.isfinite(float(low_hz)):
+        raise ValueError("low_hz 必须是有限数值")
+    if not math.isfinite(float(high_hz)):
+        raise ValueError("high_hz 必须是有限数值")
+    if float(sample_rate) <= 0.0:
+        raise ValueError("sample_rate 必须大于 0")
+    if not (0.0 <= float(low_hz) < float(high_hz)):
+        raise ValueError("low_hz 和 high_hz 必须满足 0 <= low_hz < high_hz")
+    nyquist = float(sample_rate) / 2.0
+    if float(high_hz) > nyquist:
+        raise ValueError("high_hz 必须小于等于 sample_rate / 2")
+
+
+class STFTEncoder(nn.Module):
+    """固定 STFT 前端加轻量卷积编码器，输出按 STFT 帧对齐的时间序列特征。"""
+
+    def __init__(
+        self,
+        sample_rate: float = 100.0,
+        stft_win: int = 3000,
+        stft_hop: int = 500,
+        low_hz: float = 0.05,
+        high_hz: float = 8.0,
+        out_channels: int = 16,
+        norm: str = "n0",
+        encoder_type: str = "conv1d",
+    ) -> None:
+        super().__init__()
+        self.sample_rate = float(sample_rate)
+        self.stft_win = int(stft_win)
+        self.stft_hop = int(stft_hop)
+        self.low_hz = float(low_hz)
+        self.high_hz = float(high_hz)
+        self.out_channels = int(out_channels)
+        self.norm = str(norm).lower()
+        self.encoder_type = str(encoder_type).lower()
+
+        if self.norm != "n0":
+            raise ValueError(f"未知 norm={norm!r}，当前 STFTEncoder 仅支持 norm='n0'")
+
+        _validate_stft_config(self.stft_win, self.stft_hop, self.sample_rate, self.low_hz, self.high_hz)
+        self.band_start, self.band_end = _band_indices(self.stft_win, self.sample_rate, self.low_hz, self.high_hz)
+        freq_bins = self.band_bin_count()
+
+        self.register_buffer("stft_window", torch.hann_window(self.stft_win), persistent=False)
+        self.register_buffer("band_scale", torch.ones(freq_bins, dtype=torch.float32), persistent=True)
+
+        if self.encoder_type == "conv1d":
+            self.encoder = nn.Sequential(
+                nn.Conv1d(freq_bins, self.out_channels, kernel_size=3, padding=1),
+                nn.GroupNorm(1, self.out_channels),
+                nn.SiLU(),
+                nn.Conv1d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
+                nn.SiLU(),
+            )
+        elif self.encoder_type == "conv2d":
+            self.encoder = nn.Sequential(
+                nn.Conv2d(1, self.out_channels, kernel_size=3, padding=1),
+                nn.GroupNorm(1, self.out_channels),
+                nn.SiLU(),
+                nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
+                nn.SiLU(),
+            )
+        else:
+            raise ValueError(f"未知 encoder_type={encoder_type!r}，可选: conv1d, conv2d")
+
+    def band_bin_count(self) -> int:
+        return int(self.band_end - self.band_start)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() != 3 or x.size(1) != 1:
+            raise ValueError(f"STFTEncoder 期望输入形状为 (B, 1, L)，实际为 {tuple(x.shape)}")
+
+        waveform = x[:, 0]
+        window = self.stft_window.to(device=waveform.device, dtype=waveform.dtype)
+        spectrum = torch.stft(
+            waveform,
+            n_fft=self.stft_win,
+            hop_length=self.stft_hop,
+            win_length=self.stft_win,
+            window=window,
+            center=True,
+            return_complex=True,
+        )
+        features = torch.log1p(spectrum.abs())
+        features = features[:, self.band_start : self.band_end, :]
+        encoder_dtype = next(self.encoder.parameters()).dtype
+        features = features.to(dtype=encoder_dtype)
+
+        if self.encoder_type == "conv1d":
+            return self.encoder(features)
+
+        encoded = self.encoder(features.unsqueeze(1))
+        return encoded.mean(dim=2)
