@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from resp_train.models.stft_branch import STFTEncoder
+from resp_train.models.stft_branch import FusionHead, STFTEncoder, align_to_time
 
 
 def _encoder(high_hz: float, encoder_type: str = "conv1d") -> STFTEncoder:
@@ -105,3 +105,20 @@ def test_stft_encoder_handles_zero_and_nan_input_without_crash(encoder_type):
 def test_stft_encoder_unknown_encoder_type_raises():
     with pytest.raises(ValueError, match="encoder_type"):
         _encoder(3.0, "mixer")
+
+
+def test_align_to_time_resamples_to_target_length():
+    feats = torch.randn(2, 8, 31)
+
+    aligned = align_to_time(feats, target_len=600)
+
+    assert aligned.shape == (2, 8, 600)
+
+
+def test_fusion_head_outputs_waveform_shape():
+    head = FusionHead(in_channels=24, out_length=18000, hidden=16)
+    fused = torch.randn(2, 24, 600)
+
+    out = head(fused)
+
+    assert out.shape == (2, 1, 18000)

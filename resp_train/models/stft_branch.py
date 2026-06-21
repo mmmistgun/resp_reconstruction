@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 
@@ -37,6 +38,38 @@ def _validate_stft_config(stft_win: int, stft_hop: int, sample_rate: float, low_
     nyquist = float(sample_rate) / 2.0
     if float(high_hz) > nyquist:
         raise ValueError("high_hz 必须小于等于 sample_rate / 2")
+
+
+def align_to_time(feats: torch.Tensor, target_len: int) -> torch.Tensor:
+    """将时间序列特征重采样到目标长度，长度一致时保持原张量。"""
+
+    target_len = int(target_len)
+    if feats.size(-1) == target_len:
+        return feats
+    return F.interpolate(feats, size=target_len, mode="linear", align_corners=False)
+
+
+class FusionHead(nn.Module):
+    """将融合后的时间序列特征解码为目标长度的单通道波形。"""
+
+    def __init__(self, in_channels: int, out_length: int, hidden: int = 16) -> None:
+        super().__init__()
+        self.out_length = int(out_length)
+        hidden = int(hidden)
+        self.decoder = nn.Sequential(
+            nn.Conv1d(int(in_channels), hidden, kernel_size=3, padding=1),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+            nn.Conv1d(hidden, hidden, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.Conv1d(hidden, 1, kernel_size=1),
+        )
+
+    def forward(self, fused: torch.Tensor) -> torch.Tensor:
+        decoded = self.decoder(fused)
+        if decoded.size(-1) == self.out_length:
+            return decoded
+        return F.interpolate(decoded, size=self.out_length, mode="linear", align_corners=False)
 
 
 class STFTEncoder(nn.Module):
