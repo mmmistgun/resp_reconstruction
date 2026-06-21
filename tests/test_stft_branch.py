@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from resp_train.models.stft_branch import FusionHead, STFTEncoder, align_to_time
+from resp_train.models.stft_branch import FusionHead, STFTEncoder, TimeStftDual1D, align_to_time
 
 
 def _encoder(high_hz: float, encoder_type: str = "conv1d") -> STFTEncoder:
@@ -122,3 +122,71 @@ def test_fusion_head_outputs_waveform_shape():
     out = head(fused)
 
     assert out.shape == (2, 1, 18000)
+
+
+def _dual(branch_mode: str) -> TimeStftDual1D:
+    return TimeStftDual1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64),
+        time_feat_channels=8,
+        branch_mode=branch_mode,
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs=dict(
+            sample_rate=100.0,
+            stft_win=3000,
+            stft_hop=500,
+            low_hz=0.05,
+            high_hz=3.0,
+            out_channels=16,
+            norm="n0",
+        ),
+    )
+
+
+@pytest.mark.parametrize("branch_mode", ["time_only", "stft_only", "dual"])
+def test_dual_outputs_waveform_shape(branch_mode):
+    model = _dual(branch_mode)
+    x = torch.randn(2, 1, 18000)
+
+    out = model(x)
+
+    assert out.shape == (2, 1, 18000)
+    assert torch.isfinite(out).all()
+
+
+def test_dual_mode_uses_both_branches_gradients():
+    model = _dual("dual")
+    x = torch.randn(2, 1, 18000)
+
+    model(x).square().mean().backward()
+
+    time_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.time_backbone.parameters())
+    stft_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_encoder.parameters())
+    assert time_grad and stft_grad
+
+
+def test_stft_only_mode_has_no_time_backbone():
+    model = _dual("stft_only")
+    assert model.time_backbone is None
+
+
+def test_time_only_mode_has_no_stft_encoder():
+    model = _dual("time_only")
+    assert model.stft_encoder is None
+
+
+def test_dual_uses_stft_encoder_default_out_channels_when_missing():
+    model = TimeStftDual1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64),
+        time_feat_channels=8,
+        branch_mode="dual",
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs=dict(sample_rate=100.0, stft_win=3000, stft_hop=500, low_hz=0.05, high_hz=3.0, norm="n0"),
+    )
+
+    out = model(torch.randn(1, 1, 18000))
+
+    assert out.shape == (1, 1, 18000)

@@ -153,3 +153,64 @@ class STFTEncoder(nn.Module):
 
         encoded = self.encoder(features.unsqueeze(1))
         return encoded.mean(dim=2)
+
+
+def _build_time_backbone(name: str, kwargs: dict) -> nn.Module:
+    """按名称构建时间域骨干，避免在 STFT 模块顶层引入训练注册表。"""
+
+    # 局部导入用于隔离依赖，避免仅使用 STFT 分支时加载全部时间域模型。
+    from .lowfreq import MultiScaleDecompMixer1D
+    from .timeseries import PatchMixer1D
+
+    builders = {
+        "patch_mixer1d": PatchMixer1D,
+        "multiscale_decomp_mixer1d": MultiScaleDecompMixer1D,
+    }
+    key = str(name).lower()
+    if key not in builders:
+        raise KeyError(f"未知时间域骨干 {name!r}，可选: {', '.join(sorted(builders))}")
+    return builders[key](**dict(kwargs))
+
+
+class TimeStftDual1D(nn.Module):
+    """时间域骨干与 STFT 编码器的轻量双分支包装器。"""
+
+    def __init__(
+        self,
+        time_backbone_name: str,
+        time_backbone_kwargs: dict,
+        time_feat_channels: int,
+        branch_mode: str,
+        out_length: int,
+        fuse_len: int,
+        stft_kwargs: dict,
+        fusion_hidden: int = 16,
+    ) -> None:
+        super().__init__()
+        mode = str(branch_mode).lower()
+        if mode not in {"time_only", "stft_only", "dual"}:
+            raise ValueError("branch_mode 必须是 time_only、stft_only 或 dual")
+
+        self.branch_mode = mode
+        self.fuse_len = int(fuse_len)
+        use_time = mode in {"time_only", "dual"}
+        use_stft = mode in {"stft_only", "dual"}
+
+        self.time_backbone = _build_time_backbone(time_backbone_name, time_backbone_kwargs) if use_time else None
+        self.stft_encoder = STFTEncoder(**dict(stft_kwargs)) if use_stft else None
+
+        fused_channels = 0
+        if use_time:
+            fused_channels += int(time_feat_channels)
+        if use_stft:
+            fused_channels += int(self.stft_encoder.out_channels)
+        self.fusion_head = FusionHead(fused_channels, out_length=out_length, hidden=fusion_hidden)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        features: list[torch.Tensor] = []
+        if self.time_backbone is not None:
+            time_feats, _ = self.time_backbone(x, return_features=True)
+            features.append(align_to_time(time_feats, self.fuse_len))
+        if self.stft_encoder is not None:
+            features.append(align_to_time(self.stft_encoder(x), self.fuse_len))
+        return self.fusion_head(torch.cat(features, dim=1))
