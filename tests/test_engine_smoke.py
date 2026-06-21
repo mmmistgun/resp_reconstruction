@@ -15,8 +15,8 @@ from resp_train.utils.run import create_run_dir, setup_logger
 class DictDataset(Dataset):
     """返回训练引擎期望的最小 dict batch。"""
 
-    def __init__(self) -> None:
-        t = torch.linspace(0, 8 * torch.pi, 512)
+    def __init__(self, duration_samples: int = 512) -> None:
+        t = torch.linspace(0, 8 * torch.pi, int(duration_samples))
         self.samples = []
         for phase in (0.0, 0.3, 0.6, 0.9):
             sensor = torch.sin(t + phase).unsqueeze(0)
@@ -62,6 +62,40 @@ def _cfg():
     )
 
 
+def _time_stft_dual1d_cfg():
+    return OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 1024},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 4,
+                "branch_mode": "dual",
+                "time_backbone": "patch_mixer1d",
+                "patch_len": 64,
+                "patch_stride": 32,
+                "mixer_layers": 1,
+                "stft_win": 256,
+                "stft_hop": 128,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 3.0,
+                "stft_out_channels": 4,
+                "stft_norm": "n0",
+                "fuse_len": 64,
+            },
+            "loss": {
+                "envelope_weight": 1.0,
+                "spectrum_weight": 0.2,
+                "smooth_weight": 0.01,
+                "envelope_window_sec": 0.2,
+                "spectrum_low_hz": 0.1,
+                "spectrum_high_hz": 5.0,
+            },
+        }
+    )
+
+
 def test_train_one_epoch_returns_positive_average_loss():
     cfg = _cfg()
     loader = DataLoader(DictDataset(), batch_size=2, shuffle=False)
@@ -72,6 +106,35 @@ def test_train_one_epoch_returns_positive_average_loss():
     summary = train_one_epoch(model, loader, loss_fn, optimizer, torch.device("cpu"))
 
     assert summary["loss"] > 0
+
+
+def test_time_stft_dual1d_engine_smoke_trains_and_reloads_checkpoint(tmp_path):
+    cfg = _time_stft_dual1d_cfg()
+    loader = DataLoader(DictDataset(duration_samples=cfg.window.duration_samples), batch_size=2, shuffle=False)
+    model = build_model(cfg)
+    loss_fn = WeakSyncLoss(cfg)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    before_train = {name: param.detach().clone() for name, param in model.named_parameters()}
+
+    summary = train_one_epoch(model, loader, loss_fn, optimizer, torch.device("cpu"))
+    assert summary["loss"] > 0
+    assert optimizer.state
+    assert any(not torch.equal(before_train[name], param) for name, param in model.named_parameters())
+
+    checkpoint_path = tmp_path / "checkpoint.pt"
+    save_checkpoint(checkpoint_path, model=model, optimizer=optimizer, epoch=1, metrics=summary, cfg=cfg)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    reloaded = build_model(cfg)
+    reloaded.load_state_dict(checkpoint["model_state_dict"])
+    reloaded_optimizer = torch.optim.Adam(reloaded.parameters(), lr=1e-3)
+    reloaded_optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    reloaded.eval()
+
+    batch = next(iter(loader))
+    with torch.no_grad():
+        pred = reloaded(batch["x"])
+
+    assert pred.shape == batch["x"].shape
 
 
 def test_move_batch_passes_non_blocking_to_tensor_to():
