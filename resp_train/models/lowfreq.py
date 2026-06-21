@@ -139,7 +139,7 @@ class MultiScaleDecompMixer1D(nn.Module):
             nn.Conv1d(base_channels, out_channels, kernel_size=1),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_features: bool = False) -> torch.Tensor | tuple[torch.Tensor, int]:
         length = x.size(-1)
         outputs = []
         for factor, branch in zip(self.factors, self.branches):
@@ -151,7 +151,10 @@ class MultiScaleDecompMixer1D(nn.Module):
             if y.size(-1) != length:
                 y = F.interpolate(y, size=length, mode="linear", align_corners=False)
             outputs.append(y)
-        return self.fuse(torch.cat(outputs, dim=1))
+        fused_input = torch.cat(outputs, dim=1)
+        if return_features:
+            return fused_input, length
+        return self.fuse(fused_input)
 
 
 class TimesNetLite1D(nn.Module):

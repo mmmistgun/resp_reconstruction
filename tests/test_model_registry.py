@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from resp_train.models import build_model, list_models
-from resp_train.models.lowfreq import TimesNetLite1D
+from resp_train.models.lowfreq import MultiScaleDecompMixer1D, TimesNetLite1D
 from resp_train.models.timeseries import PatchMixer1D, PeriodicUNet1DTiny
 
 
@@ -473,4 +473,26 @@ def test_patch_mixer_return_features_shape_contract():
 
     assert features.dim() == 3
     assert features.shape == (2, 8, 63)
+    assert length == 4096
+
+
+def test_multiscale_decomp_return_features_is_backward_compatible():
+    model = MultiScaleDecompMixer1D(in_channels=1, out_channels=1, base_channels=8, downsample_factors=[1, 4, 16])
+    model.eval()
+    x = torch.randn(2, 1, 4096)
+
+    with torch.no_grad():
+        default_out = model(x)
+        explicit_out = model(x, return_features=False)
+
+    assert torch.equal(default_out, explicit_out)
+
+
+def test_multiscale_decomp_return_features_shape_contract():
+    model = MultiScaleDecompMixer1D(in_channels=1, out_channels=1, base_channels=8, downsample_factors=[1, 4, 16])
+    x = torch.randn(2, 1, 4096)
+
+    features, length = model(x, return_features=True)
+
+    assert features.shape == (2, 8 * 3, 4096)
     assert length == 4096
