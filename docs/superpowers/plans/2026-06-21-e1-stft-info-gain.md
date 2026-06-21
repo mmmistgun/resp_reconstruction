@@ -208,13 +208,14 @@ git commit -m "feat: MultiScaleDecompMixer1D 增加 return_features 中间特征
 
 ---
 
-## 任务 3：STFTEncoder（固定算子 + N0 归一化 + 轻编码）
+## 任务 3：STFTEncoder（固定算子 + N0 归一化 + conv1d/conv2d 编码器）
 
 **文件：**
 - 创建：`resp_train/models/stft_branch.py`
 - 测试：`tests/test_stft_branch.py`
 
-本任务只实现 N0（仅 log1p）。N1（频带鲁棒尺度）在任务 6 加挂。
+本任务实现 N0（仅 log1p）与两种编码器 `encoder_type ∈ {conv1d, conv2d}`（零号消融变量）。
+N1（频带鲁棒尺度）在任务 6 加挂。
 
 - [ ] **步骤 1：编写失败的测试**
 
@@ -227,7 +228,7 @@ import torch
 from resp_train.models.stft_branch import STFTEncoder
 
 
-def _encoder(high_hz: float) -> STFTEncoder:
+def _encoder(high_hz: float, encoder_type: str = "conv1d") -> STFTEncoder:
     return STFTEncoder(
         sample_rate=100.0,
         stft_win=3000,
@@ -236,11 +237,13 @@ def _encoder(high_hz: float) -> STFTEncoder:
         high_hz=high_hz,
         out_channels=16,
         norm="n0",
+        encoder_type=encoder_type,
     )
 
 
-def test_stft_encoder_output_is_3d_time_series():
-    enc = _encoder(3.0)
+@pytest.mark.parametrize("encoder_type", ["conv1d", "conv2d"])
+def test_stft_encoder_output_is_3d_time_series(encoder_type):
+    enc = _encoder(3.0, encoder_type)
     x = torch.randn(2, 1, 18000)
 
     feats = enc(x)
@@ -251,7 +254,6 @@ def test_stft_encoder_output_is_3d_time_series():
 
 
 def test_stft_encoder_freq_bins_increase_with_high_hz():
-    x = torch.randn(1, 1, 18000)
     bins_3 = _encoder(3.0).band_bin_count()
     bins_8 = _encoder(8.0).band_bin_count()
     bins_12 = _encoder(12.0).band_bin_count()
@@ -259,8 +261,9 @@ def test_stft_encoder_freq_bins_increase_with_high_hz():
     assert bins_3 < bins_8 < bins_12
 
 
-def test_stft_encoder_handles_zero_and_nan_input_without_crash():
-    enc = _encoder(8.0)
+@pytest.mark.parametrize("encoder_type", ["conv1d", "conv2d"])
+def test_stft_encoder_handles_zero_and_nan_input_without_crash(encoder_type):
+    enc = _encoder(8.0, encoder_type)
     zero = enc(torch.zeros(1, 1, 18000))
     assert torch.isfinite(zero).all()
 
@@ -269,6 +272,11 @@ def test_stft_encoder_handles_zero_and_nan_input_without_crash():
     out = enc(x)
     # NaN 输入不应让前向抛错；产出可含 nan，但不得崩溃
     assert out.shape[0] == 1
+
+
+def test_stft_encoder_unknown_encoder_type_raises():
+    with pytest.raises(ValueError, match="encoder_type"):
+        _encoder(3.0, "mixer")
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
@@ -297,7 +305,12 @@ def _band_indices(stft_win: int, sample_rate: float, low_hz: float, high_hz: flo
 
 
 class STFTEncoder(nn.Module):
-    """对单通道时序做 STFT → log1p magnitude → 频带裁剪 → 归一化 → 轻编码，输出 (B,Cs,Ts')。"""
+    """对单通道时序做 STFT → log1p magnitude → 频带裁剪 → 归一化 → 编码，输出 (B,Cs,Ts')。
+
+    编码器 encoder_type：
+    - conv1d：频率轴塞进通道维，仅沿时间卷积（最朴素）。
+    - conv2d：把 (freq,time) 当单通道图像做 2D 卷积，再沿频率轴池化压成 (B,out_channels,time)。
+    """
 
     def __init__(
         self,
@@ -308,25 +321,40 @@ class STFTEncoder(nn.Module):
         high_hz: float = 3.0,
         out_channels: int = 16,
         norm: str = "n0",
+        encoder_type: str = "conv1d",
     ) -> None:
         super().__init__()
         self.sample_rate = float(sample_rate)
         self.stft_win = int(stft_win)
         self.stft_hop = int(stft_hop)
         self.norm = str(norm)
+        self.encoder_type = str(encoder_type)
         self._lo, self._hi = _band_indices(self.stft_win, self.sample_rate, low_hz, high_hz)
         self.register_buffer("stft_window", torch.hann_window(self.stft_win), persistent=False)
         # N1 用的 per-freq-bin 鲁棒尺度，默认 1（即不缩放，等价 N0）；任务 6 注入真实值。
         self.register_buffer("band_scale", torch.ones(self._hi - self._lo), persistent=True)
         freq_bins = self._hi - self._lo
-        # 轻编码：把 (freq, time) 视作 (C=freq, L=time) 的 1D 序列，conv 压成 out_channels。
-        self.encoder = nn.Sequential(
-            nn.Conv1d(freq_bins, out_channels, kernel_size=3, padding=1),
-            nn.GroupNorm(1, out_channels),
-            nn.SiLU(),
-            nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.SiLU(),
-        )
+        self.out_channels = int(out_channels)
+        if self.encoder_type == "conv1d":
+            # 频率→通道，仅沿时间卷积。
+            self.encoder = nn.Sequential(
+                nn.Conv1d(freq_bins, out_channels, kernel_size=3, padding=1),
+                nn.GroupNorm(1, out_channels),
+                nn.SiLU(),
+                nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1),
+                nn.SiLU(),
+            )
+        elif self.encoder_type == "conv2d":
+            # (B,1,freq,time) 图像式读图，频率方向有局部感受野。
+            self.encoder = nn.Sequential(
+                nn.Conv2d(1, out_channels, kernel_size=3, padding=1),
+                nn.GroupNorm(1, out_channels),
+                nn.SiLU(),
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+                nn.SiLU(),
+            )
+        else:
+            raise ValueError(f"未知 encoder_type: {self.encoder_type}，可选 conv1d / conv2d")
 
     def band_bin_count(self) -> int:
         return self._hi - self._lo
@@ -347,7 +375,11 @@ class STFTEncoder(nn.Module):
         band = log_mag[:, self._lo : self._hi, :]  # (B, freq_bins, T)
         if self.norm == "n1":
             band = band / self.band_scale.view(1, -1, 1).clamp_min(1e-6)
-        return self.encoder(band)  # (B, out_channels, T)
+        if self.encoder_type == "conv1d":
+            return self.encoder(band)  # (B, out_channels, T)
+        # conv2d：加单通道维 → 2D 卷积 → 沿频率轴均值池化 → (B, out_channels, T)
+        feat2d = self.encoder(band.unsqueeze(1))  # (B, out_channels, freq_bins, T)
+        return feat2d.mean(dim=2)  # (B, out_channels, T)
 ```
 
 - [ ] **步骤 4：运行测试验证通过**
@@ -628,25 +660,16 @@ def test_stft_encoder_n1_divides_by_band_scale(tmp_path):
 
 修改 `resp_train/models/stft_branch.py` 的 `STFTEncoder.__init__` 签名与 buffer 初始化，新增 `band_scale_path` 参数：
 
+在任务 3 的 `STFTEncoder.__init__` 基础上做两处增量改动（**保留 encoder_type 的
+conv1d/conv2d 分支不动**）：
+
+1. 在 `__init__` 参数表末尾新增 `band_scale_path: str | None = None`（放在 `encoder_type`
+   之后）。
+2. 把任务 3 中初始化 `band_scale` buffer 的那一行
+   `self.register_buffer("band_scale", torch.ones(self._hi - self._lo), persistent=True)`
+   替换为下面的“按 N1 从文件加载、否则全 1”逻辑（其余包括 encoder 构造完全不变）：
+
 ```python
-    def __init__(
-        self,
-        sample_rate: float = 100.0,
-        stft_win: int = 3000,
-        stft_hop: int = 500,
-        low_hz: float = 0.05,
-        high_hz: float = 3.0,
-        out_channels: int = 16,
-        norm: str = "n0",
-        band_scale_path: str | None = None,
-    ) -> None:
-        super().__init__()
-        self.sample_rate = float(sample_rate)
-        self.stft_win = int(stft_win)
-        self.stft_hop = int(stft_hop)
-        self.norm = str(norm)
-        self._lo, self._hi = _band_indices(self.stft_win, self.sample_rate, low_hz, high_hz)
-        self.register_buffer("stft_window", torch.hann_window(self.stft_win), persistent=False)
         n_bins = self._hi - self._lo
         if self.norm == "n1" and band_scale_path:
             import numpy as np
@@ -657,14 +680,6 @@ def test_stft_encoder_n1_divides_by_band_scale(tmp_path):
         else:
             scale = torch.ones(n_bins)
         self.register_buffer("band_scale", scale, persistent=True)
-        # encoder 部分保持任务 3 原样
-        self.encoder = nn.Sequential(
-            nn.Conv1d(n_bins, out_channels, kernel_size=3, padding=1),
-            nn.GroupNorm(1, out_channels),
-            nn.SiLU(),
-            nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.SiLU(),
-        )
 ```
 
 创建 `scripts/precompute_stft_band_scale.py`：
@@ -830,6 +845,7 @@ from resp_train.models.stft_branch import TimeStftDual1D
             high_hz=float(cfg.model.get("stft_high_hz", 3.0)),
             out_channels=int(cfg.model.get("stft_out_channels", 16)),
             norm=str(cfg.model.get("stft_norm", "n0")),
+            encoder_type=str(cfg.model.get("stft_encoder_type", "conv1d")),
             band_scale_path=(str(cfg.model.get("stft_band_scale_path")) if cfg.model.get("stft_band_scale_path") else None),
         ),
     ),
@@ -1123,35 +1139,55 @@ def _plain_backbone_overrides(backbone: str) -> list[str]:
     return base
 
 
-def build_run_specs() -> list[dict]:
-    """生成 E1 全部 run 规格（label/time_backbone/high_hz/seed/overrides）。"""
+def build_zero_ablation_specs() -> list[dict]:
+    """零号消融：代表档 E1b/patch_mixer1d/high_hz=8 上对跑 conv1d vs conv2d（6 run）。"""
     specs: list[dict] = []
+    for encoder_type in ("conv1d", "conv2d"):
+        for seed in SEEDS:
+            specs.append({
+                "label": "E1z", "time_backbone": "patch_mixer1d", "high_hz": 8.0,
+                "encoder_type": encoder_type, "seed": seed,
+                "overrides": [*STFT_BASE, "model.time_backbone=patch_mixer1d",
+                              "model.branch_mode=dual", "model.stft_high_hz=8.0",
+                              f"model.stft_encoder_type={encoder_type}", f"training.seed={seed}"],
+            })
+    return specs
+
+
+def build_run_specs(encoder: str = "conv1d") -> list[dict]:
+    """生成 E1 主线全部 run 规格；STFT 分支统一用零号消融选定的 encoder。"""
+    specs: list[dict] = []
+    stft_enc = [f"model.stft_encoder_type={encoder}"]
     for backbone in TIME_BACKBONES:
         for seed in SEEDS:
-            # E1a：现有模型直跑，不经包装器，与频带无关
+            # E1a：现有模型直跑，不经包装器，与频带/编码器无关
             specs.append({
-                "label": "E1a", "time_backbone": backbone, "high_hz": None, "seed": seed,
+                "label": "E1a", "time_backbone": backbone, "high_hz": None,
+                "encoder_type": encoder, "seed": seed,
                 "overrides": [*_plain_backbone_overrides(backbone), f"training.seed={seed}"],
             })
-            # E1a'：包装器 time_only，与频带无关
+            # E1a'：包装器 time_only，与频带无关（stft 分支不参与，但仍带 encoder 字段保持口径一致）
             specs.append({
-                "label": "E1a_prime", "time_backbone": backbone, "high_hz": None, "seed": seed,
-                "overrides": [*STFT_BASE, f"model.time_backbone={backbone}",
+                "label": "E1a_prime", "time_backbone": backbone, "high_hz": None,
+                "encoder_type": encoder, "seed": seed,
+                "overrides": [*STFT_BASE, *stft_enc, f"model.time_backbone={backbone}",
                               "model.branch_mode=time_only", "model.stft_high_hz=3.0",
                               f"training.seed={seed}"],
             })
             for high_hz in HIGH_HZ_BANDS:
                 # E1b：dual，扫三频带
                 specs.append({
-                    "label": "E1b", "time_backbone": backbone, "high_hz": high_hz, "seed": seed,
-                    "overrides": [*STFT_BASE, f"model.time_backbone={backbone}",
+                    "label": "E1b", "time_backbone": backbone, "high_hz": high_hz,
+                    "encoder_type": encoder, "seed": seed,
+                    "overrides": [*STFT_BASE, *stft_enc, f"model.time_backbone={backbone}",
                                   "model.branch_mode=dual", f"model.stft_high_hz={high_hz}",
                                   f"training.seed={seed}"],
                 })
                 # E1c：stft_only，扫三频带
                 specs.append({
-                    "label": "E1c", "time_backbone": backbone, "high_hz": high_hz, "seed": seed,
-                    "overrides": [*STFT_BASE, f"model.time_backbone={backbone}",
+                    "label": "E1c", "time_backbone": backbone, "high_hz": high_hz,
+                    "encoder_type": encoder, "seed": seed,
+                    "overrides": [*STFT_BASE, *stft_enc, f"model.time_backbone={backbone}",
                                   "model.branch_mode=stft_only", f"model.stft_high_hz={high_hz}",
                                   f"training.seed={seed}"],
                 })
@@ -1160,17 +1196,22 @@ def build_run_specs() -> list[dict]:
 
 def _tag(spec: dict) -> str:
     band = "na" if spec["high_hz"] is None else f"{spec['high_hz']:g}hz"
-    return f"{spec['label']}_{spec['time_backbone']}_{band}_{spec['seed']}"
+    return f"{spec['label']}_{spec['time_backbone']}_{spec['encoder_type']}_{band}_{spec['seed']}"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="E1 STFT 信息增益批次编排")
+    parser.add_argument("--phase", choices=["zero", "main"], default="main",
+                        help="zero=零号消融选编码器；main=主线 48 run")
+    parser.add_argument("--encoder", choices=["conv1d", "conv2d"], default="conv1d",
+                        help="主线 STFT 编码器（零号消融胜者）")
     parser.add_argument("--skip", action="append", default=[], help="跳过的 run tag")
     parser.add_argument("--dry-run", action="store_true", help="只打印将运行的 tag，不实际训练")
     args = parser.parse_args()
     skipped = set(args.skip)
 
-    for spec in build_run_specs():
+    specs = build_zero_ablation_specs() if args.phase == "zero" else build_run_specs(args.encoder)
+    for spec in specs:
         tag = _tag(spec)
         if tag in skipped:
             print(f"skip {tag}", flush=True)
@@ -1195,16 +1236,22 @@ if __name__ == "__main__":
 运行：`pytest tests/test_run_e1_overrides.py -v`
 预期：全部 PASS。
 
-- [ ] **步骤 5：dry-run 校验 run 总数（应为约 48）**
+- [ ] **步骤 5：dry-run 校验两阶段 run 数（零号消融 6，主线 48）**
 
-运行：`python scripts/run_e1_stft_info_gain.py --dry-run | wc -l`
-预期：`2 backbone × 3 seed ×（E1a 1 + E1a' 1 + E1b 3 + E1c 3）= 2×3×8 = 48`，输出 `48`。
+运行：
+
+```bash
+python scripts/run_e1_stft_info_gain.py --phase zero --dry-run | wc -l   # 期望 6
+python scripts/run_e1_stft_info_gain.py --phase main --dry-run | wc -l   # 期望 48
+```
+
+预期：零号消融 `2 encoder × 3 seed = 6`；主线 `2 backbone × 3 seed ×（1+1+3+3）= 48`。
 
 - [ ] **步骤 6：Commit**
 
 ```bash
 git add scripts/run_e1_stft_info_gain.py tests/test_run_e1_overrides.py
-git commit -m "feat: E1 STFT 信息增益批次编排脚本"
+git commit -m "feat: E1 STFT 信息增益批次编排脚本（零号消融 + 主线两阶段）"
 ```
 
 ---
@@ -1251,22 +1298,24 @@ git commit -m "docs: E1 双分支实现收尾，链接规格与批次脚本"
    - 补跑 ssm：`python scripts/run_20260620_softz_candidates.py`（仅 ssm，可用 `--skip` 跳过已跑模型）。
 2. **N1 频带尺度预统计**（仅 N1 对照档需要）：
    - `python scripts/precompute_stft_band_scale.py --config configs/tho_research_v2.yaml --high-hz 3 --output runs/stft_band_scale/band_scale_3hz.npy`
-3. **E1 首波**：`python scripts/run_e1_stft_info_gain.py`（约 48 run，支持 `--skip` 续跑）。
-4. **汇总**：`python scripts/summarize_tho_runs.py --runs-root runs/tho_research_v2_20260620_e1_stft_info_gain --output runs/tho_research_v2_20260620_e1_stft_info_gain_summary.csv`。
-5. 按规划“记录模板”填 E1a/a'/b/c/d 指标 + 分层诊断，给出研究判定。
+3. **E1 零号消融**（选编码器，6 run）：`python scripts/run_e1_stft_info_gain.py --phase zero`，
+   汇总后按主护栏 + 低 SNR 分层定 `conv1d` 或 `conv2d`（打平取 conv1d）。
+4. **E1 主线**（48 run）：`python scripts/run_e1_stft_info_gain.py --phase main --encoder <胜者>`，支持 `--skip` 续跑。
+5. **汇总**：`python scripts/summarize_tho_runs.py --runs-root runs/tho_research_v2_20260620_e1_stft_info_gain --output runs/tho_research_v2_20260620_e1_stft_info_gain_summary.csv`。
+6. 按规划“记录模板”填 E1a/a'/b/c/d 指标 + 分层诊断，给出研究判定。
 
 ---
 
 ## 自检结果
 
 **规格覆盖度核对：**
-- STFTEncoder（含 N0/N1、频带裁剪、log1p、轻编码）→ 任务 3、6 ✓
+- STFTEncoder（含 N0/N1、频带裁剪、log1p、conv1d/conv2d 编码器）→ 任务 3、6 ✓
 - 中间特征开关（PatchMixer / MultiScaleDecomp，向后兼容）→ 任务 1、2 ✓
 - TimeStftDual1D 三模式 + 融合头 + align_to_time → 任务 4、5 ✓
-- registry 注册 + cfg 字段 → 任务 7 ✓
+- registry 注册 + cfg 字段（含 stft_encoder_type）→ 任务 7 ✓
 - 集成（进 engine、checkpoint 往返）→ 任务 8 ✓
 - E0 收尾（split 审计 + ssm 补跑）→ 任务 9 ✓
-- E1 编排（48 run、E1a 不经包装器、E1a' 容量桩、三频带）→ 任务 10 ✓
+- E1 编排（零号消融 6 run 选编码器 + 主线 48 run，E1a 不经包装器、E1a' 容量桩、三频带）→ 任务 10 ✓
 - 测试策略（向后兼容护栏、契约、三模式、集成）→ 任务 1-8 ✓
 - 验收（全量回归、零变化）→ 任务 11 ✓
 
