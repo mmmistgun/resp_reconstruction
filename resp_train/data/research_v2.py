@@ -25,6 +25,16 @@ _REQUIRED_COLUMNS = [
     "allowed_losses",
 ]
 
+_DEFAULT_RR_PEAK_BAD_MASK_KEYS = (
+    "hard_invalid_sec",
+    "tho_bad_sec",
+    "bcg_bad_sec",
+    "tho_hard_invalid_sec",
+    "bcg_hard_invalid_sec",
+    "tho_extreme_motion_sec",
+    "bcg_extreme_motion_sec",
+)
+
 
 class ResearchV2WindowDataset(Dataset):
     """Research v2 整晚 NPZ + 窗口索引读取器。
@@ -83,6 +93,7 @@ class ResearchV2WindowDataset(Dataset):
             )
         if not np.isfinite(x).all() or not np.isfinite(y).all():
             raise ValueError(f"窗口包含非有限值 row={row['dataset_row_id']}")
+        rr_peak_valid_mask = self._rr_peak_valid_mask(row, start, end)
 
         return {
             "x": torch.from_numpy(x.copy()).view(1, -1),
@@ -96,8 +107,30 @@ class ResearchV2WindowDataset(Dataset):
                 "allowed_losses": str(row.get("allowed_losses", "")),
                 "supervision_confidence_level": str(row.get("supervision_confidence_level", "")),
                 "state_alignment_method": str(row.get("state_alignment_method", "")),
+                "rr_peak_valid_mask": torch.from_numpy(rr_peak_valid_mask.copy()),
             },
         }
+
+    def _rr_peak_valid_mask(self, row: pd.Series, start: int, end: int) -> np.ndarray:
+        """从秒级质量 mask 展开到采样级，供 raw peak RR 指标避开坏段。"""
+        expected = end - start
+        bad = np.zeros(expected, dtype=np.bool_)
+        sample_sec = np.floor(np.arange(start, end, dtype=np.float64) / float(self.cfg.window.target_fs)).astype(int)
+        found_any = False
+        for key in _rr_peak_bad_mask_keys(self.cfg):
+            try:
+                mask_sec = self.target_cache.get_arrays(str(row["target_source_npz"]), [key])[key]
+            except KeyError:
+                continue
+            found_any = True
+            mask_sec = np.asarray(mask_sec).reshape(-1)
+            in_range = (sample_sec >= 0) & (sample_sec < mask_sec.size)
+            bad |= ~in_range
+            if np.any(in_range):
+                bad[in_range] |= mask_sec[sample_sec[in_range]].astype(bool)
+        if not found_any:
+            return np.ones(expected, dtype=np.bool_)
+        return ~bad
 
     def _drop_nonfinite_rows(self, rows: pd.DataFrame) -> pd.DataFrame:
         if rows.empty:
@@ -189,6 +222,14 @@ def _resolve_key_column(adapted: pd.DataFrame, cfg: DictConfig, raw: Any) -> pd.
     if value in adapted.columns:
         return adapted[value].astype(str)
     return pd.Series([value] * len(adapted), index=adapted.index)
+
+
+def _rr_peak_bad_mask_keys(cfg: DictConfig) -> tuple[str, ...]:
+    evaluation_cfg = cfg.get("evaluation", {})
+    raw_keys = evaluation_cfg.get("rr_peak_bad_mask_keys", _DEFAULT_RR_PEAK_BAD_MASK_KEYS)
+    if isinstance(raw_keys, str):
+        return (raw_keys,)
+    return tuple(str(key) for key in raw_keys)
 
 
 def _usable_mask(adapted: pd.DataFrame, cfg: DictConfig) -> pd.Series:

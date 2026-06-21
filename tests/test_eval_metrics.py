@@ -72,6 +72,28 @@ def test_evaluate_prediction_dict_reports_bandpassed_peak_rate_for_spiky_predict
     assert np.isfinite(frame.loc[0, "target_rr_peak_band_bpm"])
 
 
+def test_evaluate_prediction_dict_masks_bad_segments_for_raw_peak_rate():
+    fs = 100
+    t = np.arange(0, 80, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t).astype(np.float32)
+    pred = target.copy()
+    bad = (t >= 20.0) & (t < 60.0)
+    pred[bad] = (8.0 * np.sin(2 * np.pi * 0.5 * t[bad])).astype(np.float32)
+    valid_mask = (~bad).astype(np.bool_)
+    preds = {
+        "r_tho_hat": pred.reshape(1, 1, -1),
+        "tho_ref": target.reshape(1, 1, -1),
+        "rr_peak_valid_mask": valid_mask.reshape(1, -1),
+    }
+
+    frame = evaluate_prediction_dict(preds, _cfg(), method="model")
+
+    assert frame.loc[0, "rr_peak_abs_error"] < 0.5
+    assert frame.loc[0, "rr_peak_unmasked_abs_error"] > 5.0
+    assert frame.loc[0, "rr_peak_valid_ratio"] == pytest.approx(0.5)
+    assert frame.loc[0, "rr_peak_valid_segment_count"] == 2
+
+
 def test_evaluate_prediction_dict_reports_best_lag_for_shifted_prediction():
     fs = 100
     target = _modulated_breath_signal(fs, 80.0).astype(np.float32)
@@ -133,6 +155,7 @@ class _MetaDataset(Dataset):
                 "split": "val",
                 "input_set": "mixed_zscore",
                 "residual_quality_class": "ok",
+                "rr_peak_valid_mask": torch.tensor([True, False, True, True, True, True, True, True]),
             },
         }
 
@@ -153,6 +176,8 @@ def test_collect_predictions_extracts_default_collated_meta():
     assert preds["split"].tolist() == ["val", "val"]
     assert preds["input_set"].tolist() == ["mixed_zscore", "mixed_zscore"]
     assert preds["residual_quality_class"].tolist() == ["ok", "ok"]
+    assert preds["rr_peak_valid_mask"].shape == (2, 8)
+    assert preds["rr_peak_valid_mask"][0].tolist() == [True, False, True, True, True, True, True, True]
 
 
 def test_collect_predictions_rejects_non_positive_max_windows():

@@ -26,6 +26,9 @@ def _write_research_v2_npzs(root: Path, samp_id: int) -> tuple[str, str]:
         tho_waveform_ref=base * 2,
         tho_event_phase_ref=base * 3,
         tho_rate_ref=base * 4,
+        tho_bad_sec=np.zeros(8, dtype=np.uint8),
+        bcg_bad_sec=np.zeros(8, dtype=np.uint8),
+        hard_invalid_sec=np.zeros(8, dtype=np.uint8),
     )
     return (
         f"../whole_night/alignment/{samp_id}/research_v2_alignment.npz",
@@ -175,6 +178,48 @@ def test_research_v2_dataset_slices_alignment_and_signal_bank(tmp_path: Path):
     assert sample["meta"]["samp_id"] == 88
     assert sample["meta"]["allowed_losses"] == "rate;waveform"
     assert sample["meta"]["coupling_state_id"] == 1
+    assert torch.equal(sample["meta"]["rr_peak_valid_mask"], torch.ones(40, dtype=torch.bool))
+
+
+def test_research_v2_dataset_expands_second_level_bad_masks_for_raw_peak_metrics(tmp_path: Path):
+    root = _prepare_research_v2_dataset(tmp_path)
+    cfg = _cfg(root)
+    cfg.window.duration_samples = 400
+    bank_npz = root / "whole_night" / "signal_bank" / "88" / "research_v2_signal_bank.npz"
+    base = np.arange(800, dtype=np.float32)
+    tho_bad_sec = np.zeros(8, dtype=np.uint8)
+    bcg_bad_sec = np.zeros(8, dtype=np.uint8)
+    hard_invalid_sec = np.zeros(8, dtype=np.uint8)
+    tho_bad_sec[2] = 1
+    bcg_bad_sec[4] = 1
+    np.savez(
+        root / "whole_night" / "alignment" / "88" / "research_v2_alignment.npz",
+        bcg_resp_band_to_tho_timebase=base,
+        bcg_resp_band_state_aligned=base + 100,
+    )
+    np.savez(
+        bank_npz,
+        tho_waveform_ref=base * 2,
+        tho_event_phase_ref=base * 3,
+        tho_rate_ref=base * 4,
+        tho_bad_sec=tho_bad_sec,
+        bcg_bad_sec=bcg_bad_sec,
+        hard_invalid_sec=hard_invalid_sec,
+    )
+    rows = adapt_research_v2_index(pd.read_csv(root / "training" / "dataset_index.csv"), cfg)
+    rows = rows[(rows["split"] == "train") & rows["usable"]].reset_index(drop=True)
+    rows.loc[0, "window_start_s"] = 1.0
+    rows.loc[0, "window_start_sample"] = 100
+    rows.loc[0, "window_end_sample"] = 500
+
+    dataset = ResearchV2WindowDataset(root / "training" / "dataset_index.csv", rows, cfg)
+    mask = dataset[0]["meta"]["rr_peak_valid_mask"]
+
+    assert mask.shape == (400,)
+    assert mask[:100].all()
+    assert not mask[100:200].any()
+    assert mask[200:300].all()
+    assert not mask[300:400].any()
 
 
 def test_research_v2_dataset_drops_nonfinite_selected_windows(tmp_path: Path):

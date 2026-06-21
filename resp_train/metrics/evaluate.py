@@ -29,6 +29,7 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
     evaluation_cfg = cfg.get("evaluation", {})
     max_lag_sec = float(evaluation_cfg.get("max_lag_sec", 1.0))
     lag_bandpass_order = int(evaluation_cfg.get("lag_bandpass_order", 4))
+    raw_peak_min_good_segment_sec = float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0))
 
     preds = np.asarray(predictions["r_tho_hat"])
     targets = np.asarray(predictions["tho_ref"])
@@ -36,12 +37,43 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
     for idx in range(preds.shape[0]):
         pred = np.asarray(preds[idx], dtype=np.float64).reshape(-1)
         target = np.asarray(targets[idx], dtype=np.float64).reshape(-1)
+        rr_peak_valid_mask = _rr_peak_valid_mask(predictions, idx, expected_size=pred.size)
         pred_env = rms_envelope(pred, env_window)
         target_env = rms_envelope(target, env_window)
         pred_rr_spec = estimate_spectral_rate_bpm(pred, fs=fs, low_hz=low_hz, high_hz=high_hz)
         target_rr_spec = estimate_spectral_rate_bpm(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
-        pred_rr_peak = estimate_peak_rate_bpm(pred, fs=fs, distance_sec=2.0, low_hz=low_hz, high_hz=high_hz)
-        target_rr_peak = estimate_peak_rate_bpm(target, fs=fs, distance_sec=2.0, low_hz=low_hz, high_hz=high_hz)
+        pred_rr_peak_unmasked = estimate_peak_rate_bpm(
+            pred,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
+        target_rr_peak_unmasked = estimate_peak_rate_bpm(
+            target,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
+        pred_rr_peak, rr_peak_segment_count = _estimate_masked_peak_rate_bpm(
+            pred,
+            rr_peak_valid_mask,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            min_good_segment_sec=raw_peak_min_good_segment_sec,
+        )
+        target_rr_peak, _ = _estimate_masked_peak_rate_bpm(
+            target,
+            rr_peak_valid_mask,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            min_good_segment_sec=raw_peak_min_good_segment_sec,
+        )
         pred_rr_peak_band = estimate_bandpassed_peak_rate_bpm(
             pred,
             fs=fs,
@@ -101,6 +133,11 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
                 "pred_rr_peak_bpm": pred_rr_peak,
                 "target_rr_peak_bpm": target_rr_peak,
                 "rr_peak_abs_error": _abs_error_or_nan(pred_rr_peak, target_rr_peak),
+                "pred_rr_peak_unmasked_bpm": pred_rr_peak_unmasked,
+                "target_rr_peak_unmasked_bpm": target_rr_peak_unmasked,
+                "rr_peak_unmasked_abs_error": _abs_error_or_nan(pred_rr_peak_unmasked, target_rr_peak_unmasked),
+                "rr_peak_valid_ratio": float(np.mean(rr_peak_valid_mask)),
+                "rr_peak_valid_segment_count": int(rr_peak_segment_count),
                 "pred_rr_peak_band_bpm": pred_rr_peak_band,
                 "target_rr_peak_band_bpm": target_rr_peak_band,
                 "rr_peak_band_abs_error": _abs_error_or_nan(pred_rr_peak_band, target_rr_peak_band),
@@ -159,3 +196,68 @@ def _abs_error_or_nan(a: float, b: float) -> float:
     if not np.isfinite(a) or not np.isfinite(b):
         return float("nan")
     return float(abs(a - b))
+
+
+def _rr_peak_valid_mask(predictions: dict[str, np.ndarray], idx: int, *, expected_size: int) -> np.ndarray:
+    values = predictions.get("rr_peak_valid_mask")
+    if values is None:
+        return np.ones(expected_size, dtype=np.bool_)
+    mask = np.asarray(values[idx]).reshape(-1).astype(np.bool_, copy=False)
+    if mask.size != expected_size:
+        raise ValueError(f"rr_peak_valid_mask 长度必须等于窗口长度: mask={mask.size} expected={expected_size}")
+    return mask
+
+
+def _estimate_masked_peak_rate_bpm(
+    signal: np.ndarray,
+    valid_mask: np.ndarray,
+    *,
+    fs: float,
+    distance_sec: float,
+    low_hz: float,
+    high_hz: float,
+    min_good_segment_sec: float,
+) -> tuple[float, int]:
+    """按连续共同好段估计 raw peak RR，避免拼接好段扭曲峰间距。"""
+    x = np.asarray(signal, dtype=np.float64).reshape(-1)
+    mask = np.asarray(valid_mask, dtype=np.bool_).reshape(-1)
+    if x.size != mask.size:
+        raise ValueError(f"signal 和 valid_mask 长度不一致: signal={x.size} mask={mask.size}")
+
+    min_samples = max(1, int(round(float(min_good_segment_sec) * float(fs))))
+    rates: list[float] = []
+    weights: list[int] = []
+    segment_count = 0
+    for start, end in _true_spans(mask):
+        length = end - start
+        if length < min_samples:
+            continue
+        segment_count += 1
+        rate = estimate_peak_rate_bpm(
+            x[start:end],
+            fs=fs,
+            distance_sec=distance_sec,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
+        if np.isfinite(rate):
+            rates.append(float(rate))
+            weights.append(length)
+
+    if not rates:
+        return float("nan"), segment_count
+    return float(np.average(np.asarray(rates, dtype=np.float64), weights=np.asarray(weights, dtype=np.float64))), segment_count
+
+
+def _true_spans(mask: np.ndarray) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    start: int | None = None
+    for idx, value in enumerate(mask):
+        if bool(value) and start is None:
+            start = idx
+        elif not bool(value) and start is not None:
+            spans.append((start, idx))
+            start = None
+    if start is not None:
+        spans.append((start, int(mask.size)))
+    return spans

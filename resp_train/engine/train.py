@@ -148,7 +148,7 @@ def collect_predictions(
     pred_arr = np.concatenate(preds, axis=0)[: int(max_windows)]
     target_arr = np.concatenate(targets, axis=0)[: int(max_windows)]
     meta_records = meta_records[: int(max_windows)]
-    return {
+    output = {
         pred_key: pred_arr,
         target_key: target_arr,
         "dataset_row_id": np.asarray([int(m.get("dataset_row_id", -1)) for m in meta_records], dtype=np.int64),
@@ -156,16 +156,24 @@ def collect_predictions(
         "input_set": np.asarray([str(m.get("input_set", "")) for m in meta_records]),
         "residual_quality_class": np.asarray([str(m.get("residual_quality_class", "")) for m in meta_records]),
     }
+    if meta_records and "rr_peak_valid_mask" in meta_records[0]:
+        output["rr_peak_valid_mask"] = np.stack(
+            [np.asarray(m["rr_peak_valid_mask"], dtype=np.bool_).reshape(-1) for m in meta_records],
+            axis=0,
+        )
+    return output
 
 
 def _extract_meta(meta: Mapping[str, Any], idx: int) -> dict[str, Any]:
-    """从默认 collate 后的 meta 字典中取出单个样本的标量元数据。"""
+    """从默认 collate 后的 meta 字典中取出单个样本的元数据。"""
     result: dict[str, Any] = {}
     for key, value in meta.items():
         if torch.is_tensor(value):
-            item = value[idx].item() if value.ndim > 0 else value.item()
+            selected = value[idx] if value.ndim > 0 else value
+            item = selected.item() if selected.ndim == 0 else selected.detach().cpu().numpy()
         elif isinstance(value, np.ndarray):
-            item = value[idx].item() if value.ndim > 0 else value.item()
+            selected = value[idx] if value.ndim > 0 else value
+            item = selected.item() if np.asarray(selected).ndim == 0 else np.asarray(selected)
         elif isinstance(value, (list, tuple)):
             item = value[idx]
         else:

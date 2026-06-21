@@ -24,6 +24,7 @@ class TinyRespDataset:
                 "segment_id": 1,
                 "window_id_in_segment": idx + 1,
                 "residual_quality_class": "near_zero_residual",
+                "rr_peak_valid_mask": __import__("torch").ones(512, dtype=__import__("torch").bool),
             },
         }
 
@@ -46,5 +47,8 @@ def test_evaluate_baseline_dataset_returns_metrics_frame():
         "dataset_row_id",
         "rr_spec_abs_error",
         "rr_peak_band_abs_error",
+        "rr_peak_unmasked_abs_error",
+        "rr_peak_valid_ratio",
         "spectrum_similarity",
     }
+    assert frame["rr_peak_valid_ratio"].tolist() == [1.0, 1.0]

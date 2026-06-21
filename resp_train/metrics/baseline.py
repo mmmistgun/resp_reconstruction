@@ -8,6 +8,7 @@ import pandas as pd
 from omegaconf import DictConfig
 
 from resp_train.data.factory import build_window_data
+from resp_train.metrics.evaluate import _estimate_masked_peak_rate_bpm
 from resp_train.metrics.signal import (
     bandpass_filter,
     estimate_bandpassed_peak_rate_bpm,
@@ -23,6 +24,8 @@ def evaluate_baseline_dataset(dataset: Any, cfg: DictConfig) -> pd.DataFrame:
     low_hz = float(cfg.baseline.get("bandpass_low_hz", cfg.loss.get("spectrum_low_hz", 0.05)))
     high_hz = float(cfg.baseline.get("bandpass_high_hz", cfg.loss.get("spectrum_high_hz", 0.7)))
     order = int(cfg.baseline.get("filter_order", 4))
+    evaluation_cfg = cfg.get("evaluation", {})
+    raw_peak_min_good_segment_sec = float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0))
     envelope_window = max(1, int(round(float(cfg.loss.get("envelope_window_sec", 2.0)) * fs)))
     records: list[dict[str, Any]] = []
     for idx in range(len(dataset)):
@@ -35,6 +38,7 @@ def evaluate_baseline_dataset(dataset: Any, cfg: DictConfig) -> pd.DataFrame:
                 high_hz=high_hz,
                 order=order,
                 envelope_window=envelope_window,
+                raw_peak_min_good_segment_sec=raw_peak_min_good_segment_sec,
             )
         )
     return pd.DataFrame.from_records(records)
@@ -65,6 +69,7 @@ def _evaluate_baseline_sample(
     high_hz: float,
     order: int,
     envelope_window: int,
+    raw_peak_min_good_segment_sec: float,
 ) -> dict[str, Any]:
     meta = sample["meta"]
     x = sample["x"].detach().cpu().numpy().squeeze()
@@ -79,8 +84,33 @@ def _evaluate_baseline_sample(
 
     pred_rr_spec = estimate_spectral_rate_bpm(pred, fs=fs, low_hz=low_hz, high_hz=high_hz)
     target_rr_spec = estimate_spectral_rate_bpm(target_env, fs=fs, low_hz=low_hz, high_hz=high_hz)
-    pred_rr_peak = estimate_peak_rate_bpm(pred, fs=fs, distance_sec=2.0, low_hz=low_hz, high_hz=high_hz)
-    target_rr_peak = estimate_peak_rate_bpm(target_env, fs=fs, distance_sec=2.0, low_hz=low_hz, high_hz=high_hz)
+    rr_peak_valid_mask = _sample_rr_peak_valid_mask(meta, expected_size=pred.size)
+    pred_rr_peak_unmasked = estimate_peak_rate_bpm(pred, fs=fs, distance_sec=2.0, low_hz=low_hz, high_hz=high_hz)
+    target_rr_peak_unmasked = estimate_peak_rate_bpm(
+        target_env,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    pred_rr_peak, rr_peak_segment_count = _estimate_masked_peak_rate_bpm(
+        pred,
+        rr_peak_valid_mask,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        min_good_segment_sec=raw_peak_min_good_segment_sec,
+    )
+    target_rr_peak, _ = _estimate_masked_peak_rate_bpm(
+        target_env,
+        rr_peak_valid_mask,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        min_good_segment_sec=raw_peak_min_good_segment_sec,
+    )
     pred_rr_peak_band = estimate_bandpassed_peak_rate_bpm(
         pred,
         fs=fs,
@@ -107,6 +137,11 @@ def _evaluate_baseline_sample(
         "pred_rr_peak_bpm": pred_rr_peak,
         "target_rr_peak_bpm": target_rr_peak,
         "rr_peak_abs_error": _abs_error_or_nan(pred_rr_peak, target_rr_peak),
+        "pred_rr_peak_unmasked_bpm": pred_rr_peak_unmasked,
+        "target_rr_peak_unmasked_bpm": target_rr_peak_unmasked,
+        "rr_peak_unmasked_abs_error": _abs_error_or_nan(pred_rr_peak_unmasked, target_rr_peak_unmasked),
+        "rr_peak_valid_ratio": float(np.mean(rr_peak_valid_mask)),
+        "rr_peak_valid_segment_count": int(rr_peak_segment_count),
         "pred_rr_peak_band_bpm": pred_rr_peak_band,
         "target_rr_peak_band_bpm": target_rr_peak_band,
         "rr_peak_band_abs_error": _abs_error_or_nan(pred_rr_peak_band, target_rr_peak_band),
@@ -125,3 +160,17 @@ def _abs_error_or_nan(a: float, b: float) -> float:
     if not np.isfinite(a) or not np.isfinite(b):
         return float("nan")
     return float(abs(a - b))
+
+
+def _sample_rr_peak_valid_mask(meta: dict[str, Any], *, expected_size: int) -> np.ndarray:
+    value = meta.get("rr_peak_valid_mask")
+    if value is None:
+        return np.ones(expected_size, dtype=np.bool_)
+    if hasattr(value, "detach"):
+        mask = value.detach().cpu().numpy()
+    else:
+        mask = np.asarray(value)
+    mask = np.asarray(mask).reshape(-1).astype(np.bool_, copy=False)
+    if mask.size != expected_size:
+        raise ValueError(f"rr_peak_valid_mask 长度必须等于窗口长度: mask={mask.size} expected={expected_size}")
+    return mask
