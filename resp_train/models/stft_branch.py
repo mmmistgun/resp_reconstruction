@@ -64,6 +64,21 @@ class FusionHead(nn.Module):
                 nn.SiLU(),
                 nn.Conv1d(hidden, 1, kernel_size=1),
             )
+        elif self.decoder_style == "k1_norm":
+            self.decoder = nn.Sequential(
+                nn.Conv1d(int(in_channels), hidden, kernel_size=1),
+                nn.GroupNorm(1, hidden),
+                nn.SiLU(),
+                nn.Conv1d(hidden, 1, kernel_size=1),
+            )
+        elif self.decoder_style == "k3_no_norm":
+            self.decoder = nn.Sequential(
+                nn.Conv1d(int(in_channels), hidden, kernel_size=3, padding=1),
+                nn.SiLU(),
+                nn.Conv1d(hidden, hidden, kernel_size=3, padding=1),
+                nn.SiLU(),
+                nn.Conv1d(hidden, 1, kernel_size=1),
+            )
         elif self.decoder_style == "deep":
             self.decoder = nn.Sequential(
                 nn.Conv1d(int(in_channels), hidden, kernel_size=3, padding=1),
@@ -74,7 +89,7 @@ class FusionHead(nn.Module):
                 nn.Conv1d(hidden, 1, kernel_size=1),
             )
         else:
-            raise ValueError(f"decoder_style 必须是 deep 或 lite，当前为: {decoder_style}")
+            raise ValueError(f"decoder_style 必须是 deep、lite、k1_norm 或 k3_no_norm，当前为: {decoder_style}")
 
     def forward(self, fused: torch.Tensor) -> torch.Tensor:
         decoded = self.decoder(fused)

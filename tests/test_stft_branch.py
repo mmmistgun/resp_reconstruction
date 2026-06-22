@@ -213,6 +213,24 @@ def test_fusion_head_lite_decoder_uses_only_pointwise_convs():
     assert not any(isinstance(module, torch.nn.GroupNorm) for module in head.decoder)
 
 
+def test_fusion_head_k3_no_norm_keeps_deep_kernels_without_group_norm():
+    head = FusionHead(in_channels=24, out_length=18000, hidden=16, decoder_style="k3_no_norm")
+    convs = [module for module in head.decoder if isinstance(module, torch.nn.Conv1d)]
+
+    assert head.decoder_style == "k3_no_norm"
+    assert [conv.kernel_size for conv in convs] == [(3,), (3,), (1,)]
+    assert not any(isinstance(module, torch.nn.GroupNorm) for module in head.decoder)
+
+
+def test_fusion_head_k1_norm_adds_group_norm_to_pointwise_decoder():
+    head = FusionHead(in_channels=24, out_length=18000, hidden=16, decoder_style="k1_norm")
+    convs = [module for module in head.decoder if isinstance(module, torch.nn.Conv1d)]
+
+    assert head.decoder_style == "k1_norm"
+    assert [conv.kernel_size for conv in convs] == [(1,), (1,)]
+    assert any(isinstance(module, torch.nn.GroupNorm) for module in head.decoder)
+
+
 def test_fusion_head_rejects_unknown_decoder_style():
     with pytest.raises(ValueError, match="decoder_style"):
         FusionHead(in_channels=24, out_length=18000, hidden=16, decoder_style="wide")
