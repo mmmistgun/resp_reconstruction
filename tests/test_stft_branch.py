@@ -317,3 +317,67 @@ def test_dual_uses_stft_encoder_default_out_channels_when_missing():
     out = model(torch.randn(1, 1, 18000))
 
     assert out.shape == (1, 1, 18000)
+
+
+def _native_dual(branch_mode: str, backbone: str = "patch_mixer1d") -> TimeStftDual1D:
+    kwargs = (
+        dict(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64, overlap_window="hann")
+        if backbone == "patch_mixer1d"
+        else dict(in_channels=1, out_channels=1, base_channels=8, downsample_factors=[1, 4, 16])
+    )
+    feat_ch = 8 if backbone == "patch_mixer1d" else 8 * 3
+    return TimeStftDual1D(
+        time_backbone_name=backbone,
+        time_backbone_kwargs=kwargs,
+        time_feat_channels=feat_ch,
+        branch_mode=branch_mode,
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs=dict(
+            sample_rate=100.0, stft_win=3000, stft_hop=500, low_hz=0.05, high_hz=8.0,
+            out_channels=16, norm="n0", encoder_type="conv2d",
+        ),
+        fusion_mode="native_inject",
+    )
+
+
+def test_native_inject_time_only_equals_native_backbone_forward():
+    model = _native_dual("time_only")
+    model.eval()
+    x = torch.randn(2, 1, 18000)
+
+    with torch.no_grad():
+        wrapped = model(x)
+        native = model.time_backbone(x)  # 原生非特征前向
+
+    assert torch.equal(wrapped, native)
+
+
+def test_native_inject_dual_equals_time_only_at_init_due_to_zero_proj():
+    model = _native_dual("dual")
+    model.eval()
+    x = torch.randn(2, 1, 18000)
+
+    with torch.no_grad():
+        dual_out = model(x)
+        tokens, length = model.time_backbone(x, return_features=True)
+        native = model.time_backbone.decode_from_features(tokens, length)
+
+    assert torch.allclose(dual_out, native, atol=1e-6)
+
+
+def test_native_inject_dual_has_both_branch_gradients():
+    model = _native_dual("dual")
+    x = torch.randn(2, 1, 18000)
+
+    model(x).square().mean().backward()
+
+    time_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.time_backbone.parameters())
+    stft_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_encoder.parameters())
+    proj_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_proj.parameters())
+    assert time_grad and stft_grad and proj_grad
+
+
+def test_native_inject_rejects_backbone_without_decode_from_features():
+    with pytest.raises((ValueError, TypeError, AttributeError)):
+        _native_dual("dual", backbone="multiscale_decomp_mixer1d")

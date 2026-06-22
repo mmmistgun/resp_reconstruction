@@ -764,6 +764,86 @@ warmup；历史 B1 冻结结果仍保留为无 warmup 对照基线。
 > `auto_direction/max=0.5` 不变。已写入 `configs/tho_research_v2.yaml` 默认 loss 段
 > （注意：仅对本数据/patch 路线验证过，multiscale 等其他 backbone 未验证 warmup 安全性）。
 
+### B2-0：native_inject 原生解码融合复测
+
+目的：验证 patch 双分支是否必须避开 `concat -> FusionHead` 通用解码头，改为在 patch token
+栅格上做零初始化加性注入，再走 `PatchMixer1D` 原生 `decode_from_features`。判定门来自计划：
+`time_only` 误拣率应回到原生约 `11%`；`dual - time_only` 的 `Δfrac_gt_1` 应不弱于 E1-D
+基准 `-2.34pp`；gate fail 不劣于 E1-D。
+
+固定配置：
+
+- 模型：`patch_mixer1d + time_stft_dual1d + fusion_mode=native_inject + conv2d STFT encoder + N0 8Hz`。
+- 解码：`time_only` 走原生 patch 解码；`dual` 在 token 特征上加 `stft_proj(stft_feats)` 后走同一原生解码。
+- warmup：沿用 E1-C1 默认轻 warmup。
+- seeds：`20260700`、`20260710`、`20260837`、`20260901`、`20260911`、`20260920`。
+- 输出：
+  - 明细：`runs/b2_native_detail.csv`
+  - 聚合：`runs/b2_native_grouped.csv`
+  - 配对 delta：`runs/b2_native_paired_delta.csv`
+  - 相关性配对 delta：`runs/b2_native_corr_paired_delta.csv`
+  - run 状态：`runs/b2_native_status.csv`
+
+运行状态：
+
+| 分支 | 完整 run | 不完整 run | 说明 |
+|---|---:|---:|---|
+| `time_only` | 6 | 6 | 6 个完整结果；另有 6 个早期误启动/中断残留目录，未进入配对统计 |
+| `dual` | 6 | 0 | 6 个代表性 seed 全部有 `metrics.csv` |
+
+聚合结果：
+
+| 分支 | n | mean | median | p95 | `frac_gt_1` | `frac_gt_2` |
+|---|---:|---:|---:|---:|---:|---:|
+| `time_only` | 6 | 0.600554 | 0.195961 | 2.621072 | 0.147913 | 0.067539 |
+| `dual` | 6 | 0.554411 | 0.190620 | 2.220951 | 0.133956 | 0.057695 |
+
+配对 delta（`dual - time_only`）：
+
+| 指标 | 平均 delta | 方向 |
+|---|---:|---|
+| mean | -0.046143 | 改善 |
+| median | -0.005340 | 改善很小 |
+| p95 | -0.400120 | 改善 |
+| `frac_gt_1` | -0.013956 | 改善（-1.40pp） |
+| `frac_gt_2` | -0.009844 | 改善（-0.98pp） |
+
+逐 seed 的 `frac_gt_1` 配对结果：
+
+| seed | `time_only` | `dual` | delta |
+|---:|---:|---:|---:|
+| 20260700 | 0.146916 | 0.124860 | -0.022056 |
+| 20260710 | 0.168598 | 0.121121 | -0.047477 |
+| 20260837 | 0.126355 | 0.142430 | +0.016075 |
+| 20260901 | 0.135327 | 0.129720 | -0.005607 |
+| 20260911 | 0.179813 | 0.149907 | -0.029907 |
+| 20260920 | 0.130467 | 0.135701 | +0.005234 |
+
+相关性配对 delta（`dual - time_only`，逐窗口均值后按 seed 配对）：
+
+| 指标 | 平均 delta | 方向 |
+|---|---:|---|
+| `envelope_corr` | -0.004363 | 小幅下降 |
+| `relative_envelope_corr` | -0.002451 | 小幅下降 |
+| `spectrum_similarity` | -0.000430 | 基本持平 |
+| `band_limited_corr` | -0.001031 | 基本持平 |
+| `best_lag_corr` | -0.000115 | 基本持平 |
+
+判定：
+
+1. **gate 稳定性通过**：6 个 seed 的两臂全部产出完整 `metrics.csv`，且所有 run 的
+   `max_val_signed_corr` 都未超过 `0.5`，不劣于 E1-D。
+2. **time_only 没回到原生约 11%**：`frac_gt_1=14.79%`，比旧 wrapper 约 `22%` 明显好，
+   但仍高于计划门槛里的原生 `~11%`。架构前向等价不能自动保证训练结果完全回到原生分布。
+3. **STFT 净增益门未通过**：`Δfrac_gt_1=-1.40pp`，4/6 seed 为负，方向有改善但弱于
+   E1-D 的 `-2.23pp` 和 B1 的 `-2.34pp`。因此 B2-0 不能作为进入 B2-1 gating 的 substrate。
+4. **机制含义**：`native_inject` 消掉通用解码头后，并没有放大 STFT 信息增益；反而提示旧
+   `concat -> deep FusionHead` 可能在 patch 口径下“意外帮 STFT”了一部分。按预设判定门，
+   此处应停下，不盲目追加 gating/FiLM。
+
+结论：B2-0 是有效的负结果。它证明原生解码注入能稳定训练，但没达到“头修正 + STFT 净增益更强”
+的目标；后续 patch 主线仍以 E1-D 定稿配方为准，不进入 B2-1 gating。
+
 ### 疑点 2：方向门控（核查后推翻“过严/幸存者偏差”）
 
 gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求 corr≥0（极性不反）。
@@ -805,6 +885,9 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
   同向改善，且 `band_limited_corr` / `best_lag_corr` 也 9/9 提升。无 warmup 冻结口径的限制从
   “样本量不足”转为“仍有 gate fail/极性多稳态”；E1-D 显示轻 warmup 已能显著缓解该问题，
   且不伤 STFT 净增益。
+- `native_inject` 原生解码注入：**不进入当前主线**。B2-0 证明它能稳定训练（6/6 配对、0 gate
+  fail），但 `time_only` 误拣率未回到原生约 `11%`，且 STFT 净增益只有 `Δfrac_gt_1=-1.40pp`，
+  弱于 E1-D/B1 的 `-2.23~-2.34pp`。因此不在这个 substrate 上继续投 gating。
 - `stft_only`：**确认在 magnitude 口径下不可用**——极性盲已坐实（corr≈−0.98），
   要用 STFT 单分支必须引入相位（E4/CWT），否则放弃单分支路线。
 - 门控保持 `auto_direction/max=0.5`：核查证明它正确拦截真反向，不放宽。
@@ -862,16 +945,18 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
    `configs/tho_research_v2.yaml` 默认 loss 段，成为 patch STFT 主线默认口径。仅对本数据/patch
    路线验证过；multiscale 等其他 backbone 未验证 warmup 安全性（按当前决策不再跟进 multiscale）。
 
-优先级 4（patch 融合方法优化，**极性稳定后再做、后续可选**）：
+优先级 4（patch 融合方法优化，**B2-0 后暂停**）：
 
 1. 定位：当前 `concat → deep FusionHead` 已足以支撑 E1 正结论，融合优化是“能否从 STFT 榨出
    更多”的性能问题，**非 E1 必需**。预期边际收益不大且不确定（concat+有容量解码器本身是强基线）。
-2. 正当动机仅在于 STFT 极性盲 + 低分辨率（37 帧）天然“部分不可靠”，gating/FiLM 可让模型学会
-   “该信则信、不该信则压”。最省做法：**先只上一个 gating 变体作探针**，打不过 concat 即收手。
-3. 判定口径（强制）：每个新融合都跑 dual + time_only 两臂 × 多 seed，比较
+2. B2-0 已完成原生解码注入复测：`fusion_mode=native_inject` 得到 6/6 完整配对、0 gate fail，
+   但 `Δfrac_gt_1=-1.40pp`，弱于 E1-D 的 `-2.23pp`，未过“进入 B2-1 gating”的门槛。
+   这说明旧通用融合路径可能在 patch 上提供了额外可用容量，不能假设“更原生的解码”一定更干净。
+3. 因此 **不继续 B2-1 gating**，除非先提出新的、能解释为何 gating 会弥补 B2-0 增益变弱的机制假设。
+   当前默认回到 E1-D 定稿配方推进后续研究，而不是继续扩融合结构。
+4. 若以后重启融合优化，判定口径（强制）：每个新融合都跑 dual + time_only 两臂 × 多 seed，比较
    `(新融合 dual − 新融合 time_only)` 的 `Δf1` 是否比 concat 基准 `-2.34pp` 更负。
    **time_only 对照桩不可省**——它确保涨幅来自“更会用 STFT”而非“新结构在裸 backbone 上就更强”。
-4. 必须在优先级 3 之后做：融合越复杂、参数越多，极性多稳态大概率越糟，不应在不稳地基上加结构。
 
 已闭环（无需再做）：方向门控核查——确认无误杀，stft_only 在 magnitude 口径下极性盲，
 保持门控不放宽；multiscale `fuse_len`/decoder 对照 + 逐窗分布核查——已定位崩坏为 wrapper

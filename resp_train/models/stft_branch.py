@@ -228,6 +228,7 @@ class TimeStftDual1D(nn.Module):
         stft_kwargs: dict,
         fusion_hidden: int = 16,
         fusion_decoder: str = "deep",
+        fusion_mode: str = "concat_generic",
     ) -> None:
         super().__init__()
         mode = str(branch_mode).lower()
@@ -236,11 +237,30 @@ class TimeStftDual1D(nn.Module):
 
         self.branch_mode = mode
         self.fuse_len = int(fuse_len)
+        self.fusion_mode = str(fusion_mode).lower()
+        if self.fusion_mode not in {"concat_generic", "native_inject"}:
+            raise ValueError("fusion_mode 必须是 concat_generic 或 native_inject")
         use_time = mode in {"time_only", "dual"}
         use_stft = mode in {"stft_only", "dual"}
 
         self.time_backbone = _build_time_backbone(time_backbone_name, time_backbone_kwargs) if use_time else None
         self.stft_encoder = STFTEncoder(**dict(stft_kwargs)) if use_stft else None
+
+        if self.fusion_mode == "native_inject":
+            # 原生解码融合：在 token 栅格把 STFT 加性注入主干特征，再走主干原生解码契约。
+            if not (use_time and hasattr(self.time_backbone, "decode_from_features")):
+                raise ValueError(
+                    "native_inject 仅支持暴露 decode_from_features 的主干（当前仅 patch_mixer1d）"
+                )
+            self.fusion_head = None
+            if use_stft:
+                # 末层零初始化（ReZero 式暖启）：dual 在 init 时注入项为 0，输出等价于原生解码。
+                self.stft_proj = nn.Conv1d(int(self.stft_encoder.out_channels), int(time_feat_channels), kernel_size=1)
+                nn.init.zeros_(self.stft_proj.weight)
+                nn.init.zeros_(self.stft_proj.bias)
+            else:
+                self.stft_proj = None
+            return
 
         fused_channels = 0
         if use_time:
@@ -253,8 +273,22 @@ class TimeStftDual1D(nn.Module):
             hidden=fusion_hidden,
             decoder_style=fusion_decoder,
         )
+        self.stft_proj = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.fusion_mode == "native_inject":
+            time_feats, length = self.time_backbone(x, return_features=True)
+            if self.stft_encoder is not None:
+                stft_feats = align_to_time(self.stft_encoder(x), time_feats.size(-1))
+                stft_delta = self.stft_proj(stft_feats)
+                if self.training and torch.count_nonzero(self.stft_proj.weight.detach()).item() == 0:
+                    # 零初始化注入保证 init 输出等价原生；这里额外加一个零值项，只在首个
+                    # backward 让 STFT encoder 获得梯度，避免第一步完全冻结频域分支。
+                    bridge = stft_feats.mean(dim=1, keepdim=True).expand(-1, time_feats.size(1), -1)
+                    stft_delta = stft_delta + bridge - bridge.detach()
+                time_feats = time_feats + stft_delta
+            return self.time_backbone.decode_from_features(time_feats, length)
+
         features: list[torch.Tensor] = []
         if self.time_backbone is not None:
             time_feats, _ = self.time_backbone(x, return_features=True)

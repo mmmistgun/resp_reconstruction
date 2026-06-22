@@ -699,3 +699,84 @@ def test_build_time_stft_dual1d_time_only_ignores_unused_stft_fields():
     y = model(torch.randn(1, 1, 4096))
 
     assert y.shape == (1, 1, 4096)
+
+
+def test_patch_mixer_decode_from_features_matches_native_forward():
+    torch.manual_seed(0)
+    model = PatchMixer1D(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64)
+    model.eval()
+    x = torch.randn(2, 1, 4096)
+
+    with torch.no_grad():
+        native = model(x)
+        tokens, length = model(x, return_features=True)
+        recomposed = model.decode_from_features(tokens, length)
+
+    assert torch.equal(native, recomposed)
+
+
+def test_patch_mixer_decode_from_features_shape():
+    model = PatchMixer1D(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64)
+    x = torch.randn(2, 1, 4096)
+    tokens, length = model(x, return_features=True)
+
+    out = model.decode_from_features(tokens, length)
+
+    assert out.shape == (2, 1, 4096)
+
+
+def test_build_time_stft_dual1d_native_inject_patch_preserves_shape():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": "time_stft_dual1d", "in_channels": 1, "out_channels": 1, "base_channels": 8,
+                "branch_mode": "dual", "time_backbone": "patch_mixer1d",
+                "patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "overlap_window": "hann",
+                "stft_win": 3000, "stft_hop": 500, "stft_low_hz": 0.05, "stft_high_hz": 8.0,
+                "stft_out_channels": 16, "stft_norm": "n0", "stft_encoder_type": "conv2d",
+                "fusion_mode": "native_inject",
+            },
+        }
+    )
+    model = build_model(cfg)
+    y = model(torch.randn(2, 1, 18000))
+    assert y.shape == (2, 1, 18000)
+    assert torch.isfinite(y).all()
+    assert model.fusion_head is None  # native_inject 不建通用融合头
+
+
+def test_build_time_stft_dual1d_native_inject_multiscale_raises():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_dual1d", "in_channels": 1, "out_channels": 1, "base_channels": 8,
+                "branch_mode": "dual", "time_backbone": "multiscale_decomp_mixer1d",
+                "downsample_factors": [1, 4, 16], "mixer_layers": 1,
+                "stft_win": 512, "stft_hop": 128, "stft_low_hz": 0.05, "stft_high_hz": 3.0,
+                "stft_out_channels": 16, "stft_norm": "n0",
+                "fusion_mode": "native_inject",
+            },
+        }
+    )
+    with pytest.raises(ValueError, match="native_inject"):
+        build_model(cfg)
+
+
+def test_build_time_stft_dual1d_defaults_to_concat_generic():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": "time_stft_dual1d", "in_channels": 1, "out_channels": 1, "base_channels": 8,
+                "branch_mode": "dual", "time_backbone": "patch_mixer1d",
+                "patch_len": 256, "patch_stride": 128, "mixer_layers": 1,
+                "stft_win": 3000, "stft_hop": 500, "stft_low_hz": 0.05, "stft_high_hz": 8.0,
+                "stft_out_channels": 16, "stft_norm": "n0",
+            },
+        }
+    )
+    model = build_model(cfg)
+    assert model.fusion_mode == "concat_generic"
+    assert model.fusion_head is not None

@@ -181,9 +181,19 @@ class PatchMixer1D(nn.Module):
             tokens = block(tokens)
         if return_features:
             return tokens, length
+        return self.decode_from_features(tokens, length)
+
+    def decode_from_features(self, tokens: torch.Tensor, length: int) -> torch.Tensor:
+        """把 (B, base_channels, T') token 特征经原生 patch_head + overlap-add 解码回 (B, out_channels, length)。
+
+        与 forward 非特征路径逐元素等价；供双分支在 token 栅格注入后复用原生解码契约。
+        """
+        batch = tokens.size(0)
+        patch_count = tokens.size(-1)
+        padded_length = self._padded_length(int(length))
         patch_values = self.patch_head(tokens.transpose(1, 2))
         patch_values = patch_values.view(batch, patch_count, self.out_channels, self.patch_len)
-        return self.output_smoother(self._overlap_add(patch_values, length, padded_length))
+        return self.output_smoother(self._overlap_add(patch_values, int(length), padded_length))
 
     def _padded_length(self, length: int) -> int:
         if length <= self.patch_len:

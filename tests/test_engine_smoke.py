@@ -241,3 +241,36 @@ def test_setup_logger_closes_replaced_file_handlers(tmp_path):
     setup_logger(second)
 
     assert all(handler.stream is None for handler in old_file_handlers)
+
+
+def test_time_stft_dual1d_native_inject_forward_backward_and_state_roundtrip():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": "time_stft_dual1d", "in_channels": 1, "out_channels": 1, "base_channels": 8,
+                "branch_mode": "dual", "time_backbone": "patch_mixer1d",
+                "patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "overlap_window": "hann",
+                "stft_win": 3000, "stft_hop": 500, "stft_low_hz": 0.05, "stft_high_hz": 8.0,
+                "stft_out_channels": 16, "stft_norm": "n0", "stft_encoder_type": "conv2d",
+                "fusion_mode": "native_inject",
+            },
+        }
+    )
+    model = build_model(cfg)
+    x = torch.randn(2, 1, 18000)
+    target = torch.randn(2, 1, 18000)
+
+    pred = model(x)
+    (pred - target).square().mean().backward()
+    grad_norm = sum(float(p.grad.abs().sum()) for p in model.parameters() if p.grad is not None)
+    assert pred.shape == (2, 1, 18000)
+    assert grad_norm > 0.0
+
+    state = model.state_dict()
+    fresh = build_model(cfg)
+    fresh.load_state_dict(state)
+    model.eval()
+    fresh.eval()
+    with torch.no_grad():
+        assert torch.allclose(model(x), fresh(x), atol=1e-5)
