@@ -2,13 +2,23 @@
 
 ## 结论摘要
 
-本轮 E1 实验没有给出“STFT 输入带来稳定、全面信息增益”的强证据。更准确的结论是：
-STFT 分支在 `patch_mixer1d` 上对主指标有局部收益，但伴随波形相关性和相对包络指标退化；
-在 `multiscale_decomp_mixer1d` 上，STFT 相关路径明显破坏主指标，不建议作为下一阶段主线。
+本轮 E1 实验没有给出“STFT 输入带来稳定、全面信息增益”的强证据，但也**不能据此判定
+“STFT 无用”**——容量桩 E1a' 暴露出至少一个与 STFT 无关的混淆因子尚未拆解，需先排除再定论。
 
-当前可保留的候选方向是 `patch_mixer1d + conv2d + N1 3Hz`，但补充 seed 后证据变弱：
-它仍好于 N0 8Hz 的补充表现，但已经不能认为相对纯时序 baseline 有稳定优势。
-N0 8Hz 更应作为不稳定对照，而不是主候选。
+- `multiscale_decomp_mixer1d` 的主指标崩坏**不是 STFT 造成的**：容量桩 E1a'（只有时序分支
+  + 融合头、不含 STFT）的 peak-band MAE 已从 E1a 的 `0.483` 暴涨到 `1.325`，E1b 加入 STFT
+  后（`1.19~1.43`）与 E1a' 同量级。崩坏发生在 STFT 进入之前，凶手是融合/上采样路径本身。
+- `patch_mixer1d` 上 STFT 对主指标有正贡献：相对正确的对照基线 E1a'（`0.539`，已含融合头容量
+  代价），E1b 8Hz（`0.474`）/ N1 3Hz（`0.473`）把主指标拉回并超过；但伴随波形相关性
+  （band/best-lag corr）下降，trade-off 真实存在。
+- 门控核查（见“疑点核查结果 / 疑点 2”）：方向门控**没有误杀**，初版“过严/幸存者偏差”担心
+  已推翻——E1c `stft_only` 全 fail 是 magnitude STFT 极性盲（`val_signed_corr≈0.99`，corr≈−0.98）
+  的必然结果，零星 time_only fail 是 seed 级真反向。被拦的都是真坏 run，弱信号结论不是门控美化的。
+
+当前可保留的候选方向是 `patch_mixer1d + conv2d + N1 3Hz`（降级为待复核候选）。两个混淆因子
+核查后：门控已澄清（无误杀，弱信号可信）；multiscale 崩坏已定位为融合路径有损压缩（非 STFT），
+但还差一个 `fuse_len` 对照实验最终坐实。在该对照完成前，不宜对“multiscale + STFT 是否可用”
+下最终结论；对 patch_mixer 路线，可在“STFT 相对 E1a' 有正贡献、但波形相关性下降”的口径下继续。
 
 ## 实验口径
 
@@ -121,6 +131,11 @@ N0 8Hz 更应作为不稳定对照，而不是主候选。
 - E1n1 3Hz 的 peak-band MAE 为 `0.472526`，略优于 N0 3Hz，且稳定性更好。
 - 补充 seed 后，E1n1 / N1 3Hz 的 4 个完整 seed 均值约 `0.477729`；
   E1b / N0 8Hz 的 4 个完整 seed 均值约 `0.490525`。
+- **归因视角修正**：E1b 该减去的不是纯时序 E1a，而是同样付出融合头容量代价的 E1a'。
+  E1a' patch peak-band MAE 为 `0.538742`（n=2，1 个 seed gate failure），E1b 8Hz（`0.474`）
+  与 N1 3Hz（`0.473`）都明显优于 E1a'。即“融合头容量本身先把指标退化到 `0.539`，STFT
+  又把它拉回到 `0.47`”——相对正确基线，STFT 的正贡献比“E1b 微弱优于 E1a”更明确。
+  但 E1a' patch 仅 2 个 seed，这条基线本身偏弱，结论强度受此限制（见“疑点核查结果 / 疑点 2”）。
 
 但该收益不全面，也不够稳定：E1b/E1n1 的 `band_limited_corr` 和 `best_lag_corr`
 明显低于 E1a，`relative_envelope_mae` 也没有同步改善。补充 seed 还暴露出 gate failure
@@ -129,14 +144,16 @@ N0 8Hz 更应作为不稳定对照，而不是主候选。
 
 ### MultiScale 路线
 
-`multiscale_decomp_mixer1d` 加入 STFT 后主指标明显恶化。
+`multiscale_decomp_mixer1d` 主指标崩坏，但 **E1a' 容量桩坐实凶手不是 STFT**。
 
 - E1a baseline peak-band MAE 为 `0.483444`。
-- E1a_prime 为 `1.324590`。
-- E1b 3/8/12Hz 分别为 `1.281431`、`1.431665`、`1.193187`。
+- E1a_prime（time_only，不含 STFT，仅时序主干 + 融合头）已是 `1.324590`（std `0.3139`，极不稳定）。
+- E1b 3/8/12Hz 分别为 `1.281431`、`1.431665`、`1.193187`，与 E1a_prime 同量级。
 
-虽然 spec MAE、相对包络和波形相关性有局部改善，但主指标恶化幅度过大。
-这更像是融合头或输出形态改变后破坏了 peak-band RR 提取，而不是 STFT 信息带来的正收益。
+E1a' 不含任何 STFT 输入，却已经把 peak-band MAE 抬到 E1b 的水平。这把原先“更像是融合头
+破坏”的推测坐实为：**主指标崩坏在 STFT 进入之前就已发生，归因于双分支融合/上采样路径，
+与 STFT 信息无关**。因此 multiscale 这条线不能记为“STFT 破坏主指标”，而应记为
+“双分支融合路径在全分辨率主干上有实现级缺陷”。具体怀疑见“疑点核查结果 / 疑点 1”。
 
 ### STFT-only 路线
 
@@ -150,20 +167,75 @@ N1 只在 `patch_mixer1d + high_hz=3` 代表档做了 3 seed 对照。
 
 这一结果支持继续保留 N1 作为候选归一化方式，但不足以单独证明 STFT 输入稳定有效。
 
+## 疑点核查结果
+
+对两个混淆因子做了核查（读代码 + 翻 gate failure run 的 `val_signed_corr` 轨迹）。
+结论之一推翻了初版的“门控过严”担心。
+
+### 疑点 1：融合路径有损压缩（降采样路径坐实，机制修正）
+
+- 代码坐实：`TimeStftDual1D.forward`（`resp_train/models/stft_branch.py:230`）确认 multiscale 的
+  `(B, C, 18000)` 中间特征经 `align_to_time` 降到 `fuse_len=600`，`FusionHead` 再 linear 上采样回 18000。
+- 机制修正：初版写的“600 点抹掉呼吸峰位”不准确——patch_mixer 用更粗的 T'≈140 反而没崩，
+  且 600 点（每次呼吸约 10-16 点）足以表达呼吸。
+- 真正证据：multiscale 崩坏 run 的 `band_limited_corr=0.798`、`best_lag_corr=0.846`（均不低于
+  baseline），但 `peak-band MAE=1.325`（baseline 的 2.7 倍）。整体波形相关性好、极性也正常
+  （time_only multiscale 三 seed `val_signed_corr≈0.20`，全过 gate），唯独 RR 提取极差。
+  这指向“18000 高分辨率特征被约 30× 有损压缩 + 浅层 FusionHead 上采样，引入破坏 peak 检测的
+  局部伪结构”，而 patch_mixer 的 token（140）本就是低密度抽象特征、140→600 不丢信息，故未崩。
+- 尚缺最终坐实：需一个对照实验——对 multiscale 提高 `fuse_len`（如不压缩、直接 18000）重跑一格，
+  看 peak-band 是否回到 `0.48` 量级。
+
+### 疑点 2：方向门控（核查后推翻“过严/幸存者偏差”）
+
+gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求 corr≥0（极性不反）。
+翻 gate failure run 的 `val_signed_corr` 轨迹：
+
+| run | val_signed_corr | 含义 |
+|---|---:|---|
+| `stft_only` patch ×3（全 fail） | 全程 `0.99`（≈corr −0.98） | 压倒性极性反向 |
+| `time_only` patch seed `20260837`（fail） | `0.755`（≈corr −0.5） | 真半反向，非边界误杀 |
+| `time_only` patch 另 2 seed | `0.27`（≈corr +0.46） | 正向，过 gate |
+| `time_only` multiscale ×3 | `0.20`（≈corr +0.6） | 全正向，全过 gate |
+
+- **门控没有误杀任何 run，初版“过严 / 幸存者偏差”担心不成立。**
+- E1c `stft_only` 全 fail 的真因：magnitude STFT 丢相位、根本学不出极性（corr≈−0.98），
+  门控正确拦截。这是设计层结论（magnitude 单分支极性盲），印证设计判断，**不是 bug 也不是过严**。
+  注：`stft_only` 实跑 3 个（均 seed `20260700`）即 fail-fast，其余 manifest 配置按预期跳过；
+  初版“18 个 gate failure”应理解为“3 个实跑全 fail + 其余预期跳过”。
+- 零星 `time_only`/`dual` gate failure（如 patch seed `20260837`，`0.755`）是双分支训练的
+  seed 级极性不稳定（真反向），非门控阈值误杀（`0.755` 离 `0.5` 门槛有明显距离）。
+- 推论：被门控拦掉的都是真坏 run，计入均值反而错——“STFT 弱信号”**不是门控人为美化的**，
+  这让弱信号结论更可信，而非更可疑。
+
 ## 当前决策
 
-- 暂保留候选：`patch_mixer1d + conv2d + N1 3Hz`，但需要降级为“待复核候选”。
+- 暂保留候选：`patch_mixer1d + conv2d + N1 3Hz`，降级为“待复核候选”。
 - 保留不稳定对照：`patch_mixer1d + conv2d + N0 8Hz`，补充 seed 后不再视作强候选。
-- 暂停扩展：`multiscale_decomp_mixer1d + STFT`。
-- 暂停扩展：`stft_only`。
-- 暂不进入 CWT/SST 或更复杂频域前端；E1 还没有满足“STFT 输入稳定增益”的进入条件。
+- `multiscale_decomp_mixer1d + STFT`：**不记为“STFT 不适用”**。崩坏已定位为融合路径有损压缩
+  （非 STFT、极性正常），待 `fuse_len` 对照实验坐实后再判定；验证前暂停扩展。
+- `stft_only`：**确认在 magnitude 口径下不可用**——极性盲已坐实（corr≈−0.98），
+  要用 STFT 单分支必须引入相位（E4/CWT），否则放弃单分支路线。
+- 门控保持 `auto_direction/max=0.5`：核查证明它正确拦截真反向，不放宽。
+- 暂不进入 CWT/SST 或更复杂频域前端；patch_mixer 的 STFT 信号尚弱（有 trade-off），
+  multiscale 的融合 bug 未排除，均未达到“STFT 输入稳定增益”的进入条件。
 
 ## 下一步
 
-1. 对 `patch_mixer1d + N1 3Hz` 继续做少量 seed 或独立 split 复核；N0 8Hz 只保留为不稳定对照。
-2. 抽样绘制代表窗口，重点比较 E1a baseline、N1 3Hz 成功 seed 和 gate failure seed，
-   检查 peak-band MAE 改善是否以波形相关性下降为代价。
-3. 对 `multiscale_decomp_mixer1d` 的高 peak-band 误差做少量坏例诊断，确认是 peak 提取失真、
-   输出形态问题，还是融合头容量/上采样路径问题。
-4. 若下一轮仍只有主指标小幅改善而波形诊断退化，应把 STFT 路线降级为条件分支或诊断特征，
-   不作为默认输入主线。
+优先级 0（坐实 multiscale 融合 bug，唯一未闭环的混淆因子）：
+
+1. 对 `multiscale_decomp_mixer1d` 提高 `fuse_len`（如不压缩、直接 18000，或换用主干原生 fuse
+   出波形）重跑一格 3 seed，看 peak-band MAE 是否从 `1.3` 回到 `0.48` 量级。
+   若回落，坐实“融合路径有损压缩”，multiscale 可重新进入 STFT 候选；若不回落，再查 FusionHead
+   浅解码本身。
+
+优先级 1（patch_mixer STFT 信号复核）：
+
+2. 对 `patch_mixer1d + N1 3Hz` 继续做少量 seed 或独立 split 复核；N0 8Hz 只保留为不稳定对照。
+3. 抽样绘制代表窗口，比较 E1a baseline、N1 3Hz 成功 seed 与 multiscale 崩坏 run，
+   重点看“band/lag corr 好但 peak-band 差”的窗口，确认是否为浅解码上采样引入的伪峰。
+4. 若 multiscale 修复后 STFT 仍只有主指标小幅改善而波形诊断退化，再把 STFT 路线降级为
+   条件分支或诊断特征，不作为默认输入主线。
+
+已闭环（无需再做）：方向门控核查——确认无误杀，stft_only 在 magnitude 口径下极性盲，
+保持门控不放宽。
