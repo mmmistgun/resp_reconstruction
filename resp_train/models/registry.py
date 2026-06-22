@@ -96,6 +96,7 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
         out_length=int(cfg.window.get("duration_samples", 18000)),
         fuse_len=int(cfg.model.get("fuse_len", 600)),
         stft_kwargs=stft_kwargs,
+        fusion_decoder=str(cfg.model.get("fusion_decoder", "deep")),
     )
 
 

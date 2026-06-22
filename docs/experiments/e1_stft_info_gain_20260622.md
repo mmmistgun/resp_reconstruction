@@ -16,10 +16,11 @@
   的必然结果，零星 time_only fail 是 seed 级真反向。被拦的都是真坏 run，弱信号结论不是门控美化的。
 
 当前可保留的候选方向是 `patch_mixer1d + conv2d + N1 3Hz`（降级为待复核候选）。两个混淆因子
-核查后：门控已澄清（无误杀，弱信号可信）；multiscale 崩坏不是 STFT 导致，但 `fuse_len=18000`
-对照后 peak-band 只从 `1.325` 回到 `0.942`，仍远高于 E1a 的 `0.483`。因此问题不只是
-`600` 点压缩，FusionHead/包装路径本身也会破坏 multiscale 的 peak-band 口径；对 patch_mixer
-路线，可在“STFT 相对 E1a' 有正贡献、但波形相关性下降”的口径下继续。
+核查后：门控已澄清（无误杀，弱信号可信）；multiscale 崩坏不是 STFT 导致。`fuse_len=18000`
+对照后，deep FusionHead 只从 `1.325` 回到 `0.942`；改成仿原生 fuse 的 lite FusionHead 后进一步
+降到 `0.671`，但仍未稳定回到 E1a 的 `0.483`，其中 seed `20260710` 仍为 `1.082`。因此
+FusionHead 结构是重要因素，但不是唯一因素；对 patch_mixer 路线，可在“STFT 相对 E1a' 有正贡献、
+但波形相关性下降”的口径下继续。
 
 ## 实验口径
 
@@ -152,12 +153,14 @@
 - E1b 3/8/12Hz 分别为 `1.281431`、`1.431665`、`1.193187`，与 E1a_prime 同量级。
 - E1a_prime 将 `fuse_len` 从 `600` 提高到 `18000` 后，3 seed peak-band MAE 降到
   `0.941701`，有改善但没有回到 `0.48` 量级。
+- 继续把 FusionHead 从 deep 改为 lite（纯 `1x1`、无 GroupNorm、2 层）后，3 seed peak-band MAE
+  降到 `0.671496`；两个 seed 回到 `0.45~0.48`，但 seed `20260710` 仍为 `1.081937`。
 
 E1a' 不含任何 STFT 输入，却已经把 peak-band MAE 抬到 E1b 的水平。这把原先“更像是融合头
 破坏”的推测坐实为：**主指标崩坏在 STFT 进入之前就已发生，归因于双分支融合/上采样路径，
 与 STFT 信息无关**。因此 multiscale 这条线不能记为“STFT 破坏主指标”，而应记为
-“双分支融合路径在全分辨率主干上有实现级缺陷”。`fuse_len=18000` 只部分修复，说明问题不只是
-600 点压缩，也包括 FusionHead 浅解码或包装路径对 multiscale 特征的处理方式。
+“双分支融合路径在全分辨率主干上有实现级缺陷”。`fuse_len=18000` 和 lite FusionHead 都有改善，
+但没有完全闭环，说明问题不只是 600 点压缩，还需单拆 deep 头中的 `kernel_size=3` 与 GroupNorm。
 具体见“疑点核查结果 / 疑点 1”。
 
 ### STFT-only 路线
@@ -198,9 +201,21 @@ N1 只在 `patch_mixer1d + high_hz=3` 代表档做了 3 seed 对照。
 | 20260837 | `20260622_101029_183942` | 21 | 0.891645 | 0.539939 | 0.231104 | 0.793604 | 0.845021 |
 | 均值 | - | - | 0.941701 | 0.527526 | 0.231198 | 0.790935 | 0.843433 |
 
-结论：提高 `fuse_len` 后 peak-band 明显优于原 E1a' `1.324590`，但仍没有回到 E1a
-`0.483444`。因此“600 点压缩”是因素之一，但不是唯一因素；FusionHead 浅解码或
-`TimeStftDual1D` 包装路径对 multiscale 高分辨率特征的处理仍会破坏 peak-band RR。
+随后在相同 `fuse_len=18000` 下，把 FusionHead 改成仿原生 fuse 的 `fusion_decoder=lite`
+（纯 `1x1`、无 GroupNorm、2 层），结果如下。
+
+| seed | run | epochs | peak-band MAE | spec MAE | rel-env MAE | band corr | best-lag corr |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 20260700 | `20260622_102936_000616` | 18 | 0.451012 | 0.526249 | 0.239523 | 0.788869 | 0.841683 |
+| 20260710 | `20260622_102936_018967` | 31 | 1.081937 | 0.518034 | 0.236363 | 0.793126 | 0.846246 |
+| 20260837 | `20260622_103612_728379` | 23 | 0.481539 | 0.551438 | 0.236763 | 0.789554 | 0.843479 |
+| 均值 | - | - | 0.671496 | 0.531907 | 0.237550 | 0.790516 | 0.843803 |
+
+对比 deep `fuse_len=18000`，lite 头把 peak-band 均值从 `0.941701` 降到 `0.671496`，
+其中 seed `20260700` 从 `0.875878` 降到 `0.451012`，seed `20260837` 从 `0.891645` 降到
+`0.481539`；但 seed `20260710` 从 `1.057582` 变为 `1.081937`，没有改善。结论：FusionHead
+结构确实是主要混淆因子之一，但 lite 头未让 multiscale 稳定回到 E1a `0.483444`，因此不能直接
+用 lite 头重跑 E1 关键档来给 STFT 增益下干净结论；下一步应继续单拆 `kernel_size=3` 与 GroupNorm。
 
 ### 疑点 2：方向门控（核查后推翻“过严/幸存者偏差”）
 
@@ -229,7 +244,8 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
 - 暂保留候选：`patch_mixer1d + conv2d + N1 3Hz`，降级为“待复核候选”。
 - 保留不稳定对照：`patch_mixer1d + conv2d + N0 8Hz`，补充 seed 后不再视作强候选。
 - `multiscale_decomp_mixer1d + STFT`：**不记为“STFT 不适用”**。崩坏已定位为融合路径有损压缩
-  /包装路径问题（非 STFT、极性正常）。`fuse_len=18000` 已部分修复但未回到 E1a 水平，继续暂停扩展。
+  /包装路径问题（非 STFT、极性正常）。`fuse_len=18000` 与 lite FusionHead 均有改善，但 lite
+  仍未稳定回到 E1a 水平，继续暂停扩展。
 - `stft_only`：**确认在 magnitude 口径下不可用**——极性盲已坐实（corr≈−0.98），
   要用 STFT 单分支必须引入相位（E4/CWT），否则放弃单分支路线。
 - 门控保持 `auto_direction/max=0.5`：核查证明它正确拦截真反向，不放宽。
@@ -238,7 +254,15 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
 
 ## 下一步
 
-优先级 0（patch_mixer STFT 信号复核）：
+优先级 0（multiscale FusionHead 单拆）：
+
+1. 在 `multiscale_decomp_mixer1d + time_only + fuse_len=18000` 上继续单拆 deep 头中的
+   `kernel_size=3` 与 GroupNorm，至少保留两个受控变体：
+   `kernel_size=3` 但无 GroupNorm、`kernel_size=1` 但带 GroupNorm。
+2. 若单拆后能稳定回到 `0.48`，再用对应干净头重跑 E1 关键档（patch E1a'/E1b），重新判断 STFT
+   增益；否则 multiscale 路线继续按融合实现缺陷处理。
+
+优先级 1（patch_mixer STFT 信号复核）：
 
 1. 对 `patch_mixer1d + N1 3Hz` 继续做少量 seed 或独立 split 复核；N0 8Hz 只保留为不稳定对照。
 2. 抽样绘制代表窗口，比较 E1a baseline、N1 3Hz 成功 seed 与 multiscale 崩坏 run，
@@ -247,4 +271,5 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
    条件分支或诊断特征，不作为默认输入主线。
 
 已闭环（无需再做）：方向门控核查——确认无误杀，stft_only 在 magnitude 口径下极性盲，
-保持门控不放宽；multiscale `fuse_len=18000` 对照——未回到 `0.48`，继续暂停该路线。
+保持门控不放宽；multiscale `fuse_len=18000` 与 lite FusionHead 对照——lite 部分修复但未稳定回到
+`0.48`，继续拆解该路线。

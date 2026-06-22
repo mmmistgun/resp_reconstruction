@@ -628,6 +628,30 @@ def test_build_time_stft_dual1d_uses_stft_encoder_type_field():
     assert model.stft_encoder.encoder_type == "conv2d"
 
 
+def test_build_time_stft_dual1d_uses_fusion_decoder_field():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                "branch_mode": "time_only",
+                "time_backbone": "multiscale_decomp_mixer1d",
+                "downsample_factors": [1, 4, 16],
+                "mixer_layers": 1,
+                "fuse_len": 4096,
+                "fusion_decoder": "lite",
+            },
+        }
+    )
+
+    model = build_model(cfg)
+
+    assert model.fusion_head.decoder_style == "lite"
+
+
 def test_build_time_stft_dual1d_stft_only_does_not_require_time_backbone_fields():
     cfg = OmegaConf.create(
         {

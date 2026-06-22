@@ -203,6 +203,21 @@ def test_fusion_head_outputs_waveform_shape():
     assert out.shape == (2, 1, 18000)
 
 
+def test_fusion_head_lite_decoder_uses_only_pointwise_convs():
+    head = FusionHead(in_channels=24, out_length=18000, hidden=16, decoder_style="lite")
+    convs = [module for module in head.decoder if isinstance(module, torch.nn.Conv1d)]
+
+    assert head.decoder_style == "lite"
+    assert len(convs) == 2
+    assert [conv.kernel_size for conv in convs] == [(1,), (1,)]
+    assert not any(isinstance(module, torch.nn.GroupNorm) for module in head.decoder)
+
+
+def test_fusion_head_rejects_unknown_decoder_style():
+    with pytest.raises(ValueError, match="decoder_style"):
+        FusionHead(in_channels=24, out_length=18000, hidden=16, decoder_style="wide")
+
+
 def _dual(branch_mode: str) -> TimeStftDual1D:
     return TimeStftDual1D(
         time_backbone_name="patch_mixer1d",
@@ -221,6 +236,21 @@ def _dual(branch_mode: str) -> TimeStftDual1D:
             norm="n0",
         ),
     )
+
+
+def test_dual_passes_lite_decoder_style_to_fusion_head():
+    model = TimeStftDual1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64),
+        time_feat_channels=8,
+        branch_mode="time_only",
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs={},
+        fusion_decoder="lite",
+    )
+
+    assert model.fusion_head.decoder_style == "lite"
 
 
 @pytest.mark.parametrize("branch_mode", ["time_only", "stft_only", "dual"])

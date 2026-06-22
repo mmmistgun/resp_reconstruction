@@ -53,18 +53,28 @@ def align_to_time(feats: torch.Tensor, target_len: int) -> torch.Tensor:
 class FusionHead(nn.Module):
     """将融合后的时间序列特征解码为目标长度的单通道波形。"""
 
-    def __init__(self, in_channels: int, out_length: int, hidden: int = 16) -> None:
+    def __init__(self, in_channels: int, out_length: int, hidden: int = 16, decoder_style: str = "deep") -> None:
         super().__init__()
         self.out_length = int(out_length)
         hidden = int(hidden)
-        self.decoder = nn.Sequential(
-            nn.Conv1d(int(in_channels), hidden, kernel_size=3, padding=1),
-            nn.GroupNorm(1, hidden),
-            nn.SiLU(),
-            nn.Conv1d(hidden, hidden, kernel_size=3, padding=1),
-            nn.SiLU(),
-            nn.Conv1d(hidden, 1, kernel_size=1),
-        )
+        self.decoder_style = str(decoder_style).lower()
+        if self.decoder_style == "lite":
+            self.decoder = nn.Sequential(
+                nn.Conv1d(int(in_channels), hidden, kernel_size=1),
+                nn.SiLU(),
+                nn.Conv1d(hidden, 1, kernel_size=1),
+            )
+        elif self.decoder_style == "deep":
+            self.decoder = nn.Sequential(
+                nn.Conv1d(int(in_channels), hidden, kernel_size=3, padding=1),
+                nn.GroupNorm(1, hidden),
+                nn.SiLU(),
+                nn.Conv1d(hidden, hidden, kernel_size=3, padding=1),
+                nn.SiLU(),
+                nn.Conv1d(hidden, 1, kernel_size=1),
+            )
+        else:
+            raise ValueError(f"decoder_style 必须是 deep 或 lite，当前为: {decoder_style}")
 
     def forward(self, fused: torch.Tensor) -> torch.Tensor:
         decoded = self.decoder(fused)
@@ -202,6 +212,7 @@ class TimeStftDual1D(nn.Module):
         fuse_len: int,
         stft_kwargs: dict,
         fusion_hidden: int = 16,
+        fusion_decoder: str = "deep",
     ) -> None:
         super().__init__()
         mode = str(branch_mode).lower()
@@ -221,7 +232,12 @@ class TimeStftDual1D(nn.Module):
             fused_channels += int(time_feat_channels)
         if use_stft:
             fused_channels += int(self.stft_encoder.out_channels)
-        self.fusion_head = FusionHead(fused_channels, out_length=out_length, hidden=fusion_hidden)
+        self.fusion_head = FusionHead(
+            fused_channels,
+            out_length=out_length,
+            hidden=fusion_hidden,
+            decoder_style=fusion_decoder,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         features: list[torch.Tensor] = []
