@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import argparse
 import csv
-import subprocess
+import shlex
 import sys
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +14,7 @@ COMMON_OVERRIDES = [
     "data.drop_nonfinite_windows=false",
     "data.train_sample_seed=20260610",
     "data.val_sample_seed=20260611",
-    "baseline.metrics_cache_path=runs/tho_research_v2_20260620_e1_stft_info_gain_baseline_metrics.csv",
+    "baseline.enabled=false",
     "loss.phase_alignment_weight=0.0",
     "loss.signed_corr_weight=0.2",
     "training.epochs=50",
@@ -238,42 +237,15 @@ def _command_for_spec(spec: RunSpec, device: str) -> list[str]:
     return cmd
 
 
-def _run_one(spec: RunSpec, device: str) -> str:
-    tag = _tag(spec)
-    print(f"start {tag} device={device}", flush=True)
-    subprocess.run(_command_for_spec(spec, device), check=True)
-    print(f"done {tag}", flush=True)
-    return tag
+def _command_line_for_spec(spec: RunSpec, device: str) -> str:
+    return shlex.join(_command_for_spec(spec, device))
 
 
-def _run_many(specs: list[RunSpec], devices: list[str], max_parallel: int) -> None:
-    """滚动提交训练任务，首个失败后停止继续启动后续实验。"""
-
-    assignments = [(spec, devices[idx % len(devices)]) for idx, spec in enumerate(specs)]
-    next_index = 0
-    pending: set[Future[str]] = set()
-
-    def submit_next(pool: ThreadPoolExecutor) -> None:
-        nonlocal next_index
-        if next_index >= len(assignments):
-            return
-        spec, device = assignments[next_index]
-        next_index += 1
-        pending.add(pool.submit(_run_one, spec, device))
-
-    with ThreadPoolExecutor(max_workers=min(max_parallel, len(assignments))) as pool:
-        for _ in range(min(max_parallel, len(assignments))):
-            submit_next(pool)
-        while pending:
-            done, pending = wait(pending, return_when=FIRST_COMPLETED)
-            for future in done:
-                try:
-                    future.result()
-                except Exception:
-                    for pending_future in pending:
-                        pending_future.cancel()
-                    raise
-                submit_next(pool)
+def write_commands(specs: list[RunSpec], path: str | Path, *, device: str) -> None:
+    command_path = Path(path)
+    command_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [_command_line_for_spec(spec, device) for spec in specs]
+    command_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
 def _specs_for_phase(phase: str, encoder: str, band_scale_path: str) -> list[RunSpec]:
@@ -287,7 +259,7 @@ def _specs_for_phase(phase: str, encoder: str, band_scale_path: str) -> list[Run
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="E1 STFT 信息增益批次编排")
+    parser = argparse.ArgumentParser(description="生成 E1 STFT 信息增益实验清单")
     parser.add_argument(
         "--phase",
         choices=["zero", "main", "n1"],
@@ -301,19 +273,10 @@ def main() -> None:
         help="N1 阶段使用的 per-freq-bin IQR 文件",
     )
     parser.add_argument("--skip", action="append", default=[], help="跳过指定 run tag，可重复传入")
-    parser.add_argument("--dry-run", action="store_true", help="只打印 plan tag，不实际训练")
-    parser.add_argument("--device", action="append", default=None, help="训练设备，可重复传入；默认 cuda:0")
-    parser.add_argument(
-        "--max-parallel",
-        type=int,
-        default=1,
-        help="并发训练进程数；同 GPU 多实验由该参数显式控制",
-    )
+    parser.add_argument("--device", default="cuda:0", help="写入命令清单的训练设备")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST_PATH, help="写出 manifest CSV 路径")
+    parser.add_argument("--commands", default="", help="可选：写出逐 run 训练命令清单")
     args = parser.parse_args()
-
-    if args.max_parallel < 1:
-        raise SystemExit("--max-parallel 必须 >= 1")
 
     specs = _specs_for_phase(args.phase, args.encoder, args.band_scale_path)
     skipped = set(args.skip)
@@ -330,16 +293,11 @@ def main() -> None:
         if tag in skipped:
             print(f"skip {tag}", flush=True)
             continue
-        if args.dry_run:
-            print(f"plan {tag}", flush=True)
-            continue
+        print(f"plan {tag}", flush=True)
         runnable.append(spec)
 
-    if args.dry_run or not runnable:
-        return
-
-    devices = args.device or ["cuda:0"]
-    _run_many(runnable, devices, args.max_parallel)
+    if args.commands:
+        write_commands(runnable, args.commands, device=args.device)
 
 
 if __name__ == "__main__":

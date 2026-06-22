@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import shutil
 from pathlib import Path
 
 import torch
@@ -40,22 +38,14 @@ class ThoExperiment(BaseExperiment):
         return WeakSyncLoss(self.cfg)
 
     def run_baseline(self, data: ExperimentData, run_dir: Path) -> None:
-        output_path = run_dir / "baseline_metrics.csv"
-        cache_path = _resolve_baseline_metrics_cache_path(self.cfg)
-        if cache_path is not None and cache_path.exists():
-            shutil.copyfile(cache_path, output_path)
+        if not _baseline_enabled(self.cfg):
             return
 
         tho_data = data.extras["tho_data"]
         evaluate_baseline_dataset(tho_data.val.dataset, self.cfg).to_csv(
-            output_path,
+            run_dir / "baseline_metrics.csv",
             index=False,
         )
-        if cache_path is not None:
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = cache_path.with_name(f"{cache_path.name}.{os.getpid()}.tmp")
-            shutil.copyfile(output_path, tmp_path)
-            os.replace(tmp_path, cache_path)
 
     def evaluate_best(self, model: torch.nn.Module, data: ExperimentData, run_dir: Path) -> None:
         if self.device is None:
@@ -123,14 +113,18 @@ def _resolve_config_path(config_path: str | Path | None, checkpoint_path: Path) 
     raise FileNotFoundError("未指定 --config，且 checkpoint 同目录不存在 config.yaml")
 
 
-def _resolve_baseline_metrics_cache_path(cfg: DictConfig) -> Path | None:
-    cache_path = OmegaConf.select(cfg, "baseline.metrics_cache_path")
-    if cache_path is None:
-        return None
-    text = str(cache_path).strip()
-    if not text:
-        return None
-    return Path(text)
+def _baseline_enabled(cfg: DictConfig) -> bool:
+    value = OmegaConf.select(cfg, "baseline.enabled")
+    if value is None:
+        return True
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        raise ValueError(f"baseline.enabled 只能是 true/false，当前为: {value}")
+    return bool(value)
 
 
 def _validate_checkpoint_config(

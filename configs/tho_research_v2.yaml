@@ -91,6 +91,7 @@ training:
     max: null
 
 baseline:
+  enabled: true
   bandpass_low_hz: 0.05
   bandpass_high_hz: 0.7
   filter_order: 4

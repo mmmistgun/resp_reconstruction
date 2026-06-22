@@ -80,32 +80,42 @@ def test_write_manifest_writes_csv(tmp_path):
     assert text.count("\n") == 4
 
 
-def test_default_manifest_path_is_defined_for_dry_run():
+def test_default_manifest_path_is_defined_for_manifest_generation():
     assert e1.DEFAULT_MANIFEST_PATH.endswith("_manifest.csv")
 
 
 def test_common_overrides_enable_e1_startup_acceleration():
     assert "data.drop_nonfinite_windows=false" in e1.COMMON_OVERRIDES
-    assert any(override.startswith("baseline.metrics_cache_path=") for override in e1.COMMON_OVERRIDES)
+    assert "baseline.enabled=false" in e1.COMMON_OVERRIDES
+    assert not any(override.startswith("baseline.metrics_cache_path=") for override in e1.COMMON_OVERRIDES)
 
 
-def test_dry_run_writes_manifest_without_running(monkeypatch, tmp_path):
+def test_main_writes_manifest_and_commands_without_running(monkeypatch, tmp_path):
     manifest = tmp_path / "manifest.csv"
+    commands = tmp_path / "commands.sh"
 
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("dry-run 不应启动训练执行器")
-
-    monkeypatch.setattr(e1, "_run_many", fail_if_called)
     monkeypatch.setattr(
         sys,
         "argv",
-        ["run_e1_stft_info_gain.py", "--phase", "zero", "--dry-run", "--manifest", str(manifest)],
+        [
+            "run_e1_stft_info_gain.py",
+            "--phase",
+            "zero",
+            "--manifest",
+            str(manifest),
+            "--commands",
+            str(commands),
+        ],
     )
 
     e1.main()
 
     assert manifest.exists()
     assert len(manifest.read_text(encoding="utf-8").splitlines()) == 7
+    command_lines = commands.read_text(encoding="utf-8").splitlines()
+    assert len(command_lines) == 6
+    assert all("scripts/train_tho_small.py" in line for line in command_lines)
+    assert all("--set baseline.enabled=false" in line for line in command_lines)
 
 
 def test_unknown_skip_tag_exits(monkeypatch, tmp_path):
@@ -117,7 +127,6 @@ def test_unknown_skip_tag_exits(monkeypatch, tmp_path):
             "run_e1_stft_info_gain.py",
             "--phase",
             "zero",
-            "--dry-run",
             "--skip",
             "bad_tag",
             "--manifest",
@@ -130,31 +139,6 @@ def test_unknown_skip_tag_exits(monkeypatch, tmp_path):
     assert not manifest.exists()
 
 
-def test_run_many_round_robins_devices(monkeypatch):
-    devices_seen = []
-
-    def fake_run_one(spec, device):
-        devices_seen.append(device)
-        return spec["label"]
-
-    monkeypatch.setattr(e1, "_run_one", fake_run_one)
-
-    e1._run_many(e1.build_n1_specs(), ["cuda:0", "cuda:1"], max_parallel=1)
-
-    assert devices_seen == ["cuda:0", "cuda:1", "cuda:0"]
-
-
-def test_run_many_fail_fast_does_not_start_later_specs(monkeypatch):
-    started = []
-    specs = e1.build_n1_specs()
-
-    def fake_run_one(spec, device):
-        started.append(e1.manifest_row(spec)["tag"])
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(e1, "_run_one", fake_run_one)
-
-    with pytest.raises(RuntimeError, match="boom"):
-        e1._run_many(specs, ["cuda:0"], max_parallel=1)
-
-    assert started == [e1.manifest_row(specs[0])["tag"]]
+def test_script_does_not_manage_parallel_training():
+    assert not hasattr(e1, "_run_one")
+    assert not hasattr(e1, "_run_many")
