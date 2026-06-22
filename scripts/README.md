@@ -154,6 +154,21 @@
 `rr_peak_unmasked_abs_error`，旧 run 如需横向比较应重算。`band_limited_corr`、
 `best_lag_corr` 和 `best_lag_sec` 只作为低频形态和残余时移诊断指标。
 
+### 实验矩阵 manifest
+
+多因素对比实验可以用小脚本生成 manifest，保存预期实验配置和 `tag -> overrides` 映射。
+这类脚本只负责展开规格，不负责启动训练、分配 GPU 或管理并行。正式训练仍以
+`train_tho_small.py --set ...` 作为原子入口，并行度由 shell、tmux、任务队列或人工调度控制。
+
+E1 STFT 信息增益实验的 manifest 生成器：
+
+```bash
+./.venv/bin/python scripts/build_e1_stft_info_gain_manifest.py \
+  --phase main \
+  --encoder conv2d \
+  --manifest runs/tho_research_v2_20260620_e1_stft_info_gain_manifest.csv
+```
+
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
 `runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
 

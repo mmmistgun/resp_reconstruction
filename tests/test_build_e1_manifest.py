@@ -1,8 +1,6 @@
 import sys
 
-import pytest
-
-import scripts.run_e1_stft_info_gain as e1
+import scripts.build_e1_stft_info_gain_manifest as e1
 
 
 def test_build_overrides_covers_four_labels():
@@ -90,21 +88,18 @@ def test_common_overrides_enable_e1_startup_acceleration():
     assert not any(override.startswith("baseline.metrics_cache_path=") for override in e1.COMMON_OVERRIDES)
 
 
-def test_main_writes_manifest_and_commands_without_running(monkeypatch, tmp_path):
+def test_main_writes_manifest_only(monkeypatch, tmp_path):
     manifest = tmp_path / "manifest.csv"
-    commands = tmp_path / "commands.sh"
 
     monkeypatch.setattr(
         sys,
         "argv",
         [
-            "run_e1_stft_info_gain.py",
+            "build_e1_stft_info_gain_manifest.py",
             "--phase",
             "zero",
             "--manifest",
             str(manifest),
-            "--commands",
-            str(commands),
         ],
     )
 
@@ -112,33 +107,10 @@ def test_main_writes_manifest_and_commands_without_running(monkeypatch, tmp_path
 
     assert manifest.exists()
     assert len(manifest.read_text(encoding="utf-8").splitlines()) == 7
-    command_lines = commands.read_text(encoding="utf-8").splitlines()
-    assert len(command_lines) == 6
-    assert all("scripts/train_tho_small.py" in line for line in command_lines)
-    assert all("--set baseline.enabled=false" in line for line in command_lines)
-
-
-def test_unknown_skip_tag_exits(monkeypatch, tmp_path):
-    manifest = tmp_path / "manifest.csv"
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "run_e1_stft_info_gain.py",
-            "--phase",
-            "zero",
-            "--skip",
-            "bad_tag",
-            "--manifest",
-            str(manifest),
-        ],
-    )
-
-    with pytest.raises(SystemExit, match="未知 skip tag"):
-        e1.main()
-    assert not manifest.exists()
 
 
 def test_script_does_not_manage_parallel_training():
     assert not hasattr(e1, "_run_one")
     assert not hasattr(e1, "_run_many")
+    assert not hasattr(e1, "_command_for_spec")
+    assert not hasattr(e1, "write_commands")

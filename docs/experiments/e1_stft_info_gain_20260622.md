@@ -41,7 +41,7 @@ N0 8Hz 更应作为不稳定对照，而不是主候选。
   是否伴随波形质量下降，例如 `band_limited_corr` 和 `best_lag_corr`。
 - `canonical_*`：去重后的规范统计表。若同一个 manifest tag 有多次 run，canonical 表只保留
   一个用于最终分析的完整 run，避免重跑或 zero/main 复用导致某个配置被重复计入均值。
-- `manifest`：批次编排脚本生成的预期实验清单，记录每个 tag 对应的 label、backbone、
+- `manifest`：manifest 生成器生成的预期实验清单，记录每个 tag 对应的 label、backbone、
   `high_hz`、encoder、seed 和 overrides。后续统计用它把时间戳 run 目录回连到实验参数。
 - `tag`：一个预期实验配置的稳定名字，例如
   `E1b_patch_mixer1d_conv2d_8hz_20260700`。它比时间戳 run id 更适合做参数到指标的映射。

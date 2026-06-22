@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import shlex
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -230,24 +228,6 @@ def write_manifest(specs: list[RunSpec], path: str | Path) -> None:
         writer.writerows(manifest_row(spec) for spec in specs)
 
 
-def _command_for_spec(spec: RunSpec, device: str) -> list[str]:
-    cmd = [sys.executable, "scripts/train_tho_small.py", "--config", "configs/tho_research_v2.yaml"]
-    for override in [*COMMON_OVERRIDES, f"training.device={device}", *spec["overrides"]]:
-        cmd.extend(["--set", override])
-    return cmd
-
-
-def _command_line_for_spec(spec: RunSpec, device: str) -> str:
-    return shlex.join(_command_for_spec(spec, device))
-
-
-def write_commands(specs: list[RunSpec], path: str | Path, *, device: str) -> None:
-    command_path = Path(path)
-    command_path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [_command_line_for_spec(spec, device) for spec in specs]
-    command_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-
-
 def _specs_for_phase(phase: str, encoder: str, band_scale_path: str) -> list[RunSpec]:
     if phase == "zero":
         return build_zero_ablation_specs()
@@ -272,32 +252,12 @@ def main() -> None:
         default="runs/stft_band_scale/band_scale_3hz.npy",
         help="N1 阶段使用的 per-freq-bin IQR 文件",
     )
-    parser.add_argument("--skip", action="append", default=[], help="跳过指定 run tag，可重复传入")
-    parser.add_argument("--device", default="cuda:0", help="写入命令清单的训练设备")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST_PATH, help="写出 manifest CSV 路径")
-    parser.add_argument("--commands", default="", help="可选：写出逐 run 训练命令清单")
     args = parser.parse_args()
 
     specs = _specs_for_phase(args.phase, args.encoder, args.band_scale_path)
-    skipped = set(args.skip)
-    known_tags = {_tag(spec) for spec in specs}
-    unknown_skips = sorted(skipped - known_tags)
-    if unknown_skips:
-        raise SystemExit(f"未知 skip tag: {unknown_skips}")
-
     write_manifest(specs, args.manifest)
-
-    runnable: list[RunSpec] = []
-    for spec in specs:
-        tag = _tag(spec)
-        if tag in skipped:
-            print(f"skip {tag}", flush=True)
-            continue
-        print(f"plan {tag}", flush=True)
-        runnable.append(spec)
-
-    if args.commands:
-        write_commands(runnable, args.commands, device=args.device)
+    print(f"写出 E1 manifest: {args.manifest} rows={len(specs)}")
 
 
 if __name__ == "__main__":
