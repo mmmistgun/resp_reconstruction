@@ -243,7 +243,7 @@ class BaseExperiment:
 
     def _auto_checkpoint_direction_metric(self) -> str:
         """选择当前配置中真正启用的 signed 方向约束指标。"""
-        if self._loss_weight_active("signed_corr_weight"):
+        if self._loss_weight_active("signed_corr_weight") or self._signed_schedule_active("signed_corr_schedule"):
             return "val_signed_corr"
         if self._signed_cosine_active():
             return "val_signed_cosine"
@@ -270,8 +270,12 @@ class BaseExperiment:
         """判断 signed cosine 是否通过固定权重或 schedule 启用。"""
         if self._loss_weight_active("signed_cosine_weight"):
             return True
+        return self._signed_schedule_active("signed_cosine_schedule")
+
+    def _signed_schedule_active(self, name: str) -> bool:
+        """判断 signed schedule 是否在任一阶段提供正权重。"""
         loss_cfg = self.cfg.get("loss", {})
-        schedule = loss_cfg.get("signed_cosine_schedule", None)
+        schedule = loss_cfg.get(name, None)
         if not schedule:
             return False
         mode = str(schedule.get("mode", "none")).strip().lower()

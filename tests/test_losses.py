@@ -268,6 +268,32 @@ def test_signed_cosine_weight_schedule_linearly_changes_effective_weight():
     assert loss_fn.current_weights()["signed_cosine"] == pytest.approx(0.05)
 
 
+def test_signed_corr_weight_schedule_linearly_changes_effective_weight():
+    cfg = _cfg()
+    _disable_base_losses(cfg)
+    cfg.loss.signed_corr_weight = 0.2
+    cfg.loss.signed_corr_schedule = {
+        "mode": "linear",
+        "start_epoch": 1,
+        "end_epoch": 6,
+        "start_weight": 0.6,
+        "end_weight": 0.2,
+    }
+    loss_fn = WeakSyncLoss(cfg)
+    target = _resp_sine(cfg)
+    inverted = -target
+
+    loss_fn.set_epoch(1)
+    early_total, early_parts = loss_fn(inverted, target)
+    loss_fn.set_epoch(6)
+    late_total, late_parts = loss_fn(inverted, target)
+
+    assert early_parts["signed_corr"] > 1.5
+    assert torch.allclose(early_parts["signed_corr"], late_parts["signed_corr"], atol=1e-6)
+    assert torch.isclose(early_total, late_total * 3.0, rtol=1e-4, atol=1e-6)
+    assert loss_fn.current_weights()["signed_corr"] == pytest.approx(0.2)
+
+
 def test_signed_corr_anchor_penalizes_inverted_band_signal_and_is_differentiable():
     cfg = _cfg()
     _disable_base_losses(cfg)

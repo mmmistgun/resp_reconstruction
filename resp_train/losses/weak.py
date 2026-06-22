@@ -27,6 +27,7 @@ class WeakSyncLoss(torch.nn.Module):
         self.signed_mean_weight = float(cfg.loss.get("signed_mean_weight", 0.0))
         self.si_sdr_weight = float(cfg.loss.get("si_sdr_weight", 0.0))
         self.signed_cosine_schedule = cfg.loss.get("signed_cosine_schedule", None)
+        self.signed_corr_schedule = cfg.loss.get("signed_corr_schedule", None)
         self.epoch = 1
         self.phase_alignment_zero_weight = float(cfg.loss.get("phase_alignment_zero_weight", 0.5))
         self.phase_alignment_lag_weight = float(cfg.loss.get("phase_alignment_lag_weight", 0.5))
@@ -75,7 +76,8 @@ class WeakSyncLoss(torch.nn.Module):
             raise ValueError(f"signed_env_temperature 必须为正数，当前={self.signed_env_temperature}")
         if self.signed_mean_window <= 0:
             raise ValueError(f"signed_mean_window_sec 必须为正数，当前={cfg.loss.get('signed_mean_window_sec', 2.0)}")
-        self._validate_signed_cosine_schedule()
+        self._validate_signed_schedule("signed_cosine_schedule", self.signed_cosine_schedule, self.signed_cosine_weight)
+        self._validate_signed_schedule("signed_corr_schedule", self.signed_corr_schedule, self.signed_corr_weight)
         self.relative_env_trend_window = max(self.envelope_window, int(round(self.fs * 20.0)))
         self.low_hz = float(cfg.loss.spectrum_low_hz)
         self.high_hz = float(cfg.loss.spectrum_high_hz)
@@ -88,6 +90,7 @@ class WeakSyncLoss(torch.nn.Module):
         """返回当前 epoch 的有效 loss 权重，便于测试和实验诊断。"""
         return {
             "signed_cosine": self._scheduled_signed_cosine_weight(),
+            "signed_corr": self._scheduled_signed_corr_weight(),
         }
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
@@ -112,6 +115,7 @@ class WeakSyncLoss(torch.nn.Module):
         else:
             phase_alignment = pred_loss.new_tensor(0.0)
         signed_cosine_weight = self._scheduled_signed_cosine_weight()
+        signed_corr_weight = self._scheduled_signed_corr_weight()
         signed_cosine = (
             self._signed_cosine_loss(pred_loss, target_loss)
             if signed_cosine_weight > 0
@@ -119,7 +123,7 @@ class WeakSyncLoss(torch.nn.Module):
         )
         signed_corr = (
             self._signed_corr_loss(pred_loss, target_loss)
-            if self.signed_corr_weight > 0
+            if signed_corr_weight > 0
             else pred_loss.new_tensor(0.0)
         )
         signed_rms_envelope = (
@@ -142,7 +146,7 @@ class WeakSyncLoss(torch.nn.Module):
             + self.curvature_weight * curvature
             + self.rhythm_weight * rhythm
             + signed_cosine_weight * signed_cosine
-            + self.signed_corr_weight * signed_corr
+            + signed_corr_weight * signed_corr
             + self.signed_rms_envelope_weight * signed_rms_envelope
             + self.signed_mean_weight * signed_mean
             + self.si_sdr_weight * si_sdr
@@ -164,35 +168,42 @@ class WeakSyncLoss(torch.nn.Module):
             "si_sdr": si_sdr.detach(),
         }
 
-    def _validate_signed_cosine_schedule(self) -> None:
-        if not self.signed_cosine_schedule:
+    @staticmethod
+    def _validate_signed_schedule(name: str, schedule: object, fallback_weight: float) -> None:
+        if not schedule:
             return
-        mode = str(self.signed_cosine_schedule.get("mode", "none")).lower()
+        mode = str(schedule.get("mode", "none")).lower()
         if mode in {"none", "constant"}:
             return
         if mode != "linear":
-            raise ValueError(f"signed_cosine_schedule.mode 未知: {mode}")
-        start_epoch = int(self.signed_cosine_schedule.get("start_epoch", 1))
-        end_epoch = int(self.signed_cosine_schedule.get("end_epoch", start_epoch))
-        start_weight = float(self.signed_cosine_schedule.get("start_weight", self.signed_cosine_weight))
-        end_weight = float(self.signed_cosine_schedule.get("end_weight", self.signed_cosine_weight))
+            raise ValueError(f"{name}.mode 未知: {mode}")
+        start_epoch = int(schedule.get("start_epoch", 1))
+        end_epoch = int(schedule.get("end_epoch", start_epoch))
+        start_weight = float(schedule.get("start_weight", fallback_weight))
+        end_weight = float(schedule.get("end_weight", fallback_weight))
         if start_epoch <= 0 or end_epoch <= 0:
-            raise ValueError("signed_cosine_schedule 的 start_epoch/end_epoch 必须为正数")
+            raise ValueError(f"{name} 的 start_epoch/end_epoch 必须为正数")
         if end_epoch < start_epoch:
-            raise ValueError("signed_cosine_schedule.end_epoch 必须大于等于 start_epoch")
+            raise ValueError(f"{name}.end_epoch 必须大于等于 start_epoch")
         if start_weight < 0 or end_weight < 0:
-            raise ValueError("signed_cosine_schedule 的 start_weight/end_weight 必须非负")
+            raise ValueError(f"{name} 的 start_weight/end_weight 必须非负")
 
     def _scheduled_signed_cosine_weight(self) -> float:
-        if not self.signed_cosine_schedule:
-            return self.signed_cosine_weight
-        mode = str(self.signed_cosine_schedule.get("mode", "none")).lower()
+        return self._scheduled_weight(self.signed_cosine_schedule, self.signed_cosine_weight)
+
+    def _scheduled_signed_corr_weight(self) -> float:
+        return self._scheduled_weight(self.signed_corr_schedule, self.signed_corr_weight)
+
+    def _scheduled_weight(self, schedule: object, fallback_weight: float) -> float:
+        if not schedule:
+            return fallback_weight
+        mode = str(schedule.get("mode", "none")).lower()
         if mode in {"none", "constant"}:
-            return self.signed_cosine_weight
-        start_epoch = int(self.signed_cosine_schedule.get("start_epoch", 1))
-        end_epoch = int(self.signed_cosine_schedule.get("end_epoch", start_epoch))
-        start_weight = float(self.signed_cosine_schedule.get("start_weight", self.signed_cosine_weight))
-        end_weight = float(self.signed_cosine_schedule.get("end_weight", self.signed_cosine_weight))
+            return fallback_weight
+        start_epoch = int(schedule.get("start_epoch", 1))
+        end_epoch = int(schedule.get("end_epoch", start_epoch))
+        start_weight = float(schedule.get("start_weight", fallback_weight))
+        end_weight = float(schedule.get("end_weight", fallback_weight))
         if self.epoch <= start_epoch:
             return start_weight
         if self.epoch >= end_epoch:

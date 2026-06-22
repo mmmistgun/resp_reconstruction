@@ -44,6 +44,12 @@ loss:
     start_weight: 0.0
     end_weight: 0.0
   signed_corr_weight: 0.0
+  signed_corr_schedule:
+    mode: none
+    start_epoch: 1
+    end_epoch: 1
+    start_weight: 0.0
+    end_weight: 0.0
   signed_rms_envelope_weight: 0.0
   signed_mean_weight: 0.0
   si_sdr_weight: 0.0

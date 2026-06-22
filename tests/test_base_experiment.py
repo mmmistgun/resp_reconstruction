@@ -162,6 +162,33 @@ def test_checkpoint_gate_auto_direction_uses_active_signed_corr(tmp_path: Path):
     )
 
 
+def test_checkpoint_gate_auto_direction_uses_active_signed_corr_schedule(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.loss = {
+        "signed_corr_weight": 0.0,
+        "signed_corr_schedule": {
+            "mode": "linear",
+            "start_epoch": 1,
+            "end_epoch": 6,
+            "start_weight": 0.6,
+            "end_weight": 0.2,
+        },
+        "signed_cosine_weight": 0.0,
+    }
+    cfg.training.checkpoint_gate = {
+        "metric": "auto_direction",
+        "max": 0.5,
+    }
+    experiment = ToyExperiment(cfg)
+
+    assert experiment._checkpoint_gate_allows(
+        {"val_loss": 1.0, "val_signed_corr": 0.2, "val_signed_cosine": 0.0}
+    )
+    assert not experiment._checkpoint_gate_allows(
+        {"val_loss": 0.8, "val_signed_corr": 1.7, "val_signed_cosine": 0.0}
+    )
+
+
 def test_checkpoint_gate_rejects_inactive_signed_metric(tmp_path: Path):
     cfg = _cfg(tmp_path)
     cfg.loss = {
