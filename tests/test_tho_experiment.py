@@ -1,9 +1,11 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 from omegaconf import OmegaConf
 
+from resp_train.experiments.base import ExperimentData
 from resp_train.experiments.tho import ThoExperiment, evaluate_tho_checkpoint
 
 
@@ -130,3 +132,59 @@ def test_eval_checkpoint_with_metrics_writes_only_metrics(tmp_path: Path):
     metrics = pd.read_csv(metrics_output)
     assert len(metrics) == cfg.data.max_val_windows
     assert not (tmp_path / "eval_predictions.npz").exists()
+
+
+def test_run_baseline_reuses_cached_metrics(monkeypatch, tmp_path: Path):
+    cache_path = tmp_path / "cache" / "baseline_metrics.csv"
+    cache_path.parent.mkdir()
+    pd.DataFrame({"sample_id": [1], "baseline_mae": [0.25]}).to_csv(cache_path, index=False)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    cfg = OmegaConf.create({"baseline": {"metrics_cache_path": str(cache_path)}})
+    data = ExperimentData(
+        train_loader=None,
+        val_loader=None,
+        audit_frame=pd.DataFrame(),
+        audit_summary=pd.DataFrame(),
+        extras={"tho_data": SimpleNamespace(val=SimpleNamespace(dataset=object()))},
+    )
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("存在 baseline cache 时不应重算")
+
+    monkeypatch.setattr("resp_train.experiments.tho.evaluate_baseline_dataset", fail_if_called)
+
+    ThoExperiment(cfg).run_baseline(data, run_dir)
+
+    copied = pd.read_csv(run_dir / "baseline_metrics.csv")
+    assert copied.to_dict("records") == [{"sample_id": 1, "baseline_mae": 0.25}]
+
+
+def test_run_baseline_populates_missing_metrics_cache(monkeypatch, tmp_path: Path):
+    cache_path = tmp_path / "cache" / "baseline_metrics.csv"
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    cfg = OmegaConf.create({"baseline": {"metrics_cache_path": str(cache_path)}})
+    dataset = object()
+    data = ExperimentData(
+        train_loader=None,
+        val_loader=None,
+        audit_frame=pd.DataFrame(),
+        audit_summary=pd.DataFrame(),
+        extras={"tho_data": SimpleNamespace(val=SimpleNamespace(dataset=dataset))},
+    )
+    calls = []
+
+    def fake_evaluate_baseline_dataset(received_dataset, received_cfg):
+        calls.append((received_dataset, received_cfg))
+        return pd.DataFrame({"sample_id": [2], "baseline_mae": [0.5]})
+
+    monkeypatch.setattr("resp_train.experiments.tho.evaluate_baseline_dataset", fake_evaluate_baseline_dataset)
+
+    ThoExperiment(cfg).run_baseline(data, run_dir)
+
+    assert calls == [(dataset, cfg)]
+    assert pd.read_csv(run_dir / "baseline_metrics.csv").to_dict("records") == [
+        {"sample_id": 2, "baseline_mae": 0.5}
+    ]
+    assert pd.read_csv(cache_path).to_dict("records") == [{"sample_id": 2, "baseline_mae": 0.5}]

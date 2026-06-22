@@ -84,6 +84,11 @@ def test_default_manifest_path_is_defined_for_dry_run():
     assert e1.DEFAULT_MANIFEST_PATH.endswith("_manifest.csv")
 
 
+def test_common_overrides_enable_e1_startup_acceleration():
+    assert "data.drop_nonfinite_windows=false" in e1.COMMON_OVERRIDES
+    assert any(override.startswith("baseline.metrics_cache_path=") for override in e1.COMMON_OVERRIDES)
+
+
 def test_dry_run_writes_manifest_without_running(monkeypatch, tmp_path):
     manifest = tmp_path / "manifest.csv"
 

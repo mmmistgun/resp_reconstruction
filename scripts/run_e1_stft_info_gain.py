@@ -12,8 +12,10 @@ from typing import Any
 COMMON_OVERRIDES = [
     "data.max_train_windows=null",
     "data.max_val_windows=null",
+    "data.drop_nonfinite_windows=false",
     "data.train_sample_seed=20260610",
     "data.val_sample_seed=20260611",
+    "baseline.metrics_cache_path=runs/tho_research_v2_20260620_e1_stft_info_gain_baseline_metrics.csv",
     "loss.phase_alignment_weight=0.0",
     "loss.signed_corr_weight=0.2",
     "training.epochs=50",

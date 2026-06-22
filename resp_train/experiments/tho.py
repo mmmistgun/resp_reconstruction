@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 from pathlib import Path
 
 import torch
@@ -38,11 +40,22 @@ class ThoExperiment(BaseExperiment):
         return WeakSyncLoss(self.cfg)
 
     def run_baseline(self, data: ExperimentData, run_dir: Path) -> None:
+        output_path = run_dir / "baseline_metrics.csv"
+        cache_path = _resolve_baseline_metrics_cache_path(self.cfg)
+        if cache_path is not None and cache_path.exists():
+            shutil.copyfile(cache_path, output_path)
+            return
+
         tho_data = data.extras["tho_data"]
         evaluate_baseline_dataset(tho_data.val.dataset, self.cfg).to_csv(
-            run_dir / "baseline_metrics.csv",
+            output_path,
             index=False,
         )
+        if cache_path is not None:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = cache_path.with_name(f"{cache_path.name}.{os.getpid()}.tmp")
+            shutil.copyfile(output_path, tmp_path)
+            os.replace(tmp_path, cache_path)
 
     def evaluate_best(self, model: torch.nn.Module, data: ExperimentData, run_dir: Path) -> None:
         if self.device is None:
@@ -108,6 +121,16 @@ def _resolve_config_path(config_path: str | Path | None, checkpoint_path: Path) 
     if sidecar.exists():
         return sidecar
     raise FileNotFoundError("未指定 --config，且 checkpoint 同目录不存在 config.yaml")
+
+
+def _resolve_baseline_metrics_cache_path(cfg: DictConfig) -> Path | None:
+    cache_path = OmegaConf.select(cfg, "baseline.metrics_cache_path")
+    if cache_path is None:
+        return None
+    text = str(cache_path).strip()
+    if not text:
+        return None
+    return Path(text)
 
 
 def _validate_checkpoint_config(
