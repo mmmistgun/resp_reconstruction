@@ -24,6 +24,12 @@ peak-band **均值**因被 10~20% 误拣窗口主导而脆弱，不宜单独做 
 判定路径：lite 头 + 以 E1a'（非原生 E1a）为基线 + 改用误拣率判据 + 加到 5~8 seed。
 对 patch_mixer 路线，可在“STFT 相对 E1a' 有正贡献、但波形相关性下降”的口径下继续。
 
+补做的干净 multiscale 复核（lite 头、`fuse_len=18000`、6 seed、time_only wrapper vs dual）
+给出更清晰但仍非决定性的信号：12 个预期条目中 11 个成功、1 个 `dual/20260710`
+因 checkpoint gate 未通过无 metrics；5 个同 seed 成功配对上，dual 的 `frac_gt_1`
+平均低 `1.07pp`、`frac_gt_2` 平均低 `1.01pp`，median 也略低。这支持“STFT 有降低长尾谐波
+误拣的趋势”，但 `20260700` 反向、`20260710` dual 直接 gate failure，说明优化稳定性仍是主要风险。
+
 ## 实验口径
 
 - 计划与设计：
@@ -309,6 +315,65 @@ N1 只在 `patch_mixer1d + high_hz=3` 代表档做了 3 seed 对照。
 - **必须加到 5~8 seed**，把初始化方差压到噪声地板以下，否则单 seed 的尾巴就淹没 STFT 信号。
 - canonical 头用 `lite`（消掉 deep 的次要加尾，白送的干净；按误拣率 lite≈k1_norm，均优于 k3）。
 
+### 疑点 1 续二：干净 multiscale 复核（lite + 全分辨率 + 6 seed）
+
+按上面的修正口径，补跑 `multiscale_decomp_mixer1d` 的干净复核：
+
+- 共同配置：`fusion_decoder=lite`、`fuse_len=18000`、`stft_high_hz=3.0`、`stft_norm=n0`、
+  `stft_encoder_type=conv2d`、`baseline.enabled=false`。
+- 只切 `branch_mode`：`time_only` 作为 E1a' 基线，`dual` 作为 E1b。
+- 6 个 seed：`20260700`、`20260710`、`20260837`、`20260901`、`20260911`、`20260920`。
+- 结果文件：
+  - `runs/e1_clean_ms_detail.csv`
+  - `runs/e1_clean_ms_grouped.csv`
+  - `runs/e1_clean_ms_status.csv`
+  - `runs/e1_clean_ms_paired_delta.csv`
+
+预期结果数量：2 个分支 × 6 seed = 12 个。实际 11 个成功，1 个失败且原因明确：
+
+| seed | 分支 | 状态 | run | mean | median | p95 | frac_gt_1 | frac_gt_2 | 无结果原因 |
+|---:|---|---|---|---:|---:|---:|---:|---:|---|
+| 20260700 | time_only | ok | `20260622_143358_403721` | 0.451 | 0.171 | 1.736 | 10.2% | 4.2% | - |
+| 20260700 | dual | ok | `20260622_143402_590652` | 0.599 | 0.173 | 2.764 | 13.2% | 7.0% | - |
+| 20260710 | time_only | ok | `20260622_144142_695286` | 1.082 | 0.192 | 7.526 | 20.6% | 13.9% | - |
+| 20260710 | dual | failed | `20260622_144244_794376` | - | - | - | - | - | checkpoint gate 未通过，未保存 checkpoint/metrics；best_epoch=34，best_val_loss=0.857046，val_signed_corr_min=0.686316，gate_passed=0/42 |
+| 20260837 | time_only | ok | `20260622_145119_030597` | 0.482 | 0.181 | 2.002 | 11.9% | 5.0% | - |
+| 20260837 | dual | ok | `20260622_145121_102966` | 0.488 | 0.175 | 1.850 | 11.4% | 4.6% | - |
+| 20260901 | time_only | ok | `20260622_145908_564562` | 0.720 | 0.176 | 3.815 | 15.3% | 8.1% | - |
+| 20260901 | dual | ok | `20260622_145748_740946` | 0.560 | 0.172 | 2.631 | 14.5% | 7.4% | - |
+| 20260911 | time_only | ok | `20260622_150705_747445` | 0.929 | 0.193 | 5.650 | 19.0% | 12.4% | - |
+| 20260911 | dual | ok | `20260622_150535_797784` | 0.607 | 0.174 | 2.633 | 13.8% | 6.7% | - |
+| 20260920 | time_only | ok | `20260622_151356_516338` | 0.540 | 0.184 | 2.314 | 13.5% | 6.3% | - |
+| 20260920 | dual | ok | `20260622_151354_158208` | 0.490 | 0.169 | 2.144 | 11.7% | 5.5% | - |
+
+成功 run 的跨 seed 聚合（注意 dual 只有 5 个成功 seed，time_only 有 6 个）：
+
+| 分支 | n | mean | median | p95 | frac_gt_1 | frac_gt_2 |
+|---|---:|---:|---:|---:|---:|---:|
+| time_only | 6 | 0.701 | 0.183 | 3.840 | 15.1% | 8.3% |
+| dual | 5 | 0.549 | 0.173 | 2.404 | 12.9% | 6.2% |
+
+更公平的主判据是 5 个**同 seed 成功配对**的差值（dual - time_only）：
+
+| seed | Δ frac_gt_1 | Δ frac_gt_2 | Δ mean | Δ median |
+|---:|---:|---:|---:|---:|
+| 20260700 | +2.92pp | +2.80pp | +0.148 | +0.002 |
+| 20260837 | -0.49pp | -0.49pp | +0.007 | -0.006 |
+| 20260901 | -0.75pp | -0.79pp | -0.160 | -0.004 |
+| 20260911 | -5.23pp | -5.79pp | -0.322 | -0.019 |
+| 20260920 | -1.79pp | -0.79pp | -0.050 | -0.015 |
+| 平均 | **-1.07pp** | **-1.01pp** | **-0.075** | **-0.008** |
+
+解释：
+
+1. **median sanity 通过**：两臂 median 都在 `0.17~0.19`，dual 没有伤害典型窗口；
+   这继续支持“差异主要在长尾误拣，而非波形重建退化”。
+2. **STFT 有降低谐波误拣的趋势**：5 个成功配对中 4 个 `frac_gt_1` 为负，平均 `-1.07pp`；
+   `frac_gt_2` 同样平均 `-1.01pp`。
+3. **证据仍不够强**：`20260700` 反向，`20260710` 的 dual 分支 gate failure。也就是说，
+   STFT 对长尾可能有净收益，但 dual wrapper 的优化稳定性仍会吞掉部分收益。后续若要给强结论，
+   应补到 8 seed 或做稳定性改造后再复核。
+
 ### 疑点 2：方向门控（核查后推翻“过严/幸存者偏差”）
 
 gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求 corr≥0（极性不反）。
@@ -337,7 +402,8 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
 - 保留不稳定对照：`patch_mixer1d + conv2d + N0 8Hz`，补充 seed 后不再视作强候选。
 - `multiscale_decomp_mixer1d + STFT`：**不记为“STFT 不适用”**。崩坏已定位为 wrapper 包装路径的
   优化多稳态抬高谐波误拣率（非 STFT、**非重建退化**、极性正常；中位数与原生持平 `0.18~0.21`）。
-  判 STFT 增益需改用「lite 头 + E1a' 基线 + 误拣率判据 + 5~8 seed」，在此之前继续暂停扩展。
+  干净复核显示 dual 相对 time_only 在 5 个成功配对上平均降低 `frac_gt_1` 约 `1.07pp`，
+  有长尾收益趋势；但 `dual/20260710` gate failure、`20260700` 反向，暂不能给强结论。
 - `stft_only`：**确认在 magnitude 口径下不可用**——极性盲已坐实（corr≈−0.98），
   要用 STFT 单分支必须引入相位（E4/CWT），否则放弃单分支路线。
 - 门控保持 `auto_direction/max=0.5`：核查证明它正确拦截真反向，不放宽。
@@ -346,16 +412,13 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
 
 ## 下一步
 
-优先级 0（在干净口径下重判 STFT 增益）：
+优先级 0（在干净口径下重判 STFT 增益，已完成第一轮）：
 
-1. canonical 头改用 `fusion_decoder=lite`（消掉 deep 的次要加尾），`fuse_len` 用全分辨率。
-2. 基线改用 E1a'（time_only wrapper），不再拿 E1b 比原生 E1a——wrapper 多稳态是共模噪声，
-   只有同为 wrapper 的 E1a' 与 E1b 相减 `(E1b − E1a')` 才抵消。
-3. 主判据改为谐波误拣率（逐窗 peak-band 误差 > 阈值的占比）+ median 作平稳性 sanity，
-   均值仅作参考。STFT 若有用，收益大概率正在降低误拣率。
-4. 加到 5~8 seed，把初始化方差压到噪声地板以下，再比 `(E1b − E1a')` 的误拣率。
-5. 误拣率从现有各 run 的 `metrics.csv` 逐窗值后处理即可（`scripts/peak_band_misclass_rate.py`），
-   不需改训练链路。
+1. 第一轮已按 `fusion_decoder=lite`、`fuse_len=18000`、E1a' vs E1b、误拣率判据完成 6 seed 复核。
+2. 当前证据：dual 在 5 个成功配对上平均降低 `frac_gt_1` `1.07pp`，但有 1 个反向 seed 和
+   1 个 dual gate failure。
+3. 下一步若继续 multiscale：优先补 2 个 seed（例如 `20260931`、`20260945`）或先处理 dual
+   优化稳定性，再确认 `frac_gt_1` 净收益是否稳定为负。
 
 优先级 1（patch_mixer STFT 信号复核）：
 
