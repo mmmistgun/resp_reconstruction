@@ -16,10 +16,12 @@
   的必然结果，零星 time_only fail 是 seed 级真反向。被拦的都是真坏 run，弱信号结论不是门控美化的。
 
 当前可保留的候选方向是 `patch_mixer1d + conv2d + N1 3Hz`（降级为待复核候选）。两个混淆因子
-核查后：门控已澄清（无误杀，弱信号可信）；multiscale 崩坏不是 STFT 导致。`fuse_len=18000`
-对照后，deep FusionHead 只从 `1.325` 回到 `0.942`；lite 头进一步降到 `0.671`；继续单拆后，
-`k1_norm` 为 `0.629`、`k3_no_norm` 为 `0.767`，仍未稳定回到 E1a 的 `0.483`。因此 FusionHead
-结构是重要因素，`kernel_size=3` 比 GroupNorm 更可疑，但 seed `20260710` 在所有变体上仍偏差较大；
+核查后：门控已澄清（无误杀，弱信号可信）；multiscale 崩坏不是 STFT 导致。**逐窗分布核查
+（见“疑点 1 续”）整体修正了机制**：原生 E1a 与各 wrapper 变体的 peak-band **中位数**全在
+`0.18~0.21`，不存在波形重建退化；全部差异都在**谐波误拣率（长尾）**。主因是「裸 backbone vs
+wrapper 包装」带来的优化多稳态（误拣率方差），解码器结构（deep vs lite）只是次要因子；
+peak-band **均值**因被 10~20% 误拣窗口主导而脆弱，不宜单独做 STFT 增益主判据。由此确定干净
+判定路径：lite 头 + 以 E1a'（非原生 E1a）为基线 + 改用误拣率判据 + 加到 5~8 seed。
 对 patch_mixer 路线，可在“STFT 相对 E1a' 有正贡献、但波形相关性下降”的口径下继续。
 
 ## 实验口径
@@ -159,11 +161,12 @@
   不是主因；去掉 `kernel_size=3` 更有帮助，但仍被 seed `20260710` 拉高。
 
 E1a' 不含任何 STFT 输入，却已经把 peak-band MAE 抬到 E1b 的水平。这把原先“更像是融合头
-破坏”的推测坐实为：**主指标崩坏在 STFT 进入之前就已发生，归因于双分支融合/上采样路径，
-与 STFT 信息无关**。因此 multiscale 这条线不能记为“STFT 破坏主指标”，而应记为
-“双分支融合路径在全分辨率主干上有实现级缺陷”。`fuse_len=18000`、lite FusionHead 和单拆变体
-都有改善，但没有完全闭环，说明问题不只是 600 点压缩；更像是 deep 头的局部卷积解码路径叠加
-seed 敏感性，而不是 STFT 信息本身。
+破坏”的推测坐实为：**主指标崩坏在 STFT 进入之前就已发生，与 STFT 信息无关**。但逐窗分布
+核查（见“疑点 1 续”）进一步澄清了崩坏的**性质**：**不是波形重建退化（中位数与原生 E1a
+持平，均在 `0.18~0.21`），而是 wrapper 包装路径的优化多稳态抬高了谐波误拣率（长尾）**；
+解码器结构（deep vs lite）只是次要加尾因子。因此 multiscale 这条线既不能记为“STFT 破坏
+主指标”，也不应记为“融合头结构破坏重建”，而应记为“wrapper 双分支路径相对裸主干有更高的
+误拣率方差，需用 E1a' 为基线、误拣率为判据、并加 seed 才能在其上判 STFT 增益”。
 具体见“疑点核查结果 / 疑点 1”。
 
 ### STFT-only 路线
@@ -216,9 +219,11 @@ N1 只在 `patch_mixer1d + high_hz=3` 代表档做了 3 seed 对照。
 
 对比 deep `fuse_len=18000`，lite 头把 peak-band 均值从 `0.941701` 降到 `0.671496`，
 其中 seed `20260700` 从 `0.875878` 降到 `0.451012`，seed `20260837` 从 `0.891645` 降到
-`0.481539`；但 seed `20260710` 从 `1.057582` 变为 `1.081937`，没有改善。结论：FusionHead
-结构确实是主要混淆因子之一，但 lite 头未让 multiscale 稳定回到 E1a `0.483444`，因此不能直接
-用 lite 头重跑 E1 关键档来给 STFT 增益下干净结论；下一步应继续单拆 `kernel_size=3` 与 GroupNorm。
+`0.481539`；但 seed `20260710` 从 `1.057582` 变为 `1.081937`，没有改善。当时（仅看均值）的
+判断是“FusionHead 结构是主要混淆因子、lite 头未稳定回到 `0.483`、不宜直接用 lite 重跑”。
+**该判断已被“疑点 1 续”逐窗分布核查修正：median 证明不存在重建退化，结构只是次要因子，
+`20260710` 的偏高来自 wrapper 误拣率方差而非解码器层；最终结论改为采用 lite 头、误拣率判据
+与加 seed（见“疑点 1 续”与“下一步 / 优先级 0”）。**
 
 继续在相同 `fuse_len=18000` 下单拆 deep 头中的 `kernel_size=3` 与 GroupNorm：
 
@@ -249,6 +254,60 @@ N1 只在 `patch_mixer1d + high_hz=3` 代表档做了 3 seed 对照。
 `k1_norm` 还略好于 `lite`。`kernel_size=3` 局部卷积路径更可疑：`k3_no_norm` 虽优于 deep，
 但仍明显差于 `k1_norm` / `lite`。不过所有变体在 seed `20260710` 上都没有稳定回到 `0.48`，
 说明还存在 seed 级训练/峰值提取敏感性，不能只把问题归因于一个层。
+**（注：以上均基于 peak-band「均值」，该结论被下一节逐窗分布核查整体修正——见“疑点 1 续”。）**
+
+### 疑点 1 续：逐窗分布核查（中位数证伪“结构是真因”）
+
+前述 deep / lite / k1_norm / k3_no_norm 对照都基于 peak-band **均值**。补做逐窗分布核查后，
+发现均值结论具有误导性，需整体修正。分析脚本：`scripts/peak_band_misclass_rate.py`。
+
+关键对照——把**原生 E1a（裸 multiscale，无 wrapper，走 native fuse）**按 seed 摊开，
+与各 wrapper 变体在同 seed 对齐：
+
+| 配置（time_only，wrapper 为 fuse_len=18000） | 20260700 | 20260710 | 20260837 | 均值 |
+|---|---:|---:|---:|---:|
+| 原生 E1a（无 wrapper，native fuse） | 0.527 | **0.448** | 0.476 | **0.483** |
+| wrapper deep | 0.876 | 1.058 | 0.892 | 0.942 |
+| wrapper k3_no_norm | 0.804 | 1.030 | 0.467 | 0.767 |
+| wrapper lite | 0.451 | 1.082 | 0.482 | 0.672 |
+| wrapper k1_norm | 0.453 | 0.910 | 0.523 | 0.629 |
+
+决定性发现：**seed `20260710` 上原生 E1a 恰恰是三 seed 里最好的 `0.448`，而所有 wrapper 变体
+最差。** 这证伪了「`20260710` 是 peak-band 口径本身不稳」的猜测——口径在原生路径上稳得很，
+不稳的是 wrapper 路径。
+
+再看 seed `20260710` 各配置的**逐窗分布**（n=2675，误拣率 = 逐窗误差 > 阈值的占比）：
+
+| seed710 | mean | **median** | 截尾95均值 | p95 | max | 误拣率>1.0 | 误拣率>2.0 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 原生 E1a | 0.448 | **0.180** | 0.288 | 1.68 | 9.0 | 11.3% | 3.9% |
+| wrapper lite | 1.082 | **0.192** | 0.644 | 7.53 | 12.8 | 20.6% | 13.9% |
+| wrapper k1_norm | 0.910 | **0.201** | 0.550 | 5.76 | 12.1 | 19.8% | 12.0% |
+| wrapper deep | 1.058 | **0.209** | — | 6.20 | — | 22.4% | 15.0% |
+
+三条结论，整体修正前述“结构是真因”：
+
+1. **四者 median 全在 `0.18~0.21` → 不存在波形重建退化。** 典型窗口大家一样准；
+   “FusionHead 破坏 peak-band”是被均值放大的假象。
+2. **全部差异 = 谐波误拣率（长尾）。** seed710 上 native→wrapper(lite) 误拣率 `11.3%→20.6%`
+   （+9.3pp，大头），wrapper-lite→wrapper-deep 仅 `20.6%→22.4%`（+1.8pp，小头）。
+   **主因是「裸 backbone vs wrapper 包装」本身，解码器结构（deep vs lite）只是次要因子。**
+   代码核查确认：time_only + fuse_len=18000 + lite 头与 native **计算图等价**——`align_to_time`
+   （`stft_branch.py:48`）与 `FusionHead.forward`（尺寸一致时短路返回）均无重采样，唯一差别是
+   解码头初始化 RNG 位置不同 → 端到端训练收敛到不同 basin。即 wrapper 多一个解码头带来
+   **优化多稳态**，在某些 seed 收敛到误拣率翻倍的解；3 个 seed 平均不掉（原生三 seed 紧，
+   `0.527/0.448/0.476`；wrapper-lite 散，`0.451/1.082/0.482`）。
+3. **peak-band 均值是被 10~20% 谐波误拣窗口主导的脆弱口径**，不适合单独做 STFT 增益的主判据。
+
+方法论修正（直接决定后续 E1 判定方式）：
+
+- **STFT 增益的基线应是 E1a'（time_only wrapper），不是原生 E1a。** wrapper 多稳态是共模噪声，
+  E1b（dual）和 E1a'（time_only）都带它，对比 `(E1b − E1a')` 时抵消；当初拿 E1b 比原生 E1a 是错配。
+- **判据改为谐波误拣率（逐窗 peak-band > 阈值的占比）+ median 作平稳性 sanity，均值仅参考。**
+  且 STFT 若有用，价值大概率正在降低谐波误拣（提供显式频率结构区分基频 vs 2× 谐波），
+  该收益恰好活在长尾/误拣率，不在 median。
+- **必须加到 5~8 seed**，把初始化方差压到噪声地板以下，否则单 seed 的尾巴就淹没 STFT 信号。
+- canonical 头用 `lite`（消掉 deep 的次要加尾，白送的干净；按误拣率 lite≈k1_norm，均优于 k3）。
 
 ### 疑点 2：方向门控（核查后推翻“过严/幸存者偏差”）
 
@@ -276,9 +335,9 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
 
 - 暂保留候选：`patch_mixer1d + conv2d + N1 3Hz`，降级为“待复核候选”。
 - 保留不稳定对照：`patch_mixer1d + conv2d + N0 8Hz`，补充 seed 后不再视作强候选。
-- `multiscale_decomp_mixer1d + STFT`：**不记为“STFT 不适用”**。崩坏已定位为融合路径有损压缩
-  /包装路径问题（非 STFT、极性正常）。`fuse_len=18000`、lite 与单拆 decoder 均有改善，但仍未
-  稳定回到 E1a 水平，继续暂停扩展。
+- `multiscale_decomp_mixer1d + STFT`：**不记为“STFT 不适用”**。崩坏已定位为 wrapper 包装路径的
+  优化多稳态抬高谐波误拣率（非 STFT、**非重建退化**、极性正常；中位数与原生持平 `0.18~0.21`）。
+  判 STFT 增益需改用「lite 头 + E1a' 基线 + 误拣率判据 + 5~8 seed」，在此之前继续暂停扩展。
 - `stft_only`：**确认在 magnitude 口径下不可用**——极性盲已坐实（corr≈−0.98），
   要用 STFT 单分支必须引入相位（E4/CWT），否则放弃单分支路线。
 - 门控保持 `auto_direction/max=0.5`：核查证明它正确拦截真反向，不放宽。
@@ -287,13 +346,16 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
 
 ## 下一步
 
-优先级 0（multiscale FusionHead 后续处置）：
+优先级 0（在干净口径下重判 STFT 增益）：
 
-1. 不建议直接用 lite 或 `k1_norm` 重跑 E1 关键档：两者都没有让 multiscale 稳定回到 `0.48`，
-   还不能提供“干净头”。
-2. 若继续追 multiscale，应先做 seed `20260710` 的训练/峰值提取诊断，优先看预测频谱是否出现
-   局部伪峰，而不是继续扩大 STFT 对照矩阵。
-3. 在诊断完成前，multiscale 路线继续按融合实现缺陷处理，不用于判断 STFT 输入增益。
+1. canonical 头改用 `fusion_decoder=lite`（消掉 deep 的次要加尾），`fuse_len` 用全分辨率。
+2. 基线改用 E1a'（time_only wrapper），不再拿 E1b 比原生 E1a——wrapper 多稳态是共模噪声，
+   只有同为 wrapper 的 E1a' 与 E1b 相减 `(E1b − E1a')` 才抵消。
+3. 主判据改为谐波误拣率（逐窗 peak-band 误差 > 阈值的占比）+ median 作平稳性 sanity，
+   均值仅作参考。STFT 若有用，收益大概率正在降低误拣率。
+4. 加到 5~8 seed，把初始化方差压到噪声地板以下，再比 `(E1b − E1a')` 的误拣率。
+5. 误拣率从现有各 run 的 `metrics.csv` 逐窗值后处理即可（`scripts/peak_band_misclass_rate.py`），
+   不需改训练链路。
 
 优先级 1（patch_mixer STFT 信号复核）：
 
@@ -304,5 +366,6 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
    条件分支或诊断特征，不作为默认输入主线。
 
 已闭环（无需再做）：方向门控核查——确认无误杀，stft_only 在 magnitude 口径下极性盲，
-保持门控不放宽；multiscale `fuse_len=18000`、lite、`k1_norm`、`k3_no_norm` 对照——均有改善但未
-稳定回到 `0.48`，继续暂停该路线。
+保持门控不放宽；multiscale `fuse_len`/decoder 对照 + 逐窗分布核查——已定位崩坏为 wrapper
+包装路径的误拣率方差（非重建退化、非单一层结构），中位数与原生持平，后续按“优先级 0”的
+干净口径重判，不再扩大 deep/lite 这类纯 decoder 结构对照。
