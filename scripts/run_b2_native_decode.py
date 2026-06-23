@@ -105,11 +105,23 @@ def _run_one(spec: dict, device: str) -> str:
     return tag
 
 
+def _resolve_devices(devices: list[str] | None) -> list[str]:
+    """显式传入设备时不混入默认 cuda:0，避免多卡调度偏置。"""
+
+    return devices or ["cuda:0"]
+
+
+def _assign_devices(specs: list[dict], devices: list[str]) -> list[tuple[dict, str]]:
+    """按 run 顺序轮转分配设备；并发数由 --max-parallel 独立控制。"""
+
+    return [(spec, devices[idx % len(devices)]) for idx, spec in enumerate(specs)]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="B2-0 native_inject 原生解码融合批次编排（time_only/dual × 6 seed）")
     parser.add_argument("--skip", action="append", default=[], help="跳过的 run tag")
     parser.add_argument("--dry-run", action="store_true", help="只打印将运行的 tag，不实际训练")
-    parser.add_argument("--device", action="append", default=["cuda:0"], help="训练设备，可重复传入；默认 cuda:0")
+    parser.add_argument("--device", action="append", default=None, help="训练设备，可重复传入；默认 cuda:0")
     parser.add_argument("--max-parallel", type=int, default=1, help="并发训练进程数；默认 1")
     parser.add_argument("--manifest", default="runs/b2_native_decode_manifest.csv")
     args = parser.parse_args()
@@ -141,8 +153,9 @@ def main() -> None:
     if args.dry_run or not runnable:
         return
 
+    devices = _resolve_devices(args.device)
     workers = min(args.max_parallel, len(runnable))
-    assignments = [(spec, args.device[idx % len(args.device)]) for idx, spec in enumerate(runnable)]
+    assignments = _assign_devices(runnable, devices)
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(_run_one, spec, device) for spec, device in assignments]
         for future in as_completed(futures):
