@@ -84,6 +84,11 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
             "norm": str(cfg.model.get("stft_norm", "n0")),
             "encoder_type": str(cfg.model.get("stft_encoder_type", "conv1d")),
             "band_scale_path": str(band_scale_path) if band_scale_path else None,
+            "energy_bands": (
+                [tuple(b) for b in cfg.model.get("stft_energy_bands")]
+                if cfg.model.get("stft_energy_bands")
+                else None
+            ),
         }
         if use_stft
         else {}

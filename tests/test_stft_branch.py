@@ -405,3 +405,42 @@ def test_native_inject_stft_encoder_learns_after_one_optimizer_step():
 def test_native_inject_rejects_backbone_without_decode_from_features():
     with pytest.raises((ValueError, TypeError, AttributeError)):
         _native_dual("dual", backbone="multiscale_decomp_mixer1d")
+
+
+def _band_energy_encoder(out_channels: int = 16, energy_bands=None) -> STFTEncoder:
+    return STFTEncoder(
+        sample_rate=100.0, stft_win=3000, stft_hop=500, low_hz=0.05, high_hz=8.0,
+        out_channels=out_channels, norm="n0", encoder_type="bandenergy",
+        energy_bands=energy_bands,
+    )
+
+
+def test_bandenergy_output_is_3d_time_series_with_out_channels():
+    enc = _band_energy_encoder(out_channels=16)
+    feats = enc(torch.randn(2, 1, 18000))
+    assert feats.dim() == 3
+    assert feats.shape[0] == 2
+    assert feats.shape[1] == 16  # out_channels，与 conv1d/conv2d 契约一致
+
+
+def test_bandenergy_default_uses_five_bands():
+    enc = _band_energy_encoder()
+    assert enc.energy_band_count() == 5
+
+
+def test_bandenergy_custom_band_count():
+    enc = _band_energy_encoder(energy_bands=[(0.05, 0.7), (0.7, 8.0)])
+    assert enc.energy_band_count() == 2
+    feats = enc(torch.randn(1, 1, 18000))
+    assert feats.shape[1] == 16
+
+
+def test_bandenergy_rejects_band_outside_range():
+    with pytest.raises(ValueError):
+        _band_energy_encoder(energy_bands=[(0.05, 0.3), (3.0, 50.0)])  # 50Hz 越界
+
+
+def test_bandenergy_handles_zero_input_without_crash():
+    enc = _band_energy_encoder()
+    out = enc(torch.zeros(1, 1, 18000))
+    assert torch.isfinite(out).all()
