@@ -837,12 +837,27 @@ warmup；历史 B1 冻结结果仍保留为无 warmup 对照基线。
    但仍高于计划门槛里的原生 `~11%`。架构前向等价不能自动保证训练结果完全回到原生分布。
 3. **STFT 净增益门未通过**：`Δfrac_gt_1=-1.40pp`，4/6 seed 为负，方向有改善但弱于
    E1-D 的 `-2.23pp` 和 B1 的 `-2.34pp`。因此 B2-0 不能作为进入 B2-1 gating 的 substrate。
-4. **机制含义**：`native_inject` 消掉通用解码头后，并没有放大 STFT 信息增益；反而提示旧
-   `concat -> deep FusionHead` 可能在 patch 口径下“意外帮 STFT”了一部分。按预设判定门，
-   此处应停下，不盲目追加 gating/FiLM。
+4. **机制含义（B2-0 设计前提被部分证伪）**：`native_inject` 消掉通用解码头后，并没有放大
+   STFT 信息增益，反而双双变弱（`time_only` 误拣率没回到原生约 `11%`、净增益从 `-2.34pp`
+   缩到 `-1.40pp`）。这**部分推翻了立 B2-0 时的核心前提**——当时据 multiscale 的 296-318 行
+   断言「`concat → deep FusionHead` 是纯 handicap」。实测在 patch 上：该头**确有一部分是
+   handicap**（`time_only` 从约 `22%` 降到 `14.79%` 成立），但**另一部分是在帮 STFT**：
+   deep 头在 `fuse_len=600` 超采样栅格上的 `k3` 卷积给了 STFT 一个跨 token、可学习的混合
+   空间；`native_inject` 把 STFT 压回 140 token 栅格做 `1×1` 加性注入，信道更窄更「原生」，
+   反而削弱了 STFT 的发挥。教训：「substrate 更原生干净」与「对 STFT 更有利」不是同一件事，
+   不能混为一谈。按预设判定门，此处应停下，不盲目追加 gating/FiLM。
 
 结论：B2-0 是有效的负结果。它证明原生解码注入能稳定训练，但没达到“头修正 + STFT 净增益更强”
 的目标；后续 patch 主线仍以 E1-D 定稿配方为准，不进入 B2-1 gating。
+
+实现备注（零初始化注入，标准 ReZero）：`native_inject` 的 `stft_proj` 末层零初始化保证 dual
+在 init 时输出逐元素等价原生解码。其副作用是**首个 backward 里 STFT encoder 梯度为 0**
+（`∂out/∂stft_encoder = decode' · stft_proj.weight = 0`）——但这是零初始化残差（ReZero/
+LayerScale/Fixup 一类）的**标准无害行为**：`stft_proj.weight` 自身首步即获非零梯度并离开
+零点，STFT encoder 从**第二步**起正常学习，「延迟一步」在数千 step 训练里可忽略。早期版本曾
+加过一个零值梯度桥试图让 STFT encoder 首步即拿梯度，但核查发现：该桥注入的是绕过 `stft_proj`
+的**代理方向**（非真实 `∂loss/∂out`），会污染 Adam 首步矩，副作用比它解决的「晚一步」更实，
+已删除。因此 B2-0 的负结果与「首步梯度」无关，是 substrate 本身的性质。
 
 ### 疑点 2：方向门控（核查后推翻“过严/幸存者偏差”）
 
@@ -957,6 +972,13 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
 4. 若以后重启融合优化，判定口径（强制）：每个新融合都跑 dual + time_only 两臂 × 多 seed，比较
    `(新融合 dual − 新融合 time_only)` 的 `Δf1` 是否比 concat 基准 `-2.34pp` 更负。
    **time_only 对照桩不可省**——它确保涨幅来自“更会用 STFT”而非“新结构在裸 backbone 上就更强”。
+5. **整条 patch 融合线现整体封存**（不是只停 B2-1）：B2-0 已证明「换更原生解码」方向走不通，
+   且没有现成的下一个候选优于 concat 强基线。重启的唯一合理入口是 B2-0 反转出的新假设——
+   **STFT 增益依赖一个跨 token 的宽混合空间**（deep 头在 `fuse_len=600` 上恰好提供了它，
+   `1×1` token 栅格注入提供不了）。即如要再投入，应验证「在保留原生解码的同时给 STFT 一条
+   更宽的跨 token 通路」（例如 token 栅格上的 `k3`/多 token 感受野注入，而非 `1×1`），
+   而不是直接上 gating/FiLM——后者并不针对这个被实测指认的瓶颈。在提出并接受这样的机制假设前，
+   patch 主线一律以 E1-D 定稿配方为准。
 
 已闭环（无需再做）：方向门控核查——确认无误杀，stft_only 在 magnitude 口径下极性盲，
 保持门控不放宽；multiscale `fuse_len`/decoder 对照 + 逐窗分布核查——已定位崩坏为 wrapper

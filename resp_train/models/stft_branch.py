@@ -280,13 +280,10 @@ class TimeStftDual1D(nn.Module):
             time_feats, length = self.time_backbone(x, return_features=True)
             if self.stft_encoder is not None:
                 stft_feats = align_to_time(self.stft_encoder(x), time_feats.size(-1))
-                stft_delta = self.stft_proj(stft_feats)
-                if self.training and torch.count_nonzero(self.stft_proj.weight.detach()).item() == 0:
-                    # 零初始化注入保证 init 输出等价原生；这里额外加一个零值项，只在首个
-                    # backward 让 STFT encoder 获得梯度，避免第一步完全冻结频域分支。
-                    bridge = stft_feats.mean(dim=1, keepdim=True).expand(-1, time_feats.size(1), -1)
-                    stft_delta = stft_delta + bridge - bridge.detach()
-                time_feats = time_feats + stft_delta
+                # stft_proj 末层零初始化（标准 ReZero）：dual 在 init 时注入项为 0、输出等价原生解码。
+                # stft_proj.weight 首步即获非零梯度并离开零点，STFT encoder 从第二步起正常学习；
+                # 「首步延迟一步」是零初始化残差的标准无害行为，不额外修正。
+                time_feats = time_feats + self.stft_proj(stft_feats)
             return self.time_backbone.decode_from_features(time_feats, length)
 
         features: list[torch.Tensor] = []

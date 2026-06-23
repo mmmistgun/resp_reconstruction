@@ -366,16 +366,40 @@ def test_native_inject_dual_equals_time_only_at_init_due_to_zero_proj():
     assert torch.allclose(dual_out, native, atol=1e-6)
 
 
-def test_native_inject_dual_has_both_branch_gradients():
+def test_native_inject_dual_connects_both_branches_to_graph():
+    """两分支都接进计算图。
+
+    注意：stft_proj 零初始化（标准 ReZero）下，首步 `∂out/∂stft_encoder = decode'·proj.weight = 0`，
+    故 stft_encoder 首步梯度本就为 0（正确行为，非 bug）。此处验证真正该成立的事：
+    time_backbone 与 stft_proj 首步即有梯度——即 STFT 分支已接入图、proj.weight 会离开零点，
+    使 stft_encoder 从第二步起获得梯度。
+    """
     model = _native_dual("dual")
     x = torch.randn(2, 1, 18000)
 
     model(x).square().mean().backward()
 
     time_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.time_backbone.parameters())
-    stft_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_encoder.parameters())
     proj_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_proj.parameters())
-    assert time_grad and stft_grad and proj_grad
+    assert time_grad and proj_grad
+
+
+def test_native_inject_stft_encoder_learns_after_one_optimizer_step():
+    """一步优化让 stft_proj 离开零点后，stft_encoder 即获非零梯度（链路打通）。"""
+    model = _native_dual("dual")
+    x = torch.randn(2, 1, 18000)
+    opt = torch.optim.SGD(model.parameters(), lr=0.1)
+
+    # 第一步：proj.weight 离开零点
+    opt.zero_grad()
+    model(x).square().mean().backward()
+    opt.step()
+
+    # 第二步：此时 proj.weight 非零，stft_encoder 应获得真实梯度
+    opt.zero_grad()
+    model(x).square().mean().backward()
+    stft_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_encoder.parameters())
+    assert stft_grad
 
 
 def test_native_inject_rejects_backbone_without_decode_from_features():
