@@ -61,6 +61,7 @@ class ResearchV2WindowDataset(Dataset):
             self.rows = self.rows[self.rows["usable"]].reset_index(drop=True)
         self.source_cache = WholeNightCache(self.index_csv_path)
         self.target_cache = WholeNightCache(self.index_csv_path)
+        self._rr_peak_valid_mask_cache: dict[tuple[str, str], np.ndarray] = {}
         if bool(cfg.data.get("drop_nonfinite_windows", True)):
             self.rows = self._drop_nonfinite_rows(self.rows)
         # E4-SST：可选载入离线预计算的 SST 幅度谱缓存，按 dataset_row_id 注入 _load_item。
@@ -134,14 +135,26 @@ class ResearchV2WindowDataset(Dataset):
         return item
 
     def _rr_peak_valid_mask(self, row: pd.Series, start: int, end: int) -> np.ndarray:
-        """从秒级质量 mask 展开到采样级，供 raw peak RR 指标避开坏段。"""
-        expected = end - start
-        bad = np.zeros(expected, dtype=np.bool_)
-        sample_sec = np.floor(np.arange(start, end, dtype=np.float64) / float(self.cfg.window.target_fs)).astype(int)
+        """从整晚采样级质量 mask 切出当前窗口，供 raw peak RR 指标避开坏段。"""
+        full_mask = self._whole_night_rr_peak_valid_mask(row)
+        return full_mask[start:end]
+
+    def _whole_night_rr_peak_valid_mask(self, row: pd.Series) -> np.ndarray:
+        """按整晚缓存采样级 valid mask，避免每个窗口重复展开秒级质量标记。"""
+        target_npz = str(row["target_source_npz"])
+        target_key = str(row["target_signal_key"])
+        cache_key = (target_npz, target_key)
+        if cache_key in self._rr_peak_valid_mask_cache:
+            return self._rr_peak_valid_mask_cache[cache_key]
+
+        target = self.target_cache.get_arrays(target_npz, [target_key])[target_key]
+        target_len = int(np.asarray(target).reshape(-1).shape[0])
+        bad = np.zeros(target_len, dtype=np.bool_)
+        sample_sec = np.floor(np.arange(target_len, dtype=np.float64) / float(self.cfg.window.target_fs)).astype(int)
         found_any = False
         for key in _rr_peak_bad_mask_keys(self.cfg):
             try:
-                mask_sec = self.target_cache.get_arrays(str(row["target_source_npz"]), [key])[key]
+                mask_sec = self.target_cache.get_arrays(target_npz, [key])[key]
             except KeyError:
                 continue
             found_any = True
@@ -150,9 +163,9 @@ class ResearchV2WindowDataset(Dataset):
             bad |= ~in_range
             if np.any(in_range):
                 bad[in_range] |= mask_sec[sample_sec[in_range]].astype(bool)
-        if not found_any:
-            return np.ones(expected, dtype=np.bool_)
-        return ~bad
+        full_mask = np.ones(target_len, dtype=np.bool_) if not found_any else ~bad
+        self._rr_peak_valid_mask_cache[cache_key] = full_mask
+        return full_mask
 
     def _drop_nonfinite_rows(self, rows: pd.DataFrame) -> pd.DataFrame:
         if rows.empty:

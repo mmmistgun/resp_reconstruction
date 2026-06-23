@@ -7,7 +7,11 @@ import torch
 from omegaconf import OmegaConf
 
 from resp_train.data.factory import build_tho_data
-from resp_train.data.research_v2 import ResearchV2WindowDataset, adapt_research_v2_index
+from resp_train.data.research_v2 import (
+    ResearchV2WindowDataset,
+    _DEFAULT_RR_PEAK_BAD_MASK_KEYS,
+    adapt_research_v2_index,
+)
 
 
 def _write_research_v2_npzs(root: Path, samp_id: int) -> tuple[str, str]:
@@ -220,6 +224,40 @@ def test_research_v2_dataset_expands_second_level_bad_masks_for_raw_peak_metrics
     assert not mask[100:200].any()
     assert mask[200:300].all()
     assert not mask[300:400].any()
+
+
+def test_research_v2_dataset_reuses_whole_night_rr_peak_mask(tmp_path: Path):
+    root = _prepare_research_v2_dataset(tmp_path)
+    cfg = _cfg(root)
+    cfg.data.drop_nonfinite_windows = False
+    cfg.data.preload_windows = False
+    rows = adapt_research_v2_index(pd.read_csv(root / "training" / "dataset_index.csv"), cfg)
+    row = rows[(rows["split"] == "train") & rows["usable"]].iloc[0].copy()
+    second = row.copy()
+    second["dataset_row_id"] = 999
+    second["window_start_sample"] = 20
+    second["window_end_sample"] = 60
+    dataset_rows = pd.DataFrame.from_records([row.to_dict(), second.to_dict()])
+    dataset = ResearchV2WindowDataset(root / "training" / "dataset_index.csv", dataset_rows, cfg)
+    mask_keys = set(_DEFAULT_RR_PEAK_BAD_MASK_KEYS)
+    original_get_arrays = dataset.target_cache.get_arrays
+    mask_requests: list[tuple[str, ...]] = []
+
+    def counting_get_arrays(source_npz: str, keys: list[str]):
+        if any(key in mask_keys for key in keys):
+            mask_requests.append(tuple(keys))
+        return original_get_arrays(source_npz, keys)
+
+    dataset.target_cache.get_arrays = counting_get_arrays
+
+    first = dataset[0]["meta"]["rr_peak_valid_mask"]
+    first_request_count = len(mask_requests)
+    second_mask = dataset[1]["meta"]["rr_peak_valid_mask"]
+
+    assert first_request_count > 0
+    assert len(mask_requests) == first_request_count
+    assert torch.equal(first, torch.ones(40, dtype=torch.bool))
+    assert torch.equal(second_mask, torch.ones(40, dtype=torch.bool))
 
 
 def test_research_v2_dataset_drops_nonfinite_selected_windows(tmp_path: Path):
