@@ -168,6 +168,20 @@ def test_adapt_research_v2_index_supports_renamed_soft_z_columns(tmp_path: Path)
     assert adapted["target_signal_key"].tolist() == ["tho_waveform_segment_soft_z"] * 4
 
 
+def test_adapt_research_v2_index_keeps_finite_ratios_as_audit_only(tmp_path: Path):
+    root = _prepare_research_v2_dataset(tmp_path)
+    cfg = _cfg(root)
+    raw = pd.read_csv(root / "training" / "dataset_index.csv")
+    raw["input_finite_ratio"] = [0.5, 1.0, 1.0, 1.0]
+    raw["target_finite_ratio"] = [1.0, 1.0, 0.5, 1.0]
+
+    adapted = adapt_research_v2_index(raw, cfg)
+
+    assert adapted["input_finite_ratio"].tolist() == [0.5, 1.0, 1.0, 1.0]
+    assert adapted["target_finite_ratio"].tolist() == [1.0, 1.0, 0.5, 1.0]
+    assert adapted["usable"].tolist() == [True, False, True, False]
+
+
 def test_research_v2_dataset_slices_alignment_and_signal_bank(tmp_path: Path):
     root = _prepare_research_v2_dataset(tmp_path)
     cfg = _cfg(root)
@@ -263,6 +277,7 @@ def test_research_v2_dataset_reuses_whole_night_rr_peak_mask(tmp_path: Path):
 def test_research_v2_dataset_drops_nonfinite_selected_windows(tmp_path: Path):
     root = _prepare_research_v2_dataset(tmp_path)
     cfg = _cfg(root)
+    cfg.data.drop_nonfinite_windows = True
     source_npz = root / "whole_night" / "alignment" / "88" / "research_v2_alignment.npz"
     base = np.arange(80, dtype=np.float32)
     aligned = base + 100
@@ -278,6 +293,28 @@ def test_research_v2_dataset_drops_nonfinite_selected_windows(tmp_path: Path):
     dataset = ResearchV2WindowDataset(root / "training" / "dataset_index.csv", rows, cfg)
 
     assert len(dataset) == 0
+
+
+def test_research_v2_dataset_keeps_nonfinite_windows_by_default_until_item_load(tmp_path: Path):
+    root = _prepare_research_v2_dataset(tmp_path)
+    cfg = _cfg(root)
+    source_npz = root / "whole_night" / "alignment" / "88" / "research_v2_alignment.npz"
+    base = np.arange(80, dtype=np.float32)
+    aligned = base + 100
+    aligned[20] = np.nan
+    np.savez(
+        source_npz,
+        bcg_resp_band_to_tho_timebase=base,
+        bcg_resp_band_state_aligned=aligned,
+    )
+    rows = adapt_research_v2_index(pd.read_csv(root / "training" / "dataset_index.csv"), cfg)
+    rows = rows[(rows["split"] == "train") & rows["usable"]].reset_index(drop=True)
+
+    dataset = ResearchV2WindowDataset(root / "training" / "dataset_index.csv", rows, cfg)
+
+    assert len(dataset) == 1
+    with pytest.raises(ValueError, match="窗口包含非有限值"):
+        dataset[0]
 
 
 def test_build_tho_data_supports_research_v2_format(tmp_path: Path):

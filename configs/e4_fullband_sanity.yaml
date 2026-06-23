@@ -11,6 +11,7 @@ data:
   max_train_windows: null
   max_val_windows: null
   filter_unusable: true
+  drop_nonfinite_windows: false
   preload_windows: true
   train_sample_strategy: stratified_random
   val_sample_strategy: stratified_random

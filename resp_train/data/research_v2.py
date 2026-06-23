@@ -62,7 +62,7 @@ class ResearchV2WindowDataset(Dataset):
         self.source_cache = WholeNightCache(self.index_csv_path)
         self.target_cache = WholeNightCache(self.index_csv_path)
         self._rr_peak_valid_mask_cache: dict[tuple[str, str], np.ndarray] = {}
-        if bool(cfg.data.get("drop_nonfinite_windows", True)):
+        if bool(cfg.data.get("drop_nonfinite_windows", False)):
             self.rows = self._drop_nonfinite_rows(self.rows)
         # E4-SST：可选载入离线预计算的 SST 幅度谱缓存，按 dataset_row_id 注入 _load_item。
         self._sst_cache: dict[int, np.ndarray] | None = None
@@ -228,8 +228,8 @@ def adapt_research_v2_index(df: pd.DataFrame, cfg: DictConfig) -> pd.DataFrame:
     adapted["target_signal_key"] = _resolve_key_column(adapted, cfg, cfg.data.get("target_key", "target_waveform_key"))
     adapted["valid_sec_key"] = "state_alignment_valid_sec"
     adapted["valid_ratio"] = adapted["state_alignment_valid_ratio"].astype(float)
-    adapted["input_finite_ratio"] = 1.0
-    adapted["target_finite_ratio"] = 1.0
+    adapted["input_finite_ratio"] = _optional_finite_ratio_column(adapted, "input_finite_ratio")
+    adapted["target_finite_ratio"] = _optional_finite_ratio_column(adapted, "target_finite_ratio")
     adapted["residual_quality_class"] = adapted["allowed_losses"].fillna("").astype(str)
     adapted["base_alignment_method"] = adapted.get("state_alignment_method", "").fillna("")
     adapted["apply_decision"] = np.where(adapted.get("reason", "").fillna("").eq(""), "included", "excluded")
@@ -244,6 +244,8 @@ def summarize_research_v2_audit(audited: pd.DataFrame) -> pd.DataFrame:
         n_usable=("usable", "sum"),
         valid_ratio_mean=("valid_ratio", "mean"),
         valid_ratio_min=("valid_ratio", "min"),
+        input_finite_ratio_mean=("input_finite_ratio", "mean"),
+        target_finite_ratio_mean=("target_finite_ratio", "mean"),
         hard_valid_ratio_mean=("hard_valid_ratio", "mean"),
         supervision_confidence_main=("supervision_confidence_level", _mode_or_empty),
         alignment_method_main=("state_alignment_method", _mode_or_empty),
@@ -257,6 +259,13 @@ def _resolve_key_column(adapted: pd.DataFrame, cfg: DictConfig, raw: Any) -> pd.
     if value in adapted.columns:
         return adapted[value].astype(str)
     return pd.Series([value] * len(adapted), index=adapted.index)
+
+
+def _optional_finite_ratio_column(adapted: pd.DataFrame, column: str) -> pd.Series:
+    """保留上游 finite ratio 供审计展示；缺列时按历史索引兼容为 1.0。"""
+    if column not in adapted.columns:
+        return pd.Series([1.0] * len(adapted), index=adapted.index, dtype="float64")
+    return pd.to_numeric(adapted[column], errors="coerce").fillna(0.0).astype(float)
 
 
 def _rr_peak_bad_mask_keys(cfg: DictConfig) -> tuple[str, ...]:
