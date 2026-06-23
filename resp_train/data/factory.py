@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 
 import pandas as pd
 from omegaconf import DictConfig
@@ -115,11 +116,14 @@ def _build_window_bundle(
         sample_seed=sample_seed,
     )
     dataset_cls = ResearchV2WindowDataset if _is_research_v2(cfg) else RespWindowDataset
+    preload_progress_enabled = _preload_progress_enabled(cfg)
     dataset = dataset_cls(
         index_path,
         rows,
         cfg,
         preload_windows=bool(cfg.data.get("preload_windows", False)),
+        preload_progress_desc=f"preload {split} windows" if preload_progress_enabled else None,
+        preload_show_progress=True if preload_progress_enabled else False,
     )
     if empty_error_label is not None and len(dataset) == 0:
         raise RuntimeError(f"{empty_error_label} 数据为空，请检查 input_set、split、可用性过滤和抽样配置。")
@@ -164,3 +168,18 @@ def _should_pin_memory(cfg: DictConfig) -> bool:
     """CUDA 训练时启用 pinned memory，加速 CPU 到 GPU 的异步拷贝。"""
     device = str(cfg.training.get("device", "auto"))
     return device.startswith("cuda") or (device == "auto" and torch.cuda.is_available())
+
+
+def _preload_progress_enabled(cfg: DictConfig) -> bool:
+    """预加载进度跟随 training.show_progress；false 时保持批量实验安静。"""
+    value = cfg.training.get("show_progress", None)
+    if value in (None, "auto"):
+        return sys.stderr.isatty()
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+        raise ValueError(f"training.show_progress 只能是 true/false/auto，当前为: {value}")
+    return bool(value)

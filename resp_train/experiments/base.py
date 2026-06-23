@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from pathlib import Path
+import shutil
+import sys
 from typing import Any
 
 import pandas as pd
@@ -45,9 +47,15 @@ class BaseExperiment:
         device = resolve_device(str(self.cfg.training.device))
         self.device = device
         logger.info("task=%s device=%s", self.task_name, device)
+        show_progress = self._resolve_show_progress()
+        friendly_output = self._friendly_output_enabled(show_progress)
 
         # 数据构建、审计和 baseline 是任务侧可扩展的前置阶段。
+        if friendly_output:
+            logger.info("data: building train/val loaders")
         data = self.build_data()
+        if friendly_output:
+            logger.info(self._format_data_log(data))
         data.audit_summary.to_csv(run_dir / "audit.csv", index=False)
         self.run_baseline(data, run_dir)
 
@@ -64,11 +72,13 @@ class BaseExperiment:
         stale_epochs = 0
         patience = int(self.cfg.training.get("patience", 0))
         min_delta = float(self.cfg.training.get("min_delta", 0.0))
-        show_progress = self._resolve_show_progress()
         checkpoint_gate_enabled = self._checkpoint_gate_enabled()
+        total_epochs = int(self.cfg.training.epochs)
+        checkpoint_top_k = max(1, int(self.cfg.training.get("checkpoint_top_k", 3)))
+        top_checkpoints: list[dict[str, Any]] = []
 
         # 训练循环只关注通用 loss，不包含具体任务指标或数据逻辑。
-        for epoch in range(1, int(self.cfg.training.epochs) + 1):
+        for epoch in range(1, total_epochs + 1):
             if hasattr(loss_fn, "set_epoch"):
                 loss_fn.set_epoch(epoch)
             train_metrics = train_one_epoch(
@@ -80,8 +90,18 @@ class BaseExperiment:
                 grad_clip_norm=self.cfg.training.get("grad_clip_norm"),
                 use_amp=bool(self.cfg.training.get("use_amp", False)),
                 show_progress=show_progress,
+                epoch=epoch,
+                total_epochs=total_epochs,
             )
-            val_metrics = validate(model, data.val_loader, loss_fn, device=device, show_progress=show_progress)
+            val_metrics = validate(
+                model,
+                data.val_loader,
+                loss_fn,
+                device=device,
+                show_progress=show_progress,
+                epoch=epoch,
+                total_epochs=total_epochs,
+            )
             record = {
                 "epoch": epoch,
                 "train_loss": train_metrics["loss"],
@@ -90,8 +110,6 @@ class BaseExperiment:
                 **{f"val_{k}": v for k, v in val_metrics.items() if k != "loss"},
             }
             record["checkpoint_gate_passed"] = self._checkpoint_gate_allows(record)
-            history_records.append(record)
-            logger.info(self._format_epoch_log(record))
 
             improved = record["val_loss"] < (best_loss - min_delta)
             checkpoint_improved = record["val_loss"] < (best_checkpoint_loss - min_delta)
@@ -101,6 +119,19 @@ class BaseExperiment:
                 stale_epochs = 0
             else:
                 stale_epochs += 1
+
+            history_records.append(record)
+            logger.info(
+                self._format_epoch_log(
+                    record,
+                    friendly=friendly_output,
+                    total_epochs=total_epochs,
+                    best_loss=best_loss,
+                    best_epoch=best_epoch,
+                    stale_epochs=stale_epochs,
+                    patience=patience,
+                )
+            )
 
             if record["checkpoint_gate_passed"] and checkpoint_improved:
                 best_checkpoint_loss = record["val_loss"]
@@ -123,6 +154,16 @@ class BaseExperiment:
                     epoch=epoch,
                     metrics=record,
                     cfg=self.cfg,
+                )
+            if record["checkpoint_gate_passed"]:
+                top_checkpoints = self._update_top_checkpoints(
+                    top_checkpoints,
+                    run_dir=run_dir,
+                    model=model,
+                    optimizer=optimizer,
+                    epoch=epoch,
+                    record=record,
+                    top_k=checkpoint_top_k,
                 )
             if not improved and patience > 0 and stale_epochs >= patience:
                 logger.info("early_stop epoch=%s best_epoch=%s best_val_loss=%.6f", epoch, best_epoch, best_loss)
@@ -168,8 +209,27 @@ class BaseExperiment:
     def evaluate_best(self, model: torch.nn.Module, data: ExperimentData, run_dir: Path) -> None:
         raise NotImplementedError
 
-    def _format_epoch_log(self, record: dict[str, Any]) -> str:
+    def _format_epoch_log(
+        self,
+        record: dict[str, Any],
+        *,
+        friendly: bool = False,
+        total_epochs: int | None = None,
+        best_loss: float | None = None,
+        best_epoch: int | None = None,
+        stale_epochs: int | None = None,
+        patience: int | None = None,
+    ) -> str:
         """构造每个 epoch 的核心 loss 和训练/验证分项指标日志。"""
+        if friendly:
+            return self._format_friendly_epoch_log(
+                record,
+                total_epochs=total_epochs,
+                best_loss=best_loss,
+                best_epoch=best_epoch,
+                stale_epochs=stale_epochs,
+                patience=patience,
+            )
         return (
             f"epoch={int(record['epoch'])} | "
             f"train: {self._format_metric_group(record, prefix='train')} | "
@@ -190,6 +250,156 @@ class BaseExperiment:
             parts.append(f"{display_key}={float(record[key]):.6f}")
         return " ".join(parts)
 
+    def _format_friendly_epoch_log(
+        self,
+        record: dict[str, Any],
+        *,
+        total_epochs: int | None,
+        best_loss: float | None,
+        best_epoch: int | None,
+        stale_epochs: int | None,
+        patience: int | None,
+    ) -> str:
+        """面向交互训练的短摘要：先看关键状态，再看 loss 分项。"""
+        epoch = int(record["epoch"])
+        total = int(total_epochs) if total_epochs is not None else epoch
+        gate = "pass" if bool(record.get("checkpoint_gate_passed", True)) else "blocked"
+        best_value = float(best_loss) if best_loss is not None else float(record["val_loss"])
+        best_at = int(best_epoch) if best_epoch is not None else epoch
+        stale = int(stale_epochs or 0)
+        patience_text = "off" if not patience or int(patience) <= 0 else f"{stale}/{int(patience)}"
+        return "\n".join(
+            [
+                (
+                    f"epoch {epoch}/{total} | "
+                    f"best={best_value:.6f}@{best_at} | "
+                    f"gate={gate} | patience={patience_text}"
+                ),
+                f"  loss: train={float(record['train_loss']):.6f} val={float(record['val_loss']):.6f}",
+                self._format_metric_parts_table(record),
+            ]
+        )
+
+    def _format_metric_parts_table(self, record: dict[str, Any]) -> str:
+        """用共享表头对齐 train/val loss 分项，便于观察跨 epoch 变化。"""
+        train_names = self._metric_part_names(record, prefix="train")
+        val_names = self._metric_part_names(record, prefix="val")
+        names = sorted(train_names | val_names)
+        if not names:
+            return "  parts: none"
+        lines = ["  parts: metric train val"]
+        for name in names:
+            train_value = self._format_optional_metric(record, f"train_{name}")
+            val_value = self._format_optional_metric(record, f"val_{name}")
+            lines.append(f"    {name} {train_value} {val_value}")
+        return "\n".join(lines)
+
+    def _metric_part_names(self, record: dict[str, Any], *, prefix: str) -> set[str]:
+        """提取除总 loss 外的分项名。"""
+        metric_prefix = f"{prefix}_"
+        return {
+            key.removeprefix(metric_prefix)
+            for key in record
+            if key.startswith(metric_prefix) and key != f"{prefix}_loss"
+        }
+
+    def _format_optional_metric(self, record: dict[str, Any], key: str) -> str:
+        """缺失分项用短横线占位，避免 train/val 表头错位。"""
+        if key not in record:
+            return "-"
+        return f"{float(record[key]):.6f}"
+
+    def _format_data_log(self, data: ExperimentData) -> str:
+        """汇总数据加载结果，便于长训练启动阶段判断是否按预期。"""
+        train_windows = self._safe_len(getattr(data.train_loader, "dataset", None))
+        val_windows = self._safe_len(getattr(data.val_loader, "dataset", None))
+        train_batches = self._safe_len(data.train_loader)
+        val_batches = self._safe_len(data.val_loader)
+        parts = [
+            f"data: train windows={train_windows} batches={train_batches}",
+            f"val windows={val_windows} batches={val_batches}",
+        ]
+        if self._data_uses_sst_cache(data):
+            parts.append("sst_cache=enabled")
+        return " | ".join(parts)
+
+    def _update_top_checkpoints(
+        self,
+        current: list[dict[str, Any]],
+        *,
+        run_dir: Path,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        epoch: int,
+        record: dict[str, Any],
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        """保存并维护 val_loss 前 top_k 的 checkpoint。"""
+        candidate_path = run_dir / f"checkpoint_epoch_{int(epoch):04d}.pt"
+        save_checkpoint(
+            candidate_path,
+            model=model,
+            optimizer=optimizer,
+            epoch=epoch,
+            metrics=record,
+            cfg=self.cfg,
+        )
+        candidates = [
+            *current,
+            {
+                "epoch": int(epoch),
+                "val_loss": float(record["val_loss"]),
+                "path": candidate_path,
+            },
+        ]
+        ranked = sorted(candidates, key=lambda item: (float(item["val_loss"]), int(item["epoch"])))
+        kept = ranked[: int(top_k)]
+        kept_paths = {Path(item["path"]) for item in kept}
+        for item in ranked[int(top_k) :]:
+            path = Path(item["path"])
+            if path not in kept_paths and path.exists():
+                path.unlink()
+        self._write_top_checkpoint_files(run_dir, kept, top_k=top_k)
+        return kept
+
+    def _write_top_checkpoint_files(self, run_dir: Path, checkpoints: list[dict[str, Any]], *, top_k: int) -> None:
+        """将内部 epoch checkpoint 物化为稳定的 checkpoint_topN.pt 和 manifest。"""
+        rows: list[dict[str, Any]] = []
+        for rank in range(1, int(top_k) + 1):
+            target = run_dir / f"checkpoint_top{rank}.pt"
+            if rank <= len(checkpoints):
+                item = checkpoints[rank - 1]
+                shutil.copy2(Path(item["path"]), target)
+                rows.append(
+                    {
+                        "rank": rank,
+                        "epoch": int(item["epoch"]),
+                        "val_loss": float(item["val_loss"]),
+                        "checkpoint": target.name,
+                    }
+                )
+            elif target.exists():
+                target.unlink()
+        pd.DataFrame(rows, columns=["rank", "epoch", "val_loss", "checkpoint"]).to_csv(
+            run_dir / "checkpoint_topk.csv",
+            index=False,
+        )
+
+    def _safe_len(self, value: Any) -> str:
+        """len 可能对部分 iterable 不可用；日志里用 unknown 表示。"""
+        try:
+            return str(len(value))
+        except TypeError:
+            return "unknown"
+
+    def _data_uses_sst_cache(self, data: ExperimentData) -> bool:
+        """检测数据集是否已经挂载 SST 缓存，不触发实际取样。"""
+        for loader in (data.train_loader, data.val_loader):
+            dataset = getattr(loader, "dataset", None)
+            if getattr(dataset, "_sst_cache", None) is not None:
+                return True
+        return False
+
     def _resolve_show_progress(self) -> bool | None:
         """解析训练进度条开关；None 表示由训练引擎按终端类型自动判断。"""
         value = self.cfg.training.get("show_progress", None)
@@ -203,6 +413,12 @@ class BaseExperiment:
                 return False
             raise ValueError(f"training.show_progress 只能是 true/false/auto，当前为: {value}")
         return bool(value)
+
+    def _friendly_output_enabled(self, show_progress: bool | None) -> bool:
+        """只在进度条实际启用时输出交互友好日志；批量模式保持安静。"""
+        if show_progress is not None:
+            return bool(show_progress)
+        return sys.stderr.isatty()
 
     def _checkpoint_gate_enabled(self) -> bool:
         """判断是否配置了实际生效的 checkpoint gate。"""

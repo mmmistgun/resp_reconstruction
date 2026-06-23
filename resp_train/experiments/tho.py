@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import torch
 from omegaconf import DictConfig, OmegaConf
 
@@ -58,10 +61,17 @@ class ThoExperiment(BaseExperiment):
             device=self.device,
             max_windows=len(tho_data.val.dataset),
         )
-        evaluate_prediction_dict(eval_preds, self.cfg, method=str(self.cfg.model.name)).to_csv(
-            run_dir / "metrics.csv",
-            index=False,
+        show_progress = self._friendly_output_enabled(self._resolve_show_progress())
+        metrics = evaluate_prediction_dict(
+            eval_preds,
+            self.cfg,
+            method=str(self.cfg.model.name),
+            show_progress=show_progress,
         )
+        metrics.to_csv(run_dir / "metrics.csv", index=False)
+        summary = _format_metrics_summary(metrics)
+        if summary:
+            logging.getLogger("resp_train").info(summary)
 
     def evaluate_checkpoint(self, checkpoint_path: Path, *, metrics_output: Path | None) -> None:
         device = self.device or resolve_device(str(self.cfg.training.device))
@@ -79,7 +89,13 @@ class ThoExperiment(BaseExperiment):
                 device=device,
                 max_windows=len(tho_data.val.dataset),
             )
-            evaluate_prediction_dict(eval_preds, self.cfg, method=str(self.cfg.model.name)).to_csv(
+            show_progress = self._friendly_output_enabled(self._resolve_show_progress())
+            evaluate_prediction_dict(
+                eval_preds,
+                self.cfg,
+                method=str(self.cfg.model.name),
+                show_progress=show_progress,
+            ).to_csv(
                 metrics_output,
                 index=False,
             )
@@ -125,6 +141,23 @@ def _baseline_enabled(cfg: DictConfig) -> bool:
             return True
         raise ValueError(f"baseline.enabled 只能是 true/false，当前为: {value}")
     return bool(value)
+
+
+def _format_metrics_summary(metrics: pd.DataFrame) -> str:
+    """训练结束后输出最常看的 RR 误拣摘要。"""
+    column = "rr_peak_band_abs_error"
+    if column not in metrics:
+        return ""
+    values = pd.to_numeric(metrics[column], errors="coerce").dropna()
+    if values.empty:
+        return f"metrics: n={len(metrics)} {column}=nan"
+    return (
+        f"metrics: n={len(metrics)} {column} "
+        f"mean={float(values.mean()):.6f} "
+        f"median={float(values.median()):.6f} "
+        f"p95={float(values.quantile(0.95)):.6f} "
+        f"frac_gt_1={float(np.mean(values.to_numpy() > 1.0)):.6f}"
+    )
 
 
 def _validate_checkpoint_config(

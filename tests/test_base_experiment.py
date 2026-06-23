@@ -37,6 +37,24 @@ class EpochAwareLoss(ConstantLoss):
         self.epochs.append(int(epoch))
 
 
+class EpochValueLoss(ConstantLoss):
+    """按 epoch 返回固定 loss，用于测试 checkpoint top-k 排序。"""
+
+    values = {1: 5.0, 2: 2.0, 3: 4.0, 4: 1.0, 5: 3.0}
+
+    def __init__(self):
+        super().__init__()
+        self.epoch = 1
+
+    def set_epoch(self, epoch: int):
+        self.epoch = int(epoch)
+
+    def forward(self, pred, target):
+        value = float(self.values[self.epoch])
+        loss = pred.sum() * 0.0 + value
+        return loss, {"constant": loss.detach()}
+
+
 class ToyExperiment(BaseExperiment):
     task_name = "toy"
 
@@ -70,6 +88,11 @@ class EpochAwareExperiment(ToyExperiment):
         return self.loss
 
 
+class EpochValueExperiment(ToyExperiment):
+    def build_loss(self):
+        return EpochValueLoss()
+
+
 def _cfg(tmp_path: Path):
     return OmegaConf.create(
         {
@@ -89,11 +112,17 @@ def _cfg(tmp_path: Path):
     )
 
 
+def _log_text(run_dir: Path) -> str:
+    return (run_dir / "train.log").read_text(encoding="utf-8")
+
+
 def test_base_experiment_runs_lifecycle_and_writes_outputs(tmp_path: Path):
     run_dir = ToyExperiment(_cfg(tmp_path)).train()
 
     assert (run_dir / "config.yaml").exists()
     assert (run_dir / "checkpoint.pt").exists()
+    assert (run_dir / "checkpoint_top1.pt").exists()
+    assert (run_dir / "checkpoint_topk.csv").exists()
     assert (run_dir / "train_history.csv").exists()
     assert (run_dir / "baseline_metrics.csv").exists()
     assert (run_dir / "metrics.csv").exists()
@@ -114,9 +143,41 @@ def test_base_experiment_early_stopping_records_reason(tmp_path: Path):
 
 def test_base_experiment_epoch_log_includes_train_and_val_metric_parts(tmp_path: Path):
     run_dir = ToyExperiment(_cfg(tmp_path)).train()
-    log_text = (run_dir / "train.log").read_text(encoding="utf-8")
+    log_text = _log_text(run_dir)
 
     assert "epoch=1 | train: loss=1.000000 constant=1.000000 | val: loss=1.000000 constant=1.000000" in log_text
+
+
+def test_base_experiment_quiet_mode_keeps_legacy_epoch_log(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.show_progress = False
+
+    run_dir = ToyExperiment(cfg).train()
+    log_text = _log_text(run_dir)
+
+    assert "data: train windows=" not in log_text
+    assert "epoch 1/2 | train_loss=" not in log_text
+    assert "epoch=1 | train: loss=1.000000 constant=1.000000 | val: loss=1.000000 constant=1.000000" in log_text
+
+
+def test_base_experiment_progress_mode_logs_data_and_readable_epoch_summary(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.show_progress = True
+
+    run_dir = ToyExperiment(cfg).train()
+    log_text = _log_text(run_dir)
+
+    assert "data: building train/val loaders" in log_text
+    assert "data: train windows=4 batches=2 | val windows=4 batches=2" in log_text
+    assert "epoch 1/2 | best=1.000000@1 | gate=pass | patience=0/1" in log_text
+    assert "loss: train=1.000000 val=1.000000" in log_text
+    assert "best=1.000000@1" in log_text
+    assert "patience=0/1" in log_text
+    assert "parts: metric train val" in log_text
+    assert "constant 1.000000 1.000000" in log_text
+    assert "train parts:" not in log_text
+    assert "val parts:" not in log_text
+    assert "epoch=1 | train:" not in log_text
 
 
 def test_base_experiment_notifies_loss_about_current_epoch(tmp_path: Path):
@@ -128,6 +189,25 @@ def test_base_experiment_notifies_loss_about_current_epoch(tmp_path: Path):
     experiment.train()
 
     assert experiment.loss.epochs == [1, 2, 3]
+
+
+def test_base_experiment_saves_loss_top3_checkpoints(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.epochs = 5
+    cfg.training.patience = 0
+    run_dir = EpochValueExperiment(cfg).train()
+
+    manifest = pd.read_csv(run_dir / "checkpoint_topk.csv")
+
+    assert manifest["rank"].tolist() == [1, 2, 3]
+    assert manifest["epoch"].tolist() == [4, 2, 5]
+    assert manifest["val_loss"].tolist() == [1.0, 2.0, 3.0]
+    for rank in (1, 2, 3):
+        assert (run_dir / f"checkpoint_top{rank}.pt").exists()
+    assert torch.load(run_dir / "checkpoint.pt", map_location="cpu")["epoch"] == 4
+    assert torch.load(run_dir / "checkpoint_top1.pt", map_location="cpu")["epoch"] == 4
+    assert torch.load(run_dir / "checkpoint_top2.pt", map_location="cpu")["epoch"] == 2
+    assert torch.load(run_dir / "checkpoint_top3.pt", map_location="cpu")["epoch"] == 5
 
 
 def test_checkpoint_gate_accepts_direction_metric_range(tmp_path: Path):

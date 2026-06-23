@@ -5,6 +5,7 @@ from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
 from resp_train.engine.train import collect_predictions, save_checkpoint
+import resp_train.metrics.evaluate as evaluate_module
 from resp_train.metrics.evaluate import evaluate_prediction_dict
 from scripts.eval_tho_small import _resolve_config_path, _validate_checkpoint_config
 
@@ -139,6 +140,27 @@ def test_evaluate_prediction_dict_rejects_empty_predictions():
 
     with pytest.raises(ValueError, match="预测不能为空"):
         evaluate_prediction_dict(preds, _cfg(), method="model")
+
+
+def test_evaluate_prediction_dict_progress_follows_show_progress(monkeypatch):
+    fs = 100
+    t = np.arange(0, 20, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t).astype(np.float32)
+    preds = {
+        "r_tho_hat": np.stack([target, target]).reshape(2, 1, -1),
+        "tho_ref": np.stack([target, target]).reshape(2, 1, -1),
+    }
+    seen: list[dict] = []
+
+    def fake_tqdm(iterable, *, desc=None, disable=None, leave=None):
+        seen.append({"desc": desc, "disable": disable, "leave": leave})
+        return iterable
+
+    monkeypatch.setattr(evaluate_module, "tqdm", fake_tqdm, raising=False)
+
+    evaluate_prediction_dict(preds, _cfg(), method="model", show_progress=True)
+
+    assert seen == [{"desc": "compute val metrics", "disable": False, "leave": False}]
 
 
 class _MetaDataset(Dataset):

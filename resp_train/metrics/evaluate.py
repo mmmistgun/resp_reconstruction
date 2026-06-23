@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
+from tqdm.auto import tqdm
 
 from resp_train.metrics.signal import (
     band_limited_corr,
@@ -19,7 +21,13 @@ from resp_train.metrics.signal import (
 )
 
 
-def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig, *, method: str) -> pd.DataFrame:
+def evaluate_prediction_dict(
+    predictions: dict[str, np.ndarray],
+    cfg: DictConfig,
+    *,
+    method: str,
+    show_progress: bool | None = None,
+) -> pd.DataFrame:
     """将模型预测字典转换为逐窗口评价指标表。"""
     _validate_predictions(predictions)
     fs = float(cfg.window.target_fs)
@@ -34,7 +42,13 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
     preds = np.asarray(predictions["r_tho_hat"])
     targets = np.asarray(predictions["tho_ref"])
     records: list[dict[str, Any]] = []
-    for idx in range(preds.shape[0]):
+    progress = tqdm(
+        range(preds.shape[0]),
+        desc="compute val metrics",
+        leave=False,
+        disable=not _should_show_eval_progress(show_progress),
+    )
+    for idx in progress:
         pred = np.asarray(preds[idx], dtype=np.float64).reshape(-1)
         target = np.asarray(targets[idx], dtype=np.float64).reshape(-1)
         rr_peak_valid_mask = _rr_peak_valid_mask(predictions, idx, expected_size=pred.size)
@@ -163,6 +177,13 @@ def evaluate_prediction_dict(predictions: dict[str, np.ndarray], cfg: DictConfig
             }
         )
     return pd.DataFrame.from_records(records)
+
+
+def _should_show_eval_progress(show_progress: bool | None) -> bool:
+    """评价指标计算进度；None 时仅交互终端显示。"""
+    if show_progress is not None:
+        return bool(show_progress)
+    return sys.stderr.isatty()
 
 
 def _validate_predictions(predictions: dict[str, np.ndarray]) -> None:

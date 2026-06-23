@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 from omegaconf import OmegaConf
 
+import resp_train.data.dataset as dataset_module
 from resp_train.data.factory import build_tho_data, build_window_data
 
 
@@ -148,6 +149,41 @@ def test_build_tho_data_uses_independent_train_and_val_sampling(tmp_path: Path):
     assert data.val.rows["dataset_row_id"].tolist() == [5, 6]
     assert len(data.audited) == 8
     assert data.audit_summary["n_windows"].sum() == 8
+
+
+def test_build_tho_data_preload_progress_follows_show_progress(tmp_path: Path, monkeypatch):
+    root = _prepare_dataset(tmp_path)
+    cfg = _cfg(root)
+    cfg.training.show_progress = True
+    seen_desc: list[str] = []
+
+    def fake_tqdm(iterable, *, desc=None, disable=None, leave=None):
+        seen_desc.append(str(desc))
+        assert disable is False
+        return iterable
+
+    monkeypatch.setattr(dataset_module, "tqdm", fake_tqdm, raising=False)
+
+    build_tho_data(cfg)
+
+    assert seen_desc == ["preload train windows", "preload val windows"]
+
+
+def test_build_tho_data_quiet_mode_skips_preload_progress(tmp_path: Path, monkeypatch):
+    root = _prepare_dataset(tmp_path)
+    cfg = _cfg(root)
+    cfg.training.show_progress = False
+    seen_desc: list[str] = []
+
+    def fake_tqdm(iterable, *, desc=None, disable=None, leave=None):
+        seen_desc.append(str(desc))
+        return iterable
+
+    monkeypatch.setattr(dataset_module, "tqdm", fake_tqdm, raising=False)
+
+    build_tho_data(cfg)
+
+    assert seen_desc == []
 
 
 def test_build_tho_data_rejects_empty_train_split(tmp_path: Path):

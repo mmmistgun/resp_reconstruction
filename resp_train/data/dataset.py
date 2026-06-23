@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from typing import Any
 
 import numpy as np
@@ -8,6 +9,7 @@ import pandas as pd
 import torch
 from omegaconf import DictConfig
 from torch.utils.data import Dataset
+from tqdm.auto import tqdm
 
 from resp_train.data.cache import WholeNightCache
 
@@ -20,6 +22,8 @@ class RespWindowDataset(Dataset):
         cfg: DictConfig,
         *,
         preload_windows: bool = False,
+        preload_progress_desc: str | None = None,
+        preload_show_progress: bool | None = None,
     ) -> None:
         self.index_csv_path = Path(index_csv_path)
         self.cfg = cfg
@@ -29,7 +33,12 @@ class RespWindowDataset(Dataset):
         self.cache = WholeNightCache(self.index_csv_path)
         self._preloaded: list[dict[str, Any]] | None = None
         if preload_windows:
-            self._preloaded = [self._load_item(i) for i in range(len(self.rows))]
+            indices = _preload_indices(
+                len(self.rows),
+                desc=preload_progress_desc,
+                show_progress=preload_show_progress,
+            )
+            self._preloaded = [self._load_item(i) for i in indices]
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -74,3 +83,23 @@ class RespWindowDataset(Dataset):
                 "residual_quality_class": str(row.get("residual_quality_class", "")),
             },
         }
+
+
+def _preload_indices(
+    total: int,
+    *,
+    desc: str | None,
+    show_progress: bool | None,
+):
+    """预加载窗口时的可选进度包装；批量模式不创建 tqdm。"""
+    indices = range(int(total))
+    if not desc or not _should_show_preload_progress(show_progress):
+        return indices
+    return tqdm(indices, desc=desc, leave=False, disable=False)
+
+
+def _should_show_preload_progress(show_progress: bool | None) -> bool:
+    """与训练进度条一致：None 仅在交互式终端显示。"""
+    if show_progress is not None:
+        return bool(show_progress)
+    return sys.stderr.isatty()

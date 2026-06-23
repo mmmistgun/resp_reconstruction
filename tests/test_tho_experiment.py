@@ -132,6 +132,29 @@ def test_eval_checkpoint_with_metrics_writes_only_metrics(tmp_path: Path):
     assert not (tmp_path / "eval_predictions.npz").exists()
 
 
+def test_tho_experiment_logs_final_metric_summary(monkeypatch, tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.show_progress = True
+    seen_show_progress = []
+
+    def fake_evaluate_prediction_dict(preds, cfg_arg, *, method, show_progress=None):
+        seen_show_progress.append(show_progress)
+        return pd.DataFrame(
+            {
+                "rr_peak_band_abs_error": [0.2, 1.2, 2.5],
+                "envelope_corr": [0.5, 0.6, 0.7],
+            }
+        )
+
+    monkeypatch.setattr("resp_train.experiments.tho.evaluate_prediction_dict", fake_evaluate_prediction_dict)
+
+    run_dir = ThoExperiment(cfg).train()
+    log_text = (run_dir / "train.log").read_text(encoding="utf-8")
+
+    assert seen_show_progress == [True]
+    assert "metrics: n=3 rr_peak_band_abs_error mean=1.300000 median=1.200000 p95=2.370000 frac_gt_1=0.666667" in log_text
+
+
 def test_run_baseline_skips_when_disabled(monkeypatch, tmp_path: Path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
