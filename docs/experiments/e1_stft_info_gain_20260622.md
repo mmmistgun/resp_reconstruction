@@ -912,7 +912,7 @@ E2c `bandenergy dual` 聚合结果：
 gate：6 个 E2c run 的 `max_val_signed_corr` 最大值为 `0.221028`，未触发方向 gate 失败；
 补 seed 的劣化不是极性失败造成的。
 
-判定：E2c 补到 6 seed 后未过判定门。前 4 seed 的 `-0.90pp` 是弱正小样本信号，
+判定：E2c 补到 6 seed 后未过判定门。前 4 seed 的 `-0.90pp` 是弱改善的小样本信号（Δ 为负、改善侧），
 但补入 `20260911/20260920` 后变成 `Δfrac_gt_1=+0.50pp`，且 `20260920` 明显反向
 （`+5.46pp`）。因此不能收“分频带能量赢 fullband”，也不需要继续补 seed。E2c 作为
 B2-0 substrate 上的压缩表征探针被否决；E1-D concat-deep 仍是当前 patch 主线定稿配方。
@@ -970,8 +970,9 @@ E2b `bandgroup dual` 聚合结果：
 
 gate：6 个 E2b run 的 `max_val_signed_corr` 最大值为 `0.221730`，未触发方向 gate 失败。
 
-判定：E2b 比 E2c 稳，补到 6 seed 后仍保持弱正方向；但它没有达到“明显更负且 4/4 同向”的
-判定门，幅度也远弱于 E1-D/B1 的 `-2.23~-2.34pp`。因此不能收“bandgroup 赢 fullband”，
+判定：E2b 比 E2c 稳，补到 6 seed 后仍保持弱改善方向（`Δfrac_gt_1` 为负但幅度很小、4/6 seed
+为负，按“越低越好”口径是改善侧，不要误读成 E2c 那种 Δ 为正的变差）；但它没有达到“明显更负且
+4/4 同向”的判定门，幅度也远弱于 E1-D/B1 的 `-2.23~-2.34pp`。因此不能收“bandgroup 赢 fullband”，
 更合理的解读是：在 B2-0 `native_inject` substrate 上，频带分组先验至多带来很小边际收益，
 不足以进入当前 patch 主线。若后续仍想追 E2b，必须换到 E1-D concat-deep 强基线口径重跑
 `time_only/dual` 配对，而不是继续在 B2-0 上扩结构。
@@ -1086,7 +1087,7 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
    这说明旧通用融合路径可能在 patch 上提供了额外可用容量，不能假设“更原生的解码”一定更干净。
 3. 因此 **不继续 B2-1 gating**，除非先提出新的、能解释为何 gating 会弥补 B2-0 增益变弱的机制假设。
    当前默认回到 E1-D 定稿配方推进后续研究，而不是继续扩融合结构。E2c 补到 6 seed 后被否决；
-   E2b 补到 6 seed 后只有弱正（`Δfrac_gt_1=-0.60pp`、4/6 seed 为负），不足以作为现成重启入口。
+   E2b 补到 6 seed 后只有弱改善（`Δfrac_gt_1=-0.60pp`、4/6 seed 为负，幅度很小），不足以作为现成重启入口。
 4. 若以后重启融合优化，判定口径（强制）：每个新融合都跑 dual + time_only 两臂 × 多 seed，比较
    `(新融合 dual − 新融合 time_only)` 的 `Δf1` 是否比 concat 基准 `-2.34pp` 更负。
    **time_only 对照桩不可省**——它确保涨幅来自“更会用 STFT”而非“新结构在裸 backbone 上就更强”。
