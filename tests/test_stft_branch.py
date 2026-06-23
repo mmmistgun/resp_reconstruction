@@ -319,7 +319,11 @@ def test_dual_uses_stft_encoder_default_out_channels_when_missing():
     assert out.shape == (1, 1, 18000)
 
 
-def _native_dual(branch_mode: str, backbone: str = "patch_mixer1d") -> TimeStftDual1D:
+def _native_dual(
+    branch_mode: str,
+    backbone: str = "patch_mixer1d",
+    fusion_mode: str = "native_inject",
+) -> TimeStftDual1D:
     kwargs = (
         dict(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64, overlap_window="hann")
         if backbone == "patch_mixer1d"
@@ -337,7 +341,7 @@ def _native_dual(branch_mode: str, backbone: str = "patch_mixer1d") -> TimeStftD
             sample_rate=100.0, stft_win=3000, stft_hop=500, low_hz=0.05, high_hz=8.0,
             out_channels=16, norm="n0", encoder_type="conv2d",
         ),
-        fusion_mode="native_inject",
+        fusion_mode=fusion_mode,
     )
 
 
@@ -400,6 +404,32 @@ def test_native_inject_stft_encoder_learns_after_one_optimizer_step():
     model(x).square().mean().backward()
     stft_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_encoder.parameters())
     assert stft_grad
+
+
+def test_token_context_inject_dual_preserves_native_output_at_init():
+    model = _native_dual("dual", fusion_mode="token_context_inject")
+    model.eval()
+    x = torch.randn(2, 1, 18000)
+
+    with torch.no_grad():
+        dual_out = model(x)
+        tokens, length = model.time_backbone(x, return_features=True)
+        native = model.time_backbone.decode_from_features(tokens, length)
+
+    assert torch.allclose(dual_out, native, atol=1e-6)
+    assert model.stft_adapter is not None
+    assert model.stft_proj is None
+
+
+def test_token_context_inject_context_adapter_gets_first_step_gradient():
+    model = _native_dual("dual", fusion_mode="token_context_inject")
+    x = torch.randn(2, 1, 18000)
+
+    model(x).square().mean().backward()
+
+    adapter_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_adapter.parameters())
+    time_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.time_backbone.parameters())
+    assert adapter_grad and time_grad
 
 
 def test_native_inject_rejects_backbone_without_decode_from_features():
