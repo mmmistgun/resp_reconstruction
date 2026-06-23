@@ -44,6 +44,7 @@ CONFIG_FIELDS = [
     "name",
     "time_backbone",
     "branch_mode",
+    "fusion_mode",
     "fuse_len",
     "fusion_decoder",
     "stft_high_hz",
@@ -136,7 +137,20 @@ def collect(runs_roots: list[Path], thresholds: list[float], trim_frac: float) -
 
 def _config_group_keys(frame: pd.DataFrame) -> list[str]:
     """选出用于聚合的配置维度（去掉 seed，按配置对多 seed 求统计）。"""
-    return [key for key in ["time_backbone", "branch_mode", "fuse_len", "fusion_decoder", "stft_high_hz", "stft_norm"] if key in frame.columns]
+    return [
+        key
+        for key in [
+            "time_backbone",
+            "branch_mode",
+            "fusion_mode",
+            "fuse_len",
+            "fusion_decoder",
+            "stft_encoder_type",
+            "stft_high_hz",
+            "stft_norm",
+        ]
+        if key in frame.columns
+    ]
 
 
 def grouped_summary(frame: pd.DataFrame, thresholds: list[float]) -> pd.DataFrame:
@@ -202,8 +216,10 @@ def main() -> None:
         for col in [
             "time_backbone",
             "branch_mode",
+            "fusion_mode",
             "fuse_len",
             "fusion_decoder",
+            "stft_encoder_type",
             "seed",
             "n_windows",
             "mean",
