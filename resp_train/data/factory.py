@@ -131,8 +131,8 @@ def _build_window_bundle(
         dataset,
         batch_size=int(cfg.training.batch_size),
         shuffle=bool(shuffle),
-        num_workers=int(cfg.training.num_workers),
         pin_memory=_should_pin_memory(cfg),
+        **_dataloader_worker_options(cfg),
     )
     return WindowDataBundle(
         index_path=index_path,
@@ -168,6 +168,20 @@ def _should_pin_memory(cfg: DictConfig) -> bool:
     """CUDA 训练时启用 pinned memory，加速 CPU 到 GPU 的异步拷贝。"""
     device = str(cfg.training.get("device", "auto"))
     return device.startswith("cuda") or (device == "auto" and torch.cuda.is_available())
+
+
+def _dataloader_worker_options(cfg: DictConfig) -> dict[str, int | bool]:
+    """仅在多进程 DataLoader 下启用 worker 持久化和预取参数。"""
+    num_workers = int(cfg.training.get("num_workers", 0))
+    options: dict[str, int | bool] = {"num_workers": num_workers}
+    if num_workers <= 0:
+        return options
+
+    options["persistent_workers"] = bool(cfg.training.get("persistent_workers", False))
+    prefetch_factor = cfg.training.get("prefetch_factor", None)
+    if prefetch_factor is not None:
+        options["prefetch_factor"] = int(prefetch_factor)
+    return options
 
 
 def _preload_progress_enabled(cfg: DictConfig) -> bool:

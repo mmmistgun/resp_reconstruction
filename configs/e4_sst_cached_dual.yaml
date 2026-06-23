@@ -98,7 +98,9 @@ training:
   epochs: 50
   batch_size: 128
   learning_rate: 0.001
-  num_workers: 0
+  num_workers: 4
+  persistent_workers: true
+  prefetch_factor: 2
   seed: 20260700
   device: auto
   patience: 8

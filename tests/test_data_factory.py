@@ -136,6 +136,48 @@ def test_build_window_data_pins_memory_for_cuda_training(tmp_path: Path):
     assert bundle.loader.pin_memory is True
 
 
+def test_build_window_data_enables_worker_persistence_and_prefetch_when_multiprocess(tmp_path: Path):
+    root = _prepare_dataset(tmp_path)
+    cfg = _cfg(root)
+    cfg.training.num_workers = 2
+    cfg.training.persistent_workers = True
+    cfg.training.prefetch_factor = 3
+
+    bundle = build_window_data(
+        cfg,
+        split="train",
+        max_windows=cfg.data.max_train_windows,
+        sample_strategy=cfg.data.train_sample_strategy,
+        sample_seed=cfg.data.train_sample_seed,
+        shuffle=False,
+    )
+
+    assert bundle.loader.num_workers == 2
+    assert bundle.loader.persistent_workers is True
+    assert bundle.loader.prefetch_factor == 3
+
+
+def test_build_window_data_ignores_worker_only_options_when_single_process(tmp_path: Path):
+    root = _prepare_dataset(tmp_path)
+    cfg = _cfg(root)
+    cfg.training.num_workers = 0
+    cfg.training.persistent_workers = True
+    cfg.training.prefetch_factor = 3
+
+    bundle = build_window_data(
+        cfg,
+        split="train",
+        max_windows=cfg.data.max_train_windows,
+        sample_strategy=cfg.data.train_sample_strategy,
+        sample_seed=cfg.data.train_sample_seed,
+        shuffle=False,
+    )
+
+    assert bundle.loader.num_workers == 0
+    assert bundle.loader.persistent_workers is False
+    assert bundle.loader.prefetch_factor is None
+
+
 def test_build_tho_data_uses_independent_train_and_val_sampling(tmp_path: Path):
     root = _prepare_dataset(tmp_path)
     cfg = _cfg(root)
