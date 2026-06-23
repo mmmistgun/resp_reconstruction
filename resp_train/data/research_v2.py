@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 from torch.utils.data import Dataset
 
 from resp_train.data.cache import WholeNightCache
+from resp_train.data.dataset import _preload_indices
 
 _REQUIRED_COLUMNS = [
     "dataset_row_id",
@@ -50,6 +51,8 @@ class ResearchV2WindowDataset(Dataset):
         cfg: DictConfig,
         *,
         preload_windows: bool = False,
+        preload_progress_desc: str | None = None,
+        preload_show_progress: bool | None = None,
     ) -> None:
         self.index_csv_path = Path(index_csv_path)
         self.cfg = cfg
@@ -60,9 +63,22 @@ class ResearchV2WindowDataset(Dataset):
         self.target_cache = WholeNightCache(self.index_csv_path)
         if bool(cfg.data.get("drop_nonfinite_windows", True)):
             self.rows = self._drop_nonfinite_rows(self.rows)
+        # E4-SST：可选载入离线预计算的 SST 幅度谱缓存，按 dataset_row_id 注入 _load_item。
+        self._sst_cache: dict[int, np.ndarray] | None = None
+        sst_cache_path = cfg.data.get("sst_cache_path", None)
+        if sst_cache_path:
+            blob = np.load(str(sst_cache_path))
+            ids = blob["row_ids"].astype(np.int64)
+            sst = blob["sst"].astype(np.float32)
+            self._sst_cache = {int(r): sst[i] for i, r in enumerate(ids)}
         self._preloaded: list[dict[str, Any]] | None = None
         if preload_windows:
-            self._preloaded = [self._load_item(i) for i in range(len(self.rows))]
+            indices = _preload_indices(
+                len(self.rows),
+                desc=preload_progress_desc,
+                show_progress=preload_show_progress,
+            )
+            self._preloaded = [self._load_item(i) for i in indices]
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -95,7 +111,7 @@ class ResearchV2WindowDataset(Dataset):
             raise ValueError(f"窗口包含非有限值 row={row['dataset_row_id']}")
         rr_peak_valid_mask = self._rr_peak_valid_mask(row, start, end)
 
-        return {
+        item: dict[str, Any] = {
             "x": torch.from_numpy(x.copy()).view(1, -1),
             "target": torch.from_numpy(y.copy()).view(1, -1),
             "meta": {
@@ -110,6 +126,12 @@ class ResearchV2WindowDataset(Dataset):
                 "rr_peak_valid_mask": torch.from_numpy(rr_peak_valid_mask.copy()),
             },
         }
+        if self._sst_cache is not None:
+            row_id = int(row["dataset_row_id"])
+            if row_id not in self._sst_cache:
+                raise KeyError(f"SST 缓存缺少 dataset_row_id={row_id}，请确认预计算覆盖全量窗口")
+            item["sst"] = torch.from_numpy(self._sst_cache[row_id].copy())
+        return item
 
     def _rr_peak_valid_mask(self, row: pd.Series, start: int, end: int) -> np.ndarray:
         """从秒级质量 mask 展开到采样级，供 raw peak RR 指标避开坏段。"""

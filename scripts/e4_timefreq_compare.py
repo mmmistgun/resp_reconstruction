@@ -145,10 +145,42 @@ def render_window(
         "sep_sst": round(harmonic_separation_ratio(f_sst, m_sst, target_rr_hz), 3),
     }
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-    band = (0.0, 1.4)  # 画到 1.4Hz，覆盖基频 + 2× 谐波区
+    # 上排：BCG / tho 原始波形（全窗 + 前 30s 放大）；下排：STFT/CWT/SST 时频图到 8Hz。
+    fig, axes = plt.subplots(2, 3, figsize=(18, 9))
+    t_axis = np.arange(bcg.shape[0]) / FS
+
+    # --- 上排左：BCG 全窗 ---
+    ax = axes[0, 0]
+    ax.plot(t_axis, bcg, color="tab:blue", lw=0.4)
+    ax.set_title("BCG (full 180s)")
+    ax.set_xlabel("time (s)")
+    ax.set_ylabel("amp")
+    # --- 上排中：tho 全窗 ---
+    ax = axes[0, 1]
+    ax.plot(t_axis, tho, color="tab:red", lw=0.5)
+    ax.set_title("tho target (full 180s)")
+    ax.set_xlabel("time (s)")
+    ax.set_ylabel("amp")
+    # --- 上排右：前 30s BCG vs tho 叠加放大（看呼吸形态与心冲击纹理）---
+    ax = axes[0, 2]
+    zoom = t_axis <= 30.0
+
+    def _z(a):  # 归一化便于叠加比形态
+        a = a - a.mean()
+        s = a.std()
+        return a / s if s > 1e-8 else a
+
+    ax.plot(t_axis[zoom], _z(bcg[zoom]), color="tab:blue", lw=0.6, label="BCG")
+    ax.plot(t_axis[zoom], _z(tho[zoom]), color="tab:red", lw=1.0, label="tho")
+    ax.set_title("BCG vs tho (first 30s, z-norm)")
+    ax.set_xlabel("time (s)")
+    ax.set_ylabel("z")
+    ax.legend(loc="upper right", fontsize=7)
+
+    # --- 下排：三种时频图，频率轴到 8Hz（全频带，对齐训练 STFT 口径）---
+    band = (0.0, 8.0)
     for ax, (name, f, m, taxis) in zip(
-        axes,
+        axes[1],
         [
             ("STFT |X|", f_stft, m_stft, t_stft),
             ("CWT |W|", f_cwt, m_cwt, np.arange(m_cwt.shape[1]) / FS),
@@ -160,7 +192,7 @@ def render_window(
         if np.isfinite(target_rr_hz):
             ax.axhline(target_rr_hz, color="cyan", lw=1.0, ls="--", label="tho fundamental")
             ax.axhline(2 * target_rr_hz, color="lime", lw=1.0, ls=":", label="2x harmonic")
-        ax.set_title(name)
+        ax.set_title(f"{name} (to 8Hz)")
         ax.set_xlabel("time (s)")
         ax.set_ylabel("freq (Hz)")
         ax.set_ylim(*band)

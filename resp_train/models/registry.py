@@ -71,10 +71,20 @@ def _time_backbone_feat_channels(cfg: Any) -> int:
 def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
     band_scale_path = cfg.model.get("stft_band_scale_path", None)
     branch_mode = str(cfg.model.get("branch_mode", "dual")).lower()
+    encoder_type = str(cfg.model.get("stft_encoder_type", "conv1d")).lower()
     use_time = branch_mode in {"time_only", "dual"}
     use_stft = branch_mode in {"stft_only", "dual"}
-    stft_kwargs = (
-        {
+    if not use_stft:
+        stft_kwargs: dict = {}
+    elif encoder_type == "sst_cached":
+        # sst_cached 读离线缓存，不需要 STFT 参数；只传编码器需要的 in_freq/out_channels。
+        stft_kwargs = {
+            "encoder_type": "sst_cached",
+            "in_freq": int(cfg.model.get("stft_sst_in_freq", 159)),
+            "out_channels": int(cfg.model.get("stft_out_channels", 16)),
+        }
+    else:
+        stft_kwargs = {
             "sample_rate": float(cfg.window.get("target_fs", 100)),
             "stft_win": int(cfg.model.get("stft_win", 3000)),
             "stft_hop": int(cfg.model.get("stft_hop", 500)),
@@ -82,7 +92,7 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
             "high_hz": float(cfg.model.get("stft_high_hz", 3.0)),
             "out_channels": int(cfg.model.get("stft_out_channels", 16)),
             "norm": str(cfg.model.get("stft_norm", "n0")),
-            "encoder_type": str(cfg.model.get("stft_encoder_type", "conv1d")),
+            "encoder_type": encoder_type,
             "band_scale_path": str(band_scale_path) if band_scale_path else None,
             "energy_bands": (
                 [tuple(b) for b in cfg.model.get("stft_energy_bands")]
@@ -91,9 +101,6 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
             ),
             "band_group_f": int(cfg.model.get("stft_band_group_f", 32)),
         }
-        if use_stft
-        else {}
-    )
     return TimeStftDual1D(
         time_backbone_name=str(cfg.model.get("time_backbone", "patch_mixer1d")),
         time_backbone_kwargs=_time_backbone_kwargs(cfg) if use_time else {},

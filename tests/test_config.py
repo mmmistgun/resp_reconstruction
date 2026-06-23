@@ -97,3 +97,41 @@ def test_load_research_v2_config_has_expected_format():
     assert cfg.data.target_key == "target_waveform_segment_soft_z_key"
     assert cfg.data.stratify_column == "allowed_losses"
     assert cfg.loss.smooth_weight == 0.10
+
+
+def test_e4_experiment_presets_capture_sanity_and_sst_contracts():
+    sanity = load_config("configs/e4_fullband_sanity.yaml")
+    sst = load_config("configs/e4_sst_cached_dual.yaml")
+
+    for cfg in (sanity, sst):
+        assert cfg.data.max_train_windows is None
+        assert cfg.data.max_val_windows is None
+        assert cfg.data.train_sample_seed == 20260610
+        assert cfg.data.val_sample_seed == 20260611
+        assert cfg.loss.phase_alignment_weight == 0.0
+        assert cfg.training.epochs == 50
+        assert cfg.training.batch_size == 128
+        assert cfg.training.patience == 8
+        assert cfg.training.min_delta == 0.001
+        assert bool(cfg.training.show_progress) is False
+        assert cfg.training.checkpoint_gate.metric == "auto_direction"
+        assert cfg.training.checkpoint_gate.max == 0.5
+        assert cfg.model.name == "time_stft_dual1d"
+        assert cfg.model.time_backbone == "patch_mixer1d"
+        assert cfg.model.branch_mode == "dual"
+        assert cfg.model.fusion_mode == "native_inject"
+        assert cfg.model.stft_high_hz == 8.0
+        assert cfg.model.stft_out_channels == 16
+        assert cfg.model.stft_norm == "n0"
+
+    assert sanity.model.stft_encoder_type == "conv2d"
+    assert sanity.outputs.run_root == "runs/e4_fullband_sanity"
+    assert "sst_cache_path" not in sanity.data
+
+    assert sst.model.stft_encoder_type == "sst_cached"
+    assert sst.model.stft_sst_in_freq == 159
+    assert sst.data.sst_cache_path == "runs/sst_cache/sst_8hz_37f.npz"
+    assert sst.outputs.run_root == "runs/e4_sst_dual"
+    assert "stft_win" not in sst.model
+    assert "stft_hop" not in sst.model
+    assert "stft_low_hz" not in sst.model

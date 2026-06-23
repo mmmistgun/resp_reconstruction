@@ -108,6 +108,13 @@ def test_train_one_epoch_returns_positive_average_loss():
     assert summary["loss"] > 0
 
 
+def test_progress_description_includes_epoch_context():
+    from resp_train.engine.train import _progress_description
+
+    assert _progress_description("train", epoch=3, total_epochs=50) == "epoch 3/50 train"
+    assert _progress_description("val", epoch=None, total_epochs=None) == "val"
+
+
 def test_time_stft_dual1d_engine_smoke_trains_and_reloads_checkpoint(tmp_path):
     cfg = _time_stft_dual1d_cfg()
     loader = DataLoader(DictDataset(duration_samples=cfg.window.duration_samples), batch_size=2, shuffle=False)
@@ -274,3 +281,52 @@ def test_time_stft_dual1d_native_inject_forward_backward_and_state_roundtrip():
     fresh.eval()
     with torch.no_grad():
         assert torch.allclose(model(x), fresh(x), atol=1e-5)
+
+
+class _SSTDictDataset(Dataset):
+    """yield x/target/meta + 预计算 sst，模拟 E4-SST 数据流。"""
+
+    def __init__(self, duration_samples: int, in_freq: int = 8, n_frames: int = 5) -> None:
+        t = torch.linspace(0, 8 * torch.pi, int(duration_samples))
+        self.samples = []
+        for phase in (0.0, 0.3, 0.6, 0.9):
+            self.samples.append(
+                {
+                    "x": torch.sin(t + phase).unsqueeze(0).float(),
+                    "target": torch.cos(t + phase).unsqueeze(0).float(),
+                    "sst": torch.randn(in_freq, n_frames).float(),
+                }
+            )
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int) -> dict:
+        s = self.samples[idx]
+        return {"x": s["x"], "target": s["target"], "sst": s["sst"], "meta": {"dataset_row_id": idx}}
+
+
+def _sst_cached_cfg():
+    cfg = _time_stft_dual1d_cfg()
+    cfg.model.stft_encoder_type = "sst_cached"
+    cfg.model.stft_sst_in_freq = 8
+    cfg.model.fusion_mode = "native_inject"
+    return cfg
+
+
+def test_batch_sst_returns_none_without_sst_key():
+    from resp_train.engine.train import _batch_sst
+
+    assert _batch_sst({"x": torch.randn(1, 1, 8)}, torch.device("cpu")) is None
+
+
+def test_train_one_epoch_with_sst_cached_model():
+    cfg = _sst_cached_cfg()
+    loader = DataLoader(_SSTDictDataset(cfg.window.duration_samples), batch_size=2, shuffle=False)
+    model = build_model(cfg)
+    loss_fn = WeakSyncLoss(cfg)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    summary = train_one_epoch(model, loader, loss_fn, optimizer, torch.device("cpu"))
+
+    assert summary["loss"] > 0

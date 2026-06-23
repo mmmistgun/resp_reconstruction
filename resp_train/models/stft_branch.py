@@ -282,6 +282,35 @@ def _build_time_backbone(name: str, kwargs: dict) -> nn.Module:
     return builders[key](**dict(kwargs))
 
 
+class SSTCachedEncoder(nn.Module):
+    """读离线预计算的 SST 幅度谱缓存 (B, in_freq, T) → 轻量 conv2d 编码 → (B, out_channels, T)。
+
+    与 STFTEncoder 的 conv2d 分支同结构，但输入是缓存好的 log1p(|SST|)，不从波形现场算
+    （SST 单窗 ~357ms，必须离线）。输出契约与 conv1d/conv2d/bandgroup 一致。
+    """
+
+    def __init__(self, in_freq: int, out_channels: int = 16) -> None:
+        super().__init__()
+        self.in_freq = int(in_freq)
+        self.out_channels = int(out_channels)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, self.out_channels, kernel_size=3, padding=1),
+            nn.GroupNorm(1, self.out_channels),
+            nn.SiLU(),
+            nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
+            nn.SiLU(),
+        )
+
+    def forward(self, sst: torch.Tensor) -> torch.Tensor:
+        if sst.dim() != 3:
+            raise ValueError(f"SSTCachedEncoder 期望输入 (B, freq, T)，实际为 {tuple(sst.shape)}")
+        encoder_param = next(self.encoder.parameters(), None)
+        if encoder_param is not None:
+            sst = sst.to(dtype=encoder_param.dtype)
+        encoded = self.encoder(sst.unsqueeze(1))  # (B, out_ch, freq, T)
+        return encoded.mean(dim=2)  # (B, out_ch, T)
+
+
 class TimeStftDual1D(nn.Module):
     """时间域骨干与 STFT 编码器的轻量双分支包装器。"""
 
@@ -311,8 +340,21 @@ class TimeStftDual1D(nn.Module):
         use_time = mode in {"time_only", "dual"}
         use_stft = mode in {"stft_only", "dual"}
 
+        # encoder_type=sst_cached：STFT 分支改读离线 SST 缓存，不从波形现场算。
+        self.sst_cached = str(dict(stft_kwargs).get("encoder_type", "conv1d")).lower() == "sst_cached"
+        if self.sst_cached and self.fusion_mode != "native_inject":
+            raise ValueError("sst_cached 当前仅支持 fusion_mode=native_inject")
+
         self.time_backbone = _build_time_backbone(time_backbone_name, time_backbone_kwargs) if use_time else None
-        self.stft_encoder = STFTEncoder(**dict(stft_kwargs)) if use_stft else None
+        if not use_stft:
+            self.stft_encoder = None
+        elif self.sst_cached:
+            self.stft_encoder = SSTCachedEncoder(
+                in_freq=int(stft_kwargs["in_freq"]),
+                out_channels=int(stft_kwargs.get("out_channels", 16)),
+            )
+        else:
+            self.stft_encoder = STFTEncoder(**dict(stft_kwargs))
 
         if self.fusion_mode == "native_inject":
             # 原生解码融合：在 token 栅格把 STFT 加性注入主干特征，再走主干原生解码契约。
@@ -343,14 +385,19 @@ class TimeStftDual1D(nn.Module):
         )
         self.stft_proj = None
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, sst: torch.Tensor | None = None) -> torch.Tensor:
         if self.fusion_mode == "native_inject":
             time_feats, length = self.time_backbone(x, return_features=True)
             if self.stft_encoder is not None:
-                stft_feats = align_to_time(self.stft_encoder(x), time_feats.size(-1))
+                if self.sst_cached:
+                    if sst is None:
+                        raise ValueError("sst_cached 模式需要传入预计算 sst 张量 (B, freq, T)")
+                    branch_feats = self.stft_encoder(sst)
+                else:
+                    branch_feats = self.stft_encoder(x)
+                stft_feats = align_to_time(branch_feats, time_feats.size(-1))
                 # stft_proj 末层零初始化（标准 ReZero）：dual 在 init 时注入项为 0、输出等价原生解码。
-                # stft_proj.weight 首步即获非零梯度并离开零点，STFT encoder 从第二步起正常学习；
-                # 「首步延迟一步」是零初始化残差的标准无害行为，不额外修正。
+                # stft_proj.weight 首步即获非零梯度并离开零点，分支从第二步起正常学习。
                 time_feats = time_feats + self.stft_proj(stft_feats)
             return self.time_backbone.decode_from_features(time_feats, length)
 

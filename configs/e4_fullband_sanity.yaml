@@ -1,0 +1,123 @@
+data:
+  format: research_v2
+  dataset_root: /mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf
+  index_csv: training/dataset_index.csv
+  input_set: research_v2_waveform
+  train_split: train
+  val_split: val
+  target_task: waveform
+  bcg_input_key: bcg_rawish_segment_soft_z_key
+  target_key: target_waveform_segment_soft_z_key
+  max_train_windows: null
+  max_val_windows: null
+  filter_unusable: true
+  preload_windows: true
+  train_sample_strategy: stratified_random
+  val_sample_strategy: stratified_random
+  train_sample_seed: 20260610
+  val_sample_seed: 20260611
+  stratify_column: allowed_losses
+  min_hard_valid_ratio: 0.80
+  min_state_alignment_valid_ratio: 0.80
+
+window:
+  target_fs: 100
+  duration_samples: 18000
+  duration_sec: 180
+
+model:
+  name: time_stft_dual1d
+  in_channels: 1
+  out_channels: 1
+  time_backbone: patch_mixer1d
+  base_channels: 16
+  mixer_layers: 2
+  patch_len: 256
+  patch_stride: 128
+  overlap_window: hann
+  output_smoothing_kernel: 1
+  stft_win: 3000
+  stft_hop: 500
+  stft_low_hz: 0.05
+  stft_high_hz: 8.0
+  stft_out_channels: 16
+  stft_norm: n0
+  branch_mode: dual
+  fusion_mode: native_inject
+  stft_encoder_type: conv2d
+
+loss:
+  envelope_weight: 1.0
+  spectrum_weight: 0.2
+  smooth_weight: 0.10
+  high_freq_weight: 0.2
+  relative_envelope_weight: 0.03
+  phase_alignment_weight: 0.0
+  band_waveform_weight: 0.0
+  curvature_weight: 0.0
+  rhythm_weight: 0.0
+  signed_cosine_weight: 0.0
+  # E4 复用 E1-C/D 极性 warmup，避免反相 basin 污染频域表征对照。
+  signed_cosine_schedule:
+    mode: linear
+    start_epoch: 1
+    end_epoch: 6
+    start_weight: 0.1
+    end_weight: 0.0
+  signed_corr_weight: 0.2
+  signed_corr_schedule:
+    mode: linear
+    start_epoch: 1
+    end_epoch: 6
+    start_weight: 0.6
+    end_weight: 0.2
+  signed_rms_envelope_weight: 0.0
+  signed_mean_weight: 0.0
+  si_sdr_weight: 0.0
+  phase_alignment_zero_weight: 0.5
+  phase_alignment_lag_weight: 0.5
+  phase_alignment_lag_penalty_weight: 0.1
+  phase_alignment_max_sec: 0.5
+  phase_alignment_step_sec: 0.1
+  phase_alignment_temperature: 0.05
+  signed_env_temperature: 0.25
+  signed_mean_window_sec: 2.0
+  rhythm_min_period_sec: 2.0
+  rhythm_max_period_sec: 20.0
+  rhythm_step_sec: 0.25
+  rhythm_temperature: 0.08
+  envelope_window_sec: 2.0
+  spectrum_low_hz: 0.05
+  spectrum_high_hz: 0.7
+
+evaluation:
+  max_lag_sec: 1.0
+  lag_bandpass_order: 4
+
+training:
+  epochs: 50
+  batch_size: 128
+  learning_rate: 0.001
+  num_workers: 0
+  seed: 20260700
+  device: auto
+  patience: 8
+  min_delta: 0.001
+  lr_scheduler: none
+  grad_clip_norm: null
+  use_amp: false
+  show_progress: false
+  checkpoint_gate:
+    metric: auto_direction
+    min: null
+    max: 0.5
+
+baseline:
+  enabled: true
+  bandpass_low_hz: 0.05
+  bandpass_high_hz: 0.7
+  filter_order: 4
+
+outputs:
+  run_root: runs/e4_fullband_sanity
+  max_prediction_windows: 32

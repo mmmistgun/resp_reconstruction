@@ -22,6 +22,8 @@ def train_one_epoch(
     grad_clip_norm: float | None = None,
     use_amp: bool = False,
     show_progress: bool | None = None,
+    epoch: int | None = None,
+    total_epochs: int | None = None,
 ) -> dict[str, float]:
     """执行一个训练 epoch，并返回平均 loss 摘要。"""
     resolved_device = torch.device(device)
@@ -32,12 +34,18 @@ def train_one_epoch(
     meter = _LossMeter()
     non_blocking = resolved_device.type == "cuda"
 
-    progress = tqdm(dataloader, desc="train", leave=False, disable=not _should_show_progress(show_progress))
+    progress = tqdm(
+        dataloader,
+        desc=_progress_description("train", epoch=epoch, total_epochs=total_epochs),
+        leave=False,
+        disable=not _should_show_progress(show_progress),
+    )
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
+        sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
         optimizer.zero_grad(set_to_none=True)
         with torch.amp.autocast(resolved_device.type, enabled=amp_enabled):
-            pred = model(sensor)
+            pred = model(sensor, sst=sst) if sst is not None else model(sensor)
             loss, parts = loss_fn(pred, target)
         if amp_enabled:
             scaler.scale(loss).backward()
@@ -66,6 +74,8 @@ def validate(
     device: torch.device | str,
     *,
     show_progress: bool | None = None,
+    epoch: int | None = None,
+    total_epochs: int | None = None,
 ) -> dict[str, float]:
     """执行验证循环，并返回平均 loss 摘要。"""
     resolved_device = torch.device(device)
@@ -74,10 +84,16 @@ def validate(
     meter = _LossMeter()
     non_blocking = resolved_device.type == "cuda"
 
-    progress = tqdm(dataloader, desc="val", leave=False, disable=not _should_show_progress(show_progress))
+    progress = tqdm(
+        dataloader,
+        desc=_progress_description("val", epoch=epoch, total_epochs=total_epochs),
+        leave=False,
+        disable=not _should_show_progress(show_progress),
+    )
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
-        pred = model(sensor)
+        sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
+        pred = model(sensor, sst=sst) if sst is not None else model(sensor)
         loss, parts = loss_fn(pred, target)
         meter.update(loss, parts, batch_size=sensor.size(0))
         progress.set_postfix(loss=f"{meter.summary()['loss']:.4f}")
@@ -132,7 +148,8 @@ def collect_predictions(
         if "meta" not in batch:
             raise KeyError("batch 必须包含 meta")
         x = batch["x"].to(resolved_device, non_blocking=non_blocking)
-        pred = model(x).detach().cpu().numpy()
+        sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
+        pred = (model(x, sst=sst) if sst is not None else model(x)).detach().cpu().numpy()
         target = batch["target"].detach().cpu().numpy()
         preds.append(pred)
         targets.append(target)
@@ -196,11 +213,26 @@ def _move_batch(
     return sensor.to(device, non_blocking=non_blocking), target.to(device, non_blocking=non_blocking)
 
 
+def _batch_sst(batch: Mapping[str, torch.Tensor], device: torch.device, *, non_blocking: bool = False):
+    """E4-SST：若 batch 含预计算 sst 则搬到设备，否则返回 None（向后兼容，其它模型无此键）。"""
+    sst = batch.get("sst") if hasattr(batch, "get") else None
+    if sst is None:
+        return None
+    return sst.to(device, non_blocking=non_blocking)
+
+
 def _should_show_progress(show_progress: bool | None) -> bool:
     """默认只在交互式终端展示进度条，避免日志系统被 tqdm 刷屏。"""
     if show_progress is not None:
         return bool(show_progress)
     return sys.stderr.isatty()
+
+
+def _progress_description(phase: str, *, epoch: int | None, total_epochs: int | None) -> str:
+    """构造 tqdm 描述；有 epoch 上下文时把当前阶段写清楚。"""
+    if epoch is None or total_epochs is None:
+        return phase
+    return f"epoch {int(epoch)}/{int(total_epochs)} {phase}"
 
 
 class _LossMeter:

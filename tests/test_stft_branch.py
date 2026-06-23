@@ -483,3 +483,63 @@ def test_bandgroup_handles_zero_input_without_crash():
     enc = _band_group_encoder()
     out = enc(torch.zeros(1, 1, 18000))
     assert torch.isfinite(out).all()
+
+
+def _native_dual_sst(branch_mode: str, in_freq: int = 159) -> TimeStftDual1D:
+    return TimeStftDual1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(
+            in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64, overlap_window="hann"
+        ),
+        time_feat_channels=8,
+        branch_mode=branch_mode,
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs=dict(encoder_type="sst_cached", in_freq=in_freq, out_channels=16),
+        fusion_mode="native_inject",
+    )
+
+
+def test_sst_cached_encoder_output_contract():
+    from resp_train.models.stft_branch import SSTCachedEncoder
+
+    enc = SSTCachedEncoder(in_freq=159, out_channels=16)
+    feats = enc(torch.randn(2, 159, 37))
+    assert feats.shape == (2, 16, 37)  # (B,out_ch,T')，与 conv2d 契约一致
+
+
+def test_native_inject_sst_time_only_equals_native():
+    model = _native_dual_sst("time_only")
+    model.eval()
+    x = torch.randn(2, 1, 18000)
+    with torch.no_grad():
+        assert torch.equal(model(x), model.time_backbone(x))
+
+
+def test_native_inject_sst_dual_uses_cached_sst():
+    model = _native_dual_sst("dual")
+    x = torch.randn(2, 1, 18000)
+    sst = torch.randn(2, 159, 37)
+    out = model(x, sst=sst)
+    assert out.shape == (2, 1, 18000)
+    assert torch.isfinite(out).all()
+
+
+def test_native_inject_sst_dual_requires_sst():
+    model = _native_dual_sst("dual")
+    with pytest.raises((ValueError, TypeError)):
+        model(torch.randn(2, 1, 18000))  # 缺 sst 应报错
+
+
+def test_sst_cached_rejects_concat_generic():
+    with pytest.raises(ValueError, match="native_inject"):
+        TimeStftDual1D(
+            time_backbone_name="patch_mixer1d",
+            time_backbone_kwargs=dict(in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64),
+            time_feat_channels=8,
+            branch_mode="dual",
+            out_length=18000,
+            fuse_len=600,
+            stft_kwargs=dict(encoder_type="sst_cached", in_freq=159, out_channels=16),
+            fusion_mode="concat_generic",
+        )
