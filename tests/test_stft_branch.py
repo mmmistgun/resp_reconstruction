@@ -444,3 +444,42 @@ def test_bandenergy_handles_zero_input_without_crash():
     enc = _band_energy_encoder()
     out = enc(torch.zeros(1, 1, 18000))
     assert torch.isfinite(out).all()
+
+
+def _band_group_encoder(out_channels: int = 16, band_group_f: int = 32, energy_bands=None) -> STFTEncoder:
+    return STFTEncoder(
+        sample_rate=100.0, stft_win=3000, stft_hop=500, low_hz=0.05, high_hz=8.0,
+        out_channels=out_channels, norm="n0", encoder_type="bandgroup",
+        energy_bands=energy_bands, band_group_f=band_group_f,
+    )
+
+
+def test_bandgroup_output_is_3d_with_out_channels():
+    enc = _band_group_encoder(out_channels=16)
+    feats = enc(torch.randn(2, 1, 18000))
+    assert feats.dim() == 3
+    assert feats.shape[0] == 2
+    assert feats.shape[1] == 16  # = out_channels，与其它 encoder 契约一致
+
+
+def test_bandgroup_default_uses_five_bands():
+    enc = _band_group_encoder()
+    assert enc.band_group_count() == 5
+
+
+def test_bandgroup_custom_f_and_bands():
+    enc = _band_group_encoder(band_group_f=16, energy_bands=[(0.05, 0.7), (0.7, 8.0)])
+    assert enc.band_group_count() == 2
+    feats = enc(torch.randn(1, 1, 18000))
+    assert feats.shape[1] == 16
+
+
+def test_bandgroup_rejects_band_outside_range():
+    with pytest.raises(ValueError):
+        _band_group_encoder(energy_bands=[(0.05, 0.3), (3.0, 50.0)])
+
+
+def test_bandgroup_handles_zero_input_without_crash():
+    enc = _band_group_encoder()
+    out = enc(torch.zeros(1, 1, 18000))
+    assert torch.isfinite(out).all()

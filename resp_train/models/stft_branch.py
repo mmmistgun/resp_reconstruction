@@ -113,6 +113,7 @@ class STFTEncoder(nn.Module):
         band_scale_path: str | None = None,
         encoder_type: str = "conv1d",
         energy_bands: list[tuple[float, float]] | None = None,
+        band_group_f: int = 32,
     ) -> None:
         super().__init__()
         self.sample_rate = float(sample_rate)
@@ -123,6 +124,7 @@ class STFTEncoder(nn.Module):
         self.out_channels = int(out_channels)
         self.norm = str(norm).lower()
         self.encoder_type = str(encoder_type).lower()
+        self.band_group_f = int(band_group_f)
 
         if self.norm not in {"n0", "n1"}:
             raise ValueError(f"未知 norm={norm!r}，可选: n0, n1")
@@ -145,10 +147,11 @@ class STFTEncoder(nn.Module):
             band_scale = torch.ones(freq_bins, dtype=torch.float32)
         self.register_buffer("band_scale", band_scale, persistent=True)
 
-        # bandenergy 默认 5 个重叠频带（路线图 time_frequency_input_fusion_plan.md），
-        # 每带在裁剪后特征的相对 bin 切片上求均，得到 (B, n_bands, T) 能量序列。
+        # bandenergy/bandgroup 默认 5 个重叠频带（路线图 time_frequency_input_fusion_plan.md），
+        # bandenergy 带内求均→(B,n_bands,T)；bandgroup 带内保留频点、插值到公共 F→(B,n_bands,F,T)。
+        # 两者共用同一份频带 bin 切片（相对裁剪后特征坐标）。
         self.energy_slices: list[tuple[int, int]] = []
-        if self.encoder_type == "bandenergy":
+        if self.encoder_type in {"bandenergy", "bandgroup"}:
             bands = energy_bands or [(0.05, 0.3), (0.1, 0.7), (0.3, 1.2), (0.7, 3.0), (3.0, 8.0)]
             for lo, hi in bands:
                 if not (self.low_hz <= float(lo) < float(hi) <= self.high_hz):
@@ -188,13 +191,28 @@ class STFTEncoder(nn.Module):
                 nn.Conv1d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
                 nn.SiLU(),
             )
+        elif self.encoder_type == "bandgroup":
+            # 5 带堆成 (B, n_bands, F, T) → 共享 conv2d → 沿 F 求均 → (B, out_channels, T)。
+            # 仅引入「频带分组」单一变量：权重共享、参数≈conv2d，不丢带内频率结构。
+            self.encoder = nn.Sequential(
+                nn.Conv2d(len(self.energy_slices), self.out_channels, kernel_size=3, padding=1),
+                nn.GroupNorm(1, self.out_channels),
+                nn.SiLU(),
+                nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
+                nn.SiLU(),
+            )
         else:
-            raise ValueError(f"未知 encoder_type={encoder_type!r}，可选: conv1d, conv2d, bandenergy")
+            raise ValueError(
+                f"未知 encoder_type={encoder_type!r}，可选: conv1d, conv2d, bandenergy, bandgroup"
+            )
 
     def band_bin_count(self) -> int:
         return int(self.band_end - self.band_start)
 
     def energy_band_count(self) -> int:
+        return len(self.energy_slices)
+
+    def band_group_count(self) -> int:
         return len(self.energy_slices)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -228,6 +246,20 @@ class STFTEncoder(nn.Module):
             # 对每个重叠频带在 bin 维求均，得到 (B, n_bands, T) 能量序列再编码。
             energies = [features[:, s:e, :].mean(dim=1, keepdim=True) for (s, e) in self.energy_slices]
             return self.encoder(torch.cat(energies, dim=1))
+
+        if self.encoder_type == "bandgroup":
+            # 每带切片保留带内频点 → 沿频率轴插值到公共 F → 堆成 (B, n_bands, F, T)。
+            groups = []
+            for (s, e) in self.energy_slices:
+                band = features[:, s:e, :]  # (B, bins_i, T)
+                # 把频率放到最后一维做 1D 插值到 F，再换回 (B, F, T)。
+                band = F.interpolate(
+                    band.transpose(1, 2), size=self.band_group_f, mode="linear", align_corners=False
+                ).transpose(1, 2)  # (B, F, T)
+                groups.append(band.unsqueeze(1))  # (B, 1, F, T)
+            stacked = torch.cat(groups, dim=1)  # (B, n_bands, F, T)
+            encoded = self.encoder(stacked)  # (B, out_channels, F, T)
+            return encoded.mean(dim=2)  # 沿 F 求均 → (B, out_channels, T)
 
         encoded = self.encoder(features.unsqueeze(1))
         return encoded.mean(dim=2)

@@ -89,6 +89,7 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
                 if cfg.model.get("stft_energy_bands")
                 else None
             ),
+            "band_group_f": int(cfg.model.get("stft_band_group_f", 32)),
         }
         if use_stft
         else {}

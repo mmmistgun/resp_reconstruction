@@ -801,3 +801,24 @@ def test_build_time_stft_dual1d_bandenergy_native_inject_preserves_shape():
     assert y.shape == (2, 1, 18000)
     assert torch.isfinite(y).all()
     assert model.stft_encoder.energy_band_count() == 5
+
+
+def test_build_time_stft_dual1d_bandgroup_native_inject_preserves_shape():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": "time_stft_dual1d", "in_channels": 1, "out_channels": 1, "base_channels": 8,
+                "branch_mode": "dual", "time_backbone": "patch_mixer1d",
+                "patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "overlap_window": "hann",
+                "stft_win": 3000, "stft_hop": 500, "stft_low_hz": 0.05, "stft_high_hz": 8.0,
+                "stft_out_channels": 16, "stft_norm": "n0", "stft_encoder_type": "bandgroup",
+                "fusion_mode": "native_inject",
+            },
+        }
+    )
+    model = build_model(cfg)
+    y = model(torch.randn(2, 1, 18000))
+    assert y.shape == (2, 1, 18000)
+    assert torch.isfinite(y).all()
+    assert model.stft_encoder.band_group_count() == 5
