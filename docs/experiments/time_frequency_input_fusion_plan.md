@@ -331,6 +331,54 @@ E3-C0 对 B0 dual top1 checkpoint 做输入扰动诊断。3 个 run 均完成，
 3. E5：在 C1/C2 确认“哪个位置需要选择性 STFT 注入”后，再做 gated fusion。第一轮不建议
    直接上 cross-attention。
 
+E3-C1 的结论：
+
+E3-C1 固定 B0 输入口径（`conv2d fullband 8Hz`、`patch_mixer1d`、3 个探索 seed），
+比较 `concat_generic` 后融合和 `native_inject` token 级注入位置。由于 `concat_generic`
+和 `native_inject` 不是同一 substrate，C1 只按各自配对的 time-only 解释，不直接横向比较
+绝对分数。
+
+| arm | paired substrate | rr_peak_band_abs_error delta | rr_spec_abs_error delta | relative_envelope_corr delta | band_limited_corr delta | best_lag_corr delta | 判断 |
+|---|---|---:|---:|---:|---:|---:|---|
+| C1A concat post-fusion | C1S concat time-only | -0.1146 ± 0.1086 | -0.0122 ± 0.0184 | +0.0219 ± 0.0131 | +0.0243 ± 0.0066 | +0.0281 ± 0.0026 | STFT 明确有增益，与 B0/C0 连续 |
+| C1B token pre-mixer | C1T native time-only | -0.0507 ± 0.0395 | -0.0155 ± 0.0216 | +0.0082 ± 0.0024 | +0.0017 ± 0.0003 | +0.0013 ± 0.0008 | 主候选，3/3 seed 的 peak-band RR 改善 |
+| C1C token mid-mixer | C1T native time-only | -0.0037 ± 0.0603 | -0.0495 ± 0.0186 | +0.0119 ± 0.0024 | +0.0030 ± 0.0018 | +0.0036 ± 0.0013 | 相关性和 rr_spec 候选，但 peak-band RR 不稳 |
+| C1D token post-mixer | C1T native time-only | +0.0027 ± 0.0558 | +0.0131 ± 0.0310 | -0.0019 ± 0.0056 | -0.0020 ± 0.0019 | -0.0006 ± 0.0013 | 暂停，不作为后续主线 |
+
+C1 的主要发现：
+
+- `native_inject` substrate 本身明显强于 concat substrate，因此后续所有 native 注入实验必须继续
+  配对 `native_time_only`，不能只和 concat/B0 baseline 比绝对分数。
+- `token_pre_mixer` 是当前最稳的注入位置：主护栏 `rr_peak_band_abs_error` 在 3 个 seed 上均改善，
+  适合进入下一步机制诊断。
+- `token_mid_mixer` 对 `rr_spec_abs_error`、`relative_envelope_corr`、`best_lag_corr` 更有吸引力，
+  但 peak-band RR 不稳定；它应作为 C2 诊断候选，而不是立即替代 C1B。
+- `token_post_mixer` 基本无收益，说明把 STFT 作为解码前的晚期 token 修正不足以稳定利用时频信息。
+- C1 当前不需要先补 topK：各 run 的 top3 val loss spread 最大约 0.0045（不到 0.75%），且
+  E3-B 的 topK 复核没有推翻 B0/B1/B2 的方向。topK 可作为最终收口复核，但不是进入 C2 的前置条件。
+
+E3-C2 要回答的问题：
+
+C2 不是继续扩 seed 或按整体均值重新选模型，而是做“分层贡献诊断”。它要判断 STFT 的收益来自哪些
+窗口，以及 C1B/C1C 的差异是否对应不同失败模式。
+
+第一轮 C2 范围：
+
+- 必选：`C1B token_pre_mixer`、`C1C token_mid_mixer`、`C1T native_time_only`。
+- 可选：`C1A concat_post_fusion`，用于和 B0/C0 保持连续性。
+- 暂不纳入：`C1D token_post_mixer`，除非后续需要负对照。
+
+C2 的两类诊断：
+
+- 输入扰动：对 native 注入路径补 `stft_zero`、`stft_shuffle_time`、必要时 `time_zero`，
+  检查 C1B/C1C 是否真的依赖 STFT，以及依赖是否仍主要来自时间对齐。
+- 分层汇总：按 baseline 成功/失败窗口、`rr_peak_valid_ratio`、`band_limited_corr`、
+  `spectrum_similarity` 和 target RR 档位，比较 dual - time-only 或 normal - ablated 的 delta。
+
+C2 完成后再决定是否进入 E5 gated fusion：如果 STFT 只在特定窗口或特定失败模式中有收益，
+E5 应优先做 gated/conditional fusion；如果 C2 显示收益均匀且 pre-mixer 稳定，则可以先收敛到
+更简单的 native pre-mixer 主线，不急于上 cross-attention。
+
 ### E4：CWT / SST 候选验证
 
 进入条件：
@@ -517,20 +565,23 @@ signed_corr 等多项加权复合，不是单纯波形 MSE。为保证 val loss 
 ## 当前建议
 
 早期 E0/E1 的核心作用是建立纯时序参照、确认 STFT 输入有可重复信息增益。当前已经有
-E3-A0/B/C0 证据表明：
+E3-A0/B/C0/C1 证据表明：
 
 - `conv2d fullband 8Hz + concat_generic + deep + fuse_len600` 是当前最强、最清楚的 STFT
   融合参照。
 - 可学习前端 B1/B2 暂时没有超过 B0，不应继续扩 seed。
 - STFT 分支被模型实际使用，尤其依赖时间对齐；但它对 peak-band RR 不是单调正贡献。
+- `native_inject` substrate 本身强于 concat substrate；native 注入实验必须配对
+  `native_time_only` 解释。
+- `token_pre_mixer` 是当前最稳的 native STFT 注入位置，`token_mid_mixer` 可作为相关性和
+  `rr_spec_abs_error` 诊断候选，`token_post_mixer` 暂停。
 
 因此下一步不建议立刻扩大可学习前端，也不建议直接进入 E5 的复杂 gated/cross-attention。
 更合理的顺序是：
 
-1. E3-C1：做融合/注入位置消融，固定 B0 输入、训练和评价口径，只改变 STFT 特征进入主干的位置。
-2. E3-C2：做分层贡献诊断，确认 STFT 到底改善哪些窗口，尤其是 baseline 失败窗口、低置信窗口
+1. E3-C2：做分层贡献诊断，确认 STFT 到底改善哪些窗口，尤其是 baseline 失败窗口、低置信窗口
    和低频相关弱窗口。
-3. E5：如果 C1/C2 显示 STFT 贡献集中在特定窗口或特定位置，再做 gated fusion，让模型按窗口
+2. E5：如果 C2 显示 STFT 贡献集中在特定窗口或特定位置，再做 gated fusion，让模型按窗口
    选择是否注入 STFT；cross-attention 继续后置。
 
 高频心冲击信息仍值得验证，尤其可能反映心肺耦合；但专业上不能默认更宽频带一定更好。
