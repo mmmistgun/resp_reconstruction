@@ -396,6 +396,7 @@ class TimeStftDual1D(nn.Module):
         fusion_hidden: int = 16,
         fusion_decoder: str = "deep",
         fusion_mode: str = "concat_generic",
+        stft_inject_position: str = "post_mixer",
     ) -> None:
         super().__init__()
         mode = str(branch_mode).lower()
@@ -405,6 +406,7 @@ class TimeStftDual1D(nn.Module):
         self.branch_mode = mode
         self.fuse_len = int(fuse_len)
         self.fusion_mode = str(fusion_mode).lower()
+        self.stft_inject_position = str(stft_inject_position).lower()
         if self.fusion_mode not in {"concat_generic", "native_inject", "token_context_inject"}:
             raise ValueError("fusion_mode 必须是 concat_generic、native_inject 或 token_context_inject")
         use_time = mode in {"time_only", "dual"}
@@ -433,6 +435,7 @@ class TimeStftDual1D(nn.Module):
                 raise ValueError(
                     f"{self.fusion_mode} 仅支持暴露 decode_from_features 的主干（当前仅 patch_mixer1d）"
                 )
+            self._validate_stft_inject_position()
             self.fusion_head = None
             if use_stft:
                 if self.fusion_mode == "native_inject":
@@ -475,21 +478,17 @@ class TimeStftDual1D(nn.Module):
 
     def forward(self, x: torch.Tensor, sst: torch.Tensor | None = None) -> torch.Tensor:
         if self.fusion_mode in {"native_inject", "token_context_inject"}:
-            time_feats, length = self.time_backbone(x, return_features=True)
+            self._validate_stft_inject_position()
             if self.stft_encoder is not None:
-                if self.sst_cached:
-                    if sst is None:
-                        raise ValueError("sst_cached 模式需要传入预计算 sst 张量 (B, freq, T)")
-                    branch_feats = self.stft_encoder(sst)
-                else:
-                    branch_feats = self.stft_encoder(x)
-                stft_feats = align_to_time(branch_feats, time_feats.size(-1))
-                if self.fusion_mode == "native_inject":
-                    # stft_proj 末层零初始化（标准 ReZero）：dual 在 init 时注入项为 0、输出等价原生解码。
-                    # stft_proj.weight 首步即获非零梯度并离开零点，分支从第二步起正常学习。
-                    time_feats = time_feats + self.stft_proj(stft_feats)
-                else:
-                    time_feats = time_feats + self.stft_adapter(stft_feats)
+                target_tokens = self.time_backbone.token_count_for_length(x.size(-1))
+                stft_feats = self._encode_stft_features(x, sst, target_len=target_tokens)
+                token_delta = self._project_stft_features(stft_feats)
+                return self.time_backbone.forward_with_token_injection(
+                    x,
+                    token_delta,
+                    inject_position=self.stft_inject_position,
+                )
+            time_feats, length = self.time_backbone(x, return_features=True)
             return self.time_backbone.decode_from_features(time_feats, length)
 
         features: list[torch.Tensor] = []
@@ -499,3 +498,31 @@ class TimeStftDual1D(nn.Module):
         if self.stft_encoder is not None:
             features.append(align_to_time(self.stft_encoder(x), self.fuse_len))
         return self.fusion_head(torch.cat(features, dim=1))
+
+    def _validate_stft_inject_position(self) -> None:
+        if self.stft_inject_position not in {"pre_mixer", "mid_mixer", "post_mixer"}:
+            raise ValueError(
+                "stft_inject_position 必须是 pre_mixer、mid_mixer 或 post_mixer，"
+                f"当前为: {self.stft_inject_position}"
+            )
+
+    def _encode_stft_features(
+        self,
+        x: torch.Tensor,
+        sst: torch.Tensor | None,
+        target_len: int,
+    ) -> torch.Tensor:
+        if self.sst_cached:
+            if sst is None:
+                raise ValueError("sst_cached 模式需要传入预计算 sst 张量 (B, freq, T)")
+            branch_feats = self.stft_encoder(sst)
+        else:
+            branch_feats = self.stft_encoder(x)
+        return align_to_time(branch_feats, int(target_len))
+
+    def _project_stft_features(self, stft_feats: torch.Tensor) -> torch.Tensor:
+        if self.fusion_mode == "native_inject":
+            # stft_proj 零初始化（标准 ReZero）：dual 在 init 时注入项为 0、输出等价原生解码。
+            # stft_proj.weight 首步即获非零梯度并离开零点，分支从第二步起正常学习。
+            return self.stft_proj(stft_feats)
+        return self.stft_adapter(stft_feats)

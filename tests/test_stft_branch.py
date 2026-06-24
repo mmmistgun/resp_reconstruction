@@ -370,6 +370,40 @@ def test_native_inject_dual_equals_time_only_at_init_due_to_zero_proj():
     assert torch.allclose(dual_out, native, atol=1e-6)
 
 
+@pytest.mark.parametrize("position", ["pre_mixer", "mid_mixer", "post_mixer"])
+def test_native_inject_position_dual_preserves_native_output_at_init(position):
+    model = _native_dual("dual")
+    model.stft_inject_position = position
+    model.eval()
+    x = torch.randn(2, 1, 18000)
+
+    with torch.no_grad():
+        dual_out = model(x)
+        tokens, length = model.time_backbone(x, return_features=True)
+        native = model.time_backbone.decode_from_features(tokens, length)
+
+    assert torch.allclose(dual_out, native, atol=1e-6)
+
+
+@pytest.mark.parametrize("position", ["pre_mixer", "mid_mixer", "post_mixer"])
+def test_native_inject_position_proj_gets_first_step_gradient(position):
+    model = _native_dual("dual")
+    model.stft_inject_position = position
+    x = torch.randn(2, 1, 18000)
+
+    model(x).square().mean().backward()
+
+    proj_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_proj.parameters())
+    assert proj_grad
+
+
+def test_native_inject_rejects_unknown_position():
+    model = _native_dual("dual")
+    model.stft_inject_position = "unknown"
+    with pytest.raises(ValueError, match="stft_inject_position"):
+        model(torch.randn(2, 1, 18000))
+
+
 def test_native_inject_dual_connects_both_branches_to_graph():
     """两分支都接进计算图。
 

@@ -138,6 +138,8 @@ class PatchMixerBlock(nn.Module):
 class PatchMixer1D(nn.Module):
     """将长窗口切成 patch 后混合，再折回原长度。"""
 
+    _TOKEN_INJECT_POSITIONS = {"pre_mixer", "mid_mixer", "post_mixer"}
+
     def __init__(
         self,
         in_channels: int = 1,
@@ -170,6 +172,19 @@ class PatchMixer1D(nn.Module):
             self.output_smoother = nn.Identity()
 
     def forward(self, x: torch.Tensor, return_features: bool = False) -> torch.Tensor | tuple[torch.Tensor, int]:
+        tokens, length = self.encode_tokens(x)
+        if return_features:
+            return tokens, length
+        return self.decode_from_features(tokens, length)
+
+    def encode_tokens(
+        self,
+        x: torch.Tensor,
+        token_injection: torch.Tensor | None = None,
+        inject_position: str = "post_mixer",
+    ) -> tuple[torch.Tensor, int]:
+        """编码为 patch token；可选在指定位置注入外部分支特征。"""
+
         batch, _, length = x.shape
         padded_length = self._padded_length(length)
         x_padded = _match_length(x, padded_length)
@@ -177,11 +192,61 @@ class PatchMixer1D(nn.Module):
         patch_count = patches.size(2)
         tokens = patches.permute(0, 2, 1, 3).reshape(batch, patch_count, -1)
         tokens = self.patch_embed(tokens).transpose(1, 2)
-        for block in self.blocks:
-            tokens = block(tokens)
-        if return_features:
-            return tokens, length
+        tokens = self._apply_token_injection(tokens, token_injection, inject_position)
+        return tokens, length
+
+    def forward_with_token_injection(
+        self,
+        x: torch.Tensor,
+        token_injection: torch.Tensor,
+        inject_position: str = "post_mixer",
+    ) -> torch.Tensor:
+        """在 patch token 栅格注入外部分支特征后，复用原生解码路径。"""
+
+        tokens, length = self.encode_tokens(x, token_injection=token_injection, inject_position=inject_position)
         return self.decode_from_features(tokens, length)
+
+    def token_count_for_length(self, length: int) -> int:
+        padded_length = self._padded_length(int(length))
+        return (padded_length - self.patch_len) // self.patch_stride + 1
+
+    def _apply_token_injection(
+        self,
+        tokens: torch.Tensor,
+        token_injection: torch.Tensor | None,
+        inject_position: str,
+    ) -> torch.Tensor:
+        if token_injection is None:
+            for block in self.blocks:
+                tokens = block(tokens)
+            return tokens
+
+        position = str(inject_position).lower()
+        if position not in self._TOKEN_INJECT_POSITIONS:
+            raise ValueError(
+                "stft_inject_position 必须是 pre_mixer、mid_mixer 或 post_mixer，"
+                f"当前为: {inject_position}"
+            )
+        if token_injection.shape != tokens.shape:
+            raise ValueError(
+                "token_injection 形状必须与 patch token 一致，"
+                f"tokens={tuple(tokens.shape)} injection={tuple(token_injection.shape)}"
+            )
+
+        if position == "pre_mixer":
+            tokens = tokens + token_injection
+
+        mid_after = max(1, len(self.blocks) // 2) if self.blocks else 0
+        for idx, block in enumerate(self.blocks, start=1):
+            tokens = block(tokens)
+            if position == "mid_mixer" and idx == mid_after:
+                tokens = tokens + token_injection
+
+        if position == "mid_mixer" and not self.blocks:
+            tokens = tokens + token_injection
+        if position == "post_mixer":
+            tokens = tokens + token_injection
+        return tokens
 
     def decode_from_features(self, tokens: torch.Tensor, length: int) -> torch.Tensor:
         """把 (B, base_channels, T') token 特征经原生 patch_head + overlap-add 解码回 (B, out_channels, length)。
