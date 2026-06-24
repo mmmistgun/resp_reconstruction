@@ -147,12 +147,25 @@ class STFTEncoder(nn.Module):
             band_scale = torch.ones(freq_bins, dtype=torch.float32)
         self.register_buffer("band_scale", band_scale, persistent=True)
 
-        # bandenergy/bandgroup 默认 5 个重叠频带（路线图 time_frequency_input_fusion_plan.md），
-        # bandenergy 带内求均→(B,n_bands,T)；bandgroup 带内保留频点、插值到公共 F→(B,n_bands,F,T)。
-        # 两者共用同一份频带 bin 切片（相对裁剪后特征坐标）。
+        self.freq_mlp: nn.Module | None = None
+        self.soft_band_logits: nn.Parameter | None = None
+
+        # bandenergy/bandgroup/soft_band 默认 5 个重叠频带（路线图 time_frequency_input_fusion_plan.md）。
+        # bandenergy 带内求均；bandgroup 保留带内频点；soft_band 用同一频带初始化可学习权重。
+        # 三者共用同一份频带 bin 切片（相对裁剪后特征坐标）。
         self.energy_slices: list[tuple[int, int]] = []
-        if self.encoder_type in {"bandenergy", "bandgroup"}:
-            bands = energy_bands or [(0.05, 0.3), (0.1, 0.7), (0.3, 1.2), (0.7, 3.0), (3.0, 8.0)]
+        if self.encoder_type in {"bandenergy", "bandgroup", "soft_band"}:
+            if energy_bands is None:
+                default_bands = [(0.05, 0.3), (0.1, 0.7), (0.3, 1.2), (0.7, 3.0), (3.0, 8.0)]
+                # 默认频带随当前 STFT 频率窗口裁剪；显式 energy_bands 仍保持严格校验。
+                bands = []
+                for lo, hi in default_bands:
+                    clipped_lo = max(float(lo), self.low_hz)
+                    clipped_hi = min(float(hi), self.high_hz)
+                    if clipped_lo < clipped_hi:
+                        bands.append((clipped_lo, clipped_hi))
+            else:
+                bands = energy_bands
             for lo, hi in bands:
                 if not (self.low_hz <= float(lo) < float(hi) <= self.high_hz):
                     raise ValueError(
@@ -165,6 +178,8 @@ class STFTEncoder(nn.Module):
                 if rel_end <= rel_start:
                     raise ValueError(f"energy_band ({lo},{hi}) 在当前 STFT 分辨率下 bin 切片为空")
                 self.energy_slices.append((rel_start, rel_end))
+            if not self.energy_slices:
+                raise ValueError("当前 STFT 频率窗口内没有可用 energy_band")
 
         if self.encoder_type == "conv1d":
             self.encoder = nn.Sequential(
@@ -180,6 +195,24 @@ class STFTEncoder(nn.Module):
                 nn.GroupNorm(1, self.out_channels),
                 nn.SiLU(),
                 nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
+                nn.SiLU(),
+            )
+        elif self.encoder_type == "freq_mlp":
+            # 每个 STFT 帧独立沿频率维做 MLP mixing，再交给 Conv1d 处理时间上下文。
+            # 末层零初始化 + 残差连接，使初始状态接近 conv1d fullband。
+            self.freq_mlp = nn.Sequential(
+                nn.Linear(freq_bins, freq_bins),
+                nn.SiLU(),
+                nn.Linear(freq_bins, freq_bins),
+            )
+            last = self.freq_mlp[-1]
+            nn.init.zeros_(last.weight)
+            nn.init.zeros_(last.bias)
+            self.encoder = nn.Sequential(
+                nn.Conv1d(freq_bins, self.out_channels, kernel_size=3, padding=1),
+                nn.GroupNorm(1, self.out_channels),
+                nn.SiLU(),
+                nn.Conv1d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
                 nn.SiLU(),
             )
         elif self.encoder_type == "bandenergy":
@@ -201,9 +234,24 @@ class STFTEncoder(nn.Module):
                 nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
                 nn.SiLU(),
             )
+        elif self.encoder_type == "soft_band":
+            # 每个 band 是覆盖全频段的 softmax 权重；初始 logits 让权重集中在原硬频带内。
+            # 训练可学习频带边界和形状，同时输出契约保持 (B, out_channels, T)。
+            init_logits = torch.full((len(self.energy_slices), freq_bins), -8.0, dtype=torch.float32)
+            for idx, (rel_start, rel_end) in enumerate(self.energy_slices):
+                init_logits[idx, rel_start:rel_end] = 0.0
+            self.soft_band_logits = nn.Parameter(init_logits)
+            self.encoder = nn.Sequential(
+                nn.Conv1d(len(self.energy_slices), self.out_channels, kernel_size=3, padding=1),
+                nn.GroupNorm(1, self.out_channels),
+                nn.SiLU(),
+                nn.Conv1d(self.out_channels, self.out_channels, kernel_size=3, padding=1),
+                nn.SiLU(),
+            )
         else:
             raise ValueError(
-                f"未知 encoder_type={encoder_type!r}，可选: conv1d, conv2d, bandenergy, bandgroup"
+                "未知 encoder_type="
+                f"{encoder_type!r}，可选: conv1d, conv2d, bandenergy, bandgroup, freq_mlp, soft_band"
             )
 
     def band_bin_count(self) -> int:
@@ -214,6 +262,17 @@ class STFTEncoder(nn.Module):
 
     def band_group_count(self) -> int:
         return len(self.energy_slices)
+
+    def freq_mlp_bin_count(self) -> int:
+        return self.band_bin_count() if self.freq_mlp is not None else 0
+
+    def soft_band_count(self) -> int:
+        return 0 if self.soft_band_logits is None else int(self.soft_band_logits.shape[0])
+
+    def soft_band_weights(self) -> torch.Tensor:
+        if self.soft_band_logits is None:
+            raise RuntimeError("soft_band_weights 仅在 encoder_type=soft_band 时可用")
+        return torch.softmax(self.soft_band_logits, dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() != 3 or x.size(1) != 1:
@@ -242,6 +301,12 @@ class STFTEncoder(nn.Module):
         if self.encoder_type == "conv1d":
             return self.encoder(features)
 
+        if self.encoder_type == "freq_mlp":
+            assert self.freq_mlp is not None
+            mixed = features.transpose(1, 2)
+            mixed = mixed + self.freq_mlp(mixed)
+            return self.encoder(mixed.transpose(1, 2))
+
         if self.encoder_type == "bandenergy":
             # 对每个重叠频带在 bin 维求均，得到 (B, n_bands, T) 能量序列再编码。
             energies = [features[:, s:e, :].mean(dim=1, keepdim=True) for (s, e) in self.energy_slices]
@@ -260,6 +325,11 @@ class STFTEncoder(nn.Module):
             stacked = torch.cat(groups, dim=1)  # (B, n_bands, F, T)
             encoded = self.encoder(stacked)  # (B, out_channels, F, T)
             return encoded.mean(dim=2)  # 沿 F 求均 → (B, out_channels, T)
+
+        if self.encoder_type == "soft_band":
+            weights = self.soft_band_weights().to(device=features.device, dtype=features.dtype)
+            bands = torch.einsum("bft,nf->bnt", features, weights)
+            return self.encoder(bands)
 
         encoded = self.encoder(features.unsqueeze(1))
         return encoded.mean(dim=2)

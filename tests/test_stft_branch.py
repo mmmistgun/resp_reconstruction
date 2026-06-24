@@ -17,7 +17,7 @@ def _encoder(high_hz: float, encoder_type: str = "conv1d") -> STFTEncoder:
     )
 
 
-@pytest.mark.parametrize("encoder_type", ["conv1d", "conv2d"])
+@pytest.mark.parametrize("encoder_type", ["conv1d", "conv2d", "freq_mlp", "soft_band"])
 def test_stft_encoder_output_is_3d_time_series(encoder_type):
     enc = _encoder(3.0, encoder_type)
     x = torch.randn(2, 1, 18000)
@@ -513,6 +513,31 @@ def test_bandgroup_handles_zero_input_without_crash():
     enc = _band_group_encoder()
     out = enc(torch.zeros(1, 1, 18000))
     assert torch.isfinite(out).all()
+
+
+def test_freq_mlp_mixes_frequency_bins_before_time_encoding():
+    enc = STFTEncoder(
+        sample_rate=100.0, stft_win=3000, stft_hop=500, low_hz=0.05, high_hz=8.0,
+        out_channels=16, norm="n0", encoder_type="freq_mlp",
+    )
+
+    assert enc.encoder_type == "freq_mlp"
+    assert enc.freq_mlp_bin_count() == enc.band_bin_count()
+    assert enc.freq_mlp is not None
+    assert enc.freq_mlp[0].in_features == enc.band_bin_count()
+
+
+def test_soft_band_defaults_to_five_learnable_bands_initialized_from_overlaps():
+    enc = STFTEncoder(
+        sample_rate=100.0, stft_win=3000, stft_hop=500, low_hz=0.05, high_hz=8.0,
+        out_channels=16, norm="n0", encoder_type="soft_band",
+    )
+
+    weights = enc.soft_band_weights()
+    assert enc.soft_band_count() == 5
+    assert weights.shape == (5, enc.band_bin_count())
+    assert torch.allclose(weights.sum(dim=1), torch.ones(5), atol=1e-5)
+    assert torch.isfinite(weights).all()
 
 
 def _native_dual_sst(branch_mode: str, in_freq: int = 159) -> TimeStftDual1D:

@@ -8,6 +8,7 @@ BATCH_MODULES = [
     "scripts.run_e2b_band_group",
     "scripts.run_e2c_band_energy",
     "scripts.run_e3_a0_probe",
+    "scripts.run_e3_b_probe",
     "scripts.run_e4_sst_probe",
 ]
 

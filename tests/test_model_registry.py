@@ -628,6 +628,42 @@ def test_build_time_stft_dual1d_uses_stft_encoder_type_field():
     assert model.stft_encoder.encoder_type == "conv2d"
 
 
+@pytest.mark.parametrize("encoder_type", ["freq_mlp", "soft_band"])
+def test_build_time_stft_dual1d_frequency_frontend_encoder_types(encoder_type):
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                "branch_mode": "dual",
+                "time_backbone": "patch_mixer1d",
+                "patch_len": 128,
+                "patch_stride": 64,
+                "mixer_layers": 1,
+                "stft_win": 512,
+                "stft_hop": 128,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 3.0,
+                "stft_out_channels": 16,
+                "stft_norm": "n0",
+                "stft_encoder_type": encoder_type,
+                "fuse_len": 128,
+                "fusion_mode": "concat_generic",
+            },
+        }
+    )
+
+    model = build_model(cfg)
+    y = model(torch.randn(1, 1, 4096))
+
+    assert model.stft_encoder.encoder_type == encoder_type
+    assert y.shape == (1, 1, 4096)
+    assert torch.isfinite(y).all()
+
+
 def test_build_time_stft_dual1d_uses_fusion_decoder_field():
     cfg = OmegaConf.create(
         {
