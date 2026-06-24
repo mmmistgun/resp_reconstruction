@@ -96,6 +96,7 @@ def test_load_research_v2_config_has_expected_format():
     assert cfg.data.bcg_input_key == "bcg_rawish_segment_soft_z_key"
     assert cfg.data.target_key == "target_waveform_segment_soft_z_key"
     assert cfg.data.stratify_column == "allowed_losses"
+    assert cfg.data.preload_windows is False
     assert cfg.training.num_workers == 4
     assert cfg.training.persistent_workers is True
     assert cfg.training.prefetch_factor == 2
@@ -109,6 +110,7 @@ def test_e4_experiment_presets_capture_sanity_and_sst_contracts():
     for cfg in (sanity, sst):
         assert cfg.data.max_train_windows is None
         assert cfg.data.max_val_windows is None
+        assert cfg.data.preload_windows is False
         assert cfg.data.train_sample_seed == 20260610
         assert cfg.data.val_sample_seed == 20260611
         assert cfg.loss.phase_alignment_weight == 0.0
