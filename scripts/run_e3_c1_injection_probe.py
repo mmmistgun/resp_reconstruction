@@ -23,8 +23,9 @@ except ModuleNotFoundError:
         run_command_with_delay,
     )
 
-# E1-D 实验口径：仅覆盖与默认 yaml 不同的项；极性 warmup 已固化进
-# configs/tho_research_v2.yaml 默认 loss 段，这里不再覆盖（让默认生效）。
+# E3-C1：STFT 注入位置消融。post_fusion 复用 E3-B0 强 concat 基线；
+# token_* 共享 native_inject 原生解码路径，主比较看 pre/mid/post token 注入位置。
+# concat 与 native 解码不是同一 substrate，解释时必须各自配对 time_only。
 COMMON_OVERRIDES = [
     "data.max_train_windows=null",
     "data.max_val_windows=null",
@@ -41,9 +42,7 @@ COMMON_OVERRIDES = [
     "training.checkpoint_gate.max=0.5",
 ]
 
-# native_inject 固定口径：patch + 8Hz + N0 + conv2d。
-# fuse_len / fusion_decoder 在 native_inject 下不参与，故不设置。
-STFT_BASE = [
+PATCH_STFT_BASE = [
     "model.name=time_stft_dual1d",
     "model.time_backbone=patch_mixer1d",
     "model.base_channels=16",
@@ -59,50 +58,126 @@ STFT_BASE = [
     "model.stft_out_channels=16",
     "model.stft_norm=n0",
     "model.stft_encoder_type=conv2d",
-    "model.fusion_mode=native_inject",
 ]
 
-# 复用 E1-D 同款 6 个代表性 seed。
-SEEDS = [20260700, 20260710, 20260837, 20260901, 20260911, 20260920]
+CONCAT_HEAD = [
+    "model.fusion_mode=concat_generic",
+    "model.fuse_len=600",
+    "model.fusion_decoder=deep",
+    "model.stft_inject_position=post_fusion",
+]
 
-ARMS = ["time_only", "dual"]
+NATIVE_HEAD = [
+    "model.fusion_mode=native_inject",
+    "model.fuse_len=600",
+    "model.fusion_decoder=deep",
+]
 
-# time_only / dual 分开 run root，便于 peak_band_misclass_rate.py 按臂回连配对。
-RUN_ROOT = {
-    "time_only": "runs/b2_native_time_only",
-    "dual": "runs/b2_native_dual_8hz",
-}
+# 探索期固定 3 个代表性 seed；若位置变量出现正信号，再扩 seed 收口。
+SEEDS = [20260700, 20260837, 20260901]
+
+TIME_ONLY_SUBSTRATES = [
+    {
+        "label": "E3-C1S_concat_time_only",
+        "fusion_mode": "concat_generic",
+        "stft_inject_position": "post_fusion",
+        "head": CONCAT_HEAD,
+    },
+    {
+        "label": "E3-C1T_native_time_only",
+        "fusion_mode": "native_inject",
+        "stft_inject_position": "post_mixer",
+        "head": [*NATIVE_HEAD, "model.stft_inject_position=post_mixer"],
+    },
+]
+
+DUAL_ARMS = [
+    {
+        "label": "E3-C1A_concat_post_fusion",
+        "fusion_mode": "concat_generic",
+        "stft_inject_position": "post_fusion",
+        "head": CONCAT_HEAD,
+        "paired_time_only_label": "E3-C1S_concat_time_only",
+    },
+    {
+        "label": "E3-C1B_token_pre_mixer",
+        "fusion_mode": "native_inject",
+        "stft_inject_position": "pre_mixer",
+        "head": [*NATIVE_HEAD, "model.stft_inject_position=pre_mixer"],
+        "paired_time_only_label": "E3-C1T_native_time_only",
+    },
+    {
+        "label": "E3-C1C_token_mid_mixer",
+        "fusion_mode": "native_inject",
+        "stft_inject_position": "mid_mixer",
+        "head": [*NATIVE_HEAD, "model.stft_inject_position=mid_mixer"],
+        "paired_time_only_label": "E3-C1T_native_time_only",
+    },
+    {
+        "label": "E3-C1D_token_post_mixer",
+        "fusion_mode": "native_inject",
+        "stft_inject_position": "post_mixer",
+        "head": [*NATIVE_HEAD, "model.stft_inject_position=post_mixer"],
+        "paired_time_only_label": "E3-C1T_native_time_only",
+    },
+]
+
+
+def _slug(label: str) -> str:
+    return label.lower().replace(".", "_").replace("-", "_")
+
+
+def _run_root(label: str, branch_mode: str) -> str:
+    return f"runs/e3_c1/{_slug(label)}/{branch_mode}"
+
+
+def _base_spec(arm: dict, branch_mode: str, seed: int, paired_time_only_label: str) -> dict:
+    return {
+        "label": arm["label"],
+        "branch_mode": branch_mode,
+        "seed": seed,
+        "fusion_mode": arm["fusion_mode"],
+        "stft_inject_position": arm["stft_inject_position"],
+        "stft_encoder_type": "conv2d",
+        "paired_time_only_label": paired_time_only_label,
+        "overrides": [
+            *PATCH_STFT_BASE,
+            *arm["head"],
+            f"model.branch_mode={branch_mode}",
+            f"outputs.run_root={_run_root(arm['label'], branch_mode)}",
+            f"training.seed={seed}",
+        ],
+    }
 
 
 def build_run_specs() -> list[dict]:
-    """生成 B2-0 全部 run 规格：time_only / dual × SEEDS，全部 native_inject。"""
+    """生成 C1：4 个 dual 注入位置 + 2 个 time-only substrate，同 3 seed 配对。"""
+
     specs: list[dict] = []
-    for branch_mode in ARMS:
+    for substrate in TIME_ONLY_SUBSTRATES:
         for seed in SEEDS:
-            specs.append(
-                {
-                    "branch_mode": branch_mode,
-                    "seed": seed,
-                    "overrides": [
-                        *STFT_BASE,
-                        f"model.branch_mode={branch_mode}",
-                        f"outputs.run_root={RUN_ROOT[branch_mode]}",
-                        f"training.seed={seed}",
-                    ],
-                }
-            )
+            specs.append(_base_spec(substrate, "time_only", seed, substrate["label"]))
+
+    for arm in DUAL_ARMS:
+        for seed in SEEDS:
+            specs.append(_base_spec(arm, "dual", seed, arm["paired_time_only_label"]))
     return specs
 
 
 def _tag(spec: dict) -> str:
-    return f"b2_native_{spec['branch_mode']}_{spec['seed']}"
+    return f"{_slug(spec['label'])}_{spec['branch_mode']}_{spec['seed']}"
 
 
 def manifest_row(spec: dict) -> dict:
     return {
         "tag": _tag(spec),
+        "label": spec["label"],
         "branch_mode": spec["branch_mode"],
         "seed": spec["seed"],
+        "fusion_mode": spec["fusion_mode"],
+        "stft_inject_position": spec["stft_inject_position"],
+        "stft_encoder_type": spec["stft_encoder_type"],
+        "paired_time_only_label": spec["paired_time_only_label"],
         "overrides": " ".join(spec["overrides"]),
     }
 
@@ -137,11 +212,13 @@ def _build_launch_plan(
     max_parallel: int,
     start_stagger_sec: float,
 ) -> list[tuple[dict, str, float]]:
+    """为每个并发槽位添加固定启动延迟，错开数据读取和 GPU 初始化峰值。"""
+
     return build_launch_plan(specs, devices, max_parallel, start_stagger_sec)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="B2-0 native_inject 原生解码融合批次编排（time_only/dual × 6 seed）")
+    parser = argparse.ArgumentParser(description="E3-C1 STFT 注入位置消融编排")
     parser.add_argument("--skip", action="append", default=[], help="跳过的 run tag")
     parser.add_argument("--dry-run", action="store_true", help="只打印将运行的 tag，不实际训练")
     parser.add_argument("--device", action="append", default=None, help="训练设备，可重复传入；默认 cuda:0")
@@ -152,24 +229,36 @@ def main() -> None:
         default=30.0,
         help="同一批并发 run 的槽位启动间隔秒数；0 表示不延迟，默认 30",
     )
-    parser.add_argument("--manifest", default="runs/b2_native_decode_manifest.csv")
+    parser.add_argument("--manifest", default="runs/e3_c1_manifest.csv")
     args = parser.parse_args()
-    skipped = set(args.skip)
-
-    specs = build_run_specs()
-
-    manifest_path = Path(args.manifest)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    with manifest_path.open("w", newline="", encoding="utf-8") as fp:
-        writer = csv.DictWriter(fp, fieldnames=["tag", "branch_mode", "seed", "overrides"])
-        writer.writeheader()
-        writer.writerows(manifest_row(spec) for spec in specs)
 
     if args.max_parallel < 1:
         raise SystemExit("--max-parallel 必须 >= 1")
     if args.start_stagger_sec < 0:
         raise SystemExit("--start-stagger-sec 必须 >= 0")
 
+    specs = build_run_specs()
+    manifest_path = Path(args.manifest)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with manifest_path.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(
+            fp,
+            fieldnames=[
+                "tag",
+                "label",
+                "branch_mode",
+                "seed",
+                "fusion_mode",
+                "stft_inject_position",
+                "stft_encoder_type",
+                "paired_time_only_label",
+                "overrides",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(manifest_row(spec) for spec in specs)
+
+    skipped = set(args.skip)
     runnable: list[dict] = []
     for spec in specs:
         tag = _tag(spec)

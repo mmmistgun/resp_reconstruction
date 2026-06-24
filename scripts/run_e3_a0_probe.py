@@ -2,10 +2,26 @@ from __future__ import annotations
 
 import argparse
 import csv
-import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
+try:
+    from scripts.batch_utils import (
+        DATALOADER_WORKER_OVERRIDES,
+        assign_devices,
+        build_launch_plan,
+        resolve_devices,
+        run_command_with_delay,
+    )
+except ModuleNotFoundError:
+    from batch_utils import (
+        DATALOADER_WORKER_OVERRIDES,
+        assign_devices,
+        build_launch_plan,
+        resolve_devices,
+        run_command_with_delay,
+    )
 
 # E3-A0：同时拆分「融合对齐」和「频带前端」两条怀疑。
 # 仅覆盖与 configs/tho_research_v2.yaml 默认值不同的项；极性 warmup 采用默认定稿口径。
@@ -17,6 +33,7 @@ COMMON_OVERRIDES = [
     "loss.phase_alignment_weight=0.0",
     "training.epochs=50",
     "training.batch_size=128",
+    *DATALOADER_WORKER_OVERRIDES,
     "training.patience=8",
     "training.min_delta=0.001",
     "training.show_progress=false",
@@ -153,24 +170,30 @@ def _command_for_spec(spec: dict, device: str) -> list[str]:
     return cmd
 
 
-def _run_one(spec: dict, device: str) -> str:
+def _run_one(spec: dict, device: str, launch_delay_sec: float = 0.0) -> str:
     tag = _tag(spec)
-    print(f"start {tag} device={device}", flush=True)
-    subprocess.run(_command_for_spec(spec, device), check=True)
-    print(f"done {tag}", flush=True)
-    return tag
+    return run_command_with_delay(tag, _command_for_spec(spec, device), device, launch_delay_sec)
 
 
 def _resolve_devices(devices: list[str] | None) -> list[str]:
     """显式传入设备时不混入默认 cuda:0，避免多卡调度偏置。"""
 
-    return devices or ["cuda:0"]
+    return resolve_devices(devices)
 
 
 def _assign_devices(specs: list[dict], devices: list[str]) -> list[tuple[dict, str]]:
     """按 run 顺序轮转分配设备；并发数由 --max-parallel 独立控制。"""
 
-    return [(spec, devices[idx % len(devices)]) for idx, spec in enumerate(specs)]
+    return assign_devices(specs, devices)
+
+
+def _build_launch_plan(
+    specs: list[dict],
+    devices: list[str],
+    max_parallel: int,
+    start_stagger_sec: float,
+) -> list[tuple[dict, str, float]]:
+    return build_launch_plan(specs, devices, max_parallel, start_stagger_sec)
 
 
 def main() -> None:
@@ -179,11 +202,19 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="只打印将运行的 tag，不实际训练")
     parser.add_argument("--device", action="append", default=None, help="训练设备，可重复传入；默认 cuda:0")
     parser.add_argument("--max-parallel", type=int, default=1, help="并发训练进程数；默认 1")
+    parser.add_argument(
+        "--start-stagger-sec",
+        type=float,
+        default=30.0,
+        help="同一批并发 run 的槽位启动间隔秒数；0 表示不延迟，默认 30",
+    )
     parser.add_argument("--manifest", default="runs/e3_a0_manifest.csv")
     args = parser.parse_args()
 
     if args.max_parallel < 1:
         raise SystemExit("--max-parallel 必须 >= 1")
+    if args.start_stagger_sec < 0:
+        raise SystemExit("--start-stagger-sec 必须 >= 0")
 
     specs = build_run_specs()
     manifest_path = Path(args.manifest)
@@ -222,9 +253,9 @@ def main() -> None:
 
     devices = _resolve_devices(args.device)
     workers = min(args.max_parallel, len(runnable))
-    assignments = _assign_devices(runnable, devices)
+    launch_plan = _build_launch_plan(runnable, devices, workers, args.start_stagger_sec)
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(_run_one, spec, device) for spec, device in assignments]
+        futures = [pool.submit(_run_one, spec, device, delay) for spec, device, delay in launch_plan]
         for future in as_completed(futures):
             future.result()
 

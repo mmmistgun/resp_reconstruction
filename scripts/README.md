@@ -169,6 +169,28 @@ E1 STFT 信息增益实验的 manifest 生成器：
   --manifest runs/tho_research_v2_20260620_e1_stft_info_gain_manifest.csv
 ```
 
+当前并发训练批量脚本会直接启动训练，并支持 `--device` 重复传入与 `--max-parallel`
+多进程并行。主实验仍建议先用 `--dry-run` 检查矩阵和 manifest，再正式跑。这些脚本默认
+显式启用 `data.preload_windows=true` 和 `training.num_workers=0`，让完整多 epoch 训练复用
+内存中的窗口；streaming 多 worker 只建议在内存受限的诊断场景临时手动覆盖。脚本仍会按
+并发槽位错峰 30 秒启动，以减轻预加载数据、DataLoader 构建和 GPU 初始化峰值；如需关闭
+错峰可传 `--start-stagger-sec 0`。历史
+`run_20260620_softz_candidates.py` 是串行候选脚本，不属于这套并发调度入口。
+
+```bash
+# E3-B：可学习频带前端探针
+./.venv/bin/python scripts/run_e3_b_probe.py \
+  --dry-run \
+  --manifest runs/e3_b_manifest.csv
+
+# E3-C1：STFT 注入位置消融，4 个 dual arm + 2 个 time_only substrate × 3 seed
+./.venv/bin/python scripts/run_e3_c1_injection_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/e3_c1_manifest.csv
+```
+
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
 `runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
 
