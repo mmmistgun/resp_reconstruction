@@ -53,6 +53,37 @@ class _ConcatDual(torch.nn.Module):
         self.fusion_head = _SumHead()
 
 
+class _NativeBackbone(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.calls = 0
+
+    def token_count_for_length(self, length):
+        return int(length)
+
+    def forward_with_token_injection(self, x, token_injection, inject_position="post_mixer"):
+        self.calls += 1
+        return x + token_injection
+
+
+class _NativeDual(torch.nn.Module):
+    branch_mode = "dual"
+    fusion_mode = "native_inject"
+    stft_inject_position = "pre_mixer"
+    sst_cached = False
+
+    def __init__(self):
+        super().__init__()
+        self.time_backbone = _NativeBackbone()
+        self.stft_encoder = _CountingBranch(scale=3.0)
+
+    def _encode_stft_features(self, x, sst, target_len):
+        return self.stft_encoder(x)[..., :target_len]
+
+    def _project_stft_features(self, stft_feats):
+        return stft_feats
+
+
 def test_collect_ablation_predictions_reuses_one_loader_pass_and_branch_features():
     model = _ConcatDual()
     loader = DataLoader(_ToyDataset(), batch_size=2)
@@ -71,6 +102,27 @@ def test_collect_ablation_predictions_reuses_one_loader_pass_and_branch_features
     assert set(outputs) == {"normal", "stft_zero", "time_zero"}
     assert outputs["normal"]["r_tho_hat"][0, 0, 0] == 5.0
     assert outputs["stft_zero"]["r_tho_hat"][0, 0, 0] == 2.0
+    assert outputs["time_zero"]["r_tho_hat"][0, 0, 0] == 3.0
+    assert outputs["normal"]["dataset_row_id"].tolist() == [0, 1]
+
+
+def test_collect_ablation_predictions_supports_native_inject_token_delta_modes():
+    model = _NativeDual()
+    loader = DataLoader(_ToyDataset(), batch_size=2)
+
+    outputs = e3c.collect_ablation_predictions(
+        model,
+        loader,
+        device=torch.device("cpu"),
+        max_windows=2,
+        modes=["normal", "stft_zero", "time_zero"],
+        shuffle_seed=123,
+    )
+
+    assert model.stft_encoder.calls == 1
+    assert model.time_backbone.calls == 3
+    assert outputs["normal"]["r_tho_hat"][0, 0, 0] == 4.0
+    assert outputs["stft_zero"]["r_tho_hat"][0, 0, 0] == 1.0
     assert outputs["time_zero"]["r_tho_hat"][0, 0, 0] == 3.0
     assert outputs["normal"]["dataset_row_id"].tolist() == [0, 1]
 

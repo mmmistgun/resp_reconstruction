@@ -113,15 +113,76 @@ def _validate_modes(modes: Sequence[str]) -> list[str]:
 
 def _validate_concat_dual_model(model: torch.nn.Module) -> None:
     if getattr(model, "branch_mode", None) != "dual":
-        raise ValueError("E3-C0 当前只支持 branch_mode=dual 的 checkpoint")
+        raise ValueError("E3-C 消融当前只支持 branch_mode=dual 的 checkpoint")
     if getattr(model, "fusion_mode", None) != "concat_generic":
-        raise ValueError("E3-C0 当前只支持 fusion_mode=concat_generic 的 checkpoint")
+        raise ValueError("当前模型不是 concat_generic，不能走 concat 消融路径")
     if getattr(model, "time_backbone", None) is None:
         raise ValueError("模型缺少 time_backbone，无法做 time/STFT 贡献拆分")
     if getattr(model, "stft_encoder", None) is None:
         raise ValueError("模型缺少 stft_encoder，无法做 STFT 消融")
     if getattr(model, "fusion_head", None) is None:
         raise ValueError("模型缺少 fusion_head，无法复用 concat 融合路径")
+
+
+def _validate_native_dual_model(model: torch.nn.Module) -> None:
+    if getattr(model, "branch_mode", None) != "dual":
+        raise ValueError("E3-C 消融当前只支持 branch_mode=dual 的 checkpoint")
+    if getattr(model, "fusion_mode", None) not in {"native_inject", "token_context_inject"}:
+        raise ValueError("当前模型不是 native/token 注入模式，不能走 token 消融路径")
+    if getattr(model, "time_backbone", None) is None:
+        raise ValueError("模型缺少 time_backbone，无法做 token 注入消融")
+    if getattr(model, "stft_encoder", None) is None:
+        raise ValueError("模型缺少 stft_encoder，无法做 STFT 消融")
+    if not hasattr(model.time_backbone, "forward_with_token_injection"):
+        raise ValueError("time_backbone 缺少 forward_with_token_injection，无法复用原生注入路径")
+    if not hasattr(model.time_backbone, "token_count_for_length"):
+        raise ValueError("time_backbone 缺少 token_count_for_length，无法对齐 STFT token")
+    if not hasattr(model, "_encode_stft_features") or not hasattr(model, "_project_stft_features"):
+        raise ValueError("模型缺少 STFT token 编码/投影方法，无法构造 token_delta 消融")
+
+
+@torch.no_grad()
+def collect_ablation_predictions(
+    model: torch.nn.Module,
+    loader: Iterable[Mapping[str, Any]],
+    *,
+    device: torch.device | str,
+    max_windows: int,
+    modes: Sequence[str],
+    shuffle_seed: int,
+    progress_every: int | None = None,
+    progress_label: str = "",
+) -> dict[str, dict[str, np.ndarray]]:
+    """按融合模式分发消融收集逻辑。
+
+    C0 的 concat 路径消融的是 fusion_head 输入特征；C2 的 native 路径消融的是已经
+    投影到 patch token 栅格的 token_delta。两者语义不同，不能混用同一内部路径。
+    """
+
+    fusion_mode = str(getattr(model, "fusion_mode", "")).lower()
+    if fusion_mode == "concat_generic":
+        return collect_concat_ablation_predictions(
+            model,
+            loader,
+            device=device,
+            max_windows=max_windows,
+            modes=modes,
+            shuffle_seed=shuffle_seed,
+            progress_every=progress_every,
+            progress_label=progress_label,
+        )
+    if fusion_mode in {"native_inject", "token_context_inject"}:
+        return collect_native_ablation_predictions(
+            model,
+            loader,
+            device=device,
+            max_windows=max_windows,
+            modes=modes,
+            shuffle_seed=shuffle_seed,
+            progress_every=progress_every,
+            progress_label=progress_label,
+        )
+    raise ValueError(f"不支持的 fusion_mode: {fusion_mode}")
 
 
 @torch.no_grad()
@@ -214,6 +275,94 @@ def collect_concat_ablation_predictions(
     return outputs
 
 
+@torch.no_grad()
+def collect_native_ablation_predictions(
+    model: torch.nn.Module,
+    loader: Iterable[Mapping[str, Any]],
+    *,
+    device: torch.device | str,
+    max_windows: int,
+    modes: Sequence[str],
+    shuffle_seed: int,
+    progress_every: int | None = None,
+    progress_label: str = "",
+) -> dict[str, dict[str, np.ndarray]]:
+    """单次遍历 dataloader，收集 native/token 注入路径的 STFT token_delta 消融预测。
+
+    native_inject 不存在 concat 的 fusion_head 输入，因此消融点必须放在 STFT 分支投影后的
+    token_delta 上，并继续调用主干的 forward_with_token_injection 保持注入位置语义不变。
+    """
+
+    if int(max_windows) <= 0:
+        raise ValueError("max_windows 必须大于 0")
+    selected_modes = _validate_modes(modes)
+    _validate_native_dual_model(model)
+
+    resolved_device = torch.device(device)
+    model.to(resolved_device)
+    model.eval()
+    non_blocking = resolved_device.type == "cuda"
+    generator = torch.Generator(device="cpu").manual_seed(int(shuffle_seed))
+
+    pred_parts: dict[str, list[np.ndarray]] = {mode: [] for mode in selected_modes}
+    targets: list[np.ndarray] = []
+    meta_records: list[dict[str, Any]] = []
+    batch_idx = 0
+    total_data_wait_sec = 0.0
+    total_compute_sec = 0.0
+
+    loader_iter = iter(loader)
+    while len(meta_records) < int(max_windows):
+        data_start = time.perf_counter()
+        try:
+            batch = next(loader_iter)
+        except StopIteration:
+            break
+        data_wait_sec = time.perf_counter() - data_start
+        compute_start = time.perf_counter()
+        batch_idx += 1
+        if "meta" not in batch:
+            raise KeyError("batch 必须包含 meta")
+        x = batch["x"].to(resolved_device, non_blocking=non_blocking)
+        sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
+        target_tokens = int(model.time_backbone.token_count_for_length(x.size(-1)))
+        stft_feats = model._encode_stft_features(x, sst, target_len=target_tokens)
+        token_delta = model._project_stft_features(stft_feats)
+
+        for mode in selected_modes:
+            pred = _predict_native_with_ablation(model, x, token_delta, mode=mode, generator=generator)
+            pred_parts[mode].append(pred.detach().cpu().numpy())
+
+        targets.append(batch["target"].detach().cpu().numpy())
+        batch_size = x.size(0)
+        for idx in range(batch_size):
+            meta_records.append(_extract_meta(batch["meta"], idx))
+        collected = min(len(meta_records), int(max_windows))
+        compute_sec = time.perf_counter() - compute_start
+        total_data_wait_sec += data_wait_sec
+        total_compute_sec += compute_sec
+        if progress_every and (batch_idx == 1 or batch_idx % int(progress_every) == 0 or collected >= int(max_windows)):
+            label = f" {progress_label}" if progress_label else ""
+            print(
+                f"  collect{label} batch={batch_idx} windows={collected}/{int(max_windows)} "
+                f"data_wait={data_wait_sec:.3f}s compute={compute_sec:.3f}s "
+                f"total_data_wait={total_data_wait_sec:.1f}s total_compute={total_compute_sec:.1f}s",
+                flush=True,
+            )
+
+    if not meta_records:
+        raise RuntimeError("没有可收集的预测窗口")
+
+    limit = int(max_windows)
+    target_arr = np.concatenate(targets, axis=0)[:limit]
+    meta_records = meta_records[:limit]
+    outputs: dict[str, dict[str, np.ndarray]] = {}
+    for mode, parts in pred_parts.items():
+        pred_arr = np.concatenate(parts, axis=0)[:limit]
+        outputs[mode] = _prediction_dict(pred_arr, target_arr, meta_records)
+    return outputs
+
+
 def _predict_with_ablation(
     model: torch.nn.Module,
     time_feats: torch.Tensor,
@@ -245,6 +394,43 @@ def _predict_with_ablation(
     else:
         raise ValueError(f"未知消融 mode: {mode}")
     return model.fusion_head(torch.cat([used_time, used_stft], dim=1))
+
+
+def _predict_native_with_ablation(
+    model: torch.nn.Module,
+    x: torch.Tensor,
+    token_delta: torch.Tensor,
+    *,
+    mode: str,
+    generator: torch.Generator,
+) -> torch.Tensor:
+    if mode == "normal":
+        used_x = x
+        used_delta = token_delta
+    elif mode == "stft_zero":
+        used_x = x
+        used_delta = torch.zeros_like(token_delta)
+    elif mode == "time_zero":
+        used_x = torch.zeros_like(x)
+        used_delta = token_delta
+    elif mode == "stft_shuffle_batch":
+        used_x = x
+        if token_delta.size(0) <= 1:
+            used_delta = token_delta.roll(shifts=1, dims=-1)
+        else:
+            perm = torch.randperm(token_delta.size(0), generator=generator, device=torch.device("cpu"))
+            used_delta = token_delta[perm.to(token_delta.device)]
+    elif mode == "stft_shuffle_time":
+        used_x = x
+        shifts = max(1, token_delta.size(-1) // 3)
+        used_delta = token_delta.roll(shifts=shifts, dims=-1)
+    else:
+        raise ValueError(f"未知消融 mode: {mode}")
+    return model.time_backbone.forward_with_token_injection(
+        used_x,
+        used_delta,
+        inject_position=getattr(model, "stft_inject_position", "post_mixer"),
+    )
 
 
 def _prediction_dict(
@@ -299,7 +485,7 @@ def _evaluate_run_once(
     )
     max_eval_windows = len(val_bundle.dataset) if max_windows is None else int(max_windows)
     print(f"  collect predictions: {run_dir} n={max_eval_windows} modes={','.join(modes)}", flush=True)
-    predictions_by_mode = collect_concat_ablation_predictions(
+    predictions_by_mode = collect_ablation_predictions(
         model,
         val_bundle.loader,
         device=device,
@@ -550,11 +736,11 @@ def _write_manifest(path: Path, specs: Sequence[RunSpec]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="E3-C0：单次 dataloader 遍历的 STFT 贡献消融评价")
+    parser = argparse.ArgumentParser(description="E3-C：单次 dataloader 遍历的 STFT 贡献消融评价")
     parser.add_argument("--runs-root", default="runs/e3_b", help="E3-B runs 根目录")
     parser.add_argument("--arm", default="e3_b0_concat_fullband_ref", help="要评价的 arm slug")
     parser.add_argument("--branch", default="dual", help="要评价的 branch，默认 dual")
-    parser.add_argument("--checkpoint-name", default="checkpoint_top1.pt", help="run 内 checkpoint 文件名")
+    parser.add_argument("--checkpoint-name", default="checkpoint.pt", help="run 内 checkpoint 文件名")
     parser.add_argument("--mode", action="append", default=None, help="消融模式，可重复；默认 normal/stft_zero/shuffle")
     parser.add_argument("--force", action="store_true", help="覆盖已存在的 metrics_e3c_*.csv")
     parser.add_argument("--dry-run", action="store_true", help="只写 manifest 并打印计划")
@@ -566,7 +752,7 @@ def main() -> None:
     parser.add_argument("--metrics-workers", type=int, default=1, help="每个 run 内并行计算 metrics 的进程数")
     parser.add_argument("--metrics-chunk-size", type=int, default=128, help="metrics 并行时每个 CPU 任务处理的窗口数")
     parser.add_argument("--show-progress", action="store_true", help="显示指标计算进度条")
-    parser.add_argument("--manifest", default="runs/e3_c0_ablation_manifest.csv", help="消融评价 manifest 输出路径")
+    parser.add_argument("--manifest", default="runs/e3_c_ablation_manifest.csv", help="消融评价 manifest 输出路径")
     args = parser.parse_args()
 
     if args.max_parallel < 1:

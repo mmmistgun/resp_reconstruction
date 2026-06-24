@@ -189,6 +189,36 @@ E1 STFT 信息增益实验的 manifest 生成器：
   --device cuda:1 \
   --max-parallel 2 \
   --manifest runs/e3_c1_manifest.csv
+
+# E3-C2：对 C1B/C1C 补 native token 注入消融，默认使用 checkpoint.pt 对齐 metrics.csv 口径
+./.venv/bin/python scripts/eval_e3_c_ablate_stft.py \
+  --runs-root runs/e3_c1 \
+  --arm e3_c1b_token_pre_mixer \
+  --branch dual \
+  --mode normal \
+  --mode stft_zero \
+  --mode stft_shuffle_time \
+  --mode stft_shuffle_batch \
+  --device cuda:0 \
+  --max-parallel 1 \
+  --manifest runs/e3_c2_c1b_ablation_manifest.csv
+
+./.venv/bin/python scripts/eval_e3_c_ablate_stft.py \
+  --runs-root runs/e3_c1 \
+  --arm e3_c1c_token_mid_mixer \
+  --branch dual \
+  --mode normal \
+  --mode stft_zero \
+  --mode stft_shuffle_time \
+  --mode stft_shuffle_batch \
+  --device cuda:1 \
+  --max-parallel 1 \
+  --manifest runs/e3_c2_c1c_ablation_manifest.csv
+
+# E3-C2：按 paired time-only baseline 固定分层，分表输出两类 delta
+./.venv/bin/python scripts/summarize_e3_c2_layers.py \
+  --manifest runs/e3_c1_manifest.csv \
+  --output-dir runs/e3_c2
 ```
 
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
