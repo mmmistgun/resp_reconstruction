@@ -219,6 +219,29 @@ E1 STFT 信息增益实验的 manifest 生成器：
 ./.venv/bin/python scripts/summarize_e3_c2_layers.py \
   --manifest runs/e3_c1_manifest.csv \
   --output-dir runs/e3_c2
+
+# E5-A0：gated native pre-mixer 首轮探针，1 个 time-only substrate + 2 个 dual arm × 3 seed
+./.venv/bin/python scripts/run_e5_a0_gated_fusion_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/e5_a0_manifest.csv
+
+# E5-A1：cross-attention 从头训练，1 个 time-only substrate + 2 个 dual arm × 3 seed
+./.venv/bin/python scripts/run_e5_a1_cross_attention_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/e5_a1_manifest.csv
+
+# E5-A2：同 seed time-only checkpoint warm-start + 分组学习率
+# 先确认 E5-A1T 的 time-only run 已完成，并把 root 传给 --warm-start-root。
+./.venv/bin/python scripts/run_e5_a2_cross_attention_warm_start_probe.py \
+  --warm-start-root runs/e5_a1/e5_a1t_native_time_only/time_only \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/e5_a2_manifest.csv
 ```
 
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是

@@ -185,6 +185,17 @@ class PatchMixer1D(nn.Module):
     ) -> tuple[torch.Tensor, int]:
         """编码为 patch token；可选在指定位置注入外部分支特征。"""
 
+        tokens, length = self.tokenize_input(x)
+        tokens = self._apply_token_injection(tokens, token_injection, inject_position)
+        return tokens, length
+
+    def tokenize_input(self, x: torch.Tensor) -> tuple[torch.Tensor, int]:
+        """只执行 patch embedding，返回尚未经过 mixer 的 token。
+
+        交叉注意力等 token 级融合需要用时间域原始 token 作为 query，再把外部分支输出注入
+        到既有 mixer 位置；该入口避免重复手写 patch 切分逻辑。
+        """
+
         batch, _, length = x.shape
         padded_length = self._padded_length(length)
         x_padded = _match_length(x, padded_length)
@@ -192,7 +203,6 @@ class PatchMixer1D(nn.Module):
         patch_count = patches.size(2)
         tokens = patches.permute(0, 2, 1, 3).reshape(batch, patch_count, -1)
         tokens = self.patch_embed(tokens).transpose(1, 2)
-        tokens = self._apply_token_injection(tokens, token_injection, inject_position)
         return tokens, length
 
     def forward_with_token_injection(
@@ -205,6 +215,18 @@ class PatchMixer1D(nn.Module):
 
         tokens, length = self.encode_tokens(x, token_injection=token_injection, inject_position=inject_position)
         return self.decode_from_features(tokens, length)
+
+    def decode_tokens_with_injection(
+        self,
+        tokens: torch.Tensor,
+        length: int,
+        token_injection: torch.Tensor | None = None,
+        inject_position: str = "post_mixer",
+    ) -> torch.Tensor:
+        """从已 patch-embedded 的 token 出发，注入外部分支后解码回 waveform。"""
+
+        mixed = self._apply_token_injection(tokens, token_injection, inject_position)
+        return self.decode_from_features(mixed, int(length))
 
     def token_count_for_length(self, length: int) -> int:
         padded_length = self._padded_length(int(length))

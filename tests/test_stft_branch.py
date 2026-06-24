@@ -466,6 +466,70 @@ def test_token_context_inject_context_adapter_gets_first_step_gradient():
     assert adapter_grad and time_grad
 
 
+def test_gated_native_inject_dual_preserves_native_output_at_init():
+    model = _native_dual("dual", fusion_mode="gated_native_inject")
+    model.eval()
+    x = torch.randn(2, 1, 18000)
+
+    with torch.no_grad():
+        dual_out = model(x)
+        tokens, length = model.time_backbone(x, return_features=True)
+        native = model.time_backbone.decode_from_features(tokens, length)
+
+    assert torch.allclose(dual_out, native, atol=1e-6)
+    assert model.stft_gate is not None
+    assert model.stft_proj is not None
+
+
+def test_gated_native_inject_gate_learns_after_projection_moves():
+    model = _native_dual("dual", fusion_mode="gated_native_inject")
+    x = torch.randn(2, 1, 18000)
+    opt = torch.optim.SGD(model.parameters(), lr=0.1)
+
+    opt.zero_grad()
+    model(x).square().mean().backward()
+    opt.step()
+
+    opt.zero_grad()
+    model(x).square().mean().backward()
+    gate_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.stft_gate.parameters())
+    assert gate_grad
+
+
+def test_cross_attention_inject_dual_preserves_native_output_at_init():
+    model = _native_dual("dual", fusion_mode="cross_attention_inject")
+    model.eval()
+    x = torch.randn(2, 1, 18000)
+
+    with torch.no_grad():
+        dual_out = model(x)
+        tokens, length = model.time_backbone(x, return_features=True)
+        native = model.time_backbone.decode_from_features(tokens, length)
+
+    assert torch.allclose(dual_out, native, atol=1e-6)
+    assert model.cross_attention_adapter is not None
+    assert model.stft_proj is None
+
+
+def test_cross_attention_inject_attention_learns_after_projection_moves():
+    model = _native_dual("dual", fusion_mode="cross_attention_inject")
+    x = torch.randn(2, 1, 18000)
+    opt = torch.optim.SGD(model.parameters(), lr=0.1)
+
+    opt.zero_grad()
+    model(x).square().mean().backward()
+    opt.step()
+
+    opt.zero_grad()
+    model(x).square().mean().backward()
+    attn_grad = any(
+        p.grad is not None and p.grad.abs().sum() > 0
+        for name, p in model.cross_attention_adapter.named_parameters()
+        if not name.startswith("out_proj")
+    )
+    assert attn_grad
+
+
 def test_native_inject_rejects_backbone_without_decode_from_features():
     with pytest.raises((ValueError, TypeError, AttributeError)):
         _native_dual("dual", backbone="multiscale_decomp_mixer1d")

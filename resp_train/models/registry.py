@@ -112,6 +112,8 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
         fusion_decoder=str(cfg.model.get("fusion_decoder", "deep")),
         fusion_mode=str(cfg.model.get("fusion_mode", "concat_generic")),
         stft_inject_position=str(cfg.model.get("stft_inject_position", "post_mixer")),
+        cross_attention_heads=int(cfg.model.get("cross_attention_heads", 1)),
+        cross_attention_dropout=float(cfg.model.get("cross_attention_dropout", 0.0)),
     )
 
 

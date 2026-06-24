@@ -381,6 +381,54 @@ class SSTCachedEncoder(nn.Module):
         return encoded.mean(dim=2)  # (B, out_ch, T)
 
 
+class TokenCrossAttentionAdapter(nn.Module):
+    """time token 查询 STFT token 的轻量 cross-attention 适配器。"""
+
+    def __init__(
+        self,
+        time_channels: int,
+        stft_channels: int,
+        num_heads: int = 1,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        time_channels = int(time_channels)
+        stft_channels = int(stft_channels)
+        num_heads = int(num_heads)
+        if time_channels <= 0 or stft_channels <= 0:
+            raise ValueError("time_channels 和 stft_channels 必须大于 0")
+        if num_heads <= 0:
+            raise ValueError("cross_attention_heads 必须大于 0")
+        if time_channels % num_heads != 0:
+            raise ValueError(
+                f"cross_attention_heads={num_heads} 必须整除 time_feat_channels={time_channels}"
+            )
+        self.kv_proj = nn.Conv1d(stft_channels, time_channels, kernel_size=1)
+        self.attn = nn.MultiheadAttention(
+            embed_dim=time_channels,
+            num_heads=num_heads,
+            dropout=float(dropout),
+            batch_first=True,
+        )
+        self.out_proj = nn.Conv1d(time_channels, time_channels, kernel_size=1)
+        # ReZero 式输出投影：初始不扰动 time-only 解，训练首步先打开投影。
+        nn.init.zeros_(self.out_proj.weight)
+        nn.init.zeros_(self.out_proj.bias)
+
+    def forward(self, time_tokens: torch.Tensor, stft_feats: torch.Tensor) -> torch.Tensor:
+        if time_tokens.dim() != 3 or stft_feats.dim() != 3:
+            raise ValueError("time_tokens 和 stft_feats 都必须是 (B, C, T)")
+        if time_tokens.size(0) != stft_feats.size(0) or time_tokens.size(-1) != stft_feats.size(-1):
+            raise ValueError(
+                "time_tokens 与 stft_feats 的 batch/token 长度必须一致，"
+                f"time={tuple(time_tokens.shape)} stft={tuple(stft_feats.shape)}"
+            )
+        query = time_tokens.transpose(1, 2)
+        key_value = self.kv_proj(stft_feats).transpose(1, 2)
+        attended, _ = self.attn(query, key_value, key_value, need_weights=False)
+        return self.out_proj(attended.transpose(1, 2))
+
+
 class TimeStftDual1D(nn.Module):
     """时间域骨干与 STFT 编码器的轻量双分支包装器。"""
 
@@ -397,6 +445,8 @@ class TimeStftDual1D(nn.Module):
         fusion_decoder: str = "deep",
         fusion_mode: str = "concat_generic",
         stft_inject_position: str = "post_mixer",
+        cross_attention_heads: int = 1,
+        cross_attention_dropout: float = 0.0,
     ) -> None:
         super().__init__()
         mode = str(branch_mode).lower()
@@ -407,15 +457,19 @@ class TimeStftDual1D(nn.Module):
         self.fuse_len = int(fuse_len)
         self.fusion_mode = str(fusion_mode).lower()
         self.stft_inject_position = str(stft_inject_position).lower()
-        if self.fusion_mode not in {"concat_generic", "native_inject", "token_context_inject"}:
-            raise ValueError("fusion_mode 必须是 concat_generic、native_inject 或 token_context_inject")
+        native_modes = {"native_inject", "token_context_inject", "gated_native_inject", "cross_attention_inject"}
+        if self.fusion_mode not in {"concat_generic", *native_modes}:
+            raise ValueError(
+                "fusion_mode 必须是 concat_generic、native_inject、token_context_inject "
+                "、gated_native_inject 或 cross_attention_inject"
+            )
         use_time = mode in {"time_only", "dual"}
         use_stft = mode in {"stft_only", "dual"}
 
         # encoder_type=sst_cached：STFT 分支改读离线 SST 缓存，不从波形现场算。
         self.sst_cached = str(dict(stft_kwargs).get("encoder_type", "conv1d")).lower() == "sst_cached"
-        if self.sst_cached and self.fusion_mode != "native_inject":
-            raise ValueError("sst_cached 当前仅支持 fusion_mode=native_inject")
+        if self.sst_cached and self.fusion_mode not in {"native_inject", "gated_native_inject", "cross_attention_inject"}:
+            raise ValueError("sst_cached 当前仅支持 fusion_mode=native_inject、gated_native_inject 或 cross_attention_inject")
 
         self.time_backbone = _build_time_backbone(time_backbone_name, time_backbone_kwargs) if use_time else None
         if not use_stft:
@@ -429,7 +483,9 @@ class TimeStftDual1D(nn.Module):
             self.stft_encoder = STFTEncoder(**dict(stft_kwargs))
 
         self.stft_adapter: nn.Module | None = None
-        if self.fusion_mode in {"native_inject", "token_context_inject"}:
+        self.stft_gate: nn.Module | None = None
+        self.cross_attention_adapter: nn.Module | None = None
+        if self.fusion_mode in native_modes:
             # 原生解码融合：在 token 栅格把 STFT 加性注入主干特征，再走主干原生解码契约。
             if not (use_time and hasattr(self.time_backbone, "decode_from_features")):
                 raise ValueError(
@@ -438,13 +494,29 @@ class TimeStftDual1D(nn.Module):
             self._validate_stft_inject_position()
             self.fusion_head = None
             if use_stft:
-                if self.fusion_mode == "native_inject":
+                if self.fusion_mode in {"native_inject", "gated_native_inject"}:
                     # 末层零初始化（ReZero 式暖启）：dual 在 init 时注入项为 0，输出等价于原生解码。
                     self.stft_proj = nn.Conv1d(
                         int(self.stft_encoder.out_channels), int(time_feat_channels), kernel_size=1
                     )
                     nn.init.zeros_(self.stft_proj.weight)
                     nn.init.zeros_(self.stft_proj.bias)
+                    if self.fusion_mode == "gated_native_inject":
+                        # E5-A0 轻量门控：只改变 STFT token delta 的使用强度，不改变注入位置。
+                        # gate bias 初始化为 sigmoid(2)≈0.88，接近 C1B ungated，同时允许训练中下调。
+                        self.stft_gate = nn.Conv1d(
+                            int(self.stft_encoder.out_channels), int(time_feat_channels), kernel_size=1
+                        )
+                        nn.init.zeros_(self.stft_gate.weight)
+                        nn.init.constant_(self.stft_gate.bias, 2.0)
+                elif self.fusion_mode == "cross_attention_inject":
+                    self.stft_proj = None
+                    self.cross_attention_adapter = TokenCrossAttentionAdapter(
+                        time_channels=int(time_feat_channels),
+                        stft_channels=int(self.stft_encoder.out_channels),
+                        num_heads=int(cross_attention_heads),
+                        dropout=float(cross_attention_dropout),
+                    )
                 else:
                     # A0.1 对齐探针：给 STFT 一条 token 栅格上的局部上下文通路，再加性注入。
                     # 最后一层零初始化，确保初始输出等价 time-only，训练中再学习是否使用 STFT。
@@ -475,11 +547,23 @@ class TimeStftDual1D(nn.Module):
             decoder_style=fusion_decoder,
         )
         self.stft_proj = None
+        self.stft_gate = None
+        self.cross_attention_adapter = None
 
     def forward(self, x: torch.Tensor, sst: torch.Tensor | None = None) -> torch.Tensor:
-        if self.fusion_mode in {"native_inject", "token_context_inject"}:
+        if self.fusion_mode in {"native_inject", "token_context_inject", "gated_native_inject", "cross_attention_inject"}:
             self._validate_stft_inject_position()
             if self.stft_encoder is not None:
+                if self.fusion_mode == "cross_attention_inject":
+                    time_tokens, length = self.time_backbone.tokenize_input(x)
+                    stft_feats = self._encode_stft_features(x, sst, target_len=time_tokens.size(-1))
+                    token_delta = self.cross_attention_adapter(time_tokens, stft_feats)
+                    return self.time_backbone.decode_tokens_with_injection(
+                        time_tokens,
+                        length,
+                        token_delta,
+                        inject_position=self.stft_inject_position,
+                    )
                 target_tokens = self.time_backbone.token_count_for_length(x.size(-1))
                 stft_feats = self._encode_stft_features(x, sst, target_len=target_tokens)
                 token_delta = self._project_stft_features(stft_feats)
@@ -525,4 +609,10 @@ class TimeStftDual1D(nn.Module):
             # stft_proj 零初始化（标准 ReZero）：dual 在 init 时注入项为 0、输出等价原生解码。
             # stft_proj.weight 首步即获非零梯度并离开零点，分支从第二步起正常学习。
             return self.stft_proj(stft_feats)
+        if self.fusion_mode == "gated_native_inject":
+            # gate 与 stft_proj 同 token 栅格逐通道相乘。由于 stft_proj 零初始化，init 输出仍等价
+            # time-only；第一步先让投影离开零点，随后 gate 开始学习选择性抑制或放大 STFT delta。
+            return self.stft_proj(stft_feats) * torch.sigmoid(self.stft_gate(stft_feats))
+        if self.fusion_mode == "cross_attention_inject":
+            raise RuntimeError("cross_attention_inject 应在 forward 中用 time token 直接计算")
         return self.stft_adapter(stft_feats)

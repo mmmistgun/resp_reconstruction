@@ -473,6 +473,155 @@ C2 后续决策：
 - 第一轮使用 gated fusion。
 - cross-attention 只在 gated fusion 有收益但仍不足时引入。
 
+E5-A0 完成后需要修正上述默认顺序：轻量 gated native pre-mixer 对 `rr_spec_abs_error` 和相关性
+有小幅收益，但 `rr_peak_band_abs_error`、呼吸次数误差和 seed 稳定性不足。因此后续不是把
+gated fusion 升为默认主线，而是把它作为负/混合结果保留；如果继续验证 cross-attention，
+必须拆成两个独立问题，避免把结构收益和预训练/优化策略混在一起。
+
+#### E5-A0：gated native pre-mixer 首轮探针
+
+E5-A0 从 E3-C2 的结论出发，只验证一个问题：STFT token delta 是否应该被逐窗口、逐通道选择性
+使用。它不是 E5 的全量融合搜索，也不引入新的时频前端、loss、训练 seed 或注入位置。
+
+固定口径：
+
+- 数据、loss、epoch、batch、checkpoint gate、STFT 参数和 3 个探索 seed 全部沿用 E3-C1/C2。
+- 输入仍为 `conv2d fullband 8Hz + n0`，主干仍为 `patch_mixer1d`。
+- 注入位置固定为 `pre_mixer`，因为 C1B 是当前 peak-band RR 最稳的 native STFT 主线。
+- 继续配对同 seed 的 native time-only substrate，禁止把 native substrate 本身的强度解释为 gate 收益。
+
+候选：
+
+| arm | branch_mode | fusion_mode | paired substrate | 目的 |
+|---|---|---|---|---|
+| `E5-A0T_native_time_only` | `time_only` | `native_inject` | 自身 | native substrate 参照 |
+| `E5-A0.0_native_pre_mixer_ungated` | `dual` | `native_inject` | `E5-A0T_native_time_only` | 复现 C1B ungated pre-mixer |
+| `E5-A0.1_gated_native_pre_mixer` | `dual` | `gated_native_inject` | `E5-A0T_native_time_only` | 只在 STFT token delta 上加轻量 gate |
+
+实现约束：
+
+- `gated_native_inject` 仍使用 ReZero 式 `stft_proj` 零初始化，初始输出等价 time-only。
+- gate 为逐 token/channel 的 `1x1 Conv1d + sigmoid`，输入为 STFT encoder feature；
+  bias 初始化为 `2.0`，即初始 gate 约 `0.88`，尽量接近 ungated C1B，同时允许训练下调。
+- 第一轮不记录 gate 分布为正式结论；如果 A0.1 有收益，再补 gate 分布和 C2 同口径分层消融。
+
+通过条件：
+
+- A0.1 相对 A0.0 或 paired time-only 至少不恶化主护栏 `rr_peak_band_abs_error`。
+- A0.1 应降低 C2 暴露的 easy/fast 窗口副作用，尤其不能继续扩大 fast RR 档误差。
+- 低 `spectrum_similarity` 或 baseline hard 窗口中，相关性和 `rr_spec_abs_error` 收益不应被 gate 抹掉。
+
+停止条件：
+
+- A0.1 只改善相关性但明显恶化 peak-band RR。
+- A0.1 与 A0.0 差异小到不能解释为选择性融合收益。
+- A0.1 的收益只出现在单 seed，或分层结果与 C2 的 hard/low-spectrum 证据不一致。
+
+运行入口：
+
+- 编排脚本：`scripts/run_e5_a0_gated_fusion_probe.py`
+- manifest：`runs/e5_a0_manifest.csv`
+- run root：`runs/e5_a0/<arm>/<branch_mode>/`
+
+#### E5-A1：cross-attention 从头训练
+
+E5-A1 只回答“token 级 cross-attention 结构本身是否比简单 token delta 注入更有效”。它从头训练，
+不使用 time-only checkpoint warm-start，不使用不同参数组学习率，不引入新 loss 或新 STFT 前端。
+
+候选：
+
+| arm | branch_mode | fusion_mode | paired substrate | 目的 |
+|---|---|---|---|---|
+| `E5-A1T_native_time_only` | `time_only` | `native_inject` | 自身 | native substrate 参照 |
+| `E5-A1.0_native_pre_mixer_ungated` | `dual` | `native_inject` | `E5-A1T_native_time_only` | C1B/E5-A0 ungated 主线复现 |
+| `E5-A1.1_cross_attention_pre_mixer` | `dual` | `cross_attention_inject` | `E5-A1T_native_time_only` | time token 查询 STFT token |
+
+结构约束：
+
+- time token 作为 query，STFT token 作为 key/value；输出投影后作为 pre-mixer token delta。
+- 第一轮只用 1 层、2 heads，避免把 A1 变成大模型容量实验。
+- cross-attention 输出投影零初始化，初始输出等价 time-only/native backbone；这与 C1B 的 ReZero
+  注入保持可比。
+- 不做双向 cross-attention，不加 hard mask，不加显式 fast/easy 规则门控。
+
+实现：
+
+- 模型分支：`fusion_mode=cross_attention_inject`，配置项 `model.cross_attention_heads=2`。
+- 编排脚本：`scripts/run_e5_a1_cross_attention_probe.py`
+- manifest：`runs/e5_a1_manifest.csv`
+- run root：`runs/e5_a1/<arm>/<branch_mode>/`
+
+通过条件：
+
+- A1.1 相对 A1.0 不能恶化 `rr_peak_band_abs_error` 和 `breath_count_zero_cross_abs_error`。
+- A1.1 若主要改善 `rr_spec_abs_error`、相关性或 val loss，但 peak-band/呼吸次数变差，
+  视为重复 E5-A0 失败模式，不进入 A2。
+- 如果 A1.1 至少接近 A1.0，并在低 `spectrum_similarity` 或 baseline hard 窗口有稳定收益，
+  再进入 E5-A2。
+
+#### E5-A2：cross-attention warm-start 与分组学习率
+
+E5-A2 只在 E5-A1 不差于 ungated 主线后进入。它回答的是“cross-attention 能否在已有时序解上
+做条件修正”，不再回答 cross-attention 结构本身是否有效。
+
+候选：
+
+| arm | 初始化 | 学习率策略 | 目的 |
+|---|---|---|---|
+| `E5-A2.0_cross_attention_warm_start` | 同 seed native time-only checkpoint 初始化 time backbone | time backbone 低学习率，STFT encoder 和 cross-attention 正常学习率 | 低扰动条件修正 |
+| `E5-A2.1_cross_attention_warm_start_freeze_probe` | 同上 | 短程冻结 time backbone，仅训练 STFT/cross-attention，再整体解冻 | 后续可选诊断；当前不进入首轮 runner |
+
+实现约束：
+
+- A2 需要支持参数组学习率和 checkpoint 部分加载；若后续追加冻结/解冻调度且会让
+  `scripts/train_tho_small.py` 或通用 `ThoExperiment` 过重，应单独实现 E5-A2 训练脚本或轻量
+  experiment wrapper，不强行污染当前通用训练入口。
+- A2 的结果必须和 A1 从头训练分表记录；不能把 warm-start 结果直接混进从头训练排名。
+- A2 不应改变数据 split、STFT 参数、loss 权重或评价指标；唯一新增自由度是初始化和优化策略。
+
+当前实现：
+
+- 首轮只实现 `E5-A2.0_cross_attention_warm_start`。
+- 训练入口：`scripts/train_e5_a2_tho.py`，内部使用 `ThoE5A2Experiment`。
+- 编排脚本：`scripts/run_e5_a2_cross_attention_warm_start_probe.py`
+- 默认 warm-start root：`runs/e5_a1/e5_a1t_native_time_only/time_only`
+- 分组学习率：`training.time_backbone_learning_rate=0.0001`，
+  `training.learning_rate=0.001` 用于 STFT encoder 和 cross-attention。
+- warm-start 只加载 `training.warm_start_prefixes=[time_backbone.]`，cross-attention 和 STFT encoder
+  保持新初始化。
+- manifest：`runs/e5_a2_manifest.csv`
+- run root：`runs/e5_a2/e5_a2_0_cross_attention_warm_start/dual/`
+
+结果（2026-06-24，3 seeds，2675 val windows/run）：
+
+| arm | `rr_peak_band_abs_error` | `rr_spec_abs_error` | `breath_count_zero_cross_abs_error` | `relative_envelope_corr` | `band_limited_corr` | 结论 |
+|---|---:|---:|---:|---:|---:|---|
+| `E5-A1T_native_time_only` | 0.5411 | 0.5836 | 1.0555 | 0.5175 | 0.7913 | native substrate |
+| `E5-A1.0_native_pre_mixer_ungated` | 0.4905 | 0.5679 | 1.0639 | 0.5257 | 0.7929 | 当前主线对照 |
+| `E5-A1.1_cross_attention_pre_mixer` | 0.6505 | 0.5571 | 1.2080 | 0.5206 | 0.7894 | peak-band 与呼吸次数明显退化 |
+| `E5-A2.0_cross_attention_warm_start` | 0.6338 | 0.5821 | 1.2353 | 0.5214 | 0.7900 | warm-start/分组 LR 未修复退化 |
+
+配对差异：
+
+- E5-A1.1 相对 E5-A1.0：`rr_peak_band_abs_error +0.1600`，
+  `rr_spec_abs_error -0.0108`，`breath_count_zero_cross_abs_error +0.1441`，
+  `relative_envelope_corr -0.0052`，`band_limited_corr -0.0035`。
+- E5-A2.0 相对 E5-A1.0：`rr_peak_band_abs_error +0.1433`，
+  `rr_spec_abs_error +0.0142`，`breath_count_zero_cross_abs_error +0.1713`，
+  `relative_envelope_corr -0.0044`，`band_limited_corr -0.0029`。
+- 呼吸次数误差主要表现为偏多计：E5-A1.0 signed breath count error 为 `+0.4299`，
+  E5-A1.1 为 `+0.6178`，E5-A2.0 为 `+0.6117`。
+
+阶段判断：
+
+- cross-attention 从头训练只轻微改善 `rr_spec_abs_error`，但显著破坏更关键的 peak-band RR
+  和呼吸次数；这重复了 E5-A0 “频谱指标小改善、计数/peak-band 变差”的失败模式。
+- warm-start + time backbone 低学习率没有解决问题，且 seed `20260901` 明显拉坏，
+  说明问题不是单纯的随机初始化或主干被扰动过大。
+- E5-A1/E5-A2 不建议继续扩 seed 或进入 freeze/unfreeze；E5 收口为
+  `native_inject pre_mixer` 仍是当前最稳主线，后续若继续探索应换问题定义，而不是继续调
+  cross-attention 优化细节。
+
 不建议：
 
 - 第一轮直接使用双向 cross-attention。
