@@ -1196,7 +1196,7 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
    `configs/tho_research_v2.yaml` 默认 loss 段，成为 patch STFT 主线默认口径。仅对本数据/patch
    路线验证过；multiscale 等其他 backbone 未验证 warmup 安全性（按当前决策不再跟进 multiscale）。
 
-优先级 4（patch 融合方法优化，**B2-0/E2b/E2c 后整体暂停**）：
+优先级 4（patch 融合方法优化，**B2-0/E2b/E2c/E3-A0 后整体收口**）：
 
 1. 定位：当前 `concat → deep FusionHead` 已足以支撑 E1 正结论，融合优化是“能否从 STFT 榨出
    更多”的性能问题，**非 E1 必需**。预期边际收益不大且不确定（concat+有容量解码器本身是强基线）。
@@ -1216,6 +1216,34 @@ gate `auto_direction/max=0.5` 解析为 `val_signed_corr ≤ 0.5`，等价要求
    更宽的跨 token 通路」（例如 token 栅格上的 `k3`/多 token 感受野注入，而非 `1×1`），
    而不是直接上 gating/FiLM——后者并不针对这个被实测指认的瓶颈。在提出并接受这样的机制假设前，
    patch 主线一律以 E1-D 定稿配方为准。E2c 已单独作为表征侧探针否决，不等价于重启 gating/FiLM 扩结构线。
+6. **E3-A0 融合对齐 × 频带前端探针已完成（2026-06-24）**：本轮只做少量代表 seed 机制探针，
+   不再扩 seed。实验矩阵为 4 个 dual arm × 3 seed，加 2 个去重 `time_only` substrate × 3 seed，
+   共 18 个训练 run；随后对每个 run 的 `checkpoint_top1/2/3.pt` 做任务指标重评，共 54 个评价结果。
+   选择规则为每个 run 在 top3 中取 `rr_peak_band_abs_error_mean` 最低者，再做同 seed 配对。
+7. **E3-A0.0 的定位**：`E3-A0.0_concat_fullband` 不是新融合方法，而是 E1-D
+   `concat_generic + fuse_len=600 + fusion_decoder=deep + conv2d fullband 8Hz N0`
+   强基线在 E3 子集和 top3 重评口径下的复核锚点。它和 E1-D 结构同类，差异主要是 seed 数
+   与 checkpoint 选择口径。top3 重评后，A0.0 `dual - time_only` 为 `Δfrac_gt_1=-3.25pp`，
+   3/3 seed 改善，`Δmean=-0.116`、`Δp95=-0.575`，且没有 `token_context` 系列的 raw peak
+   副作用。因此后续融合/前端候选应把 A0.0 作为默认强参照，而不是只和 B2 `native_inject`
+   比。
+8. **E3-A0 的机制结论**：
+   - `A0.1 token_context + fullband conv2d` 不成立：相对自身 `time_only`，top3 口径下
+     `Δfrac_gt_1=+0.02pp`，1/3 seed 改善，且 raw peak 明显恶化。
+   - `A0.2 concat + bandgroup` 有效但不突出：相对 A0.0 `time_only`，`Δfrac_gt_1=-2.06pp`，
+     2/3 seed 改善。
+   - `A0.3 token_context + bandgroup` 绝对 peak-band 主指标最好（`mean=0.448`、
+     `frac_gt_1=10.88%`、`p95=1.752`），且相对 A0.1 `time_only` 为 3/3 seed 改善；
+     但 `rr_spec_mean=0.611`、raw peak mean `5.308`，副作用明显，不能直接作为默认融合基线。
+9. **可带到后续实验的口径**：
+   - 默认融合强基线：`concat_generic + deep FusionHead + fuse_len=600`。
+   - 默认 reference STFT 前端：`conv2d fullband 8Hz + N0`；`bandgroup` 只作为候选或消融，不替代 reference。
+   - 每个新融合/前端必须保留同 seed `time_only` substrate，或明确复用等价 substrate；
+     否则无法区分「更会用 STFT」和「裸时序底座本来更强」。
+   - 探索期继续保存并重评 `checkpoint_top1/2/3`，但正式结论需标注这是同 val 集任务指标择优，
+     存在乐观偏置；最终收口仍应以固定选择口径或独立确认集为准。
+   - 主判据继续以 `rr_peak_band_abs_error` 的 `frac_gt_1`、mean、p95 为核心，`rr_spec_abs_error`
+     和 raw `rr_peak_abs_error` 作为副作用诊断，不把 raw peak 单独升级为主目标。
 
 优先级 5（频域输入/表征探索，**E1→E4 已整体收口**）：
 
