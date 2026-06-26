@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 
+from resp_train.losses.stft import TargetStftLoss
+
 
 class WeakSyncLoss(torch.nn.Module):
     """用于波形弱同步训练的组合损失。"""
@@ -26,6 +28,9 @@ class WeakSyncLoss(torch.nn.Module):
         self.signed_rms_envelope_weight = float(cfg.loss.get("signed_rms_envelope_weight", 0.0))
         self.signed_mean_weight = float(cfg.loss.get("signed_mean_weight", 0.0))
         self.si_sdr_weight = float(cfg.loss.get("si_sdr_weight", 0.0))
+        self.stft_dist_weight = float(cfg.loss.get("stft_dist_weight", 0.0))
+        self.stft_band_energy_weight = float(cfg.loss.get("stft_band_energy_weight", 0.0))
+        self.log_component_grad_norms = bool(cfg.loss.get("log_component_grad_norms", False))
         self.signed_cosine_schedule = cfg.loss.get("signed_cosine_schedule", None)
         self.signed_corr_schedule = cfg.loss.get("signed_corr_schedule", None)
         self.epoch = 1
@@ -54,6 +59,8 @@ class WeakSyncLoss(torch.nn.Module):
             ("signed_rms_envelope_weight", self.signed_rms_envelope_weight),
             ("signed_mean_weight", self.signed_mean_weight),
             ("si_sdr_weight", self.si_sdr_weight),
+            ("stft_dist_weight", self.stft_dist_weight),
+            ("stft_band_energy_weight", self.stft_band_energy_weight),
         ):
             if value < 0:
                 raise ValueError(f"{name} 必须非负，当前={value}")
@@ -81,6 +88,11 @@ class WeakSyncLoss(torch.nn.Module):
         self.relative_env_trend_window = max(self.envelope_window, int(round(self.fs * 20.0)))
         self.low_hz = float(cfg.loss.spectrum_low_hz)
         self.high_hz = float(cfg.loss.spectrum_high_hz)
+        self.target_stft_loss = (
+            TargetStftLoss.from_config(cfg)
+            if self.stft_dist_weight > 0 or self.stft_band_energy_weight > 0 or self.log_component_grad_norms
+            else None
+        )
 
     def set_epoch(self, epoch: int) -> None:
         """更新当前 epoch，供课程式 loss 权重调度使用。"""
@@ -99,6 +111,11 @@ class WeakSyncLoss(torch.nn.Module):
         # 有限制，因此损失内部统一用 float32 做频域和包络计算。
         pred_loss = pred.float()
         target_loss = target.float()
+        components = self._loss_components(pred_loss, target_loss)
+        total = self._weighted_total(components)
+        return total, {name: value.detach() for name, value in components.items()}
+
+    def _loss_components(self, pred_loss: torch.Tensor, target_loss: torch.Tensor) -> dict[str, torch.Tensor]:
         env = self._envelope_loss(pred_loss, target_loss)
         spec = self._spectrum_loss(pred_loss, target_loss)
         smooth = torch.mean(torch.abs(pred_loss[..., 1:] - pred_loss[..., :-1]))
@@ -135,38 +152,84 @@ class WeakSyncLoss(torch.nn.Module):
             self._signed_mean_loss(pred_loss, target_loss) if self.signed_mean_weight > 0 else pred_loss.new_tensor(0.0)
         )
         si_sdr = self._si_sdr_loss(pred_loss, target_loss) if self.si_sdr_weight > 0 else pred_loss.new_tensor(0.0)
-        total = (
-            self.env_weight * env
-            + self.spec_weight * spec
-            + self.smooth_weight * smooth
-            + self.high_freq_weight * high_freq
-            + self.relative_env_weight * relative_env
-            + self.phase_alignment_weight * phase_alignment
-            + self.band_waveform_weight * band_waveform
-            + self.curvature_weight * curvature
-            + self.rhythm_weight * rhythm
-            + signed_cosine_weight * signed_cosine
-            + signed_corr_weight * signed_corr
-            + self.signed_rms_envelope_weight * signed_rms_envelope
-            + self.signed_mean_weight * signed_mean
-            + self.si_sdr_weight * si_sdr
-        )
-        return total, {
-            "envelope": env.detach(),
-            "spectrum": spec.detach(),
-            "smooth": smooth.detach(),
-            "high_freq": high_freq.detach(),
-            "relative_envelope": relative_env.detach(),
-            "phase_alignment": phase_alignment.detach(),
-            "band_waveform": band_waveform.detach(),
-            "curvature": curvature.detach(),
-            "rhythm": rhythm.detach(),
-            "signed_cosine": signed_cosine.detach(),
-            "signed_corr": signed_corr.detach(),
-            "signed_rms_envelope": signed_rms_envelope.detach(),
-            "signed_mean": signed_mean.detach(),
-            "si_sdr": si_sdr.detach(),
+        if self.target_stft_loss is not None:
+            stft_parts = self.target_stft_loss(pred_loss, target_loss)
+            stft_dist = stft_parts["stft_dist"] if self.stft_dist_weight > 0 else pred_loss.new_tensor(0.0)
+            stft_band_energy = (
+                stft_parts["stft_band_energy"] if self.stft_band_energy_weight > 0 else pred_loss.new_tensor(0.0)
+            )
+        else:
+            stft_dist = pred_loss.new_tensor(0.0)
+            stft_band_energy = pred_loss.new_tensor(0.0)
+        return {
+            "envelope": env,
+            "spectrum": spec,
+            "smooth": smooth,
+            "high_freq": high_freq,
+            "relative_envelope": relative_env,
+            "phase_alignment": phase_alignment,
+            "band_waveform": band_waveform,
+            "curvature": curvature,
+            "rhythm": rhythm,
+            "signed_cosine": signed_cosine,
+            "signed_corr": signed_corr,
+            "signed_rms_envelope": signed_rms_envelope,
+            "signed_mean": signed_mean,
+            "si_sdr": si_sdr,
+            "stft_dist": stft_dist,
+            "stft_band_energy": stft_band_energy,
         }
+
+    def _weighted_total(self, components: dict[str, torch.Tensor]) -> torch.Tensor:
+        return self._weighted_base_total(components) + self._weighted_stft_total(components)
+
+    def _weighted_base_total(self, components: dict[str, torch.Tensor]) -> torch.Tensor:
+        return (
+            self.env_weight * components["envelope"]
+            + self.spec_weight * components["spectrum"]
+            + self.smooth_weight * components["smooth"]
+            + self.high_freq_weight * components["high_freq"]
+            + self.relative_env_weight * components["relative_envelope"]
+            + self.phase_alignment_weight * components["phase_alignment"]
+            + self.band_waveform_weight * components["band_waveform"]
+            + self.curvature_weight * components["curvature"]
+            + self.rhythm_weight * components["rhythm"]
+            + self._scheduled_signed_cosine_weight() * components["signed_cosine"]
+            + self._scheduled_signed_corr_weight() * components["signed_corr"]
+            + self.signed_rms_envelope_weight * components["signed_rms_envelope"]
+            + self.signed_mean_weight * components["signed_mean"]
+            + self.si_sdr_weight * components["si_sdr"]
+        )
+
+    def _weighted_stft_total(self, components: dict[str, torch.Tensor]) -> torch.Tensor:
+        return (
+            self.stft_dist_weight * components["stft_dist"]
+            + self.stft_band_energy_weight * components["stft_band_energy"]
+        )
+
+    def component_gradient_norms(self, pred: torch.Tensor, target: torch.Tensor) -> dict[str, torch.Tensor]:
+        """返回关键加权 loss 分项对模型输出的梯度范数，用于 F-A 权重诊断。"""
+
+        self._validate_inputs(pred, target)
+        pred_loss = pred.float()
+        target_loss = target.float()
+        components = self._loss_components(pred_loss, target_loss)
+        weighted = {
+            "base_total": self._weighted_base_total(components),
+            "stft_total": self._weighted_stft_total(components),
+            "stft_dist": self.stft_dist_weight * components["stft_dist"],
+            "stft_band_energy": self.stft_band_energy_weight * components["stft_band_energy"],
+        }
+        return {f"grad_norm_{name}": self._grad_norm(value, pred) for name, value in weighted.items()}
+
+    @staticmethod
+    def _grad_norm(value: torch.Tensor, pred: torch.Tensor) -> torch.Tensor:
+        if not value.requires_grad:
+            return pred.new_tensor(0.0)
+        grad = torch.autograd.grad(value, pred, retain_graph=True, allow_unused=True)[0]
+        if grad is None:
+            return pred.new_tensor(0.0)
+        return torch.linalg.vector_norm(grad.detach())
 
     @staticmethod
     def _validate_signed_schedule(name: str, schedule: object, fallback_weight: float) -> None:

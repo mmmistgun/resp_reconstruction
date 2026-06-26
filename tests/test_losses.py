@@ -68,6 +68,8 @@ def test_weak_sync_loss_returns_current_components_and_scalar():
         "signed_rms_envelope",
         "signed_mean",
         "si_sdr",
+        "stft_dist",
+        "stft_band_energy",
     }
     total.backward()
     assert pred.grad is not None

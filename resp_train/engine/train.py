@@ -47,6 +47,8 @@ def train_one_epoch(
         with torch.amp.autocast(resolved_device.type, enabled=amp_enabled):
             pred = model(sensor, sst=sst) if sst is not None else model(sensor)
             loss, parts = loss_fn(pred, target)
+        if bool(getattr(loss_fn, "log_component_grad_norms", False)) and hasattr(loss_fn, "component_gradient_norms"):
+            parts = {**parts, **loss_fn.component_gradient_norms(pred, target)}
         if amp_enabled:
             scaler.scale(loss).backward()
             if grad_clip_norm is not None:
