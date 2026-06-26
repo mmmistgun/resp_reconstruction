@@ -774,6 +774,32 @@ manifest：`runs/f_a2_guard_manifest.csv`
 - 若降低权重后 hard 收益消失，说明原 F-A2 的收益主要依赖较强 band-energy 约束；此时不应直接进入 F-B，而应考虑 hard/low-spectrum 加权或阶段性调度。
 - 若 easy/fast-RR 仍系统性变差，即使 overall 指标改善，也不进入扩 seed 或 F-B。
 
+### 8.3 F-A2 guard probe 结果记录（2026-06-27）
+
+运行范围：
+
+- manifest：`runs/f_a2_guard_manifest.csv`
+- summary：`runs/f_a2_guard_summary.csv`
+- paired delta：`runs/f_a2_guard_paired_delta.csv`
+- strata delta：`runs/f_a2_guard_strata_delta.csv`
+- 新训练 run：`F-A2b_dist_bandE_w005`、`F-A2c_dist_bandE_w003`，各 3 seed
+- 复用 run：`F0_native_stft_pre_mixer`、`F-A2_dist_bandE`，各 3 seed
+- 汇总状态：`summary` 为 12 行 complete，12 个 `run_dir` 唯一
+
+主结果：
+
+- `F-A2b_dist_bandE_w005` 是本轮最稳的折中候选：相对 F0 的 overall paired `rr_peak_band_abs_error_mean` 三个 seed 全部改善，平均 `-0.0192`；`rr_peak_band_abs_error_median` 平均 `-0.0070`；`breath_count_zero_cross_abs_error_mean` 平均 `-0.0208`；`frac_gt_1` 平均 `-0.0059`；`frac_gt_2` 平均 `-0.0037`。baseline hard 分层平均 `-0.1960`，low-spectrum 平均 `-0.0185`，说明 hard/low-spectrum 收益基本保留。
+- `F-A2b` 相对原 `F-A2_dist_bandE` 的 overall peak mean 平均再降 `-0.0028`，且原 F-A2 在 seed `20260837` 上 overall peak 变差的问题消失；但 `rr_spec_abs_error_mean` 比原 F-A2 平均差 `+0.0040`，`band_limited_corr_mean` 平均差 `-0.0006`。
+- `F-A2c_dist_bandE_w003` 护栏更轻但收益缩水：overall paired `rr_peak_band_abs_error_mean` 平均 `-0.0104`，baseline hard 平均 `-0.1116`，low-spectrum 平均 `-0.0149`；`relative_envelope_corr_mean` 平均 `-0.0003`。它降低了 easy 退化幅度，但不像 `F-A2b` 那样保留强 hard 收益。
+- easy / fast-RR 护栏仍未完全通过：`F-A2b` baseline easy 三个 seed 均变差，平均 `+0.0182`；fast-RR 平均 `+0.0019`，2/3 seed 变差。`F-A2c` baseline easy 也三 seed 均变差，但平均降到 `+0.0090`；fast-RR 平均 `+0.0010`，仍有 2/3 seed 变差。
+- 梯度规模符合权重降低预期：原 `F-A2` tail STFT/base 梯度比约 `3.7%`；`F-A2b` 约 `0.8%`；`F-A2c` 约 `0.4%`。dist 分量梯度仍约 `0.000004`，主要作用仍来自 band-energy。
+
+阶段判断：
+
+- 不直接进入 F-B，也不扩 seed。`F-A2b_dist_bandE_w005` 具有比原 F-A2 更稳定的 overall / hard 正信号，但 easy 和 fast-RR 仍系统性变差，不满足第 7 节护栏。
+- 不建议继续只扫更小 scalar 权重。`0.003` 已显示继续降权会削弱 hard 收益；下一步应改变监督选择方式，例如 hard/low-spectrum 加权、阶段性 band-energy 调度，或对 easy/fast-RR 档降权/关闭 STFT 派生 loss。
+- 若资源允许，下一批更有价值的候选是保留 `stft_band_energy_weight=0.005`，但把 STFT loss 只强化到 baseline hard / low-spectrum 或低 confidence 窗口；成功标准必须要求 baseline easy 不再三 seed 同向变差。
+
 ## 9. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
