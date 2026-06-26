@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
@@ -30,6 +32,8 @@ class WeakSyncLoss(torch.nn.Module):
         self.si_sdr_weight = float(cfg.loss.get("si_sdr_weight", 0.0))
         self.stft_dist_weight = float(cfg.loss.get("stft_dist_weight", 0.0))
         self.stft_band_energy_weight = float(cfg.loss.get("stft_band_energy_weight", 0.0))
+        self.stft_sample_weight_mode = str(cfg.loss.get("stft_sample_weight_mode", "none")).lower()
+        self.stft_sample_weight_min = float(cfg.loss.get("stft_sample_weight_min", 0.0))
         self.log_component_grad_norms = bool(cfg.loss.get("log_component_grad_norms", False))
         self.signed_cosine_schedule = cfg.loss.get("signed_cosine_schedule", None)
         self.signed_corr_schedule = cfg.loss.get("signed_corr_schedule", None)
@@ -61,9 +65,18 @@ class WeakSyncLoss(torch.nn.Module):
             ("si_sdr_weight", self.si_sdr_weight),
             ("stft_dist_weight", self.stft_dist_weight),
             ("stft_band_energy_weight", self.stft_band_energy_weight),
+            ("stft_sample_weight_min", self.stft_sample_weight_min),
         ):
             if value < 0:
                 raise ValueError(f"{name} 必须非负，当前={value}")
+        if self.stft_sample_weight_min > 1:
+            raise ValueError(f"stft_sample_weight_min 必须 <= 1，当前={self.stft_sample_weight_min}")
+        if self.stft_sample_weight_mode not in {
+            "none",
+            "waveform_confidence_score_inverse",
+            "waveform_confidence_level_medlow",
+        }:
+            raise ValueError(f"未知 stft_sample_weight_mode: {self.stft_sample_weight_mode}")
         if self.rhythm_min_period_sec >= self.rhythm_max_period_sec:
             raise ValueError(
                 "rhythm_min_period_sec 必须小于 rhythm_max_period_sec，"
@@ -105,17 +118,49 @@ class WeakSyncLoss(torch.nn.Module):
             "signed_corr": self._scheduled_signed_corr_weight(),
         }
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    def forward(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        *,
+        sample_weight: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         self._validate_inputs(pred, target)
         # AMP 下模型输出可能是 float16；cuFFT 对非 2 次幂长度的 half FFT
         # 有限制，因此损失内部统一用 float32 做频域和包络计算。
         pred_loss = pred.float()
         target_loss = target.float()
-        components = self._loss_components(pred_loss, target_loss)
+        components = self._loss_components(pred_loss, target_loss, sample_weight=sample_weight)
         total = self._weighted_total(components)
         return total, {name: value.detach() for name, value in components.items()}
 
-    def _loss_components(self, pred_loss: torch.Tensor, target_loss: torch.Tensor) -> dict[str, torch.Tensor]:
+    def sample_weights_from_meta(self, meta: Mapping[str, object], *, device: torch.device) -> torch.Tensor | None:
+        """从 batch meta 生成 target STFT loss 的样本权重；默认关闭。"""
+        if self.stft_sample_weight_mode == "none":
+            return None
+        if not isinstance(meta, Mapping):
+            raise TypeError("meta 必须是 Mapping，才能生成 stft sample weights")
+        if self.stft_sample_weight_mode == "waveform_confidence_score_inverse":
+            if "waveform_confidence_score" not in meta:
+                raise KeyError("meta 缺少 waveform_confidence_score，无法生成 STFT 样本权重")
+            score = _meta_float_tensor(meta["waveform_confidence_score"], device=device)
+            return torch.clamp(1.0 - score, min=self.stft_sample_weight_min, max=1.0)
+        if "waveform_confidence_level" not in meta:
+            raise KeyError("meta 缺少 waveform_confidence_level，无法生成 STFT 样本权重")
+        levels = _meta_string_list(meta["waveform_confidence_level"])
+        weights = [
+            1.0 if level.strip().lower() in {"low", "medium"} else self.stft_sample_weight_min
+            for level in levels
+        ]
+        return torch.tensor(weights, device=device, dtype=torch.float32)
+
+    def _loss_components(
+        self,
+        pred_loss: torch.Tensor,
+        target_loss: torch.Tensor,
+        *,
+        sample_weight: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
         env = self._envelope_loss(pred_loss, target_loss)
         spec = self._spectrum_loss(pred_loss, target_loss)
         smooth = torch.mean(torch.abs(pred_loss[..., 1:] - pred_loss[..., :-1]))
@@ -153,7 +198,7 @@ class WeakSyncLoss(torch.nn.Module):
         )
         si_sdr = self._si_sdr_loss(pred_loss, target_loss) if self.si_sdr_weight > 0 else pred_loss.new_tensor(0.0)
         if self.target_stft_loss is not None:
-            stft_parts = self.target_stft_loss(pred_loss, target_loss)
+            stft_parts = self.target_stft_loss(pred_loss, target_loss, sample_weight=sample_weight)
             stft_dist = stft_parts["stft_dist"] if self.stft_dist_weight > 0 else pred_loss.new_tensor(0.0)
             stft_band_energy = (
                 stft_parts["stft_band_energy"] if self.stft_band_energy_weight > 0 else pred_loss.new_tensor(0.0)
@@ -207,13 +252,19 @@ class WeakSyncLoss(torch.nn.Module):
             + self.stft_band_energy_weight * components["stft_band_energy"]
         )
 
-    def component_gradient_norms(self, pred: torch.Tensor, target: torch.Tensor) -> dict[str, torch.Tensor]:
+    def component_gradient_norms(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        *,
+        sample_weight: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
         """返回关键加权 loss 分项对模型输出的梯度范数，用于 F-A 权重诊断。"""
 
         self._validate_inputs(pred, target)
         pred_loss = pred.float()
         target_loss = target.float()
-        components = self._loss_components(pred_loss, target_loss)
+        components = self._loss_components(pred_loss, target_loss, sample_weight=sample_weight)
         weighted = {
             "base_total": self._weighted_base_total(components),
             "stft_total": self._weighted_stft_total(components),
@@ -515,3 +566,28 @@ class WeakSyncLoss(torch.nn.Module):
     def _zscore(x: torch.Tensor) -> torch.Tensor:
         std = x.std(dim=-1, keepdim=True)
         return (x - x.mean(dim=-1, keepdim=True)) / torch.clamp(std, min=1e-6)
+
+
+def _meta_float_tensor(value: object, *, device: torch.device) -> torch.Tensor:
+    tensor = torch.as_tensor(value, device=device, dtype=torch.float32).reshape(-1)
+    if tensor.numel() == 0:
+        raise ValueError("waveform_confidence_score 为空")
+    if not bool(torch.isfinite(tensor).all()):
+        raise ValueError("waveform_confidence_score 包含非有限值")
+    if bool(((tensor < 0) | (tensor > 1)).any()):
+        raise ValueError("waveform_confidence_score 必须位于 [0, 1]")
+    return tensor
+
+
+def _meta_string_list(value: object) -> list[str]:
+    if torch.is_tensor(value):
+        flattened = value.detach().cpu().reshape(-1).tolist()
+        return [str(item) for item in flattened]
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value]
+    if hasattr(value, "tolist"):
+        converted = value.tolist()
+        if isinstance(converted, list):
+            return [str(item) for item in converted]
+        return [str(converted)]
+    return [str(value)]

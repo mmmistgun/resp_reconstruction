@@ -77,15 +77,34 @@ class TargetStftLoss(torch.nn.Module):
             band_energy_weights=weights,
         )
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> dict[str, torch.Tensor]:
+    def forward(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        *,
+        sample_weight: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
         self._validate_inputs(pred, target)
+        sample_weight = _prepare_sample_weight(
+            sample_weight,
+            batch_size=pred.shape[0],
+            device=pred.device,
+            dtype=pred.dtype,
+            eps=self.eps,
+        )
         pred_logmag, pred_power = self._stft_features(pred)
         target_logmag, target_power = self._stft_features(target)
         dist_mask = self._frequency_mask(self.dist_low_hz, self.dist_high_hz, pred.device)
         frame_weights = self._frame_weights(target_power, dist_mask)
         return {
-            "stft_dist": self._distribution_loss(pred_logmag, target_logmag, dist_mask, frame_weights),
-            "stft_band_energy": self._band_energy_loss(pred_power, target_power, frame_weights),
+            "stft_dist": self._distribution_loss(
+                pred_logmag,
+                target_logmag,
+                dist_mask,
+                frame_weights,
+                sample_weight,
+            ),
+            "stft_band_energy": self._band_energy_loss(pred_power, target_power, frame_weights, sample_weight),
         }
 
     def _validate_config(self) -> None:
@@ -155,6 +174,7 @@ class TargetStftLoss(torch.nn.Module):
         target_logmag: torch.Tensor,
         mask: torch.Tensor,
         frame_weights: torch.Tensor,
+        sample_weight: torch.Tensor | None,
     ) -> torch.Tensor:
         pred_prob = torch.softmax(self.dist_beta * pred_logmag[:, mask, :], dim=1)
         target_prob = torch.softmax(self.dist_beta * target_logmag[:, mask, :], dim=1)
@@ -165,13 +185,14 @@ class TargetStftLoss(torch.nn.Module):
             dim=1,
         )
         jsd = 0.5 * (pred_kl + target_kl)
-        return _weighted_frame_mean(jsd, frame_weights, self.eps)
+        return _weighted_frame_mean(jsd, frame_weights, self.eps, sample_weight=sample_weight)
 
     def _band_energy_loss(
         self,
         pred_power: torch.Tensor,
         target_power: torch.Tensor,
         frame_weights: torch.Tensor,
+        sample_weight: torch.Tensor | None,
     ) -> torch.Tensor:
         total = pred_power.new_tensor(0.0)
         total_weight = 0.0
@@ -182,19 +203,55 @@ class TargetStftLoss(torch.nn.Module):
             pred_energy = torch.log1p(pred_power[:, mask, :].sum(dim=1))
             target_energy = torch.log1p(target_power[:, mask, :].sum(dim=1))
             loss = F.smooth_l1_loss(pred_energy, target_energy, reduction="none")
-            total = total + float(weight) * _weighted_frame_mean(loss, frame_weights, self.eps)
+            total = total + float(weight) * _weighted_frame_mean(
+                loss,
+                frame_weights,
+                self.eps,
+                sample_weight=sample_weight,
+            )
             total_weight += float(weight)
         if total_weight <= 0:
             return pred_power.new_tensor(0.0)
         return total / total_weight
 
 
-def _weighted_frame_mean(values: torch.Tensor, weights: torch.Tensor, eps: float) -> torch.Tensor:
+def _weighted_frame_mean(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    eps: float,
+    *,
+    sample_weight: torch.Tensor | None = None,
+) -> torch.Tensor:
     denom = weights.sum(dim=-1)
     numerator = (values * weights).sum(dim=-1)
     per_sample = numerator / torch.clamp(denom, min=eps)
     per_sample = torch.where(denom > eps, per_sample, torch.zeros_like(per_sample))
+    if sample_weight is not None:
+        sample_denom = sample_weight.sum()
+        if float(sample_denom.detach().cpu()) <= eps:
+            return per_sample.new_tensor(0.0)
+        return (per_sample * sample_weight).sum() / torch.clamp(sample_denom, min=eps)
     return per_sample.mean()
+
+
+def _prepare_sample_weight(
+    sample_weight: torch.Tensor | None,
+    *,
+    batch_size: int,
+    device: torch.device,
+    dtype: torch.dtype,
+    eps: float,
+) -> torch.Tensor | None:
+    if sample_weight is None:
+        return None
+    weight = torch.as_tensor(sample_weight, device=device, dtype=dtype).reshape(-1)
+    if weight.numel() != int(batch_size):
+        raise ValueError(f"sample_weight 长度必须等于 batch size: weight={weight.numel()} batch={batch_size}")
+    if not bool(torch.isfinite(weight).all()):
+        raise ValueError("sample_weight 包含非有限值")
+    if bool((weight < 0).any()):
+        raise ValueError("sample_weight 必须非负")
+    return torch.where(weight > eps, weight, torch.zeros_like(weight))
 
 
 def _as_band_pairs(value: Sequence[Sequence[float]]) -> tuple[tuple[float, float], ...]:

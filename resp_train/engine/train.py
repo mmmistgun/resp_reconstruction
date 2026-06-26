@@ -43,12 +43,13 @@ def train_one_epoch(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
+        loss_kwargs = _loss_sample_weight_kwargs(loss_fn, batch, resolved_device)
         optimizer.zero_grad(set_to_none=True)
         with torch.amp.autocast(resolved_device.type, enabled=amp_enabled):
             pred = model(sensor, sst=sst) if sst is not None else model(sensor)
-            loss, parts = loss_fn(pred, target)
+            loss, parts = loss_fn(pred, target, **loss_kwargs)
         if bool(getattr(loss_fn, "log_component_grad_norms", False)) and hasattr(loss_fn, "component_gradient_norms"):
-            parts = {**parts, **loss_fn.component_gradient_norms(pred, target)}
+            parts = {**parts, **loss_fn.component_gradient_norms(pred, target, **loss_kwargs)}
         if amp_enabled:
             scaler.scale(loss).backward()
             if grad_clip_norm is not None:
@@ -95,8 +96,9 @@ def validate(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
+        loss_kwargs = _loss_sample_weight_kwargs(loss_fn, batch, resolved_device)
         pred = model(sensor, sst=sst) if sst is not None else model(sensor)
-        loss, parts = loss_fn(pred, target)
+        loss, parts = loss_fn(pred, target, **loss_kwargs)
         meter.update(loss, parts, batch_size=sensor.size(0))
         progress.set_postfix(loss=f"{meter.summary()['loss']:.4f}")
 
@@ -221,6 +223,23 @@ def _batch_sst(batch: Mapping[str, torch.Tensor], device: torch.device, *, non_b
     if sst is None:
         return None
     return sst.to(device, non_blocking=non_blocking)
+
+
+def _loss_sample_weight_kwargs(
+    loss_fn: nn.Module,
+    batch: Mapping[str, Any],
+    device: torch.device,
+) -> dict[str, torch.Tensor]:
+    """让 loss 可选地从 batch meta 派生样本权重；未实现时保持旧调用方式。"""
+    if not hasattr(loss_fn, "sample_weights_from_meta") or not hasattr(batch, "get"):
+        return {}
+    meta = batch.get("meta")
+    if meta is None:
+        return {}
+    sample_weight = loss_fn.sample_weights_from_meta(meta, device=device)
+    if sample_weight is None:
+        return {}
+    return {"sample_weight": sample_weight}
 
 
 def _should_show_progress(show_progress: bool | None) -> bool:

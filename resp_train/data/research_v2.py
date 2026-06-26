@@ -122,6 +122,8 @@ class ResearchV2WindowDataset(Dataset):
                 "samp_id": int(row["samp_id"]),
                 "coupling_state_id": int(row["coupling_state_id"]),
                 "allowed_losses": str(row.get("allowed_losses", "")),
+                "waveform_confidence_score": float(row.get("waveform_confidence_score", float("nan"))),
+                "waveform_confidence_level": str(row.get("waveform_confidence_level", "")),
                 "supervision_confidence_level": str(row.get("supervision_confidence_level", "")),
                 "state_alignment_method": str(row.get("state_alignment_method", "")),
                 "rr_peak_valid_mask": torch.from_numpy(rr_peak_valid_mask.copy()),

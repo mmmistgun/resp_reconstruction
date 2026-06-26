@@ -800,6 +800,46 @@ manifest：`runs/f_a2_guard_manifest.csv`
 - 不建议继续只扫更小 scalar 权重。`0.003` 已显示继续降权会削弱 hard 收益；下一步应改变监督选择方式，例如 hard/low-spectrum 加权、阶段性 band-energy 调度，或对 easy/fast-RR 档降权/关闭 STFT 派生 loss。
 - 若资源允许，下一批更有价值的候选是保留 `stft_band_energy_weight=0.005`，但把 STFT loss 只强化到 baseline hard / low-spectrum 或低 confidence 窗口；成功标准必须要求 baseline easy 不再三 seed 同向变差。
 
+### 8.4 F-A2 confidence guard probe 计划（2026-06-27）
+
+目的：接受 8.3 的判断，不继续做更小 scalar 权重 sweep；保留 `F-A2b_dist_bandE_w005` 的权重强度，但改变 STFT 派生 loss 的样本选择，让约束更偏向低 waveform confidence 窗口。该 probe 不改模型结构、数据 split、评价指标或已有 F0/F-A2/F-A2b 结果。
+
+代码入口：
+
+- 训练编排：`scripts/run_f_a2_confidence_guard_probe.py`
+- 汇总入口：继续使用 `scripts/summarize_f_a_stft_loss.py`
+- manifest：`runs/f_a2_confidence_guard_manifest.csv`
+
+实现口径：
+
+- `ResearchV2WindowDataset` 将 index 中已有的 `waveform_confidence_score` 和 `waveform_confidence_level` 暴露到 batch `meta`。
+- `WeakSyncLoss` 新增默认关闭的 `loss.stft_sample_weight_mode=none`；仅当 runner 显式覆盖时，才从 meta 生成 `sample_weight`，并且只作用到 target STFT 派生 loss，不改变 base waveform/spectrum loss。
+- 两个新模式分别是 `waveform_confidence_score_inverse` 与 `waveform_confidence_level_medlow`。前者使用 `1 - waveform_confidence_score`，并保留 `stft_sample_weight_min=0.05` 的高置信兜底；后者对 low/medium 赋权 1.0，对 high 赋权 0.0。
+
+矩阵：
+
+| label | 训练方式 | `stft_dist_weight` | `stft_band_energy_weight` | `stft_sample_weight_mode` | 目的 |
+|---|---|---:|---:|---|---|
+| `F0_native_stft_pre_mixer` | 复用 `runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual` | 0.0 | 0.0 | `none` | 同 seed anchor |
+| `F-A2_dist_bandE` | 复用 `runs/f_a_stft_loss/f_a2_dist_bande/dual` | 0.02 | 0.01 | `none` | 原 F-A2 对照 |
+| `F-A2b_dist_bandE_w005` | 复用 `runs/f_a2_guard/f_a2b_dist_bande_w005/dual` | 0.02 | 0.005 | `none` | 当前最强 scalar 护栏候选 |
+| `F-A2d_confScoreInv_w005` | 新训练 | 0.02 | 0.005 | `waveform_confidence_score_inverse` | 连续低置信加权，避免完全关闭高置信样本 |
+| `F-A2e_confLevelMedLow_w005` | 新训练 | 0.02 | 0.005 | `waveform_confidence_level_medlow` | 对 high confidence 关闭 STFT 派生 loss，强化 low/medium |
+
+执行范围：每个新候选 3 seed，即 6 个新训练 run；旧 F0、原 F-A2、F-A2b 只写入 manifest 供同表汇总，不重新训练。
+
+训练后汇总路径：
+
+- summary：`runs/f_a2_confidence_guard_summary.csv`
+- paired delta：`runs/f_a2_confidence_guard_paired_delta.csv`
+- strata delta：`runs/f_a2_confidence_guard_strata_delta.csv`
+
+阶段判断：
+
+- 只有当候选保留 baseline hard / low-spectrum 收益，且 baseline easy 不再三 seed 同向变差时，才考虑扩 seed。
+- 若 score inverse 仍损伤 easy，但 level medlow 缓解，下一步优先做更细的 confidence/quality 分桶，而不是进入 F-B。
+- 若两个候选都削弱 hard 收益或 easy/fast-RR 仍系统性变差，F-A2 系列应先停止，转向 hard-window 诊断或重新定义 target STFT loss 形式。
+
 ## 9. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。

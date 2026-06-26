@@ -104,6 +104,30 @@ def test_target_stft_band_energy_penalizes_missing_energy_trajectory():
     assert flat_parts["stft_band_energy"] > same_parts["stft_band_energy"] + 0.05
 
 
+def test_target_stft_loss_applies_optional_sample_weights_after_frame_aggregation():
+    loss_fn = TargetStftLoss(
+        sample_rate=100,
+        win_length=1000,
+        hop_length=500,
+        n_fft=1000,
+        dist_low_hz=0.067,
+        dist_high_hz=1.2,
+        dist_beta=3.0,
+    )
+    good_target = _sine(0.2)
+    good_pred = good_target.clone()
+    bad_target = _sine(0.2)
+    bad_pred = _sine(0.4)
+    target = torch.cat([good_target, bad_target], dim=0)
+    pred = torch.cat([good_pred, bad_pred], dim=0)
+
+    unweighted = loss_fn(pred, target)
+    weighted = loss_fn(pred, target, sample_weight=torch.tensor([1.0, 0.0]))
+
+    assert weighted["stft_dist"] < 1e-4
+    assert unweighted["stft_dist"] > weighted["stft_dist"] + 0.02
+
+
 def test_weak_sync_loss_includes_target_stft_loss_and_backpropagates():
     cfg = _weak_cfg()
     loss_fn = WeakSyncLoss(cfg)

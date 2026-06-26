@@ -196,6 +196,8 @@ def test_research_v2_dataset_slices_alignment_and_signal_bank(tmp_path: Path):
     assert sample["meta"]["samp_id"] == 88
     assert sample["meta"]["allowed_losses"] == "rate;waveform"
     assert sample["meta"]["coupling_state_id"] == 1
+    assert sample["meta"]["waveform_confidence_score"] == pytest.approx(0.8)
+    assert sample["meta"]["waveform_confidence_level"] == "high"
     assert torch.equal(sample["meta"]["rr_peak_valid_mask"], torch.ones(40, dtype=torch.bool))
 
 

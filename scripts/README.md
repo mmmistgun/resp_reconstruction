@@ -183,6 +183,11 @@ E1 STFT 信息增益实验的 manifest 生成器：
   --dry-run \
   --manifest runs/e3_b_manifest.csv
 
+# F-A2 confidence guard：复用 F0/原 F-A2/F-A2b，只训练低置信加权 STFT loss 候选
+./.venv/bin/python scripts/run_f_a2_confidence_guard_probe.py \
+  --dry-run \
+  --manifest runs/f_a2_confidence_guard_manifest.csv
+
 # E3-C1：STFT 注入位置消融，4 个 dual arm + 2 个 time_only substrate × 3 seed
 ./.venv/bin/python scripts/run_e3_c1_injection_probe.py \
   --device cuda:0 \

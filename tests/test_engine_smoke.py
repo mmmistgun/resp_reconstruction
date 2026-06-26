@@ -40,6 +40,30 @@ class _FakeTensor:
         return self
 
 
+class _SampleWeightSpyLoss(torch.nn.Module):
+    log_component_grad_norms = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.forward_sample_weight: torch.Tensor | None = None
+        self.grad_sample_weight: torch.Tensor | None = None
+
+    def sample_weights_from_meta(self, meta, *, device: torch.device):
+        scores = meta["waveform_confidence_score"].to(device=device, dtype=torch.float32)
+        return 1.0 - scores
+
+    def forward(self, pred, target, *, sample_weight=None):
+        self.forward_sample_weight = None if sample_weight is None else sample_weight.detach().cpu().clone()
+        loss = (pred - target).square().mean()
+        if sample_weight is not None:
+            loss = loss * sample_weight.mean()
+        return loss, {"sample_weight_mean": pred.new_tensor(-1.0) if sample_weight is None else sample_weight.mean()}
+
+    def component_gradient_norms(self, pred, target, *, sample_weight=None):
+        self.grad_sample_weight = None if sample_weight is None else sample_weight.detach().cpu().clone()
+        return {"grad_norm_sample_weight": pred.new_tensor(0.0) if sample_weight is None else sample_weight.mean()}
+
+
 def _cfg():
     return OmegaConf.create(
         {
@@ -106,6 +130,61 @@ def test_train_one_epoch_returns_positive_average_loss():
     summary = train_one_epoch(model, loader, loss_fn, optimizer, torch.device("cpu"))
 
     assert summary["loss"] > 0
+
+
+def test_train_one_epoch_passes_meta_derived_sample_weights_to_loss():
+    loader = DataLoader(
+        [
+            {
+                "x": torch.ones(1, 8),
+                "target": torch.zeros(1, 8),
+                "meta": {"dataset_row_id": 1, "waveform_confidence_score": 0.2},
+            },
+            {
+                "x": torch.ones(1, 8),
+                "target": torch.zeros(1, 8),
+                "meta": {"dataset_row_id": 2, "waveform_confidence_score": 0.8},
+            },
+        ],
+        batch_size=2,
+        shuffle=False,
+    )
+    model = torch.nn.Conv1d(1, 1, kernel_size=1)
+    loss_fn = _SampleWeightSpyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    summary = train_one_epoch(model, loader, loss_fn, optimizer, torch.device("cpu"))
+
+    expected = torch.tensor([0.8, 0.2])
+    assert torch.allclose(loss_fn.forward_sample_weight, expected)
+    assert torch.allclose(loss_fn.grad_sample_weight, expected)
+    assert summary["sample_weight_mean"] == pytest.approx(0.5)
+
+
+def test_validate_passes_meta_derived_sample_weights_to_loss():
+    loader = DataLoader(
+        [
+            {
+                "x": torch.ones(1, 8),
+                "target": torch.zeros(1, 8),
+                "meta": {"dataset_row_id": 1, "waveform_confidence_score": 0.25},
+            },
+            {
+                "x": torch.ones(1, 8),
+                "target": torch.zeros(1, 8),
+                "meta": {"dataset_row_id": 2, "waveform_confidence_score": 0.75},
+            },
+        ],
+        batch_size=2,
+        shuffle=False,
+    )
+    model = torch.nn.Conv1d(1, 1, kernel_size=1)
+    loss_fn = _SampleWeightSpyLoss()
+
+    summary = validate(model, loader, loss_fn, torch.device("cpu"))
+
+    assert torch.allclose(loss_fn.forward_sample_weight, torch.tensor([0.75, 0.25]))
+    assert summary["sample_weight_mean"] == pytest.approx(0.5)
 
 
 def test_progress_description_includes_epoch_context():

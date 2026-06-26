@@ -228,6 +228,62 @@ def _resp_sine(cfg, seconds: float = 60.0, freq_hz: float = 0.25) -> torch.Tenso
     return torch.sin(2 * torch.pi * freq_hz * time).reshape(1, 1, -1)
 
 
+def test_stft_sample_weights_can_use_inverse_waveform_confidence_score():
+    cfg = _cfg()
+    cfg.loss.stft_sample_weight_mode = "waveform_confidence_score_inverse"
+    cfg.loss.stft_sample_weight_min = 0.05
+    loss_fn = WeakSyncLoss(cfg)
+
+    weights = loss_fn.sample_weights_from_meta(
+        {"waveform_confidence_score": torch.tensor([0.95, 0.2, 0.0])},
+        device=torch.device("cpu"),
+    )
+
+    assert torch.allclose(weights, torch.tensor([0.05, 0.8, 1.0]))
+
+
+def test_stft_sample_weights_can_use_waveform_confidence_level_medlow():
+    cfg = _cfg()
+    cfg.loss.stft_sample_weight_mode = "waveform_confidence_level_medlow"
+    loss_fn = WeakSyncLoss(cfg)
+
+    weights = loss_fn.sample_weights_from_meta(
+        {"waveform_confidence_level": ["high", "medium", "low"]},
+        device=torch.device("cpu"),
+    )
+
+    assert torch.allclose(weights, torch.tensor([0.0, 1.0, 1.0]))
+
+
+def test_weak_sync_stft_loss_sample_weights_only_gate_stft_components():
+    cfg = _cfg()
+    _disable_base_losses(cfg)
+    cfg.loss.stft_dist_weight = 1.0
+    cfg.loss.stft_band_energy_weight = 0.0
+    cfg.loss.stft_win_length = 1000
+    cfg.loss.stft_hop_length = 500
+    cfg.loss.stft_n_fft = 1000
+    cfg.loss.stft_sample_weight_mode = "waveform_confidence_score_inverse"
+    loss_fn = WeakSyncLoss(cfg)
+    good_target = _resp_sine(cfg, freq_hz=0.2)
+    good_pred = good_target.clone()
+    bad_target = _resp_sine(cfg, freq_hz=0.2)
+    bad_pred = _resp_sine(cfg, freq_hz=0.4)
+    target = torch.cat([good_target, bad_target], dim=0)
+    pred = torch.cat([good_pred, bad_pred], dim=0)
+    sample_weight = loss_fn.sample_weights_from_meta(
+        {"waveform_confidence_score": torch.tensor([0.0, 1.0])},
+        device=torch.device("cpu"),
+    )
+
+    weighted_total, weighted_parts = loss_fn(pred, target, sample_weight=sample_weight)
+    unweighted_total, unweighted_parts = loss_fn(pred, target)
+
+    assert weighted_parts["stft_dist"] < 1e-4
+    assert unweighted_parts["stft_dist"] > weighted_parts["stft_dist"] + 0.02
+    assert unweighted_total > weighted_total + 0.02
+
+
 def test_signed_cosine_anchor_penalizes_inverted_band_signal_and_ignores_scale():
     cfg = _cfg()
     _disable_base_losses(cfg)
