@@ -743,6 +743,37 @@ F-D 的推进条件：
 - 保留 `F-A2_dist_bandE` 作为正信号候选，但必须先做护栏修正：降低或调度 `stft_band_energy_weight`，或让 STFT 派生 loss 更偏向 hard/low-spectrum 窗口，目标是保留 hard/low-spectrum 收益，同时消除 easy 与 fast-RR 系统性恶化。
 - `F-A0_dist` 不单独继续；若继续使用 distribution 项，应作为 `F-A2` 的小辅助，并重新评估权重或 beta，否则当前梯度贡献太小。
 
+### 8.2 F-A2 guard probe 计划（2026-06-27）
+
+目的：只检验 `F-A2_dist_bandE` 的护栏修正，不改模型结构、数据 split、评价指标或原始 F0/F-A2 结果。核心问题是：降低 `stft_band_energy_weight` 后，能否保留 baseline hard / low-spectrum 收益，同时消除 baseline easy 和 fast-RR 的系统性退化。
+
+runner：`scripts/run_f_a2_guard_probe.py`
+
+manifest：`runs/f_a2_guard_manifest.csv`
+
+矩阵：
+
+| label | 训练方式 | `stft_dist_weight` | `stft_band_energy_weight` | 目的 |
+|---|---|---:|---:|---|
+| `F0_native_stft_pre_mixer` | 复用 `runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual` | 0.0 | 0.0 | 同 seed anchor |
+| `F-A2_dist_bandE` | 复用 `runs/f_a_stft_loss/f_a2_dist_bande/dual` | 0.02 | 0.01 | 原 F-A2 对照 |
+| `F-A2b_dist_bandE_w005` | 新训练 | 0.02 | 0.005 | band-energy 减半，观察 easy/fast 护栏 |
+| `F-A2c_dist_bandE_w003` | 新训练 | 0.02 | 0.003 | 更弱 band-energy，观察 hard 收益是否仍保留 |
+
+执行范围：每个新候选 3 seed，即 6 个新训练 run；旧 F0 和旧 F-A2 只写入 manifest 供同表汇总，不重新训练。
+
+训练后汇总路径：
+
+- summary：`runs/f_a2_guard_summary.csv`
+- paired delta：`runs/f_a2_guard_paired_delta.csv`
+- strata delta：`runs/f_a2_guard_strata_delta.csv`
+
+阶段判断：
+
+- 若 `F-A2b` 或 `F-A2c` 在 baseline hard / low-spectrum 仍明显优于 F0，且 baseline easy 不再系统性变差，才考虑扩 seed。
+- 若降低权重后 hard 收益消失，说明原 F-A2 的收益主要依赖较强 band-energy 约束；此时不应直接进入 F-B，而应考虑 hard/low-spectrum 加权或阶段性调度。
+- 若 easy/fast-RR 仍系统性变差，即使 overall 指标改善，也不进入扩 seed 或 F-B。
+
 ## 9. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
