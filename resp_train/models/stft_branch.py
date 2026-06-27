@@ -171,6 +171,98 @@ class TargetStftAuxHead(nn.Module):
         return self.decoder(aligned)
 
 
+class BandAwareTargetStftAuxHead(nn.Module):
+    """按少量生理频带拆分输出 head 的 target STFT auxiliary head。"""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_length: int,
+        sample_rate: float = 100.0,
+        win_length: int = 3000,
+        hop_length: int = 500,
+        n_fft: int = 3000,
+        center: bool = False,
+        low_hz: float = 0.033,
+        high_hz: float = 3.0,
+        hidden_channels: int | None = None,
+    ) -> None:
+        super().__init__()
+        self.in_channels = int(in_channels)
+        self.out_length = int(out_length)
+        self.sample_rate = float(sample_rate)
+        self.win_length = int(win_length)
+        self.hop_length = int(hop_length)
+        self.n_fft = int(n_fft)
+        self.center = bool(center)
+        self.low_hz = float(low_hz)
+        self.high_hz = float(high_hz)
+        if self.n_fft < self.win_length:
+            raise ValueError("fb_aux_stft_n_fft 必须大于等于 fb_aux_stft_win_length")
+        _validate_stft_config(self.n_fft, self.hop_length, self.sample_rate, self.low_hz, self.high_hz)
+        self.band_start, self.band_end = _band_indices(self.n_fft, self.sample_rate, self.low_hz, self.high_hz)
+        self.frame_count = _stft_frame_count(
+            self.out_length,
+            self.win_length,
+            self.hop_length,
+            self.n_fft,
+            self.center,
+        )
+        hidden = int(hidden_channels or self.in_channels)
+        self.shared = nn.Sequential(
+            nn.Conv1d(self.in_channels, hidden, kernel_size=3, padding=1),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+            nn.Conv1d(hidden, hidden, kernel_size=3, padding=1),
+            nn.SiLU(),
+        )
+        self.band_slices = self._build_band_slices()
+        self.band_heads = nn.ModuleList(
+            nn.Conv1d(hidden, rel_end - rel_start, kernel_size=1)
+            for rel_start, rel_end in self.band_slices
+        )
+
+    def band_bin_count(self) -> int:
+        return int(self.band_end - self.band_start)
+
+    def band_count(self) -> int:
+        return len(self.band_slices)
+
+    def _build_band_slices(self) -> list[tuple[int, int]]:
+        # 低频诊断区、常规呼吸主频段、偏快/谐波区分头；输出仍按频率顺序拼回原 bin 栅格。
+        edges = [self.low_hz, 0.067, 0.3, 0.7, 1.2, self.high_hz]
+        clipped = sorted({float(min(max(edge, self.low_hz), self.high_hz)) for edge in edges})
+        if clipped[0] > self.low_hz:
+            clipped.insert(0, self.low_hz)
+        if clipped[-1] < self.high_hz:
+            clipped.append(self.high_hz)
+
+        slices: list[tuple[int, int]] = []
+        cursor = 0
+        total = self.band_bin_count()
+        for lo, hi in zip(clipped[:-1], clipped[1:]):
+            if hi <= lo:
+                continue
+            abs_start, abs_end = _band_indices(self.n_fft, self.sample_rate, lo, hi)
+            rel_start = max(cursor, abs_start - self.band_start)
+            rel_end = min(total, abs_end - self.band_start)
+            if rel_end > rel_start:
+                slices.append((rel_start, rel_end))
+                cursor = rel_end
+        if cursor < total:
+            slices.append((cursor, total))
+        if not slices:
+            raise ValueError("enc2_band_aware_aux 未生成有效频带 head")
+        return slices
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        if tokens.dim() != 3:
+            raise ValueError(f"BandAwareTargetStftAuxHead 期望 token 形状为 (B, C, T)，实际为 {tuple(tokens.shape)}")
+        aligned = align_to_time(tokens, self.frame_count)
+        shared = self.shared(aligned)
+        return torch.cat([head(shared) for head in self.band_heads], dim=1)
+
+
 class LowComplexResidualHead(nn.Module):
     """从共享 token 预测低频复数 STFT 残差，再 iSTFT 成小幅 waveform residual。"""
 
@@ -643,8 +735,8 @@ class TimeStftDual1D(nn.Module):
         use_time = mode in {"time_only", "dual"}
         use_stft = mode in {"stft_only", "dual"}
         self.fb_aux_head_name = str(fb_aux_head or "none").lower()
-        if self.fb_aux_head_name not in {"none", "enc1_min_aux"}:
-            raise ValueError("fb_aux_head 必须是 none 或 enc1_min_aux")
+        if self.fb_aux_head_name not in {"none", "enc1_min_aux", "enc2_band_aware_aux"}:
+            raise ValueError("fb_aux_head 必须是 none、enc1_min_aux 或 enc2_band_aware_aux")
         self.fb_residual_head_name = str(fb_residual_head or "none").lower()
         if self.fb_residual_head_name not in {"none", "low_complex_residual"}:
             raise ValueError("fb_residual_head 必须是 none 或 low_complex_residual")
@@ -673,7 +765,12 @@ class TimeStftDual1D(nn.Module):
         if self.fb_aux_head_name != "none":
             if not use_time:
                 raise ValueError("fb_aux_head 需要启用 time_backbone")
-            self.fb_aux_head = TargetStftAuxHead(
+            aux_head_cls = (
+                BandAwareTargetStftAuxHead
+                if self.fb_aux_head_name == "enc2_band_aware_aux"
+                else TargetStftAuxHead
+            )
+            self.fb_aux_head = aux_head_cls(
                 in_channels=int(time_feat_channels),
                 out_length=int(out_length),
                 sample_rate=float(stft_kwargs.get("sample_rate", 100.0)),

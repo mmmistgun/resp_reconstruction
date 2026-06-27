@@ -1382,6 +1382,56 @@ decoder 的情况下修正 waveform”。
 - 后续若继续 F-B2，只应做“选择性启用 residual”的诊断，例如 hard/ambiguity gate、residual energy cap、
   或只在训练期 proxy 认定为 hard/fast 的窗口上启用 residual；不建议直接加大 residual scale、扩大频带或改成更强 decoder。
 
+### 7.17 F-B 3.5 feature extractor probe 准备（2026-06-27）
+
+目的：沿第 3.5 节尝试特征提取器选择，但不直接进入 `Enc3_tfgrid_residual`。7.16 已说明 residual 对
+hard/fast 有正信号但损伤 easy；因此本轮先只替换 auxiliary extractor，检查 band-aware 先验是否能减少
+Enc1 的旁路/误伤模式。
+
+实现范围：
+
+- 模型：`TimeStftDual1D` 新增 `model.fb_aux_head=enc2_band_aware_aux`。
+- 结构：shared temporal Conv1d 后按 `0.033-0.067 / 0.067-0.3 / 0.3-0.7 / 0.7-1.2 / 1.2-3.0Hz`
+  等频带分 head，最后按频率顺序拼回 `aux_target_stft_logmag`。
+- 输出契约：仍返回 `{"waveform": ..., "aux_target_stft_logmag": ...}`，loss 与评估口径不变。
+- runner：`scripts/run_f_b_feature_extractor_probe.py`
+- manifest：`runs/f_b_feature_extractor_manifest.csv`
+
+矩阵：
+
+| label | 训练方式 | 目的 |
+|---|---|---|
+| `F0_native_stft_pre_mixer` | 复用 `runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual` | 同 seed anchor |
+| `F-B1_aux_consistency_detach` | 复用 `runs/f_b_aux/f_b1_aux_consistency_detach/dual` | Enc1 baseline |
+| `F-B1b_aux_enc2_band_aware_consistency` | 新训练 3 seed | 验证 band-aware auxiliary extractor 是否改善传导与 easy 护栏 |
+
+命令：
+
+```bash
+./.venv/bin/python scripts/run_f_b_feature_extractor_probe.py \
+  --dry-run \
+  --manifest runs/f_b_feature_extractor_manifest.csv
+
+./.venv/bin/python scripts/run_f_b_feature_extractor_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_b_feature_extractor_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_b_feature_extractor_manifest.csv \
+  --output runs/f_b_feature_extractor_summary.csv \
+  --paired-output runs/f_b_feature_extractor_paired_delta.csv \
+  --strata-output runs/f_b_feature_extractor_strata_delta.csv
+```
+
+判断：
+
+- 若 Enc2 相对 Enc1 只改善 aux/STFT 分量但 `STFT(y_hat)`、peak-band RR、计数无改善，仍判为旁路。
+- 若 baseline easy 继续三 seed 同向退化，不进入 Enc3 或 residual 复杂化。
+- 只有 Enc2 同时缓解 easy、保持 hard/fast 信号，才考虑下一步 residual gate 或 TF-Grid-lite。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
