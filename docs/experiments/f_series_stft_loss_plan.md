@@ -1432,6 +1432,46 @@ Enc1 的旁路/误伤模式。
 - 若 baseline easy 继续三 seed 同向退化，不进入 Enc3 或 residual 复杂化。
 - 只有 Enc2 同时缓解 easy、保持 hard/fast 信号，才考虑下一步 residual gate 或 TF-Grid-lite。
 
+### 7.18 F-B 3.5 feature extractor probe 结果（2026-06-27）
+
+运行范围：
+
+- manifest：`runs/f_b_feature_extractor_manifest.csv`
+- summary：`runs/f_b_feature_extractor_summary.csv`
+- paired delta：`runs/f_b_feature_extractor_paired_delta.csv`
+- strata delta：`runs/f_b_feature_extractor_strata_delta.csv`
+- 完成情况：`F0_native_stft_pre_mixer` 3 seed 复用完成；`F-B1_aux_consistency_detach` 3 seed 复用完成；
+  `F-B1b_aux_enc2_band_aware_consistency` 3 seed 训练完成。
+
+相对 `F0_native_stft_pre_mixer` 的 paired 结果：
+
+| label | overall `rr_peak_band_abs_error_mean` delta | 改善 seed | `frac_gt_1` delta | `frac_gt_2` delta | 判断 |
+|---|---:|---:|---:|---:|---|
+| `F-B1_aux_consistency_detach` | `+0.0438` | 1/3 | `+0.0130` | `+0.0086` | 不通过 |
+| `F-B1b_aux_enc2_band_aware_consistency` | `+0.0173` | 1/3 | `+0.0076` | `+0.0042` | 不通过；较 Enc1 有回收但仍未过护栏 |
+
+关键分层：
+
+- baseline hard 出现正信号：`F-B1b` 的 `rr_peak_band_abs_error_mean` 三 seed 全部改善，平均 `-0.0536`；
+  这比 Enc1 的 hard 分层更稳定。
+- breath-count 有回收：overall `breath_count_zero_cross_abs_error_mean` 平均 `-0.0169`，2/3 seed 改善；
+  相对 Enc1，breath-count 三 seed 全部改善，平均 `-0.0516`。
+- baseline easy 仍失败：`rr_peak_band_abs_error_mean` 三 seed 全部变差，平均 `+0.0293`；虽然比 Enc1 的
+  `+0.0370` 略轻，但仍触发 7.17 的停止条件。
+- fast-RR 信号变弱：`F-B1b` fast-RR 平均 `-0.0050`，2/3 seed 改善，但弱于 Enc1 的 `-0.0207`；且
+  fast-RR `rr_spec_abs_error_mean` 平均 `+0.0038`，没有形成频谱收益。
+- 相对 Enc1，Enc2 的 overall peak-band RR 平均 `-0.0265`，但只有 1/3 seed 改善；均值主要来自 seed
+  `20260901` 的大幅回收，不能视为稳定通过。
+
+阶段判断：
+
+- `F-B1b_aux_enc2_band_aware_consistency` 不通过第 7.17 的条件，不进入 `Enc3_tfgrid_residual` 或更强
+  feature extractor。
+- Enc2 的有用信号是 hard 分层和 breath-count 回收，说明 band-aware 先验不是完全无效；但它仍没有解决 easy
+  误伤，也没有把 fast-RR/频谱收益稳定放大。
+- 下一步若继续 F 系列，优先做 hard/easy 选择性 gating 或 residual energy cap，而不是继续堆更强 auxiliary
+  extractor。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
