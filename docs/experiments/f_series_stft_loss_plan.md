@@ -840,6 +840,34 @@ manifest：`runs/f_a2_guard_manifest.csv`
 - 若 score inverse 仍损伤 easy，但 level medlow 缓解，下一步优先做更细的 confidence/quality 分桶，而不是进入 F-B。
 - 若两个候选都削弱 hard 收益或 easy/fast-RR 仍系统性变差，F-A2 系列应先停止，转向 hard-window 诊断或重新定义 target STFT loss 形式。
 
+### 8.5 F-A2 confidence guard probe 结果记录（2026-06-27）
+
+运行范围：
+
+- manifest：`runs/f_a2_confidence_guard_manifest.csv`
+- summary：`runs/f_a2_confidence_guard_summary.csv`
+- paired delta：`runs/f_a2_confidence_guard_paired_delta.csv`
+- strata delta：`runs/f_a2_confidence_guard_strata_delta.csv`
+- 新训练 run：`F-A2d_confScoreInv_w005`、`F-A2e_confLevelMedLow_w005`，各 3 seed
+- 复用 run：`F0_native_stft_pre_mixer`、`F-A2_dist_bandE`、`F-A2b_dist_bandE_w005`，各 3 seed
+- 汇总状态：`summary` 为 15 行 complete，15 个 `run_dir` 唯一，每个 run 的验证窗口数均为 2675
+- resolved config 核对：`F-A2d` 三个 seed 均为 `loss.stft_sample_weight_mode=waveform_confidence_score_inverse`、`loss.stft_sample_weight_min=0.05`、`loss.stft_band_energy_weight=0.005`；`F-A2e` 三个 seed 均为 `loss.stft_sample_weight_mode=waveform_confidence_level_medlow`、`loss.stft_sample_weight_min=0.0`、`loss.stft_band_energy_weight=0.005`
+
+主结果：
+
+- `F-A2d_confScoreInv_w005` 相对 F0 的 overall paired `rr_peak_band_abs_error_mean` 平均 `-0.0204`，略好于 `F-A2b` 的 `-0.0192`；`breath_count_zero_cross_abs_error_mean` 平均 `-0.0244`，`frac_gt_1` 平均 `-0.0080`，`frac_gt_2` 平均 `-0.0036`。但 `rr_peak_band_abs_error_median` 平均 `-0.0049`，弱于 `F-A2b` 的 `-0.0070`。
+- `F-A2e_confLevelMedLow_w005` 是本轮 overall 数值最强但优势很小的候选：paired `rr_peak_band_abs_error_mean` 平均 `-0.0208`，`breath_count_zero_cross_abs_error_mean` 平均 `-0.0245`，`frac_gt_1` 平均 `-0.0081`，`frac_gt_2` 平均 `-0.0040`。相对 `F-A2b`，overall peak mean 只再降 `-0.0016`，属于小幅边际增益。
+- 两个新候选保留了 hard / low-spectrum 正信号：`F-A2d` baseline hard 平均 `-0.2075`、low-spectrum 平均 `-0.0217`；`F-A2e` baseline hard 平均 `-0.2078`、low-spectrum 平均 `-0.0211`。二者都略强于 `F-A2b` 的 baseline hard `-0.1960` 和 low-spectrum `-0.0185`。
+- 关键失败点仍是 easy / fast-RR 护栏：`F-A2d` baseline easy 三个 seed 全部变差，平均 `+0.0193`；fast-RR 平均 `+0.0036`，2/3 seed 变差。`F-A2e` baseline easy 也三 seed 全部变差，平均 `+0.0190`；fast-RR 平均 `+0.0045`，2/3 seed 变差。相对 `F-A2b`，easy 没有缓解，fast-RR 反而更差。
+- 梯度规模显示 sample-weight 路径确实生效，但没有解决护栏：tail STFT/base 梯度比 `F-A2b` 约 `0.79%`，`F-A2d` 约 `0.86%`，`F-A2e` 约 `0.97%`；新候选并非完全关闭 STFT 分量，而是在低置信样本上提高了有效约束占比。
+
+阶段判断：
+
+- 不进入 F-B，也不扩 seed。confidence gating 的 pilot 结果保留了 F-A2b 的 overall / hard / low-spectrum 正信号，但没有消除 baseline easy 和 fast-RR 的系统性退化，不满足第 7 节护栏。
+- 不建议继续沿着 `waveform_confidence_score/level` 做更细 scalar sweep。当前结果说明 waveform confidence 不是 easy/fast-RR 退化的有效代理，继续调 confidence 权重的高后悔成本较高。
+- 若继续 F 系列，应先做诊断而不是训练新候选：定位 baseline easy / fast-RR 退化窗口的共同特征，例如 target RR、baseline spectrum similarity、预测相位/lag、band-energy 分布和 confidence 的交叉关系；只有找到可训练期使用且不引入验证泄漏的 proxy 后，再设计下一批 gating 或 loss 形式。
+- 当前可保留的候选仍是 `F-A2b_dist_bandE_w005`，但仅作为“有 hard/low-spectrum 正信号、未过 easy/fast 护栏”的候选，不应作为主线升级。
+
 ## 9. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
