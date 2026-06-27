@@ -289,6 +289,132 @@ class TargetStftLoss(torch.nn.Module):
         return total / total_weight
 
 
+class TargetStftLogMagLoss(torch.nn.Module):
+    """F-B auxiliary head 使用的目标 STFT log-magnitude 监督与一致性损失。"""
+
+    def __init__(
+        self,
+        *,
+        sample_rate: float,
+        win_length: int = 3000,
+        hop_length: int = 500,
+        n_fft: int | None = None,
+        center: bool = False,
+        low_hz: float = 0.033,
+        high_hz: float = 3.0,
+        main_low_hz: float = 0.067,
+        main_high_hz: float = 1.2,
+        diag_weight: float = 0.1,
+    ) -> None:
+        super().__init__()
+        self.sample_rate = float(sample_rate)
+        self.win_length = int(win_length)
+        self.hop_length = int(hop_length)
+        self.n_fft = int(n_fft or win_length)
+        self.center = bool(center)
+        self.low_hz = float(low_hz)
+        self.high_hz = float(high_hz)
+        self.main_low_hz = float(main_low_hz)
+        self.main_high_hz = float(main_high_hz)
+        self.diag_weight = float(diag_weight)
+        self._validate_config()
+        self.register_buffer("window", torch.hann_window(self.win_length), persistent=False)
+
+    @classmethod
+    def from_config(cls, cfg) -> "TargetStftLogMagLoss":
+        loss_cfg = cfg.loss
+        return cls(
+            sample_rate=float(cfg.window.target_fs),
+            win_length=int(loss_cfg.get("fb_stft_win_length", 3000)),
+            hop_length=int(loss_cfg.get("fb_stft_hop_length", 500)),
+            n_fft=int(loss_cfg.get("fb_stft_n_fft", loss_cfg.get("fb_stft_win_length", 3000))),
+            center=_as_bool(loss_cfg.get("fb_stft_center", False)),
+            low_hz=float(loss_cfg.get("fb_stft_low_hz", 0.033)),
+            high_hz=float(loss_cfg.get("fb_stft_high_hz", 3.0)),
+            main_low_hz=float(loss_cfg.get("fb_stft_main_low_hz", 0.067)),
+            main_high_hz=float(loss_cfg.get("fb_stft_main_high_hz", 1.2)),
+            diag_weight=float(loss_cfg.get("fb_stft_diag_weight", 0.1)),
+        )
+
+    def project(self, waveform: torch.Tensor) -> torch.Tensor:
+        self._validate_waveform(waveform)
+        if not self.center and waveform.shape[-1] < self.win_length:
+            raise ValueError(
+                f"center=False 时 STFT win_length 不能大于输入长度: win={self.win_length} "
+                f"length={waveform.shape[-1]}"
+            )
+        window = self.window.to(device=waveform.device, dtype=waveform.dtype)
+        spectrum = torch.stft(
+            waveform.squeeze(1),
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=window,
+            center=self.center,
+            return_complex=True,
+        )
+        return torch.log1p(spectrum.abs())[:, self._band_mask(waveform.device), :]
+
+    def loss(self, pred_logmag: torch.Tensor, target_logmag: torch.Tensor) -> torch.Tensor:
+        if pred_logmag.shape != target_logmag.shape:
+            raise ValueError(
+                "STFT logmag shape 必须一致: "
+                f"pred={tuple(pred_logmag.shape)} target={tuple(target_logmag.shape)}"
+            )
+        if pred_logmag.ndim != 3:
+            raise ValueError(f"STFT logmag 必须为 (B, F, T)，当前={tuple(pred_logmag.shape)}")
+        weights = self._band_weights(pred_logmag.device, pred_logmag.dtype).view(1, -1, 1)
+        values = F.smooth_l1_loss(pred_logmag, target_logmag, reduction="none")
+        denom = weights.sum() * pred_logmag.shape[0] * pred_logmag.shape[-1]
+        return (values * weights).sum() / torch.clamp(denom, min=pred_logmag.new_tensor(1e-8))
+
+    def aux_loss(self, aux_logmag: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        return self.loss(aux_logmag.float(), self.project(target.float()).detach())
+
+    def consistency_loss(self, waveform: torch.Tensor, aux_logmag: torch.Tensor) -> torch.Tensor:
+        return self.loss(self.project(waveform.float()), aux_logmag.float())
+
+    def _validate_config(self) -> None:
+        if self.sample_rate <= 0:
+            raise ValueError(f"sample_rate 必须为正数，当前={self.sample_rate}")
+        if self.win_length <= 0 or self.hop_length <= 0 or self.n_fft <= 0:
+            raise ValueError("win_length、hop_length 和 n_fft 必须为正数")
+        if self.n_fft < self.win_length:
+            raise ValueError(f"n_fft 必须大于等于 win_length，当前 n_fft={self.n_fft} win={self.win_length}")
+        if not (0.0 <= self.low_hz < self.high_hz <= self.sample_rate / 2.0):
+            raise ValueError("fb_stft_low_hz/high_hz 必须满足 0 <= low < high <= Nyquist")
+        if not (self.low_hz <= self.main_low_hz < self.main_high_hz <= self.high_hz):
+            raise ValueError("fb_stft_main_low_hz/high_hz 必须落在 auxiliary STFT 频带内")
+        if self.diag_weight < 0:
+            raise ValueError(f"fb_stft_diag_weight 必须非负，当前={self.diag_weight}")
+
+    @staticmethod
+    def _validate_waveform(waveform: torch.Tensor) -> None:
+        if waveform.ndim != 3 or waveform.shape[1] != 1:
+            raise ValueError(f"waveform 必须为 [B, 1, T]，当前 shape={tuple(waveform.shape)}")
+
+    def _band_mask(self, device: torch.device) -> torch.Tensor:
+        freqs = torch.fft.rfftfreq(self.n_fft, d=1.0 / self.sample_rate).to(device)
+        tol = (self.sample_rate / float(self.n_fft)) * 1e-4
+        mask = (freqs >= self.low_hz - tol) & (freqs <= self.high_hz + tol)
+        if not bool(mask.any()):
+            raise ValueError(
+                f"STFT 频带为空: low_hz={self.low_hz} high_hz={self.high_hz} "
+                f"fs={self.sample_rate} n_fft={self.n_fft}"
+            )
+        return mask
+
+    def _band_weights(self, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        freqs = torch.fft.rfftfreq(self.n_fft, d=1.0 / self.sample_rate).to(device)
+        band_freqs = freqs[self._band_mask(device)]
+        main = (band_freqs >= self.main_low_hz) & (band_freqs <= self.main_high_hz)
+        weights = torch.full_like(band_freqs, fill_value=self.diag_weight, dtype=dtype)
+        weights = torch.where(main, torch.ones_like(weights), weights)
+        if not bool((weights > 0).any()):
+            raise ValueError("F-B STFT loss 频带权重全为 0")
+        return weights
+
+
 def _weighted_frame_mean(
     values: torch.Tensor,
     weights: torch.Tensor,

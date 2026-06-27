@@ -12,11 +12,29 @@ def _band_indices(stft_win: int, sample_rate: float, low_hz: float, high_hz: flo
     """计算 rFFT 频点中指定频带的左闭右开切片范围。"""
 
     freqs = torch.fft.rfftfreq(int(stft_win), d=1.0 / float(sample_rate))
-    start = int(torch.searchsorted(freqs, torch.tensor(float(low_hz)), right=False).item())
-    end = int(torch.searchsorted(freqs, torch.tensor(float(high_hz)), right=True).item())
+    bin_width = float(sample_rate) / float(stft_win)
+    tol = bin_width * 1e-4
+    start = int(torch.searchsorted(freqs, torch.tensor(float(low_hz) - tol), right=False).item())
+    end = int(torch.searchsorted(freqs, torch.tensor(float(high_hz) + tol), right=True).item())
     if start >= end:
         raise ValueError("STFT 频带内没有可用 rFFT 频点，请增大 stft_win 或调整 low_hz/high_hz")
     return start, end
+
+
+def _stft_frame_count(length: int, win_length: int, hop_length: int, n_fft: int, center: bool) -> int:
+    """返回 torch.stft 对应的时间帧数，用于约束 auxiliary head 输出形状。"""
+
+    length = int(length)
+    win_length = int(win_length)
+    hop_length = int(hop_length)
+    n_fft = int(n_fft)
+    if center:
+        effective_length = length + 2 * (n_fft // 2)
+    else:
+        effective_length = length
+    if effective_length < win_length:
+        raise ValueError("STFT 窗长不能大于有效输入长度")
+    return (effective_length - win_length) // hop_length + 1
 
 
 def _validate_stft_config(stft_win: int, stft_hop: int, sample_rate: float, low_hz: float, high_hz: float) -> None:
@@ -96,6 +114,61 @@ class FusionHead(nn.Module):
         if decoded.size(-1) == self.out_length:
             return decoded
         return F.interpolate(decoded, size=self.out_length, mode="linear", align_corners=False)
+
+
+class TargetStftAuxHead(nn.Module):
+    """从共享 token 预测目标胸带 STFT log-magnitude，用于 F-B auxiliary supervision。"""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_length: int,
+        sample_rate: float = 100.0,
+        win_length: int = 3000,
+        hop_length: int = 500,
+        n_fft: int = 3000,
+        center: bool = False,
+        low_hz: float = 0.033,
+        high_hz: float = 3.0,
+        hidden_channels: int | None = None,
+    ) -> None:
+        super().__init__()
+        self.in_channels = int(in_channels)
+        self.out_length = int(out_length)
+        self.sample_rate = float(sample_rate)
+        self.win_length = int(win_length)
+        self.hop_length = int(hop_length)
+        self.n_fft = int(n_fft)
+        self.center = bool(center)
+        self.low_hz = float(low_hz)
+        self.high_hz = float(high_hz)
+        if self.n_fft < self.win_length:
+            raise ValueError("fb_aux_stft_n_fft 必须大于等于 fb_aux_stft_win_length")
+        _validate_stft_config(self.n_fft, self.hop_length, self.sample_rate, self.low_hz, self.high_hz)
+        self.band_start, self.band_end = _band_indices(self.n_fft, self.sample_rate, self.low_hz, self.high_hz)
+        self.frame_count = _stft_frame_count(
+            self.out_length,
+            self.win_length,
+            self.hop_length,
+            self.n_fft,
+            self.center,
+        )
+        hidden = int(hidden_channels or self.in_channels)
+        self.decoder = nn.Sequential(
+            nn.Conv1d(self.in_channels, hidden, kernel_size=3, padding=1),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+            nn.Conv1d(hidden, self.band_bin_count(), kernel_size=1),
+        )
+
+    def band_bin_count(self) -> int:
+        return int(self.band_end - self.band_start)
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        if tokens.dim() != 3:
+            raise ValueError(f"TargetStftAuxHead 期望 token 形状为 (B, C, T)，实际为 {tuple(tokens.shape)}")
+        aligned = align_to_time(tokens, self.frame_count)
+        return self.decoder(aligned)
 
 
 class STFTEncoder(nn.Module):
@@ -447,6 +520,14 @@ class TimeStftDual1D(nn.Module):
         stft_inject_position: str = "post_mixer",
         cross_attention_heads: int = 1,
         cross_attention_dropout: float = 0.0,
+        fb_aux_head: str = "none",
+        fb_aux_hidden_channels: int | None = None,
+        fb_aux_stft_win_length: int = 3000,
+        fb_aux_stft_hop_length: int = 500,
+        fb_aux_stft_n_fft: int = 3000,
+        fb_aux_stft_center: bool = False,
+        fb_aux_stft_low_hz: float = 0.033,
+        fb_aux_stft_high_hz: float = 3.0,
     ) -> None:
         super().__init__()
         mode = str(branch_mode).lower()
@@ -465,6 +546,9 @@ class TimeStftDual1D(nn.Module):
             )
         use_time = mode in {"time_only", "dual"}
         use_stft = mode in {"stft_only", "dual"}
+        self.fb_aux_head_name = str(fb_aux_head or "none").lower()
+        if self.fb_aux_head_name not in {"none", "enc1_min_aux"}:
+            raise ValueError("fb_aux_head 必须是 none 或 enc1_min_aux")
 
         # encoder_type=sst_cached：STFT 分支改读离线 SST 缓存，不从波形现场算。
         self.sst_cached = str(dict(stft_kwargs).get("encoder_type", "conv1d")).lower() == "sst_cached"
@@ -485,6 +569,22 @@ class TimeStftDual1D(nn.Module):
         self.stft_adapter: nn.Module | None = None
         self.stft_gate: nn.Module | None = None
         self.cross_attention_adapter: nn.Module | None = None
+        self.fb_aux_head: TargetStftAuxHead | None = None
+        if self.fb_aux_head_name != "none":
+            if not use_time:
+                raise ValueError("fb_aux_head 需要启用 time_backbone")
+            self.fb_aux_head = TargetStftAuxHead(
+                in_channels=int(time_feat_channels),
+                out_length=int(out_length),
+                sample_rate=float(stft_kwargs.get("sample_rate", 100.0)),
+                win_length=int(fb_aux_stft_win_length),
+                hop_length=int(fb_aux_stft_hop_length),
+                n_fft=int(fb_aux_stft_n_fft),
+                center=bool(fb_aux_stft_center),
+                low_hz=float(fb_aux_stft_low_hz),
+                high_hz=float(fb_aux_stft_high_hz),
+                hidden_channels=fb_aux_hidden_channels,
+            )
         if self.fusion_mode in native_modes:
             # 原生解码融合：在 token 栅格把 STFT 加性注入主干特征，再走主干原生解码契约。
             if not (use_time and hasattr(self.time_backbone, "decode_from_features")):
@@ -558,30 +658,37 @@ class TimeStftDual1D(nn.Module):
                     time_tokens, length = self.time_backbone.tokenize_input(x)
                     stft_feats = self._encode_stft_features(x, sst, target_len=time_tokens.size(-1))
                     token_delta = self.cross_attention_adapter(time_tokens, stft_feats)
-                    return self.time_backbone.decode_tokens_with_injection(
+                    tokens = self.time_backbone._apply_token_injection(
                         time_tokens,
-                        length,
                         token_delta,
-                        inject_position=self.stft_inject_position,
+                        self.stft_inject_position,
                     )
+                    waveform = self.time_backbone.decode_from_features(tokens, length)
+                    return self._maybe_attach_aux(waveform, tokens)
                 target_tokens = self.time_backbone.token_count_for_length(x.size(-1))
                 stft_feats = self._encode_stft_features(x, sst, target_len=target_tokens)
                 token_delta = self._project_stft_features(stft_feats)
-                return self.time_backbone.forward_with_token_injection(
+                tokens, length = self.time_backbone.encode_tokens(
                     x,
-                    token_delta,
+                    token_injection=token_delta,
                     inject_position=self.stft_inject_position,
                 )
+                waveform = self.time_backbone.decode_from_features(tokens, length)
+                return self._maybe_attach_aux(waveform, tokens)
             time_feats, length = self.time_backbone(x, return_features=True)
-            return self.time_backbone.decode_from_features(time_feats, length)
+            waveform = self.time_backbone.decode_from_features(time_feats, length)
+            return self._maybe_attach_aux(waveform, time_feats)
 
         features: list[torch.Tensor] = []
+        aux_tokens: torch.Tensor | None = None
         if self.time_backbone is not None:
             time_feats, _ = self.time_backbone(x, return_features=True)
+            aux_tokens = time_feats
             features.append(align_to_time(time_feats, self.fuse_len))
         if self.stft_encoder is not None:
             features.append(align_to_time(self.stft_encoder(x), self.fuse_len))
-        return self.fusion_head(torch.cat(features, dim=1))
+        waveform = self.fusion_head(torch.cat(features, dim=1))
+        return self._maybe_attach_aux(waveform, aux_tokens)
 
     def _validate_stft_inject_position(self) -> None:
         if self.stft_inject_position not in {"pre_mixer", "mid_mixer", "post_mixer"}:
@@ -616,3 +723,13 @@ class TimeStftDual1D(nn.Module):
         if self.fusion_mode == "cross_attention_inject":
             raise RuntimeError("cross_attention_inject 应在 forward 中用 time token 直接计算")
         return self.stft_adapter(stft_feats)
+
+    def _maybe_attach_aux(self, waveform: torch.Tensor, tokens: torch.Tensor | None):
+        if self.fb_aux_head is None:
+            return waveform
+        if tokens is None:
+            raise RuntimeError("fb_aux_head 需要 time tokens，但当前 forward 未产生 tokens")
+        return {
+            "waveform": waveform,
+            "aux_target_stft_logmag": self.fb_aux_head(tokens),
+        }

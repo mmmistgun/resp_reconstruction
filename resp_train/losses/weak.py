@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 
-from resp_train.losses.stft import TargetStftLoss
+from resp_train.losses.stft import TargetStftLogMagLoss, TargetStftLoss
 
 
 class WeakSyncLoss(torch.nn.Module):
@@ -33,6 +33,10 @@ class WeakSyncLoss(torch.nn.Module):
         self.stft_dist_weight = float(cfg.loss.get("stft_dist_weight", 0.0))
         self.stft_band_energy_weight = float(cfg.loss.get("stft_band_energy_weight", 0.0))
         self.stft_peak_anchor_weight = float(cfg.loss.get("stft_peak_anchor_weight", 0.0))
+        self.fb_aux_weight = float(cfg.loss.get("fb_aux_weight", 0.0))
+        self.fb_consistency_weight = float(cfg.loss.get("fb_consistency_weight", 0.0))
+        self.fb_consistency_start_epoch = int(cfg.loss.get("fb_consistency_start_epoch", 1))
+        self.fb_consistency_detach_aux = bool(cfg.loss.get("fb_consistency_detach_aux", True))
         self.stft_sample_weight_mode = str(cfg.loss.get("stft_sample_weight_mode", "none")).lower()
         self.stft_sample_weight_min = float(cfg.loss.get("stft_sample_weight_min", 0.0))
         self.log_component_grad_norms = bool(cfg.loss.get("log_component_grad_norms", False))
@@ -67,10 +71,14 @@ class WeakSyncLoss(torch.nn.Module):
             ("stft_dist_weight", self.stft_dist_weight),
             ("stft_band_energy_weight", self.stft_band_energy_weight),
             ("stft_peak_anchor_weight", self.stft_peak_anchor_weight),
+            ("fb_aux_weight", self.fb_aux_weight),
+            ("fb_consistency_weight", self.fb_consistency_weight),
             ("stft_sample_weight_min", self.stft_sample_weight_min),
         ):
             if value < 0:
                 raise ValueError(f"{name} 必须非负，当前={value}")
+        if self.fb_consistency_start_epoch < 1:
+            raise ValueError(f"fb_consistency_start_epoch 必须为正数，当前={self.fb_consistency_start_epoch}")
         if self.stft_sample_weight_min > 1:
             raise ValueError(f"stft_sample_weight_min 必须 <= 1，当前={self.stft_sample_weight_min}")
         if self.stft_sample_weight_mode not in {
@@ -113,6 +121,11 @@ class WeakSyncLoss(torch.nn.Module):
             )
             else None
         )
+        self.fb_stft_loss = (
+            TargetStftLogMagLoss.from_config(cfg)
+            if (self.fb_aux_weight > 0 or self.fb_consistency_weight > 0)
+            else None
+        )
 
     def set_epoch(self, epoch: int) -> None:
         """更新当前 epoch，供课程式 loss 权重调度使用。"""
@@ -127,17 +140,23 @@ class WeakSyncLoss(torch.nn.Module):
 
     def forward(
         self,
-        pred: torch.Tensor,
+        pred: torch.Tensor | Mapping[str, torch.Tensor],
         target: torch.Tensor,
         *,
         sample_weight: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        self._validate_inputs(pred, target)
+        waveform, aux_outputs = self._split_model_output(pred)
+        self._validate_inputs(waveform, target)
         # AMP 下模型输出可能是 float16；cuFFT 对非 2 次幂长度的 half FFT
         # 有限制，因此损失内部统一用 float32 做频域和包络计算。
-        pred_loss = pred.float()
+        pred_loss = waveform.float()
         target_loss = target.float()
-        components = self._loss_components(pred_loss, target_loss, sample_weight=sample_weight)
+        components = self._loss_components(
+            pred_loss,
+            target_loss,
+            sample_weight=sample_weight,
+            aux_logmag=aux_outputs.get("aux_target_stft_logmag"),
+        )
         total = self._weighted_total(components)
         return total, {name: value.detach() for name, value in components.items()}
 
@@ -167,6 +186,7 @@ class WeakSyncLoss(torch.nn.Module):
         target_loss: torch.Tensor,
         *,
         sample_weight: torch.Tensor | None = None,
+        aux_logmag: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         env = self._envelope_loss(pred_loss, target_loss)
         spec = self._spectrum_loss(pred_loss, target_loss)
@@ -217,6 +237,16 @@ class WeakSyncLoss(torch.nn.Module):
             stft_dist = pred_loss.new_tensor(0.0)
             stft_band_energy = pred_loss.new_tensor(0.0)
             stft_peak_anchor = pred_loss.new_tensor(0.0)
+        fb_aux = pred_loss.new_tensor(0.0)
+        fb_consistency = pred_loss.new_tensor(0.0)
+        if self.fb_stft_loss is not None:
+            if aux_logmag is None:
+                raise KeyError("F-B loss 已启用，但模型输出缺少 aux_target_stft_logmag")
+            if self.fb_aux_weight > 0:
+                fb_aux = self.fb_stft_loss.aux_loss(aux_logmag, target_loss)
+            if self.fb_consistency_weight > 0 and self.epoch >= self.fb_consistency_start_epoch:
+                consistency_target = aux_logmag.detach() if self.fb_consistency_detach_aux else aux_logmag
+                fb_consistency = self.fb_stft_loss.consistency_loss(pred_loss, consistency_target)
         return {
             "envelope": env,
             "spectrum": spec,
@@ -235,10 +265,16 @@ class WeakSyncLoss(torch.nn.Module):
             "stft_dist": stft_dist,
             "stft_band_energy": stft_band_energy,
             "stft_peak_anchor": stft_peak_anchor,
+            "fb_aux": fb_aux,
+            "fb_consistency": fb_consistency,
         }
 
     def _weighted_total(self, components: dict[str, torch.Tensor]) -> torch.Tensor:
-        return self._weighted_base_total(components) + self._weighted_stft_total(components)
+        return (
+            self._weighted_base_total(components)
+            + self._weighted_stft_total(components)
+            + self._weighted_fb_total(components)
+        )
 
     def _weighted_base_total(self, components: dict[str, torch.Tensor]) -> torch.Tensor:
         return (
@@ -265,27 +301,42 @@ class WeakSyncLoss(torch.nn.Module):
             + self.stft_peak_anchor_weight * components["stft_peak_anchor"]
         )
 
+    def _weighted_fb_total(self, components: dict[str, torch.Tensor]) -> torch.Tensor:
+        return (
+            self.fb_aux_weight * components["fb_aux"]
+            + self.fb_consistency_weight * components["fb_consistency"]
+        )
+
     def component_gradient_norms(
         self,
-        pred: torch.Tensor,
+        pred: torch.Tensor | Mapping[str, torch.Tensor],
         target: torch.Tensor,
         *,
         sample_weight: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         """返回关键加权 loss 分项对模型输出的梯度范数，用于 F-A 权重诊断。"""
 
-        self._validate_inputs(pred, target)
-        pred_loss = pred.float()
+        waveform, aux_outputs = self._split_model_output(pred)
+        self._validate_inputs(waveform, target)
+        pred_loss = waveform.float()
         target_loss = target.float()
-        components = self._loss_components(pred_loss, target_loss, sample_weight=sample_weight)
+        components = self._loss_components(
+            pred_loss,
+            target_loss,
+            sample_weight=sample_weight,
+            aux_logmag=aux_outputs.get("aux_target_stft_logmag"),
+        )
         weighted = {
             "base_total": self._weighted_base_total(components),
             "stft_total": self._weighted_stft_total(components),
             "stft_dist": self.stft_dist_weight * components["stft_dist"],
             "stft_band_energy": self.stft_band_energy_weight * components["stft_band_energy"],
             "stft_peak_anchor": self.stft_peak_anchor_weight * components["stft_peak_anchor"],
+            "fb_total": self._weighted_fb_total(components),
+            "fb_aux": self.fb_aux_weight * components["fb_aux"],
+            "fb_consistency": self.fb_consistency_weight * components["fb_consistency"],
         }
-        return {f"grad_norm_{name}": self._grad_norm(value, pred) for name, value in weighted.items()}
+        return {f"grad_norm_{name}": self._grad_norm(value, waveform) for name, value in weighted.items()}
 
     @staticmethod
     def _grad_norm(value: torch.Tensor, pred: torch.Tensor) -> torch.Tensor:
@@ -345,6 +396,17 @@ class WeakSyncLoss(torch.nn.Module):
             raise ValueError(f"pred 和 target shape 必须一致: pred={tuple(pred.shape)} target={tuple(target.shape)}")
         if pred.ndim != 3 or pred.shape[1] != 1:
             raise ValueError(f"pred 和 target 必须为 [B, 1, T]，当前 shape={tuple(pred.shape)}")
+
+    @staticmethod
+    def _split_model_output(pred: torch.Tensor | Mapping[str, torch.Tensor]) -> tuple[torch.Tensor, Mapping[str, torch.Tensor]]:
+        if isinstance(pred, Mapping):
+            if "waveform" not in pred:
+                raise KeyError("模型输出 dict 必须包含 waveform")
+            waveform = pred["waveform"]
+            if not torch.is_tensor(waveform):
+                raise TypeError("模型输出 waveform 必须是 Tensor")
+            return waveform, pred
+        return pred, {}
 
     def _envelope_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         pred_env = self._zscore(self._rms_envelope(pred))

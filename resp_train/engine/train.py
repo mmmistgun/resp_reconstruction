@@ -153,7 +153,8 @@ def collect_predictions(
             raise KeyError("batch 必须包含 meta")
         x = batch["x"].to(resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
-        pred = (model(x, sst=sst) if sst is not None else model(x)).detach().cpu().numpy()
+        raw_pred = model(x, sst=sst) if sst is not None else model(x)
+        pred = _waveform_output(raw_pred).detach().cpu().numpy()
         target = batch["target"].detach().cpu().numpy()
         preds.append(pred)
         targets.append(target)
@@ -240,6 +241,20 @@ def _loss_sample_weight_kwargs(
     if sample_weight is None:
         return {}
     return {"sample_weight": sample_weight}
+
+
+def _waveform_output(output: Any) -> torch.Tensor:
+    """从普通 tensor 或 F-B dict 输出中取最终 waveform。"""
+    if isinstance(output, Mapping):
+        if "waveform" not in output:
+            raise KeyError("模型输出 dict 必须包含 waveform")
+        waveform = output["waveform"]
+        if not torch.is_tensor(waveform):
+            raise TypeError("模型输出 waveform 必须是 Tensor")
+        return waveform
+    if not torch.is_tensor(output):
+        raise TypeError(f"模型输出必须是 Tensor 或包含 waveform 的 Mapping，当前={type(output)!r}")
+    return output
 
 
 def _should_show_progress(show_progress: bool | None) -> bool:

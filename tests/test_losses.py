@@ -71,6 +71,8 @@ def test_weak_sync_loss_returns_current_components_and_scalar():
         "stft_dist",
         "stft_band_energy",
         "stft_peak_anchor",
+        "fb_aux",
+        "fb_consistency",
     }
     total.backward()
     assert pred.grad is not None
@@ -130,6 +132,39 @@ def test_optional_loss_weights_zero_keep_total_loss_unchanged():
     )
 
     assert torch.allclose(total, expected)
+
+
+def test_fb_aux_loss_accepts_model_output_dict_and_delays_consistency():
+    cfg = _cfg()
+    cfg.window.duration_samples = 512
+    cfg.window.target_fs = 64
+    cfg.loss.fb_aux_weight = 0.1
+    cfg.loss.fb_consistency_weight = 0.2
+    cfg.loss.fb_consistency_start_epoch = 3
+    cfg.loss.fb_stft_win_length = 128
+    cfg.loss.fb_stft_hop_length = 64
+    cfg.loss.fb_stft_n_fft = 128
+    cfg.loss.fb_stft_center = False
+    cfg.loss.fb_stft_low_hz = 0.5
+    cfg.loss.fb_stft_high_hz = 4.0
+    cfg.loss.fb_stft_main_low_hz = 0.5
+    cfg.loss.fb_stft_main_high_hz = 2.0
+    loss_fn = WeakSyncLoss(cfg)
+    target = torch.randn(1, 1, 512)
+    pred = target.clone().detach().requires_grad_(True)
+    aux = torch.zeros(1, 8, 7, requires_grad=True)
+    output = {"waveform": pred, "aux_target_stft_logmag": aux}
+
+    loss_fn.set_epoch(1)
+    total_before, parts_before = loss_fn(output, target)
+
+    loss_fn.set_epoch(3)
+    total_after, parts_after = loss_fn(output, target)
+
+    assert parts_before["fb_aux"] > 0
+    assert parts_before["fb_consistency"] == 0
+    assert parts_after["fb_consistency"] > 0
+    assert total_after > total_before
 
 
 def test_relative_envelope_loss_penalizes_missing_relative_boost():

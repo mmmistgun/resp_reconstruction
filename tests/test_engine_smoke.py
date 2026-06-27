@@ -299,6 +299,25 @@ def test_collect_predictions_accepts_custom_output_keys():
     assert preds["dataset_row_id"].tolist() == [0, 1, 2]
 
 
+def test_collect_predictions_accepts_model_output_dict():
+    class DictOutputModel(torch.nn.Module):
+        def forward(self, x):
+            return {"waveform": x + 1.0, "aux_target_stft_logmag": torch.zeros(x.size(0), 2, 3)}
+
+    loader = DataLoader(DictDataset(), batch_size=2, shuffle=False)
+
+    preds = collect_predictions(
+        DictOutputModel(),
+        loader,
+        device=torch.device("cpu"),
+        max_windows=2,
+    )
+
+    first_batch = next(iter(loader))
+    assert preds["r_tho_hat"].shape == (2, 1, 512)
+    assert torch.allclose(torch.as_tensor(preds["r_tho_hat"]), first_batch["x"] + 1.0)
+
+
 def test_engine_public_api_exports_checkpoint_saver():
     assert callable(save_checkpoint)
 

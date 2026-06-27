@@ -114,6 +114,18 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
         stft_inject_position=str(cfg.model.get("stft_inject_position", "post_mixer")),
         cross_attention_heads=int(cfg.model.get("cross_attention_heads", 1)),
         cross_attention_dropout=float(cfg.model.get("cross_attention_dropout", 0.0)),
+        fb_aux_head=str(cfg.model.get("fb_aux_head", "none")),
+        fb_aux_hidden_channels=(
+            int(cfg.model.get("fb_aux_hidden_channels"))
+            if cfg.model.get("fb_aux_hidden_channels") is not None
+            else None
+        ),
+        fb_aux_stft_win_length=int(cfg.model.get("fb_aux_stft_win_length", 3000)),
+        fb_aux_stft_hop_length=int(cfg.model.get("fb_aux_stft_hop_length", 500)),
+        fb_aux_stft_n_fft=int(cfg.model.get("fb_aux_stft_n_fft", 3000)),
+        fb_aux_stft_center=bool(cfg.model.get("fb_aux_stft_center", False)),
+        fb_aux_stft_low_hz=float(cfg.model.get("fb_aux_stft_low_hz", 0.033)),
+        fb_aux_stft_high_hz=float(cfg.model.get("fb_aux_stft_high_hz", 3.0)),
     )
 
 

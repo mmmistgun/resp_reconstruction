@@ -165,3 +165,39 @@ def test_summarize_f_a_runs_matches_run_dir_by_training_seed(tmp_path):
     paired_by_seed = paired.set_index("seed")
     assert paired_by_seed.loc[20260700, "delta_rr_peak_band_abs_error_mean"] == -0.5
     assert paired_by_seed.loc[20260837, "delta_rr_peak_band_abs_error_mean"] == 1.0
+
+
+def test_summarize_f_a_runs_includes_f_b_candidates(tmp_path):
+    f0_root = tmp_path / "f0"
+    fb_root = tmp_path / "fb"
+    _write_run(f0_root, "20260626_000000", _metrics([1.0, 0.2], [0.9, 0.8], [14, 20]), seed=20260700)
+    _write_run(fb_root, "20260626_000001", _metrics([0.6, 0.3], [0.9, 0.8], [14, 20]), seed=20260700)
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        [
+            {
+                "tag": "f0_native_stft_pre_mixer_dual_20260700",
+                "label": "F0_native_stft_pre_mixer",
+                "branch_mode": "dual",
+                "seed": 20260700,
+                "paired_f0_label": "F0_native_stft_pre_mixer",
+                "paired_time_only_label": "F0_native_time_only",
+                "overrides": f"outputs.run_root={f0_root}",
+            },
+            {
+                "tag": "f_b0_aux_enc1_dual_20260700",
+                "label": "F-B0_aux_enc1",
+                "branch_mode": "dual",
+                "seed": 20260700,
+                "paired_f0_label": "F0_native_stft_pre_mixer",
+                "paired_time_only_label": "F0_native_time_only",
+                "overrides": f"outputs.run_root={fb_root}",
+            },
+        ]
+    ).to_csv(manifest, index=False)
+
+    _, paired, strata = summarize_f_a_runs(manifest)
+
+    assert paired.iloc[0]["label"] == "F-B0_aux_enc1"
+    assert paired.iloc[0]["delta_rr_peak_band_abs_error_mean"] < 0
+    assert set(strata["label"]) == {"F-B0_aux_enc1"}

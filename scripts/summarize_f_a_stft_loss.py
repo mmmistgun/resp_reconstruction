@@ -83,7 +83,7 @@ def _history_summary(path: Path) -> dict[str, Any]:
 
 def _paired_delta_frame(detail: pd.DataFrame) -> pd.DataFrame:
     records = []
-    candidates = detail[(detail["status"] == "complete") & detail["label"].astype(str).str.startswith("F-A")]
+    candidates = detail[(detail["status"] == "complete") & _candidate_label_mask(detail["label"])]
     baselines = detail[detail["status"] == "complete"]
     for candidate in candidates.to_dict("records"):
         baseline = _matching_row(
@@ -111,7 +111,7 @@ def _paired_delta_frame(detail: pd.DataFrame) -> pd.DataFrame:
 
 def _stratified_delta_frame(detail: pd.DataFrame) -> pd.DataFrame:
     records = []
-    candidates = detail[(detail["status"] == "complete") & detail["label"].astype(str).str.startswith("F-A")]
+    candidates = detail[(detail["status"] == "complete") & _candidate_label_mask(detail["label"])]
     baselines = detail[detail["status"] == "complete"]
     for candidate in candidates.to_dict("records"):
         baseline = _matching_row(
@@ -168,6 +168,11 @@ def _matching_row(frame: pd.DataFrame, *, label: str, seed: int) -> dict[str, An
     if matched.empty:
         return None
     return matched.iloc[0].to_dict()
+
+
+def _candidate_label_mask(labels: pd.Series) -> pd.Series:
+    text = labels.astype(str)
+    return text.str.startswith("F-A") | text.str.startswith("F-B")
 
 
 def _delta(candidate: dict[str, Any], baseline: dict[str, Any], column: str) -> float:

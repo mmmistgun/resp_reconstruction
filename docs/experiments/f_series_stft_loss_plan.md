@@ -1201,6 +1201,95 @@ paired 图与 ratio 观察：
 - 不建议继续扫 `stft_peak_anchor_guard_tolerance_bpm` 或 `stft_peak_anchor_target_quantile`。当前问题不是一个 scalar threshold 没调好，而是训练期可用 proxy 仍无法可靠区分“有效低频 hard 修正”和“fast-hard 次谐波下拉”。
 - F-A2 小改动阶段应收口：保留 `F-A2b_dist_bandE_w005` 作为“有 hard/low-spectrum 正信号但未过护栏”的参考候选；若继续 F 系列，应转向更可靠的 hard/ambiguity proxy、lag-aware/complex 小权重，或只对经过更严格训练期 proxy 的 hard 窗口启用 STFT loss，而不是继续在同一 framewise magnitude-anchor 上叠加小改动。
 
+### 7.13 F-B0/F-B1 auxiliary probe 准备（2026-06-27）
+
+目的：接受 7.12 的收口判断，不把 F-A2 系列升级到 residual 或输出空间；只准备 F-B0/F-B1
+诊断入口，检查 target-STFT auxiliary supervision 是否能进入 shared latent 并传导到最终
+waveform。
+
+代码入口：
+
+- 模型：`TimeStftDual1D` 可选 `model.fb_aux_head=enc1_min_aux`，在共享 patch token 上输出
+  `aux_target_stft_logmag`。
+- loss：`WeakSyncLoss` 支持模型返回 `{"waveform": ..., "aux_target_stft_logmag": ...}`；
+  新增 `loss.fb_aux_weight` 与 `loss.fb_consistency_weight`，默认均为 0。
+- runner：`scripts/run_f_b_aux_probe.py`
+- summary：复用 `scripts/summarize_f_a_stft_loss.py`，该脚本现在同时识别 `F-A*` 与 `F-B*`。
+- manifest：`runs/f_b_aux_manifest.csv`
+
+第一批矩阵：
+
+| label | 训练方式 | `fb_aux_weight` | `fb_consistency_weight` | `fb_consistency_start_epoch` | 目的 |
+|---|---|---:|---:|---:|---|
+| `F0_native_stft_pre_mixer` | 复用 `runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual` | 0.0 | 0.0 | 1 | 同 seed anchor |
+| `F-B0_aux_enc1` | 新训练 | 0.01 | 0.0 | 1 | 判断 shared latent 是否包含目标 STFT 结构 |
+| `F-B1_aux_consistency_detach` | 新训练 | 0.01 | 0.005 | 7 | warmup 后用 `detach(aux)` 拉 `STFT(y_hat)` |
+
+执行范围：每个 F-B 新候选 3 seed，即 6 个新训练 run；F0 anchor 只写入 manifest 供同表汇总。
+本阶段不训练 `F-B2_low_complex_residual`，也不进入 F-C。
+
+推荐命令：
+
+```bash
+./.venv/bin/python scripts/run_f_b_aux_probe.py \
+  --dry-run \
+  --manifest runs/f_b_aux_manifest.csv
+
+./.venv/bin/python scripts/run_f_b_aux_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_b_aux_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_b_aux_manifest.csv \
+  --output runs/f_b_aux_summary.csv \
+  --paired-output runs/f_b_aux_paired_delta.csv \
+  --strata-output runs/f_b_aux_strata_delta.csv
+```
+
+阶段判断仍沿用第 6 节：aux loss 下降本身不算通过；只有 `F-B1` 同时改善或至少不损伤
+`STFT(y_hat)`、peak-band RR、计数、easy 与 fast-RR 护栏，才考虑后续 residual probe。
+
+### 7.14 F-B0/F-B1 auxiliary probe 结果（2026-06-27）
+
+运行范围：
+
+- manifest：`runs/f_b_aux_manifest.csv`
+- summary：`runs/f_b_aux_summary.csv`
+- paired delta：`runs/f_b_aux_paired_delta.csv`
+- strata delta：`runs/f_b_aux_strata_delta.csv`
+- 完成情况：`F0_native_stft_pre_mixer` 3 seed 复用完成；`F-B0_aux_enc1` 与
+  `F-B1_aux_consistency_detach` 各 3 seed 训练完成。
+
+相对 `F0_native_stft_pre_mixer` 的 paired 结果：
+
+| label | overall `rr_peak_band_abs_error_mean` delta | 改善 seed | `frac_gt_1` delta | `frac_gt_2` delta | 判断 |
+|---|---:|---:|---:|---:|---|
+| `F-B0_aux_enc1` | `+0.0265` | 2/3 | `+0.0070` | `+0.0077` | 不通过；seed `20260901` 明显退化 |
+| `F-B1_aux_consistency_detach` | `+0.0438` | 1/3 | `+0.0130` | `+0.0086` | 不通过；consistency 没有改善 waveform RR |
+
+关键分层：
+
+- baseline easy 是硬护栏失败点：`F-B0` 三 seed 全部变差，平均 `+0.0298`；
+  `F-B1` 三 seed 全部变差，平均 `+0.0370`。
+- baseline hard 没有稳定收益：`F-B0` 平均 `+0.0197`，`F-B1` 平均 `+0.0727`；
+  二者都被 seed `20260901` 的大幅退化拉坏。
+- fast-RR 有局部正信号：`F-B0` 平均 `-0.0247`，`F-B1` 平均 `-0.0207`，均为 2/3 seed 改善；
+  但该收益不足以抵消 overall、baseline easy 与 tail fraction 的退化。
+- 频谱/相关性指标有旁路迹象：`F-B1` 的 `rr_spec_abs_error_mean` 与
+  `band_limited_corr_mean` 多数改善，但没有传导到 peak-band RR 与计数主指标。
+- 训练日志确认 auxiliary/consistency 分量进入训练：`F-B0` 末轮 `val_fb_aux` 约 `0.160-0.171`，
+  consistency 为 0；`F-B1` 末轮 `val_fb_consistency` 约 `0.346-0.371`。
+
+阶段判断：
+
+- `F-B0_aux_enc1` 只能说明 shared latent/aux head 能学习目标 STFT 表征；aux loss 下降不构成通过。
+- `F-B1_aux_consistency_detach` 没能把目标 STFT 监督稳定传导到最终 waveform，且 easy 护栏系统性失败。
+- 本轮不进入 `F-B2_low_complex_residual`，也不进入 F-C；继续做 residual/output-space 会把问题从“监督能否传导”扩大成新 decoder 搜索。
+- 若后续重启 F-B，应先解决 aux head 对 shared latent 的扰动与 seed `20260901` 的退化窗口，而不是扩 seed 或加大 consistency 权重。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
