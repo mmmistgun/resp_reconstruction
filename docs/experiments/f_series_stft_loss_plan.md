@@ -1592,6 +1592,44 @@ cap 失败与修复：
 若 cap 重跑仍不能缓解 baseline easy，则 F-B residual 路线应停止，下一步转向无泄漏的 hard/easy window proxy
 与选择性 gating，而不是继续扩大 residual head。
 
+### 7.21 F-B3b residual energy cap 重跑结果（2026-06-27）
+
+运行范围：
+
+- manifest：`runs/f_b_enc3_residual_manifest.csv`
+- summary：`runs/f_b_enc3_residual_summary.csv`
+- paired delta：`runs/f_b_enc3_residual_paired_delta.csv`
+- strata delta：`runs/f_b_enc3_residual_strata_delta.csv`
+- 完成情况：修复 `fb_residual_energy_cap` 数值稳定性后，`F-B3b_enc3_tfgrid_residual_cap` 3 seed 重跑完成；
+  summary 当前 12 行全部为 `complete`，paired delta 9 行，strata delta 45 行。
+
+相对 `F0_native_stft_pre_mixer` 的 paired 结果：
+
+| label | overall `rr_peak_band_abs_error_mean` delta | 改善 seed | `rr_spec_abs_error_mean` delta | `frac_gt_1` delta | `frac_gt_2` delta | 判断 |
+|---|---:|---:|---:|---:|---:|---|
+| `F-B2_low_complex_residual` | `+0.0072` | 2/3 | `-0.0265` | `+0.0016` | `+0.0034` | 旧结果，仍不通过 |
+| `F-B3_enc3_tfgrid_residual` | `+0.0262` | 1/3 | `-0.0279` | `+0.0070` | `+0.0052` | 不通过 |
+| `F-B3b_enc3_tfgrid_residual_cap` | `+0.0266` | 1/3 | `-0.0279` | `+0.0071` | `+0.0054` | 不通过；cap 未缓解误伤 |
+
+关键分层：
+
+- baseline easy 仍失败：`F-B3b` 的 `rr_peak_band_abs_error_mean` 三 seed 全部变差，平均 `+0.0406`；
+  与 Enc3 的 `+0.0405` 基本相同，比 F-B2 的 `+0.0333` 更差。
+- baseline hard 收益弱于 F-B2：`F-B3b` hard 平均 `-0.0630`、2/3 seed 改善；F-B2 是
+  `-0.1108`、3/3 seed 改善。
+- fast-RR 收益没有保住：`F-B3b` fast-RR 平均 `-0.0026`、2/3 seed 改善；F-B2 是 `-0.0152`、
+  3/3 seed 改善。
+- 频谱指标有改善但没有转化：`F-B3b` overall `rr_spec_abs_error_mean` 三 seed 全部改善，平均 `-0.0279`。
+- 相对 Enc3，cap 对 overall peak-band RR 平均仅 `+0.00036`，三 seed 都略差；说明 5% RMS cap 在当前 residual
+  幅度下基本没有形成有效选择性。
+
+阶段判断：
+
+- `F-B3b_enc3_tfgrid_residual_cap` 不通过，且没有缓解 baseline easy 护栏。
+- F-B residual head 扩展路线停止：不扩 seed，不继续 `F-B2b_wide_residual`、更强 TF residual head 或更高 cap sweep。
+- 下一步若继续 F 系列，只能转向可解释的 hard/easy 选择性机制：先定义无泄漏窗口级 proxy，再把 residual/gate 只作用在
+  proxy 判定的 hard/ambiguous 窗口；不能用事后 baseline 分层标签直接训练 gating。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
