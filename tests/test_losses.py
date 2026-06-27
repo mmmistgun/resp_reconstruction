@@ -70,6 +70,7 @@ def test_weak_sync_loss_returns_current_components_and_scalar():
         "si_sdr",
         "stft_dist",
         "stft_band_energy",
+        "stft_peak_anchor",
     }
     total.backward()
     assert pred.grad is not None

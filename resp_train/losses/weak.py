@@ -32,6 +32,7 @@ class WeakSyncLoss(torch.nn.Module):
         self.si_sdr_weight = float(cfg.loss.get("si_sdr_weight", 0.0))
         self.stft_dist_weight = float(cfg.loss.get("stft_dist_weight", 0.0))
         self.stft_band_energy_weight = float(cfg.loss.get("stft_band_energy_weight", 0.0))
+        self.stft_peak_anchor_weight = float(cfg.loss.get("stft_peak_anchor_weight", 0.0))
         self.stft_sample_weight_mode = str(cfg.loss.get("stft_sample_weight_mode", "none")).lower()
         self.stft_sample_weight_min = float(cfg.loss.get("stft_sample_weight_min", 0.0))
         self.log_component_grad_norms = bool(cfg.loss.get("log_component_grad_norms", False))
@@ -65,6 +66,7 @@ class WeakSyncLoss(torch.nn.Module):
             ("si_sdr_weight", self.si_sdr_weight),
             ("stft_dist_weight", self.stft_dist_weight),
             ("stft_band_energy_weight", self.stft_band_energy_weight),
+            ("stft_peak_anchor_weight", self.stft_peak_anchor_weight),
             ("stft_sample_weight_min", self.stft_sample_weight_min),
         ):
             if value < 0:
@@ -103,7 +105,12 @@ class WeakSyncLoss(torch.nn.Module):
         self.high_hz = float(cfg.loss.spectrum_high_hz)
         self.target_stft_loss = (
             TargetStftLoss.from_config(cfg)
-            if self.stft_dist_weight > 0 or self.stft_band_energy_weight > 0 or self.log_component_grad_norms
+            if (
+                self.stft_dist_weight > 0
+                or self.stft_band_energy_weight > 0
+                or self.stft_peak_anchor_weight > 0
+                or self.log_component_grad_norms
+            )
             else None
         )
 
@@ -203,9 +210,13 @@ class WeakSyncLoss(torch.nn.Module):
             stft_band_energy = (
                 stft_parts["stft_band_energy"] if self.stft_band_energy_weight > 0 else pred_loss.new_tensor(0.0)
             )
+            stft_peak_anchor = (
+                stft_parts["stft_peak_anchor"] if self.stft_peak_anchor_weight > 0 else pred_loss.new_tensor(0.0)
+            )
         else:
             stft_dist = pred_loss.new_tensor(0.0)
             stft_band_energy = pred_loss.new_tensor(0.0)
+            stft_peak_anchor = pred_loss.new_tensor(0.0)
         return {
             "envelope": env,
             "spectrum": spec,
@@ -223,6 +234,7 @@ class WeakSyncLoss(torch.nn.Module):
             "si_sdr": si_sdr,
             "stft_dist": stft_dist,
             "stft_band_energy": stft_band_energy,
+            "stft_peak_anchor": stft_peak_anchor,
         }
 
     def _weighted_total(self, components: dict[str, torch.Tensor]) -> torch.Tensor:
@@ -250,6 +262,7 @@ class WeakSyncLoss(torch.nn.Module):
         return (
             self.stft_dist_weight * components["stft_dist"]
             + self.stft_band_energy_weight * components["stft_band_energy"]
+            + self.stft_peak_anchor_weight * components["stft_peak_anchor"]
         )
 
     def component_gradient_norms(
@@ -270,6 +283,7 @@ class WeakSyncLoss(torch.nn.Module):
             "stft_total": self._weighted_stft_total(components),
             "stft_dist": self.stft_dist_weight * components["stft_dist"],
             "stft_band_energy": self.stft_band_energy_weight * components["stft_band_energy"],
+            "stft_peak_anchor": self.stft_peak_anchor_weight * components["stft_peak_anchor"],
         }
         return {f"grad_norm_{name}": self._grad_norm(value, pred) for name, value in weighted.items()}
 

@@ -30,6 +30,10 @@ class TargetStftLoss(torch.nn.Module):
         dist_low_hz: float = 0.067,
         dist_high_hz: float = 1.2,
         dist_beta: float = 3.0,
+        peak_anchor_sigma_bins: float = 1.0,
+        peak_anchor_mode: str = "framewise",
+        peak_anchor_guard_tolerance_bpm: float = 2.0,
+        peak_anchor_target_quantile: float = 0.5,
         frame_weight_mode: str = "target_band_energy",
         band_energy_bands: Sequence[Sequence[float]] | None = None,
         band_energy_weights: Sequence[float] | None = None,
@@ -44,6 +48,10 @@ class TargetStftLoss(torch.nn.Module):
         self.dist_low_hz = float(dist_low_hz)
         self.dist_high_hz = float(dist_high_hz)
         self.dist_beta = float(dist_beta)
+        self.peak_anchor_sigma_bins = float(peak_anchor_sigma_bins)
+        self.peak_anchor_mode = str(peak_anchor_mode).lower()
+        self.peak_anchor_guard_tolerance_bpm = float(peak_anchor_guard_tolerance_bpm)
+        self.peak_anchor_target_quantile = float(peak_anchor_target_quantile)
         self.frame_weight_mode = str(frame_weight_mode).lower()
         self.band_energy_bands = _as_band_pairs(band_energy_bands or DEFAULT_BAND_ENERGY_BANDS)
         self.band_energy_weights = _as_weights(
@@ -72,6 +80,10 @@ class TargetStftLoss(torch.nn.Module):
             dist_low_hz=float(loss_cfg.get("stft_dist_low_hz", 0.067)),
             dist_high_hz=float(loss_cfg.get("stft_dist_high_hz", 1.2)),
             dist_beta=float(loss_cfg.get("stft_dist_beta", 3.0)),
+            peak_anchor_sigma_bins=float(loss_cfg.get("stft_peak_anchor_sigma_bins", 1.0)),
+            peak_anchor_mode=str(loss_cfg.get("stft_peak_anchor_mode", "framewise")),
+            peak_anchor_guard_tolerance_bpm=float(loss_cfg.get("stft_peak_anchor_guard_tolerance_bpm", 2.0)),
+            peak_anchor_target_quantile=float(loss_cfg.get("stft_peak_anchor_target_quantile", 0.5)),
             frame_weight_mode=str(loss_cfg.get("stft_frame_weight_mode", "target_band_energy")),
             band_energy_bands=bands,
             band_energy_weights=weights,
@@ -104,6 +116,13 @@ class TargetStftLoss(torch.nn.Module):
                 frame_weights,
                 sample_weight,
             ),
+            "stft_peak_anchor": self._peak_anchor_loss(
+                pred_logmag,
+                target_logmag,
+                dist_mask,
+                frame_weights,
+                sample_weight,
+            ),
             "stft_band_energy": self._band_energy_loss(pred_power, target_power, frame_weights, sample_weight),
         }
 
@@ -118,6 +137,20 @@ class TargetStftLoss(torch.nn.Module):
             raise ValueError("stft_dist_low_hz 必须小于 stft_dist_high_hz")
         if self.dist_beta <= 0:
             raise ValueError(f"stft_dist_beta 必须为正数，当前={self.dist_beta}")
+        if self.peak_anchor_sigma_bins < 0:
+            raise ValueError(f"stft_peak_anchor_sigma_bins 必须非负，当前={self.peak_anchor_sigma_bins}")
+        if self.peak_anchor_mode not in {"framewise", "target_rr_guard"}:
+            raise ValueError(f"未知 stft_peak_anchor_mode: {self.peak_anchor_mode}")
+        if self.peak_anchor_guard_tolerance_bpm < 0:
+            raise ValueError(
+                "stft_peak_anchor_guard_tolerance_bpm 必须非负，"
+                f"当前={self.peak_anchor_guard_tolerance_bpm}"
+            )
+        if not 0.0 <= self.peak_anchor_target_quantile <= 1.0:
+            raise ValueError(
+                "stft_peak_anchor_target_quantile 必须位于 [0, 1]，"
+                f"当前={self.peak_anchor_target_quantile}"
+            )
         if self.frame_weight_mode not in {"none", "target_band_energy"}:
             raise ValueError(f"未知 stft_frame_weight_mode: {self.frame_weight_mode}")
         for (low, high), weight in zip(self.band_energy_bands, self.band_energy_weights, strict=True):
@@ -186,6 +219,47 @@ class TargetStftLoss(torch.nn.Module):
         )
         jsd = 0.5 * (pred_kl + target_kl)
         return _weighted_frame_mean(jsd, frame_weights, self.eps, sample_weight=sample_weight)
+
+    def _peak_anchor_loss(
+        self,
+        pred_logmag: torch.Tensor,
+        target_logmag: torch.Tensor,
+        mask: torch.Tensor,
+        frame_weights: torch.Tensor,
+        sample_weight: torch.Tensor | None,
+    ) -> torch.Tensor:
+        pred_logits = self.dist_beta * pred_logmag[:, mask, :]
+        log_prob = F.log_softmax(pred_logits, dim=1)
+        target_band = target_logmag[:, mask, :]
+        peak_index = target_band.argmax(dim=1)
+        if self.peak_anchor_sigma_bins <= 0:
+            loss = -log_prob.gather(1, peak_index.unsqueeze(1)).squeeze(1)
+        else:
+            freq_index = torch.arange(log_prob.shape[1], device=log_prob.device, dtype=log_prob.dtype).view(1, -1, 1)
+            peak = peak_index.unsqueeze(1).to(dtype=log_prob.dtype)
+            sigma = log_prob.new_tensor(self.peak_anchor_sigma_bins)
+            target_weight = torch.exp(-0.5 * ((freq_index - peak) / sigma).square())
+            target_weight = target_weight / torch.clamp(target_weight.sum(dim=1, keepdim=True), min=self.eps)
+            loss = -(target_weight.detach() * log_prob).sum(dim=1)
+        if self.peak_anchor_mode == "target_rr_guard":
+            frame_weights = frame_weights * self._target_rr_peak_guard(mask, peak_index).to(dtype=frame_weights.dtype)
+        return _weighted_frame_mean(loss, frame_weights, self.eps, sample_weight=sample_weight)
+
+    def _target_rr_peak_guard(self, mask: torch.Tensor, peak_index: torch.Tensor) -> torch.Tensor:
+        band_bpm = self._band_bpm(mask, peak_index.device)
+        with torch.no_grad():
+            frame_peak_bpm = band_bpm[peak_index.detach()]
+            anchor_bpm = torch.quantile(
+                frame_peak_bpm.float(),
+                q=self.peak_anchor_target_quantile,
+                dim=-1,
+                keepdim=True,
+            ).to(dtype=frame_peak_bpm.dtype)
+            return frame_peak_bpm >= anchor_bpm - self.peak_anchor_guard_tolerance_bpm
+
+    def _band_bpm(self, mask: torch.Tensor, device: torch.device) -> torch.Tensor:
+        freqs = torch.fft.rfftfreq(self.n_fft, d=1.0 / self.sample_rate).to(device=device)
+        return freqs[mask] * 60.0
 
     def _band_energy_loss(
         self,
