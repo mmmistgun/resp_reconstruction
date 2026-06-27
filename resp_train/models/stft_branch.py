@@ -350,6 +350,102 @@ class LowComplexResidualHead(nn.Module):
         return residual.unsqueeze(1).to(dtype=original_dtype)
 
 
+class LowBandComplexStftOutputHead(nn.Module):
+    """从共享 token 直接预测低频复数 STFT，并 iSTFT 成主 waveform 输出。"""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_length: int,
+        sample_rate: float = 100.0,
+        win_length: int = 3000,
+        hop_length: int = 500,
+        n_fft: int = 3000,
+        center: bool = True,
+        low_hz: float = 0.0,
+        high_hz: float = 3.0,
+        hidden_channels: int | None = None,
+        output_scale: float = 1.0,
+    ) -> None:
+        super().__init__()
+        self.in_channels = int(in_channels)
+        self.out_length = int(out_length)
+        self.sample_rate = float(sample_rate)
+        self.win_length = int(win_length)
+        self.hop_length = int(hop_length)
+        self.n_fft = int(n_fft)
+        self.center = bool(center)
+        self.low_hz = float(low_hz)
+        self.high_hz = float(high_hz)
+        self.output_scale = float(output_scale)
+        if self.n_fft < self.win_length:
+            raise ValueError("output_stft_n_fft 必须大于等于 output_stft_win_length")
+        if self.output_scale <= 0:
+            raise ValueError("output_stft_scale 必须大于 0")
+        _validate_stft_config(self.n_fft, self.hop_length, self.sample_rate, self.low_hz, self.high_hz)
+        self.band_start, self.band_end = _band_indices(self.n_fft, self.sample_rate, self.low_hz, self.high_hz)
+        self.frame_count = _stft_frame_count(
+            self.out_length,
+            self.win_length,
+            self.hop_length,
+            self.n_fft,
+            self.center,
+        )
+        hidden = int(hidden_channels or self.in_channels)
+        self.decoder = nn.Sequential(
+            nn.Conv1d(self.in_channels, hidden, kernel_size=3, padding=1),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+            nn.Conv1d(hidden, hidden, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.Conv1d(hidden, 2 * self.band_bin_count(), kernel_size=1),
+        )
+        self.register_buffer("istft_window", torch.hann_window(self.win_length), persistent=False)
+
+    def band_bin_count(self) -> int:
+        return int(self.band_end - self.band_start)
+
+    def forward(self, tokens: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if tokens.dim() != 3:
+            raise ValueError(f"LowBandComplexStftOutputHead 期望 token 形状为 (B, C, T)，实际为 {tuple(tokens.shape)}")
+        aligned = align_to_time(tokens, self.frame_count)
+        decoded = self.decoder(aligned)
+        original_dtype = decoded.dtype
+        work_dtype = torch.float64 if decoded.dtype == torch.float64 else torch.float32
+        decoded = decoded.to(dtype=work_dtype) * float(self.output_scale)
+        real, imag = decoded.chunk(2, dim=1)
+        realimag = torch.stack(
+            [
+                real.reshape(real.size(0), self.band_bin_count(), self.frame_count),
+                imag.reshape(imag.size(0), self.band_bin_count(), self.frame_count),
+            ],
+            dim=1,
+        )
+        complex_dtype = torch.complex128 if work_dtype == torch.float64 else torch.complex64
+        spectrum = torch.zeros(
+            real.size(0),
+            self.n_fft // 2 + 1,
+            self.frame_count,
+            device=real.device,
+            dtype=complex_dtype,
+        )
+        spectrum[:, self.band_start : self.band_end, :] = torch.complex(
+            realimag[:, 0],
+            realimag[:, 1],
+        )
+        window = self.istft_window.to(device=real.device, dtype=work_dtype)
+        waveform = torch.istft(
+            spectrum,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=window,
+            center=self.center,
+            length=self.out_length,
+        )
+        return waveform.unsqueeze(1).to(dtype=original_dtype), realimag.to(dtype=original_dtype)
+
+
 class TfGridLiteResidualHead(nn.Module):
     """TF-Grid-lite 复数 STFT residual head，用小型时频卷积约束 residual 搜索空间。"""
 
@@ -979,32 +1075,9 @@ class TimeStftDual1D(nn.Module):
 
     def forward(self, x: torch.Tensor, sst: torch.Tensor | None = None) -> torch.Tensor:
         if self.fusion_mode in {"native_inject", "token_context_inject", "gated_native_inject", "cross_attention_inject"}:
-            self._validate_stft_inject_position()
-            if self.stft_encoder is not None:
-                if self.fusion_mode == "cross_attention_inject":
-                    time_tokens, length = self.time_backbone.tokenize_input(x)
-                    stft_feats = self._encode_stft_features(x, sst, target_len=time_tokens.size(-1))
-                    token_delta = self.cross_attention_adapter(time_tokens, stft_feats)
-                    tokens = self.time_backbone._apply_token_injection(
-                        time_tokens,
-                        token_delta,
-                        self.stft_inject_position,
-                    )
-                    waveform = self.time_backbone.decode_from_features(tokens, length)
-                    return self._maybe_attach_aux(waveform, tokens)
-                target_tokens = self.time_backbone.token_count_for_length(x.size(-1))
-                stft_feats = self._encode_stft_features(x, sst, target_len=target_tokens)
-                token_delta = self._project_stft_features(stft_feats)
-                tokens, length = self.time_backbone.encode_tokens(
-                    x,
-                    token_injection=token_delta,
-                    inject_position=self.stft_inject_position,
-                )
-                waveform = self.time_backbone.decode_from_features(tokens, length)
-                return self._maybe_attach_aux(waveform, tokens)
-            time_feats, length = self.time_backbone(x, return_features=True)
-            waveform = self.time_backbone.decode_from_features(time_feats, length)
-            return self._maybe_attach_aux(waveform, time_feats)
+            tokens, length = self._native_tokens(x, sst)
+            waveform = self.time_backbone.decode_from_features(tokens, length)
+            return self._maybe_attach_aux(waveform, tokens)
 
         features: list[torch.Tensor] = []
         aux_tokens: torch.Tensor | None = None
@@ -1016,6 +1089,29 @@ class TimeStftDual1D(nn.Module):
             features.append(align_to_time(self.stft_encoder(x), self.fuse_len))
         waveform = self.fusion_head(torch.cat(features, dim=1))
         return self._maybe_attach_aux(waveform, aux_tokens)
+
+    def _native_tokens(self, x: torch.Tensor, sst: torch.Tensor | None = None) -> tuple[torch.Tensor, int]:
+        self._validate_stft_inject_position()
+        if self.stft_encoder is not None:
+            if self.fusion_mode == "cross_attention_inject":
+                time_tokens, length = self.time_backbone.tokenize_input(x)
+                stft_feats = self._encode_stft_features(x, sst, target_len=time_tokens.size(-1))
+                token_delta = self.cross_attention_adapter(time_tokens, stft_feats)
+                tokens = self.time_backbone._apply_token_injection(
+                    time_tokens,
+                    token_delta,
+                    self.stft_inject_position,
+                )
+                return tokens, length
+            target_tokens = self.time_backbone.token_count_for_length(x.size(-1))
+            stft_feats = self._encode_stft_features(x, sst, target_len=target_tokens)
+            token_delta = self._project_stft_features(stft_feats)
+            return self.time_backbone.encode_tokens(
+                x,
+                token_injection=token_delta,
+                inject_position=self.stft_inject_position,
+            )
+        return self.time_backbone(x, return_features=True)
 
     def _validate_stft_inject_position(self) -> None:
         if self.stft_inject_position not in {"pre_mixer", "mid_mixer", "post_mixer"}:
@@ -1078,3 +1174,76 @@ class TimeStftDual1D(nn.Module):
         if self.fb_aux_head is not None:
             outputs["aux_target_stft_logmag"] = self.fb_aux_head(tokens)
         return {"waveform": final_waveform, **outputs}
+
+
+class TimeStftLowComplexOutput1D(TimeStftDual1D):
+    """F-C wrapper：用 low-band complex STFT 作为主输出空间，再 iSTFT 回 waveform。"""
+
+    def __init__(
+        self,
+        time_backbone_name: str,
+        time_backbone_kwargs: dict,
+        time_feat_channels: int,
+        branch_mode: str,
+        out_length: int,
+        fuse_len: int,
+        stft_kwargs: dict,
+        fusion_hidden: int = 16,
+        fusion_decoder: str = "deep",
+        fusion_mode: str = "native_inject",
+        stft_inject_position: str = "pre_mixer",
+        cross_attention_heads: int = 1,
+        cross_attention_dropout: float = 0.0,
+        output_stft_hidden_channels: int | None = None,
+        output_stft_win_length: int = 3000,
+        output_stft_hop_length: int = 500,
+        output_stft_n_fft: int = 3000,
+        output_stft_center: bool = True,
+        output_stft_low_hz: float = 0.0,
+        output_stft_high_hz: float = 3.0,
+        output_stft_scale: float = 1.0,
+    ) -> None:
+        mode = str(branch_mode).lower()
+        native_modes = {"native_inject", "token_context_inject", "gated_native_inject", "cross_attention_inject"}
+        if mode == "stft_only":
+            raise ValueError("time_stft_low_complex_output1d 需要 time_backbone token，branch_mode 不能为 stft_only")
+        if str(fusion_mode).lower() not in native_modes:
+            raise ValueError("time_stft_low_complex_output1d 仅支持 native/token 注入类 fusion_mode")
+        super().__init__(
+            time_backbone_name=time_backbone_name,
+            time_backbone_kwargs=time_backbone_kwargs,
+            time_feat_channels=time_feat_channels,
+            branch_mode=branch_mode,
+            out_length=out_length,
+            fuse_len=fuse_len,
+            stft_kwargs=stft_kwargs,
+            fusion_hidden=fusion_hidden,
+            fusion_decoder=fusion_decoder,
+            fusion_mode=fusion_mode,
+            stft_inject_position=stft_inject_position,
+            cross_attention_heads=cross_attention_heads,
+            cross_attention_dropout=cross_attention_dropout,
+            fb_aux_head="none",
+            fb_residual_head="none",
+        )
+        self.output_stft_head = LowBandComplexStftOutputHead(
+            in_channels=int(time_feat_channels),
+            out_length=int(out_length),
+            sample_rate=float(stft_kwargs.get("sample_rate", 100.0)),
+            win_length=int(output_stft_win_length),
+            hop_length=int(output_stft_hop_length),
+            n_fft=int(output_stft_n_fft),
+            center=bool(output_stft_center),
+            low_hz=float(output_stft_low_hz),
+            high_hz=float(output_stft_high_hz),
+            hidden_channels=output_stft_hidden_channels,
+            output_scale=float(output_stft_scale),
+        )
+
+    def forward(self, x: torch.Tensor, sst: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
+        tokens, _ = self._native_tokens(x, sst)
+        waveform, realimag = self.output_stft_head(tokens)
+        return {
+            "waveform": waveform,
+            "output_stft_realimag": realimag,
+        }

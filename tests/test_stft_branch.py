@@ -1,7 +1,14 @@
 import pytest
 import torch
 
-from resp_train.models.stft_branch import FusionHead, STFTEncoder, TimeStftDual1D, align_to_time
+from resp_train.models.stft_branch import (
+    FusionHead,
+    LowBandComplexStftOutputHead,
+    STFTEncoder,
+    TimeStftDual1D,
+    TimeStftLowComplexOutput1D,
+    align_to_time,
+)
 
 
 def _encoder(high_hz: float, encoder_type: str = "conv1d") -> STFTEncoder:
@@ -234,6 +241,80 @@ def test_fusion_head_k1_norm_adds_group_norm_to_pointwise_decoder():
 def test_fusion_head_rejects_unknown_decoder_style():
     with pytest.raises(ValueError, match="decoder_style"):
         FusionHead(in_channels=24, out_length=18000, hidden=16, decoder_style="wide")
+
+
+def test_low_band_complex_stft_output_head_returns_waveform_and_realimag_grid():
+    head = LowBandComplexStftOutputHead(
+        in_channels=8,
+        out_length=2048,
+        sample_rate=100.0,
+        win_length=256,
+        hop_length=64,
+        n_fft=256,
+        center=True,
+        low_hz=0.0,
+        high_hz=3.0,
+        hidden_channels=8,
+    )
+    tokens = torch.randn(2, 8, 17, requires_grad=True)
+
+    waveform, realimag = head(tokens)
+    waveform.square().mean().backward()
+
+    assert waveform.shape == (2, 1, 2048)
+    assert realimag.shape == (2, 2, head.band_bin_count(), head.frame_count)
+    assert torch.isfinite(waveform).all()
+    assert torch.isfinite(realimag).all()
+    assert tokens.grad is not None
+    assert torch.isfinite(tokens.grad).all()
+
+
+def test_time_stft_low_complex_output_returns_waveform_dict_and_backpropagates():
+    model = TimeStftLowComplexOutput1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(
+            in_channels=1,
+            out_channels=1,
+            base_channels=8,
+            patch_len=128,
+            patch_stride=64,
+            mixer_layers=1,
+            overlap_window="hann",
+        ),
+        time_feat_channels=8,
+        branch_mode="dual",
+        out_length=4096,
+        fuse_len=128,
+        stft_kwargs=dict(
+            sample_rate=100.0,
+            stft_win=512,
+            stft_hop=128,
+            low_hz=0.05,
+            high_hz=8.0,
+            out_channels=8,
+            norm="n0",
+            encoder_type="conv2d",
+        ),
+        fusion_mode="native_inject",
+        stft_inject_position="pre_mixer",
+        output_stft_win_length=512,
+        output_stft_hop_length=128,
+        output_stft_n_fft=512,
+        output_stft_center=True,
+        output_stft_low_hz=0.0,
+        output_stft_high_hz=3.0,
+        output_stft_hidden_channels=8,
+    )
+    x = torch.randn(2, 1, 4096)
+
+    out = model(x)
+    out["waveform"].square().mean().backward()
+
+    assert set(out) == {"waveform", "output_stft_realimag"}
+    assert out["waveform"].shape == (2, 1, 4096)
+    assert out["output_stft_realimag"].shape[:2] == (2, 2)
+    assert torch.isfinite(out["waveform"]).all()
+    assert any(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters())
 
 
 def _dual(branch_mode: str) -> TimeStftDual1D:

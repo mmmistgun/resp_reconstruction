@@ -23,7 +23,7 @@ from resp_train.models.timeseries import (
     PolyphasePatchHannBandlimited1D,
     PeriodicUNet1DTiny,
 )
-from resp_train.models.stft_branch import TimeStftDual1D
+from resp_train.models.stft_branch import TimeStftDual1D, TimeStftLowComplexOutput1D
 from resp_train.models.unet1d import UNet1DTiny, UNet1DTinyNoSkip1, UNet1DTinyNoSkipAll
 
 
@@ -69,38 +69,9 @@ def _time_backbone_feat_channels(cfg: Any) -> int:
 
 
 def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
-    band_scale_path = cfg.model.get("stft_band_scale_path", None)
     branch_mode = str(cfg.model.get("branch_mode", "dual")).lower()
     encoder_type = str(cfg.model.get("stft_encoder_type", "conv1d")).lower()
     use_time = branch_mode in {"time_only", "dual"}
-    use_stft = branch_mode in {"stft_only", "dual"}
-    if not use_stft:
-        stft_kwargs: dict = {}
-    elif encoder_type == "sst_cached":
-        # sst_cached 读离线缓存，不需要 STFT 参数；只传编码器需要的 in_freq/out_channels。
-        stft_kwargs = {
-            "encoder_type": "sst_cached",
-            "in_freq": int(cfg.model.get("stft_sst_in_freq", 159)),
-            "out_channels": int(cfg.model.get("stft_out_channels", 16)),
-        }
-    else:
-        stft_kwargs = {
-            "sample_rate": float(cfg.window.get("target_fs", 100)),
-            "stft_win": int(cfg.model.get("stft_win", 3000)),
-            "stft_hop": int(cfg.model.get("stft_hop", 500)),
-            "low_hz": float(cfg.model.get("stft_low_hz", 0.05)),
-            "high_hz": float(cfg.model.get("stft_high_hz", 3.0)),
-            "out_channels": int(cfg.model.get("stft_out_channels", 16)),
-            "norm": str(cfg.model.get("stft_norm", "n0")),
-            "encoder_type": encoder_type,
-            "band_scale_path": str(band_scale_path) if band_scale_path else None,
-            "energy_bands": (
-                [tuple(b) for b in cfg.model.get("stft_energy_bands")]
-                if cfg.model.get("stft_energy_bands")
-                else None
-            ),
-            "band_group_f": int(cfg.model.get("stft_band_group_f", 32)),
-        }
     return TimeStftDual1D(
         time_backbone_name=str(cfg.model.get("time_backbone", "patch_mixer1d")),
         time_backbone_kwargs=_time_backbone_kwargs(cfg) if use_time else {},
@@ -108,7 +79,7 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
         branch_mode=branch_mode,
         out_length=int(cfg.window.get("duration_samples", 18000)),
         fuse_len=int(cfg.model.get("fuse_len", 600)),
-        stft_kwargs=stft_kwargs,
+        stft_kwargs=_stft_branch_kwargs(cfg, branch_mode, encoder_type),
         fusion_decoder=str(cfg.model.get("fusion_decoder", "deep")),
         fusion_mode=str(cfg.model.get("fusion_mode", "concat_generic")),
         stft_inject_position=str(cfg.model.get("stft_inject_position", "post_mixer")),
@@ -140,6 +111,66 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
         fb_residual_stft_low_hz=float(cfg.model.get("fb_residual_stft_low_hz", 0.067)),
         fb_residual_stft_high_hz=float(cfg.model.get("fb_residual_stft_high_hz", 1.2)),
         fb_residual_energy_cap=float(cfg.model.get("fb_residual_energy_cap", 0.0)),
+    )
+
+
+def _stft_branch_kwargs(cfg: Any, branch_mode: str, encoder_type: str) -> dict:
+    use_stft = str(branch_mode).lower() in {"stft_only", "dual"}
+    if not use_stft:
+        return {}
+    if encoder_type == "sst_cached":
+        # sst_cached 读离线缓存，不需要 STFT 参数；只传编码器需要的 in_freq/out_channels。
+        return {
+            "encoder_type": "sst_cached",
+            "in_freq": int(cfg.model.get("stft_sst_in_freq", 159)),
+            "out_channels": int(cfg.model.get("stft_out_channels", 16)),
+        }
+    band_scale_path = cfg.model.get("stft_band_scale_path", None)
+    return {
+        "sample_rate": float(cfg.window.get("target_fs", 100)),
+        "stft_win": int(cfg.model.get("stft_win", 3000)),
+        "stft_hop": int(cfg.model.get("stft_hop", 500)),
+        "low_hz": float(cfg.model.get("stft_low_hz", 0.05)),
+        "high_hz": float(cfg.model.get("stft_high_hz", 3.0)),
+        "out_channels": int(cfg.model.get("stft_out_channels", 16)),
+        "norm": str(cfg.model.get("stft_norm", "n0")),
+        "encoder_type": encoder_type,
+        "band_scale_path": str(band_scale_path) if band_scale_path else None,
+        "energy_bands": (
+            [tuple(b) for b in cfg.model.get("stft_energy_bands")]
+            if cfg.model.get("stft_energy_bands")
+            else None
+        ),
+        "band_group_f": int(cfg.model.get("stft_band_group_f", 32)),
+    }
+
+
+def _build_time_stft_low_complex_output1d(cfg: Any) -> TimeStftLowComplexOutput1D:
+    branch_mode = str(cfg.model.get("branch_mode", "dual")).lower()
+    encoder_type = str(cfg.model.get("stft_encoder_type", "conv1d")).lower()
+    use_time = branch_mode in {"time_only", "dual"}
+    hidden_channels = cfg.model.get("output_stft_hidden_channels", None)
+    return TimeStftLowComplexOutput1D(
+        time_backbone_name=str(cfg.model.get("time_backbone", "patch_mixer1d")),
+        time_backbone_kwargs=_time_backbone_kwargs(cfg) if use_time else {},
+        time_feat_channels=_time_backbone_feat_channels(cfg) if use_time else 0,
+        branch_mode=branch_mode,
+        out_length=int(cfg.window.get("duration_samples", 18000)),
+        fuse_len=int(cfg.model.get("fuse_len", 600)),
+        stft_kwargs=_stft_branch_kwargs(cfg, branch_mode, encoder_type),
+        fusion_decoder=str(cfg.model.get("fusion_decoder", "deep")),
+        fusion_mode=str(cfg.model.get("fusion_mode", "native_inject")),
+        stft_inject_position=str(cfg.model.get("stft_inject_position", "pre_mixer")),
+        cross_attention_heads=int(cfg.model.get("cross_attention_heads", 1)),
+        cross_attention_dropout=float(cfg.model.get("cross_attention_dropout", 0.0)),
+        output_stft_hidden_channels=int(hidden_channels) if hidden_channels is not None else None,
+        output_stft_win_length=int(cfg.model.get("output_stft_win_length", 3000)),
+        output_stft_hop_length=int(cfg.model.get("output_stft_hop_length", 500)),
+        output_stft_n_fft=int(cfg.model.get("output_stft_n_fft", 3000)),
+        output_stft_center=bool(cfg.model.get("output_stft_center", True)),
+        output_stft_low_hz=float(cfg.model.get("output_stft_low_hz", 0.0)),
+        output_stft_high_hz=float(cfg.model.get("output_stft_high_hz", 3.0)),
+        output_stft_scale=float(cfg.model.get("output_stft_scale", 1.0)),
     )
 
 
@@ -301,6 +332,7 @@ _REGISTRY: dict[str, ModelFactory] = {
         state_layers=int(cfg.model.get("state_layers", 2)),
     ),
     "time_stft_dual1d": _build_time_stft_dual1d,
+    "time_stft_low_complex_output1d": _build_time_stft_low_complex_output1d,
 }
 
 

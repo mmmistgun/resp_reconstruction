@@ -503,6 +503,10 @@ def test_time_stft_dual1d_is_registered():
     assert "time_stft_dual1d" in list_models()
 
 
+def test_time_stft_low_complex_output1d_is_registered():
+    assert "time_stft_low_complex_output1d" in list_models()
+
+
 @pytest.mark.parametrize("branch_mode", ["time_only", "stft_only", "dual"])
 def test_build_time_stft_dual1d_preserves_waveform_shape(branch_mode):
     cfg = OmegaConf.create(
@@ -780,6 +784,51 @@ def test_build_time_stft_dual1d_native_inject_patch_preserves_shape():
     assert y.shape == (2, 1, 18000)
     assert torch.isfinite(y).all()
     assert model.fusion_head is None  # native_inject 不建通用融合头
+
+
+def test_build_time_stft_low_complex_output1d_preserves_waveform_shape():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 4096},
+            "model": {
+                "name": "time_stft_low_complex_output1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 8,
+                "branch_mode": "dual",
+                "time_backbone": "patch_mixer1d",
+                "patch_len": 128,
+                "patch_stride": 64,
+                "mixer_layers": 1,
+                "overlap_window": "hann",
+                "stft_win": 512,
+                "stft_hop": 128,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 8.0,
+                "stft_out_channels": 8,
+                "stft_norm": "n0",
+                "stft_encoder_type": "conv2d",
+                "fusion_mode": "native_inject",
+                "stft_inject_position": "pre_mixer",
+                "output_stft_win_length": 512,
+                "output_stft_hop_length": 128,
+                "output_stft_n_fft": 512,
+                "output_stft_center": True,
+                "output_stft_low_hz": 0.0,
+                "output_stft_high_hz": 3.0,
+                "output_stft_hidden_channels": 8,
+            },
+        }
+    )
+    model = build_model(cfg)
+
+    out = model(torch.randn(2, 1, 4096))
+
+    assert set(out) == {"waveform", "output_stft_realimag"}
+    assert out["waveform"].shape == (2, 1, 4096)
+    assert out["output_stft_realimag"].shape[:2] == (2, 2)
+    assert torch.isfinite(out["waveform"]).all()
+    assert model.output_stft_head.high_hz == pytest.approx(3.0)
 
 
 def test_build_time_stft_dual1d_passes_fb_residual_head_config():
