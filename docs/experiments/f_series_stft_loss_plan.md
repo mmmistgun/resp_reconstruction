@@ -1163,6 +1163,44 @@ paired 图与 ratio 观察：
 - 若 `F-A2g` 牺牲 hard/low-spectrum 收益，说明简单 anti-subharmonic guard 把有效 hard 帧也屏蔽掉了，下一步不应继续调 tolerance/quantile 大扫，而应回到窗口级 proxy 诊断。
 - 若 `F-A2g` fast-hard 仍明显差于 F-A2b，说明仅用 target STFT framewise peak 分布无法可靠近似训练期 target RR，应暂停 F-A2 小改动，考虑 lag-aware/complex loss 或仅对 hard 窗口启用 STFT loss 的更严格 proxy。
 
+### 7.12 F-A2g target-RR-aware / anti-subharmonic peak-anchor 结果记录（2026-06-27）
+
+运行范围：
+
+- manifest：`runs/f_a2_target_rr_anchor_manifest.csv`
+- summary：`runs/f_a2_target_rr_anchor_summary.csv`
+- paired delta：`runs/f_a2_target_rr_anchor_paired_delta.csv`
+- strata delta：`runs/f_a2_target_rr_anchor_strata_delta.csv`
+- 窗口诊断：`runs/diagnostics/f_a2_target_rr_anchor_windows/window_delta.csv`
+- 新训练 run：`F-A2g_targetRRAware_w005`，3 seed
+- 复用 run：`F0_native_stft_pre_mixer`、`F-A2_dist_bandE`、`F-A2b_dist_bandE_w005`、`F-A2d_confScoreInv_w005`、`F-A2e_confLevelMedLow_w005`、`F-A2f_peak_anchor_w005`，各 3 seed
+- 汇总状态：`summary` 为 21 行 complete；每个 run 的验证窗口数均为 2675。
+- resolved config 核对：`F-A2g` 三个 seed 均为 `loss.stft_dist_weight=0.02`、`loss.stft_band_energy_weight=0.005`、`loss.stft_peak_anchor_weight=0.005`、`loss.stft_peak_anchor_sigma_bins=1.0`、`loss.stft_peak_anchor_mode=target_rr_guard`、`loss.stft_peak_anchor_guard_tolerance_bpm=2.0`、`loss.stft_peak_anchor_target_quantile=0.5`、`loss.stft_sample_weight_mode=none`。
+
+主结果：
+
+- `F-A2g_targetRRAware_w005` 相对 F0 的 overall paired `rr_peak_band_abs_error_mean` 三 seed 全部改善，平均 `-0.0188`；绝对均值为 `0.4721`。这个量级与 `F-A2f_peak_anchor_w005` 的 `-0.0187` 基本相同，但弱于 `F-A2b_dist_bandE_w005` 的 `-0.0192` 和 `F-A2e_confLevelMedLow_w005` 的 `-0.0208`。
+- 相对 `F-A2b_dist_bandE_w005`，`F-A2g` 没有形成 overall 升级：overall peak mean 差 `+0.0004`，peak median 差 `+0.0037`，breath-count delta 差 `+0.0005`；`rr_spec_abs_error_mean` 好 `-0.0015`，`frac_gt_1` 好 `-0.0007`，但不足以抵消 RR peak 护栏问题。
+- 相对 `F-A2f_peak_anchor_w005`，`F-A2g` 只略微改善 overall peak mean `-0.0001` 和 breath-count `-0.0032`，但 `rr_spec_abs_error_mean` 差 `+0.0016`，`frac_gt_1` 差 `+0.0011`。因此 guard 没有把 F-A2f 的主要问题转成稳定收益。
+- baseline hard 正信号保留：`F-A2g` baseline hard 平均 `-0.2033`，略强于 `F-A2b` 的 `-0.1960`，接近 `F-A2f` 的 `-0.2023`，但弱于 `F-A2d/e` 的约 `-0.208`。
+- low-spectrum 收益保留但不增强：`F-A2g` low-spectrum 平均 `-0.0170`，接近 `F-A2f` 的 `-0.0169`，弱于 `F-A2b` 的 `-0.0185` 和 `F-A2d/e` 的约 `-0.021`。
+- 关键失败点仍是 easy / fast-RR 护栏：`F-A2g` baseline easy 平均 `+0.0176`，仍三 seed 同向变差；fast-RR 平均 `+0.0062`，差于 `F-A2b` 的 `+0.0019`，也略差于 `F-A2f` 的 `+0.0057`。
+- 梯度规模确认 guard 分项进入训练：tail 5 epoch 的 `stft_total/base_total` 梯度比 `F-A2g` 约 `1.10%`，`stft_peak_anchor/base_total` 约 `0.69%`，高于 `F-A2f` 的约 `0.63%`。这说明失败不是 peak-anchor 没有梯度，而是当前 target-RR proxy / guard 选择性仍不够。
+
+直接窗口比较：
+
+- `F-A2g - F-A2b` 的 overall 窗口级 `rr_peak_band_abs_error` 平均 `+0.0004`，中位 `0.0`；8025 个窗口中 `>0.25 bpm` 变差 148 个，`>0.25 bpm` 改善 142 个，整体近中性。
+- `F-A2g - F-A2b` 在 fast-RR 分层平均 `+0.0043`，fast-hard 分层平均 `+0.0643`。fast-hard 共 151 个窗口，`>0.25 bpm` 变差 17 个、改善 10 个；seed `20260837` 的 fast-hard 平均差达 `+0.1930`，是主要退化来源。
+- `F-A2g - F-A2f` 的 overall 平均 `-0.0001`，但 fast-hard 平均仍为 `+0.0052`，没有形成明确回收。`row_8448` 等代表性 fast-hard 下拉窗口仍存在：target 约 `18.52 bpm`，`F-A2b` 预测约 `15.56 bpm`，`F-A2f` 约 `12.40 bpm`，`F-A2g` 约 `12.45 bpm`。
+- baseline easy 的直接比较基本中性：`F-A2g - F-A2b` 为 `-0.0006`，`F-A2g - F-A2f` 为 `+0.0002`。这说明 F-A2g 没有新增 easy 退化，但也没有解决相对 F0 的 easy 系统性变差。
+
+阶段判断：
+
+- `F-A2g_targetRRAware_w005` 不通过第 6 节护栏，不进入 F-B，也不扩 seed。它保留了 F-A2b/F-A2f 的 hard 正信号，但没有解决 easy 退化，并且 fast-RR / fast-hard 仍差于 F-A2b。
+- 本次失败说明“用 target STFT framewise peak 中位数作为训练期 target-RR proxy，再屏蔽低于 proxy 2 bpm 的帧”不足以防止多峰 fast-hard 窗口下拉。尤其是部分窗口中 proxy 或保留帧仍可能偏向低频峰，guard 没有真正对齐评估口径里的 target RR。
+- 不建议继续扫 `stft_peak_anchor_guard_tolerance_bpm` 或 `stft_peak_anchor_target_quantile`。当前问题不是一个 scalar threshold 没调好，而是训练期可用 proxy 仍无法可靠区分“有效低频 hard 修正”和“fast-hard 次谐波下拉”。
+- F-A2 小改动阶段应收口：保留 `F-A2b_dist_bandE_w005` 作为“有 hard/low-spectrum 正信号但未过护栏”的参考候选；若继续 F 系列，应转向更可靠的 hard/ambiguity proxy、lag-aware/complex 小权重，或只对经过更严格训练期 proxy 的 hard 窗口启用 STFT loss，而不是继续在同一 framewise magnitude-anchor 上叠加小改动。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
