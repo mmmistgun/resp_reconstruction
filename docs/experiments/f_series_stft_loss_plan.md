@@ -1343,6 +1343,45 @@ decoder 的情况下修正 waveform”。
 - baseline easy 不允许 3/3 seed 同向退化；若重复 7.14 的 easy 失败，F-B2 立即停止。
 - fast-RR 的局部正信号必须同时带来 hard/overall 收益，不能以 easy 或 tail fraction 为代价。
 
+### 7.16 F-B2 low-complex residual 结果（2026-06-27）
+
+运行范围：
+
+- manifest：`runs/f_b2_residual_manifest.csv`
+- summary：`runs/f_b2_residual_summary.csv`
+- paired delta：`runs/f_b2_residual_paired_delta.csv`
+- strata delta：`runs/f_b2_residual_strata_delta.csv`
+- 完成情况：`F0_native_stft_pre_mixer` 3 seed 复用完成；`F-B1_aux_consistency_detach` 3 seed 复用完成；
+  `F-B2_low_complex_residual` 3 seed 训练完成。
+
+相对 `F0_native_stft_pre_mixer` 的 paired 结果：
+
+| label | overall `rr_peak_band_abs_error_mean` delta | 改善 seed | `frac_gt_1` delta | `frac_gt_2` delta | 判断 |
+|---|---:|---:|---:|---:|---|
+| `F-B1_aux_consistency_detach` | `+0.0438` | 1/3 | `+0.0130` | `+0.0086` | 不通过 |
+| `F-B2_low_complex_residual` | `+0.0072` | 2/3 | `+0.0016` | `+0.0034` | 不通过；明显优于 F-B1，但仍未过护栏 |
+
+关键分层：
+
+- baseline hard 出现稳定正信号：`F-B2` 的 `rr_peak_band_abs_error_mean` 三 seed 全部改善，平均
+  `-0.1108`；这说明低频复数 residual 确实能修正一部分 hard 窗口。
+- fast-RR 也有稳定正信号：三 seed 全部改善，平均 `-0.0152`；`rr_spec_abs_error_mean` 三 seed 全部改善，
+  平均 `-0.0387`。
+- baseline easy 仍是失败点：三 seed 全部变差，平均 `+0.0333`；这与 7.14 中 F-B1 的 easy 系统性退化
+  同向，说明 residual 没有解决护栏问题。
+- tail fraction 未通过：overall `frac_gt_2` 三 seed 全部变差，平均 `+0.0034`；`frac_gt_1` 虽 2/3 seed
+  改善，但 seed `20260901` 仍变差 `+0.0157`。
+- 相对 F-B1，F-B2 有明确回收：overall peak-band RR 平均 `-0.0366`，`frac_gt_1` 三 seed 全部改善，
+  breath-count 三 seed 全部改善。但该回收不足以超过 F0 anchor。
+
+阶段判断：
+
+- `F-B2_low_complex_residual` 不通过第 7.15 的通过条件，不能扩 seed，也不能进入 F-C。
+- 这轮结果给出一个有用机制信号：low-complex residual 对 baseline hard / fast-RR 有帮助；问题在于它同时损伤
+  easy 与 tail fraction。
+- 后续若继续 F-B2，只应做“选择性启用 residual”的诊断，例如 hard/ambiguity gate、residual energy cap、
+  或只在训练期 proxy 认定为 hard/fast 的窗口上启用 residual；不建议直接加大 residual scale、扩大频带或改成更强 decoder。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
