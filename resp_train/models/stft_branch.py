@@ -1054,7 +1054,8 @@ class TimeStftDual1D(nn.Module):
     def _cap_residual_energy(self, residual: torch.Tensor, base_waveform: torch.Tensor) -> torch.Tensor:
         if self.fb_residual_energy_cap <= 0:
             return residual
-        residual_rms = residual.float().square().mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-8)
+        residual_power = residual.float().square().mean(dim=-1, keepdim=True).clamp_min(1e-16)
+        residual_rms = residual_power.sqrt()
         base_rms = base_waveform.detach().float().square().mean(dim=-1, keepdim=True).sqrt()
         max_rms = float(self.fb_residual_energy_cap) * base_rms
         scale = torch.minimum(torch.ones_like(residual_rms), max_rms / residual_rms)

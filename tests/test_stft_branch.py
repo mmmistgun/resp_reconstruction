@@ -603,6 +603,52 @@ def test_fb_residual_energy_cap_bounds_residual_rms_ratio():
     assert torch.max(residual_rms / base_rms).item() <= 0.0101
 
 
+def test_fb_residual_energy_cap_keeps_zero_residual_backward_finite():
+    model = TimeStftDual1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(
+            in_channels=1,
+            out_channels=1,
+            base_channels=8,
+            patch_len=256,
+            patch_stride=128,
+            overlap_window="hann",
+        ),
+        time_feat_channels=8,
+        branch_mode="dual",
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs=dict(
+            sample_rate=100.0,
+            stft_win=3000,
+            stft_hop=500,
+            low_hz=0.05,
+            high_hz=8.0,
+            out_channels=16,
+            norm="n0",
+            encoder_type="conv2d",
+        ),
+        fusion_mode="native_inject",
+        stft_inject_position="pre_mixer",
+        fb_residual_head="enc3_tfgrid_residual",
+        fb_residual_scale=0.03,
+        fb_residual_energy_cap=0.05,
+        fb_residual_stft_win_length=3000,
+        fb_residual_stft_hop_length=500,
+        fb_residual_stft_n_fft=3000,
+        fb_residual_stft_center=True,
+        fb_residual_stft_low_hz=0.067,
+        fb_residual_stft_high_hz=1.2,
+    )
+    x = torch.randn(2, 1, 18000)
+
+    model(x)["waveform"].square().mean().backward()
+
+    grads = [param.grad for param in model.parameters() if param.grad is not None]
+    assert grads
+    assert all(torch.isfinite(grad).all().item() for grad in grads)
+
+
 @pytest.mark.parametrize("position", ["pre_mixer", "mid_mixer", "post_mixer"])
 def test_native_inject_position_dual_preserves_native_output_at_init(position):
     model = _native_dual("dual")

@@ -1529,6 +1529,69 @@ Enc1 的旁路/误伤模式。
 - 若 `F-B3/F-B3b` 仍重复“hard 改善、easy 3/3 退化”，下一步不应继续堆 residual head，而应回到窗口级 proxy
   设计，再做 hard/easy selective gating。
 
+### 7.20 F-B Enc3 residual 结果与 cap 数值修复（2026-06-27）
+
+运行范围：
+
+- manifest：`runs/f_b_enc3_residual_manifest.csv`
+- summary：`runs/f_b_enc3_residual_summary.csv`
+- paired delta：`runs/f_b_enc3_residual_paired_delta.csv`
+- strata delta：`runs/f_b_enc3_residual_strata_delta.csv`
+- 完成情况：`F0_native_stft_pre_mixer` 3 seed 复用完成；`F-B2_low_complex_residual` 3 seed 复用完成；
+  `F-B3_enc3_tfgrid_residual` 3 seed 训练完成。
+- `F-B3b_enc3_tfgrid_residual_cap` 本轮 3 seed 训练无效：三个 run 从 epoch 1 开始即 `loss=nan`，early stop
+  后没有 checkpoint/metrics，因此 summary 中状态为 `missing`，不能用于结论。
+
+相对 `F0_native_stft_pre_mixer` 的 paired 结果：
+
+| label | overall `rr_peak_band_abs_error_mean` delta | 改善 seed | `rr_spec_abs_error_mean` delta | `frac_gt_1` delta | `frac_gt_2` delta | 判断 |
+|---|---:|---:|---:|---:|---:|---|
+| `F-B2_low_complex_residual` | `+0.0072` | 2/3 | `-0.0265` | `+0.0016` | `+0.0034` | 旧结果，仍不通过 |
+| `F-B3_enc3_tfgrid_residual` | `+0.0262` | 1/3 | `-0.0279` | `+0.0070` | `+0.0052` | 不通过；比 F-B2 更差 |
+
+关键分层：
+
+- baseline easy 仍失败：`F-B3` 的 `rr_peak_band_abs_error_mean` 三 seed 全部变差，平均 `+0.0405`；
+  比 F-B2 的 `+0.0333` 更差。
+- baseline hard 有正信号但弱于 F-B2：`F-B3` hard 平均 `-0.0655`、2/3 seed 改善；F-B2 是
+  `-0.1108`、3/3 seed 改善。
+- fast-RR 收益基本被削弱：`F-B3` fast-RR 平均 `-0.0027`、2/3 seed 改善；F-B2 是 `-0.0152`、
+  3/3 seed 改善。
+- 频谱指标仍有收益：`F-B3` 的 `rr_spec_abs_error_mean` overall 三 seed 全部改善，平均 `-0.0279`；
+  但这没有转化成 peak-band RR 或 easy 护栏通过。
+- 相对 F-B2，`F-B3` 的 overall peak-band RR 平均再差 `+0.0190`；只有 seed `20260700` 比 F-B2 好。
+
+cap 失败与修复：
+
+- 失败模式：`F-B3b_enc3_tfgrid_residual_cap` 三个旧 run 均在 epoch 1 出现全损失 NaN，最终没有
+  `checkpoint.pt` 或 `metrics.csv`。
+- 根因：`fb_residual_energy_cap` 原实现先做 `sqrt(mean(residual^2))` 再 clamp；residual head 零初始化时
+  residual 为 0，反传会经过 `sqrt(0)`，导致 NaN 梯度并污染训练。
+- 修复：改为先 clamp residual power，再 sqrt；新增回归测试覆盖 zero residual + cap 的 backward finite。
+- 验证：`tests/test_stft_branch.py::test_fb_residual_energy_cap_keeps_zero_residual_backward_finite` 先失败后通过；
+  相关测试 `165 passed`；`/tmp/f_b_cap_smoke` 的 1 epoch CPU smoke 训练和验证 loss 均为有限值。
+
+阶段判断：
+
+- `F-B3_enc3_tfgrid_residual` 不通过；不能扩 seed，也不应继续堆更强 TF residual head。
+- `F-B3b` 旧结果无效；若要判断 residual energy cap，需要基于修复后的代码只重跑 cap 三个 seed。
+- 修复后重跑 cap 时不要重跑已完成的 `F-B3`，建议：
+
+```bash
+./.venv/bin/python scripts/run_f_b_enc3_residual_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_b_enc3_residual_manifest.csv \
+  --start-stagger-sec 90 \
+  --skip f_b3_enc3_tfgrid_residual_dual_20260700 \
+  --skip f_b3_enc3_tfgrid_residual_dual_20260837 \
+  --skip f_b3_enc3_tfgrid_residual_dual_20260901
+```
+
+若 cap 重跑仍不能缓解 baseline easy，则 F-B residual 路线应停止，下一步转向无泄漏的 hard/easy window proxy
+与选择性 gating，而不是继续扩大 residual head。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
