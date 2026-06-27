@@ -350,6 +350,111 @@ class LowComplexResidualHead(nn.Module):
         return residual.unsqueeze(1).to(dtype=original_dtype)
 
 
+class TfGridLiteResidualHead(nn.Module):
+    """TF-Grid-lite 复数 STFT residual head，用小型时频卷积约束 residual 搜索空间。"""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_length: int,
+        sample_rate: float = 100.0,
+        win_length: int = 3000,
+        hop_length: int = 500,
+        n_fft: int = 3000,
+        center: bool = True,
+        low_hz: float = 0.067,
+        high_hz: float = 1.2,
+        hidden_channels: int | None = None,
+        residual_scale: float = 0.03,
+    ) -> None:
+        super().__init__()
+        self.in_channels = int(in_channels)
+        self.out_length = int(out_length)
+        self.sample_rate = float(sample_rate)
+        self.win_length = int(win_length)
+        self.hop_length = int(hop_length)
+        self.n_fft = int(n_fft)
+        self.center = bool(center)
+        self.low_hz = float(low_hz)
+        self.high_hz = float(high_hz)
+        self.residual_scale = float(residual_scale)
+        if self.n_fft < self.win_length:
+            raise ValueError("fb_residual_stft_n_fft 必须大于等于 fb_residual_stft_win_length")
+        if self.residual_scale < 0:
+            raise ValueError("fb_residual_scale 必须非负")
+        _validate_stft_config(self.n_fft, self.hop_length, self.sample_rate, self.low_hz, self.high_hz)
+        self.band_start, self.band_end = _band_indices(self.n_fft, self.sample_rate, self.low_hz, self.high_hz)
+        self.frame_count = _stft_frame_count(
+            self.out_length,
+            self.win_length,
+            self.hop_length,
+            self.n_fft,
+            self.center,
+        )
+        hidden = int(hidden_channels or self.in_channels)
+        bins = self.band_bin_count()
+        self.input_proj = nn.Conv1d(self.in_channels, hidden, kernel_size=1)
+        self.freq_embedding = nn.Parameter(torch.zeros(1, hidden, bins, 1))
+        self.freq_conv = nn.Sequential(
+            nn.Conv2d(hidden, hidden, kernel_size=(3, 1), padding=(1, 0)),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+        )
+        self.time_conv = nn.Sequential(
+            nn.Conv2d(hidden, hidden, kernel_size=(1, 3), padding=(0, 1)),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+        )
+        self.band_gate = nn.Conv2d(hidden, hidden, kernel_size=1)
+        self.output_conv = nn.Conv2d(hidden, 2, kernel_size=1)
+        nn.init.zeros_(self.band_gate.weight)
+        nn.init.constant_(self.band_gate.bias, 2.0)
+        nn.init.zeros_(self.output_conv.weight)
+        nn.init.zeros_(self.output_conv.bias)
+        self.register_buffer("istft_window", torch.hann_window(self.win_length), persistent=False)
+
+    def band_bin_count(self) -> int:
+        return int(self.band_end - self.band_start)
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        if tokens.dim() != 3:
+            raise ValueError(f"TfGridLiteResidualHead 期望 token 形状为 (B, C, T)，实际为 {tuple(tokens.shape)}")
+        aligned = align_to_time(tokens, self.frame_count)
+        hidden = self.input_proj(aligned)
+        grid = hidden.unsqueeze(2).expand(-1, -1, self.band_bin_count(), -1) + self.freq_embedding
+        grid = self.freq_conv(grid)
+        grid = self.time_conv(grid)
+        band_context = grid.mean(dim=3, keepdim=True)
+        grid = grid * torch.sigmoid(self.band_gate(band_context))
+        decoded = self.output_conv(grid)
+
+        original_dtype = decoded.dtype
+        work_dtype = torch.float64 if decoded.dtype == torch.float64 else torch.float32
+        decoded = torch.tanh(decoded.to(dtype=work_dtype)) * float(self.residual_scale)
+        real = decoded[:, 0, :, :]
+        imag = decoded[:, 1, :, :]
+        complex_dtype = torch.complex128 if work_dtype == torch.float64 else torch.complex64
+        spectrum = torch.zeros(
+            real.size(0),
+            self.n_fft // 2 + 1,
+            self.frame_count,
+            device=real.device,
+            dtype=complex_dtype,
+        )
+        spectrum[:, self.band_start : self.band_end, :] = torch.complex(real, imag)
+        window = self.istft_window.to(device=real.device, dtype=work_dtype)
+        residual = torch.istft(
+            spectrum,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=window,
+            center=self.center,
+            length=self.out_length,
+        )
+        return residual.unsqueeze(1).to(dtype=original_dtype)
+
+
 class STFTEncoder(nn.Module):
     """固定 STFT 前端加轻量卷积编码器，输出按 STFT 帧对齐的时间序列特征。"""
 
@@ -716,6 +821,7 @@ class TimeStftDual1D(nn.Module):
         fb_residual_stft_center: bool = True,
         fb_residual_stft_low_hz: float = 0.067,
         fb_residual_stft_high_hz: float = 1.2,
+        fb_residual_energy_cap: float = 0.0,
     ) -> None:
         super().__init__()
         mode = str(branch_mode).lower()
@@ -738,8 +844,11 @@ class TimeStftDual1D(nn.Module):
         if self.fb_aux_head_name not in {"none", "enc1_min_aux", "enc2_band_aware_aux"}:
             raise ValueError("fb_aux_head 必须是 none、enc1_min_aux 或 enc2_band_aware_aux")
         self.fb_residual_head_name = str(fb_residual_head or "none").lower()
-        if self.fb_residual_head_name not in {"none", "low_complex_residual"}:
-            raise ValueError("fb_residual_head 必须是 none 或 low_complex_residual")
+        if self.fb_residual_head_name not in {"none", "low_complex_residual", "enc3_tfgrid_residual"}:
+            raise ValueError("fb_residual_head 必须是 none、low_complex_residual 或 enc3_tfgrid_residual")
+        self.fb_residual_energy_cap = float(fb_residual_energy_cap)
+        if self.fb_residual_energy_cap < 0:
+            raise ValueError("fb_residual_energy_cap 必须非负")
 
         # encoder_type=sst_cached：STFT 分支改读离线 SST 缓存，不从波形现场算。
         self.sst_cached = str(dict(stft_kwargs).get("encoder_type", "conv1d")).lower() == "sst_cached"
@@ -761,7 +870,7 @@ class TimeStftDual1D(nn.Module):
         self.stft_gate: nn.Module | None = None
         self.cross_attention_adapter: nn.Module | None = None
         self.fb_aux_head: TargetStftAuxHead | None = None
-        self.fb_residual_head: LowComplexResidualHead | None = None
+        self.fb_residual_head: LowComplexResidualHead | TfGridLiteResidualHead | None = None
         if self.fb_aux_head_name != "none":
             if not use_time:
                 raise ValueError("fb_aux_head 需要启用 time_backbone")
@@ -785,7 +894,12 @@ class TimeStftDual1D(nn.Module):
         if self.fb_residual_head_name != "none":
             if not use_time:
                 raise ValueError("fb_residual_head 需要启用 time_backbone")
-            self.fb_residual_head = LowComplexResidualHead(
+            residual_head_cls = (
+                TfGridLiteResidualHead
+                if self.fb_residual_head_name == "enc3_tfgrid_residual"
+                else LowComplexResidualHead
+            )
+            self.fb_residual_head = residual_head_cls(
                 in_channels=int(time_feat_channels),
                 out_length=int(out_length),
                 sample_rate=float(stft_kwargs.get("sample_rate", 100.0)),
@@ -937,6 +1051,15 @@ class TimeStftDual1D(nn.Module):
             raise RuntimeError("cross_attention_inject 应在 forward 中用 time token 直接计算")
         return self.stft_adapter(stft_feats)
 
+    def _cap_residual_energy(self, residual: torch.Tensor, base_waveform: torch.Tensor) -> torch.Tensor:
+        if self.fb_residual_energy_cap <= 0:
+            return residual
+        residual_rms = residual.float().square().mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-8)
+        base_rms = base_waveform.detach().float().square().mean(dim=-1, keepdim=True).sqrt()
+        max_rms = float(self.fb_residual_energy_cap) * base_rms
+        scale = torch.minimum(torch.ones_like(residual_rms), max_rms / residual_rms)
+        return residual * scale.to(device=residual.device, dtype=residual.dtype)
+
     def _maybe_attach_aux(self, waveform: torch.Tensor, tokens: torch.Tensor | None):
         if self.fb_aux_head is None and self.fb_residual_head is None:
             return waveform
@@ -947,6 +1070,7 @@ class TimeStftDual1D(nn.Module):
         final_waveform = waveform
         if self.fb_residual_head is not None:
             residual = self.fb_residual_head(tokens).to(dtype=waveform.dtype)
+            residual = self._cap_residual_energy(residual, waveform)
             final_waveform = waveform + residual
             outputs["base_waveform"] = waveform
             outputs["residual_waveform"] = residual

@@ -1472,6 +1472,63 @@ Enc1 的旁路/误伤模式。
 - 下一步若继续 F 系列，优先做 hard/easy 选择性 gating 或 residual energy cap，而不是继续堆更强 auxiliary
   extractor。
 
+### 7.19 F-B Enc3 residual 与 energy cap 准备（2026-06-27）
+
+说明：7.18 的阶段判断仍成立，`F-B1b_aux_enc2_band_aware_consistency` 没有通过 easy 护栏；本节是用户明确要求
+“试 Enc3，再来 hard/easy 选择性 gating 或 residual energy cap”后的受控 probe。为避免把失败的 auxiliary
+结论误升级成“已通过”，本轮只做两件事：
+
+1. `Enc3_tfgrid_residual`：把 F-B2 的低频复数 residual head 替换成 TF-Grid-lite complex residual head，
+   仍从 shared token 输出 `0.067-1.2Hz` 复数 STFT residual，经 iSTFT 后加回 waveform。
+2. `residual_energy_cap`：先选择比 hard/easy gate 更可复现的能量上限方案，限制 residual RMS 不超过 base
+   waveform RMS 的 5%。hard/easy 选择性 gating 需要可靠的窗口级 hard/easy proxy；在没有新 proxy 前不把它写成
+   模型内 gating，避免用训练标签或事后分层制造泄漏。
+
+新增实现：
+
+- residual head：`model.fb_residual_head=enc3_tfgrid_residual`。
+- residual cap：`model.fb_residual_energy_cap=0.05`；`0.0` 表示关闭。
+- runner：`scripts/run_f_b_enc3_residual_probe.py`。
+- manifest：`runs/f_b_enc3_residual_manifest.csv`。
+
+实验臂：
+
+| label | 运行方式 | 作用 |
+|---|---|---|
+| `F0_native_stft_pre_mixer` | 复用 `runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual` | paired anchor |
+| `F-B2_low_complex_residual` | 复用 `runs/f_b2_residual/f_b2_low_complex_residual/dual` | residual baseline |
+| `F-B3_enc3_tfgrid_residual` | 新训练 3 seed | 验证 TF-Grid-lite residual 是否比低复杂度 residual 更会修 hard |
+| `F-B3b_enc3_tfgrid_residual_cap` | 新训练 3 seed | 验证 residual energy cap 是否缓解 easy 误伤 |
+
+命令：
+
+```bash
+./.venv/bin/python scripts/run_f_b_enc3_residual_probe.py \
+  --dry-run \
+  --manifest runs/f_b_enc3_residual_manifest.csv
+
+./.venv/bin/python scripts/run_f_b_enc3_residual_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_b_enc3_residual_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_b_enc3_residual_manifest.csv \
+  --output runs/f_b_enc3_residual_summary.csv \
+  --paired-output runs/f_b_enc3_residual_paired_delta.csv \
+  --strata-output runs/f_b_enc3_residual_strata_delta.csv
+```
+
+通过/停止口径：
+
+- `F-B3` 只有在 overall peak-band RR 至少 2/3 seed 改善，且 baseline easy 不再 3/3 同向变差时，才算有继续价值。
+- `F-B3b` 的核心判断是相对 `F-B3` 是否降低 baseline easy 误伤；如果 hard 收益也同步消失，说明 cap 只是关掉
+  residual，不是有效选择性机制。
+- 若 `F-B3/F-B3b` 仍重复“hard 改善、easy 3/3 退化”，下一步不应继续堆 residual head，而应回到窗口级 proxy
+  设计，再做 hard/easy selective gating。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。

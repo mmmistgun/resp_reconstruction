@@ -139,6 +139,7 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
         fb_residual_stft_center=bool(cfg.model.get("fb_residual_stft_center", True)),
         fb_residual_stft_low_hz=float(cfg.model.get("fb_residual_stft_low_hz", 0.067)),
         fb_residual_stft_high_hz=float(cfg.model.get("fb_residual_stft_high_hz", 1.2)),
+        fb_residual_energy_cap=float(cfg.model.get("fb_residual_energy_cap", 0.0)),
     )
 
 
