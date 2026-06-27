@@ -126,6 +126,19 @@ def _build_time_stft_dual1d(cfg: Any) -> TimeStftDual1D:
         fb_aux_stft_center=bool(cfg.model.get("fb_aux_stft_center", False)),
         fb_aux_stft_low_hz=float(cfg.model.get("fb_aux_stft_low_hz", 0.033)),
         fb_aux_stft_high_hz=float(cfg.model.get("fb_aux_stft_high_hz", 3.0)),
+        fb_residual_head=str(cfg.model.get("fb_residual_head", "none")),
+        fb_residual_hidden_channels=(
+            int(cfg.model.get("fb_residual_hidden_channels"))
+            if cfg.model.get("fb_residual_hidden_channels") is not None
+            else None
+        ),
+        fb_residual_scale=float(cfg.model.get("fb_residual_scale", 0.03)),
+        fb_residual_stft_win_length=int(cfg.model.get("fb_residual_stft_win_length", 3000)),
+        fb_residual_stft_hop_length=int(cfg.model.get("fb_residual_stft_hop_length", 500)),
+        fb_residual_stft_n_fft=int(cfg.model.get("fb_residual_stft_n_fft", 3000)),
+        fb_residual_stft_center=bool(cfg.model.get("fb_residual_stft_center", True)),
+        fb_residual_stft_low_hz=float(cfg.model.get("fb_residual_stft_low_hz", 0.067)),
+        fb_residual_stft_high_hz=float(cfg.model.get("fb_residual_stft_high_hz", 1.2)),
     )
 
 

@@ -324,6 +324,29 @@ F-B summary 继续复用 `summarize_f_a_stft_loss.py`，该脚本当前同时识
   --strata-output runs/f_b_aux_strata_delta.csv
 ```
 
+`run_f_b2_residual_probe.py` 用于受控推进 F-B2：复用 `F0_native_stft_pre_mixer` 与已完成的
+`F-B1_aux_consistency_detach`，只训练 `F-B2_low_complex_residual`。该版本保留主 waveform
+decoder，并从 shared token 预测低频复数 STFT residual，经 iSTFT 形成小幅 residual 加到主输出：
+
+```bash
+./.venv/bin/python scripts/run_f_b2_residual_probe.py \
+  --dry-run \
+  --manifest runs/f_b2_residual_manifest.csv
+
+./.venv/bin/python scripts/run_f_b2_residual_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_b2_residual_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_b2_residual_manifest.csv \
+  --output runs/f_b2_residual_summary.csv \
+  --paired-output runs/f_b2_residual_paired_delta.csv \
+  --strata-output runs/f_b2_residual_strata_delta.csv
+```
+
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
 `runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
 

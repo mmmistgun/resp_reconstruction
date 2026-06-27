@@ -414,6 +414,54 @@ def test_native_inject_fb_aux_head_returns_waveform_and_target_stft_logits():
     assert out["aux_target_stft_logmag"].shape == (2, 90, 31)
 
 
+def test_native_inject_fb_low_complex_residual_head_returns_diagnostic_waveforms():
+    model = TimeStftDual1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(
+            in_channels=1,
+            out_channels=1,
+            base_channels=8,
+            patch_len=256,
+            patch_stride=128,
+            overlap_window="hann",
+        ),
+        time_feat_channels=8,
+        branch_mode="dual",
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs=dict(
+            sample_rate=100.0,
+            stft_win=3000,
+            stft_hop=500,
+            low_hz=0.05,
+            high_hz=8.0,
+            out_channels=16,
+            norm="n0",
+            encoder_type="conv2d",
+        ),
+        fusion_mode="native_inject",
+        stft_inject_position="pre_mixer",
+        fb_residual_head="low_complex_residual",
+        fb_residual_scale=0.05,
+        fb_residual_stft_win_length=3000,
+        fb_residual_stft_hop_length=500,
+        fb_residual_stft_n_fft=3000,
+        fb_residual_stft_center=True,
+        fb_residual_stft_low_hz=0.067,
+        fb_residual_stft_high_hz=1.2,
+    )
+    x = torch.randn(2, 1, 18000)
+
+    out = model(x)
+
+    assert set(out) == {"waveform", "base_waveform", "residual_waveform"}
+    assert out["waveform"].shape == (2, 1, 18000)
+    assert out["base_waveform"].shape == (2, 1, 18000)
+    assert out["residual_waveform"].shape == (2, 1, 18000)
+    assert torch.allclose(out["waveform"], out["base_waveform"], atol=1e-6)
+    assert torch.max(torch.abs(out["residual_waveform"])) <= 0.05 + 1e-6
+
+
 @pytest.mark.parametrize("position", ["pre_mixer", "mid_mixer", "post_mixer"])
 def test_native_inject_position_dual_preserves_native_output_at_init(position):
     model = _native_dual("dual")

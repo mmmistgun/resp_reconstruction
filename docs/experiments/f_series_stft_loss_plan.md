@@ -1290,6 +1290,59 @@ waveform。
 - 本轮不进入 `F-B2_low_complex_residual`，也不进入 F-C；继续做 residual/output-space 会把问题从“监督能否传导”扩大成新 decoder 搜索。
 - 若后续重启 F-B，应先解决 aux head 对 shared latent 的扰动与 seed `20260901` 的退化窗口，而不是扩 seed 或加大 consistency 权重。
 
+### 7.15 F-B2 low-complex residual 受控推进（2026-06-27）
+
+说明：7.14 的阶段判断仍成立，`F-B1` 没有通过护栏。此处是用户明确要求继续 F-B/F-B2 后的受控
+probe，目的不是宣称 F-B1 已可升级，而是用最小 residual 结构验证“低频复数残差是否能在不接管主
+decoder 的情况下修正 waveform”。
+
+实现范围：
+
+- 模型：`TimeStftDual1D` 新增 `model.fb_residual_head=low_complex_residual`。
+- residual 形式：从 shared token 预测 `0.067-1.2Hz` 低频复数 STFT delta，`center=true` iSTFT
+  到 waveform residual，再以 `model.fb_residual_scale=0.03` 加到主 waveform。
+- 初始化：residual head 最后一层零初始化，初始 `waveform == base_waveform`，降低接管风险。
+- 输出诊断：模型 dict 返回 `waveform`、`base_waveform`、`residual_waveform`；loss/metrics 仍只使用
+  `waveform`。
+- runner：`scripts/run_f_b2_residual_probe.py`
+- manifest：`runs/f_b2_residual_manifest.csv`
+
+第一批矩阵：
+
+| label | 训练方式 | 目的 |
+|---|---|---|
+| `F0_native_stft_pre_mixer` | 复用 `runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual` | 同 seed anchor |
+| `F-B1_aux_consistency_detach` | 复用 `runs/f_b_aux/f_b1_aux_consistency_detach/dual` | auxiliary + consistency 对照 |
+| `F-B2_low_complex_residual` | 新训练 3 seed | 验证低频复数 residual 是否改善 waveform 主指标 |
+
+命令：
+
+```bash
+./.venv/bin/python scripts/run_f_b2_residual_probe.py \
+  --dry-run \
+  --manifest runs/f_b2_residual_manifest.csv
+
+./.venv/bin/python scripts/run_f_b2_residual_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_b2_residual_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_b2_residual_manifest.csv \
+  --output runs/f_b2_residual_summary.csv \
+  --paired-output runs/f_b2_residual_paired_delta.csv \
+  --strata-output runs/f_b2_residual_strata_delta.csv
+```
+
+通过条件：
+
+- `F-B2_low_complex_residual` 相对 `F0_native_stft_pre_mixer` 的 overall peak-band RR 不能只靠单 seed
+  偶然改善，且 `frac_gt_1/frac_gt_2` 不应变差。
+- baseline easy 不允许 3/3 seed 同向退化；若重复 7.14 的 easy 失败，F-B2 立即停止。
+- fast-RR 的局部正信号必须同时带来 hard/overall 收益，不能以 easy 或 tail fraction 为代价。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。

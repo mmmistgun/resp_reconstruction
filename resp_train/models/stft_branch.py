@@ -171,6 +171,93 @@ class TargetStftAuxHead(nn.Module):
         return self.decoder(aligned)
 
 
+class LowComplexResidualHead(nn.Module):
+    """从共享 token 预测低频复数 STFT 残差，再 iSTFT 成小幅 waveform residual。"""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_length: int,
+        sample_rate: float = 100.0,
+        win_length: int = 3000,
+        hop_length: int = 500,
+        n_fft: int = 3000,
+        center: bool = True,
+        low_hz: float = 0.067,
+        high_hz: float = 1.2,
+        hidden_channels: int | None = None,
+        residual_scale: float = 0.03,
+    ) -> None:
+        super().__init__()
+        self.in_channels = int(in_channels)
+        self.out_length = int(out_length)
+        self.sample_rate = float(sample_rate)
+        self.win_length = int(win_length)
+        self.hop_length = int(hop_length)
+        self.n_fft = int(n_fft)
+        self.center = bool(center)
+        self.low_hz = float(low_hz)
+        self.high_hz = float(high_hz)
+        self.residual_scale = float(residual_scale)
+        if self.n_fft < self.win_length:
+            raise ValueError("fb_residual_stft_n_fft 必须大于等于 fb_residual_stft_win_length")
+        if self.residual_scale < 0:
+            raise ValueError("fb_residual_scale 必须非负")
+        _validate_stft_config(self.n_fft, self.hop_length, self.sample_rate, self.low_hz, self.high_hz)
+        self.band_start, self.band_end = _band_indices(self.n_fft, self.sample_rate, self.low_hz, self.high_hz)
+        self.frame_count = _stft_frame_count(
+            self.out_length,
+            self.win_length,
+            self.hop_length,
+            self.n_fft,
+            self.center,
+        )
+        hidden = int(hidden_channels or self.in_channels)
+        self.decoder = nn.Sequential(
+            nn.Conv1d(self.in_channels, hidden, kernel_size=3, padding=1),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+            nn.Conv1d(hidden, 2 * self.band_bin_count(), kernel_size=1),
+        )
+        last = self.decoder[-1]
+        nn.init.zeros_(last.weight)
+        nn.init.zeros_(last.bias)
+        self.register_buffer("istft_window", torch.hann_window(self.win_length), persistent=False)
+
+    def band_bin_count(self) -> int:
+        return int(self.band_end - self.band_start)
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        if tokens.dim() != 3:
+            raise ValueError(f"LowComplexResidualHead 期望 token 形状为 (B, C, T)，实际为 {tuple(tokens.shape)}")
+        aligned = align_to_time(tokens, self.frame_count)
+        decoded = self.decoder(aligned)
+        original_dtype = decoded.dtype
+        work_dtype = torch.float64 if decoded.dtype == torch.float64 else torch.float32
+        decoded = torch.tanh(decoded.to(dtype=work_dtype)) * float(self.residual_scale)
+        real, imag = decoded.chunk(2, dim=1)
+        complex_dtype = torch.complex128 if work_dtype == torch.float64 else torch.complex64
+        spectrum = torch.zeros(
+            real.size(0),
+            self.n_fft // 2 + 1,
+            self.frame_count,
+            device=real.device,
+            dtype=complex_dtype,
+        )
+        spectrum[:, self.band_start : self.band_end, :] = torch.complex(real, imag)
+        window = self.istft_window.to(device=real.device, dtype=work_dtype)
+        residual = torch.istft(
+            spectrum,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=window,
+            center=self.center,
+            length=self.out_length,
+        )
+        return residual.unsqueeze(1).to(dtype=original_dtype)
+
+
 class STFTEncoder(nn.Module):
     """固定 STFT 前端加轻量卷积编码器，输出按 STFT 帧对齐的时间序列特征。"""
 
@@ -528,6 +615,15 @@ class TimeStftDual1D(nn.Module):
         fb_aux_stft_center: bool = False,
         fb_aux_stft_low_hz: float = 0.033,
         fb_aux_stft_high_hz: float = 3.0,
+        fb_residual_head: str = "none",
+        fb_residual_hidden_channels: int | None = None,
+        fb_residual_scale: float = 0.03,
+        fb_residual_stft_win_length: int = 3000,
+        fb_residual_stft_hop_length: int = 500,
+        fb_residual_stft_n_fft: int = 3000,
+        fb_residual_stft_center: bool = True,
+        fb_residual_stft_low_hz: float = 0.067,
+        fb_residual_stft_high_hz: float = 1.2,
     ) -> None:
         super().__init__()
         mode = str(branch_mode).lower()
@@ -549,6 +645,9 @@ class TimeStftDual1D(nn.Module):
         self.fb_aux_head_name = str(fb_aux_head or "none").lower()
         if self.fb_aux_head_name not in {"none", "enc1_min_aux"}:
             raise ValueError("fb_aux_head 必须是 none 或 enc1_min_aux")
+        self.fb_residual_head_name = str(fb_residual_head or "none").lower()
+        if self.fb_residual_head_name not in {"none", "low_complex_residual"}:
+            raise ValueError("fb_residual_head 必须是 none 或 low_complex_residual")
 
         # encoder_type=sst_cached：STFT 分支改读离线 SST 缓存，不从波形现场算。
         self.sst_cached = str(dict(stft_kwargs).get("encoder_type", "conv1d")).lower() == "sst_cached"
@@ -570,6 +669,7 @@ class TimeStftDual1D(nn.Module):
         self.stft_gate: nn.Module | None = None
         self.cross_attention_adapter: nn.Module | None = None
         self.fb_aux_head: TargetStftAuxHead | None = None
+        self.fb_residual_head: LowComplexResidualHead | None = None
         if self.fb_aux_head_name != "none":
             if not use_time:
                 raise ValueError("fb_aux_head 需要启用 time_backbone")
@@ -584,6 +684,22 @@ class TimeStftDual1D(nn.Module):
                 low_hz=float(fb_aux_stft_low_hz),
                 high_hz=float(fb_aux_stft_high_hz),
                 hidden_channels=fb_aux_hidden_channels,
+            )
+        if self.fb_residual_head_name != "none":
+            if not use_time:
+                raise ValueError("fb_residual_head 需要启用 time_backbone")
+            self.fb_residual_head = LowComplexResidualHead(
+                in_channels=int(time_feat_channels),
+                out_length=int(out_length),
+                sample_rate=float(stft_kwargs.get("sample_rate", 100.0)),
+                win_length=int(fb_residual_stft_win_length),
+                hop_length=int(fb_residual_stft_hop_length),
+                n_fft=int(fb_residual_stft_n_fft),
+                center=bool(fb_residual_stft_center),
+                low_hz=float(fb_residual_stft_low_hz),
+                high_hz=float(fb_residual_stft_high_hz),
+                hidden_channels=fb_residual_hidden_channels,
+                residual_scale=float(fb_residual_scale),
             )
         if self.fusion_mode in native_modes:
             # 原生解码融合：在 token 栅格把 STFT 加性注入主干特征，再走主干原生解码契约。
@@ -725,11 +841,18 @@ class TimeStftDual1D(nn.Module):
         return self.stft_adapter(stft_feats)
 
     def _maybe_attach_aux(self, waveform: torch.Tensor, tokens: torch.Tensor | None):
-        if self.fb_aux_head is None:
+        if self.fb_aux_head is None and self.fb_residual_head is None:
             return waveform
         if tokens is None:
-            raise RuntimeError("fb_aux_head 需要 time tokens，但当前 forward 未产生 tokens")
-        return {
-            "waveform": waveform,
-            "aux_target_stft_logmag": self.fb_aux_head(tokens),
-        }
+            raise RuntimeError("F-B auxiliary/residual head 需要 time tokens，但当前 forward 未产生 tokens")
+
+        outputs: dict[str, torch.Tensor] = {}
+        final_waveform = waveform
+        if self.fb_residual_head is not None:
+            residual = self.fb_residual_head(tokens).to(dtype=waveform.dtype)
+            final_waveform = waveform + residual
+            outputs["base_waveform"] = waveform
+            outputs["residual_waveform"] = residual
+        if self.fb_aux_head is not None:
+            outputs["aux_target_stft_logmag"] = self.fb_aux_head(tokens)
+        return {"waveform": final_waveform, **outputs}

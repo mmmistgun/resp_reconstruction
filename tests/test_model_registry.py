@@ -782,6 +782,33 @@ def test_build_time_stft_dual1d_native_inject_patch_preserves_shape():
     assert model.fusion_head is None  # native_inject 不建通用融合头
 
 
+def test_build_time_stft_dual1d_passes_fb_residual_head_config():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": "time_stft_dual1d", "in_channels": 1, "out_channels": 1, "base_channels": 8,
+                "branch_mode": "dual", "time_backbone": "patch_mixer1d",
+                "patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "overlap_window": "hann",
+                "stft_win": 3000, "stft_hop": 500, "stft_low_hz": 0.05, "stft_high_hz": 8.0,
+                "stft_out_channels": 16, "stft_norm": "n0", "stft_encoder_type": "conv2d",
+                "fusion_mode": "native_inject", "stft_inject_position": "pre_mixer",
+                "fb_residual_head": "low_complex_residual", "fb_residual_scale": 0.03,
+                "fb_residual_stft_win_length": 3000, "fb_residual_stft_hop_length": 500,
+                "fb_residual_stft_n_fft": 3000, "fb_residual_stft_center": True,
+                "fb_residual_stft_low_hz": 0.067, "fb_residual_stft_high_hz": 1.2,
+            },
+        }
+    )
+    model = build_model(cfg)
+
+    out = model(torch.randn(2, 1, 18000))
+
+    assert set(out) == {"waveform", "base_waveform", "residual_waveform"}
+    assert out["waveform"].shape == (2, 1, 18000)
+    assert model.fb_residual_head.residual_scale == pytest.approx(0.03)
+
+
 @pytest.mark.parametrize("position", ["pre_mixer", "mid_mixer", "post_mixer"])
 def test_build_time_stft_dual1d_passes_stft_inject_position(position):
     cfg = OmegaConf.create(
