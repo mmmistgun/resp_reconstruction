@@ -1943,6 +1943,60 @@ cap 失败与修复：
 运行建议：F 系列 topK 复评继续使用 `--start-stagger-sec 30` 缓解并发启动 I/O 峰；`--metric-workers 4` 可以保留为轻量加速，
 但不要为了追求 CPU 满载盲目放大，外层 `--max-parallel` 仍按 GPU/硬盘压力控制。
 
+### 7.28 F-D 特征提取网络 probe 准备（2026-06-29）
+
+背景：F-D topK 复评后，`F-D2_high_cwt_modulation` 在 candidate topK 探索口径下变成 F-D 内主 RR 最强候选；
+但所有 F-D 路线仍未通过 baseline easy 和 fast-RR 护栏。因此本节不是把 F-D 升级为主线，而是补一个小分支来判断
+“现有 high-CWT 特征提取网络是否过弱”。输入缓存、loss、输出 waveform 定义和 paired anchor 均保持不变。
+
+新增 encoder：
+
+- `cached_tf_tcn`：用于 dense high-CWT map，结构为 anisotropic CWT-CNN `(3x7)/(3x5)`、频率轴 adaptive pooling 到
+  6 个 band groups，再接 residual TCN dilation `1/2/4`，输出仍为 `(B, C, T_high)` 后对齐到 native tokens。
+- `cached_sequence_res_tcn`：用于 8 维 modulation feature sequence，替代原顺序堆叠 Conv1D 为 residual TCN dilation
+  `1/2/4`，保留同样的 cached sequence 输入和 native injection 融合。
+
+runner：`scripts/run_f_d_feature_extractor_probe.py`
+
+实验矩阵：
+
+| label | 说明 | train |
+|---|---|---:|
+| `F0_native_stft_pre_mixer` | paired anchor | 否 |
+| `F-D0_high_stft_anchor` | high-STFT reference | 否 |
+| `F-D1_high_cwt` | 旧 dense CWT encoder `cached_tf` | 否 |
+| `F-D1b_high_cwt_cnn_tcn` | 新 dense CWT `cached_tf_tcn` | 是 |
+| `F-D2_high_cwt_modulation` | 旧 modulation `cached_sequence` | 否 |
+| `F-D2b_high_cwt_modulation_res_tcn` | 新 modulation residual TCN | 是 |
+
+运行命令：
+
+```bash
+./.venv/bin/python scripts/run_f_d_feature_extractor_probe.py \
+  --dry-run \
+  --manifest runs/f_d_feature_extractor_manifest.csv
+
+./.venv/bin/python scripts/run_f_d_feature_extractor_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_d_feature_extractor_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_d_feature_extractor_manifest.csv \
+  --output runs/f_d_feature_extractor_summary.csv \
+  --paired-output runs/f_d_feature_extractor_paired_delta.csv \
+  --strata-output runs/f_d_feature_extractor_strata_delta.csv
+```
+
+判断口径：
+
+- `F-D1b` 必须相对 `F-D1` 改善 overall/hard/low-spectrum，且 baseline easy/fast 不更差，才说明 dense CWT encoder
+  过弱值得继续修。
+- `F-D2b` 必须相对 `F-D2` 至少保住 topK 后的 overall/spec 优势，并缓解 easy/fast 误伤，才有继续 gating/cap 的价值。
+- 若二者仍重复 hard 改善、easy/fast 退化，本分支停止；不要继续加更强 CWT-CNN、attention pooling 或 SST dense path。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。

@@ -3,8 +3,10 @@ import torch
 
 from resp_train.models.stft_branch import (
     CachedSequenceEncoder,
+    CachedTfTcnEncoder,
     FusionHead,
     LowBandComplexStftOutputHead,
+    ResidualCachedSequenceEncoder,
     STFTEncoder,
     TimeStftDual1D,
     TimeStftLowComplexOutput1D,
@@ -1072,6 +1074,32 @@ def test_cached_sequence_encoder_output_contract_and_backward():
     assert torch.isfinite(features.grad).all()
 
 
+def test_cached_tf_tcn_encoder_output_contract_and_backward():
+    enc = CachedTfTcnEncoder(in_freq=36, out_channels=16, hidden_channels=32, pooled_freq=6)
+    features = torch.randn(2, 36, 180, requires_grad=True)
+
+    out = enc(features)
+    out.square().mean().backward()
+
+    assert out.shape == (2, 16, 180)
+    assert torch.isfinite(out).all()
+    assert features.grad is not None
+    assert torch.isfinite(features.grad).all()
+
+
+def test_residual_cached_sequence_encoder_output_contract_and_backward():
+    enc = ResidualCachedSequenceEncoder(in_channels=8, out_channels=16, hidden_channels=32)
+    features = torch.randn(2, 8, 180, requires_grad=True)
+
+    out = enc(features)
+    out.square().mean().backward()
+
+    assert out.shape == (2, 16, 180)
+    assert torch.isfinite(out).all()
+    assert features.grad is not None
+    assert torch.isfinite(features.grad).all()
+
+
 def test_native_inject_cached_sequence_uses_cached_context():
     model = TimeStftDual1D(
         time_backbone_name="patch_mixer1d",
@@ -1083,6 +1111,63 @@ def test_native_inject_cached_sequence_uses_cached_context():
         out_length=18000,
         fuse_len=600,
         stft_kwargs=dict(encoder_type="cached_sequence", in_freq=8, out_channels=16),
+        fusion_mode="native_inject",
+        stft_inject_position="pre_mixer",
+    )
+    x = torch.randn(2, 1, 18000)
+    cached = torch.randn(2, 8, 180)
+
+    out = model(x, sst=cached)
+
+    assert out.shape == (2, 1, 18000)
+    assert torch.isfinite(out).all()
+
+
+def test_native_inject_cached_tf_tcn_uses_cached_context():
+    model = TimeStftDual1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(
+            in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64, overlap_window="hann"
+        ),
+        time_feat_channels=8,
+        branch_mode="dual",
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs=dict(
+            encoder_type="cached_tf_tcn",
+            in_freq=36,
+            out_channels=16,
+            hidden_channels=32,
+            pooled_freq=6,
+        ),
+        fusion_mode="native_inject",
+        stft_inject_position="pre_mixer",
+    )
+    x = torch.randn(2, 1, 18000)
+    cached = torch.randn(2, 36, 180)
+
+    out = model(x, sst=cached)
+
+    assert out.shape == (2, 1, 18000)
+    assert torch.isfinite(out).all()
+
+
+def test_native_inject_residual_cached_sequence_uses_cached_context():
+    model = TimeStftDual1D(
+        time_backbone_name="patch_mixer1d",
+        time_backbone_kwargs=dict(
+            in_channels=1, out_channels=1, base_channels=8, patch_len=128, patch_stride=64, overlap_window="hann"
+        ),
+        time_feat_channels=8,
+        branch_mode="dual",
+        out_length=18000,
+        fuse_len=600,
+        stft_kwargs=dict(
+            encoder_type="cached_sequence_res_tcn",
+            in_freq=8,
+            out_channels=16,
+            hidden_channels=32,
+        ),
         fusion_mode="native_inject",
         stft_inject_position="pre_mixer",
     )

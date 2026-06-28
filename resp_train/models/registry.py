@@ -118,15 +118,20 @@ def _stft_branch_kwargs(cfg: Any, branch_mode: str, encoder_type: str) -> dict:
     use_stft = str(branch_mode).lower() in {"stft_only", "dual"}
     if not use_stft:
         return {}
-    if encoder_type in {"sst_cached", "cached_tf", "cached_sequence"}:
+    if encoder_type in {"sst_cached", "cached_tf", "cached_sequence", "cached_tf_tcn", "cached_sequence_res_tcn"}:
         # cached_* 读离线缓存，不需要 STFT 参数；只传编码器需要的输入通道和输出通道。
         default_in_freq = 159 if encoder_type == "sst_cached" else 36
         in_freq = cfg.model.get("stft_cached_in_freq", cfg.model.get("stft_sst_in_freq", default_in_freq))
-        return {
+        kwargs = {
             "encoder_type": encoder_type,
             "in_freq": int(in_freq),
             "out_channels": int(cfg.model.get("stft_out_channels", 16)),
         }
+        if cfg.model.get("stft_cached_hidden_channels") is not None:
+            kwargs["hidden_channels"] = int(cfg.model.get("stft_cached_hidden_channels"))
+        if cfg.model.get("stft_cached_pooled_freq") is not None:
+            kwargs["pooled_freq"] = int(cfg.model.get("stft_cached_pooled_freq"))
+        return kwargs
     band_scale_path = cfg.model.get("stft_band_scale_path", None)
     return {
         "sample_rate": float(cfg.window.get("target_fs", 100)),

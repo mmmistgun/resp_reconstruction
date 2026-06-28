@@ -834,6 +834,76 @@ class SSTCachedEncoder(nn.Module):
         return encoded.mean(dim=2)  # (B, out_ch, T)
 
 
+class _ResidualTcnBlock(nn.Module):
+    """轻量残差 TCN block，用于 F-D 缓存特征编码器。"""
+
+    def __init__(self, channels: int, dilation: int) -> None:
+        super().__init__()
+        channels = int(channels)
+        dilation = int(dilation)
+        if channels <= 0 or dilation <= 0:
+            raise ValueError("_ResidualTcnBlock 的 channels/dilation 必须大于 0")
+        self.net = nn.Sequential(
+            nn.Conv1d(channels, channels, kernel_size=3, padding=dilation, dilation=dilation),
+            nn.GroupNorm(1, channels),
+            nn.SiLU(),
+            nn.Conv1d(channels, channels, kernel_size=1),
+            nn.GroupNorm(1, channels),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.silu(x + self.net(x))
+
+
+class CachedTfTcnEncoder(nn.Module):
+    """F-D Enc1：缓存 high-CWT/SST map (B, F, T) → CWT-CNN + TCN → (B, C, T)。"""
+
+    def __init__(
+        self,
+        in_freq: int,
+        out_channels: int = 16,
+        hidden_channels: int | None = None,
+        pooled_freq: int = 6,
+    ) -> None:
+        super().__init__()
+        self.in_freq = int(in_freq)
+        self.out_channels = int(out_channels)
+        hidden = int(hidden_channels or max(32, self.out_channels))
+        self.pooled_freq = int(pooled_freq)
+        if self.in_freq <= 0 or self.out_channels <= 0 or hidden <= 0 or self.pooled_freq <= 0:
+            raise ValueError("CachedTfTcnEncoder 的 in_freq/out_channels/hidden_channels/pooled_freq 必须大于 0")
+        self.map_encoder = nn.Sequential(
+            nn.Conv2d(1, hidden, kernel_size=(3, 7), padding=(1, 3)),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+            nn.Conv2d(hidden, hidden, kernel_size=(3, 5), padding=(1, 2)),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+        )
+        self.temporal = nn.Sequential(
+            nn.Conv1d(hidden * self.pooled_freq, hidden, kernel_size=1),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+            _ResidualTcnBlock(hidden, dilation=1),
+            _ResidualTcnBlock(hidden, dilation=2),
+            _ResidualTcnBlock(hidden, dilation=4),
+            nn.Conv1d(hidden, self.out_channels, kernel_size=1),
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if features.dim() != 3:
+            raise ValueError(f"CachedTfTcnEncoder 期望输入 (B, F, T)，实际为 {tuple(features.shape)}")
+        if features.size(1) != self.in_freq:
+            raise ValueError(f"CachedTfTcnEncoder 输入频点必须为 {self.in_freq}，实际为 {features.size(1)}")
+        encoder_param = next(self.map_encoder.parameters(), None)
+        if encoder_param is not None:
+            features = features.to(dtype=encoder_param.dtype)
+        encoded = self.map_encoder(features.unsqueeze(1))
+        encoded = F.adaptive_avg_pool2d(encoded, output_size=(self.pooled_freq, encoded.size(-1)))
+        encoded = encoded.flatten(1, 2)
+        return self.temporal(encoded)
+
+
 class CachedSequenceEncoder(nn.Module):
     """预计算序列特征 (B, K, T) 的轻量 TCN 编码器，用于 F-D modulation features。"""
 
@@ -866,6 +936,40 @@ class CachedSequenceEncoder(nn.Module):
         if features.size(1) != self.in_channels:
             raise ValueError(
                 f"CachedSequenceEncoder 输入通道必须为 {self.in_channels}，实际为 {features.size(1)}"
+            )
+        encoder_param = next(self.encoder.parameters(), None)
+        if encoder_param is not None:
+            features = features.to(dtype=encoder_param.dtype)
+        return self.encoder(features)
+
+
+class ResidualCachedSequenceEncoder(nn.Module):
+    """F-D Enc2b：缓存序列特征 (B, K, T) 的残差 TCN 编码器。"""
+
+    def __init__(self, in_channels: int, out_channels: int = 16, hidden_channels: int | None = None) -> None:
+        super().__init__()
+        self.in_channels = int(in_channels)
+        self.out_channels = int(out_channels)
+        hidden = int(hidden_channels or max(32, self.out_channels, self.in_channels))
+        if self.in_channels <= 0 or self.out_channels <= 0 or hidden <= 0:
+            raise ValueError("ResidualCachedSequenceEncoder 的 in_channels/out_channels/hidden_channels 必须大于 0")
+        self.encoder = nn.Sequential(
+            nn.GroupNorm(1, self.in_channels),
+            nn.Conv1d(self.in_channels, hidden, kernel_size=1),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+            _ResidualTcnBlock(hidden, dilation=1),
+            _ResidualTcnBlock(hidden, dilation=2),
+            _ResidualTcnBlock(hidden, dilation=4),
+            nn.Conv1d(hidden, self.out_channels, kernel_size=1),
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if features.dim() != 3:
+            raise ValueError(f"ResidualCachedSequenceEncoder 期望输入 (B, K, T)，实际为 {tuple(features.shape)}")
+        if features.size(1) != self.in_channels:
+            raise ValueError(
+                f"ResidualCachedSequenceEncoder 输入通道必须为 {self.in_channels}，实际为 {features.size(1)}"
             )
         encoder_param = next(self.encoder.parameters(), None)
         if encoder_param is not None:
@@ -988,7 +1092,13 @@ class TimeStftDual1D(nn.Module):
         # cached_*：分支改读离线时频/序列缓存，不从波形现场算；训练引擎仍通过 batch["sst"] 传入。
         self.stft_encoder_type = str(dict(stft_kwargs).get("encoder_type", "conv1d")).lower()
         self.sst_cached = self.stft_encoder_type == "sst_cached"
-        self.cached_context = self.stft_encoder_type in {"sst_cached", "cached_tf", "cached_sequence"}
+        self.cached_context = self.stft_encoder_type in {
+            "sst_cached",
+            "cached_tf",
+            "cached_sequence",
+            "cached_tf_tcn",
+            "cached_sequence_res_tcn",
+        }
         if self.cached_context and self.fusion_mode not in {"native_inject", "gated_native_inject", "cross_attention_inject"}:
             raise ValueError(
                 "cached context 当前仅支持 fusion_mode=native_inject、gated_native_inject 或 cross_attention_inject"
@@ -1002,10 +1112,27 @@ class TimeStftDual1D(nn.Module):
                 in_freq=int(stft_kwargs["in_freq"]),
                 out_channels=int(stft_kwargs.get("out_channels", 16)),
             )
+        elif self.stft_encoder_type == "cached_tf_tcn":
+            self.stft_encoder = CachedTfTcnEncoder(
+                in_freq=int(stft_kwargs["in_freq"]),
+                out_channels=int(stft_kwargs.get("out_channels", 16)),
+                hidden_channels=(
+                    int(stft_kwargs["hidden_channels"]) if stft_kwargs.get("hidden_channels") is not None else None
+                ),
+                pooled_freq=int(stft_kwargs.get("pooled_freq", 6)),
+            )
         elif self.stft_encoder_type == "cached_sequence":
             self.stft_encoder = CachedSequenceEncoder(
                 in_channels=int(stft_kwargs["in_freq"]),
                 out_channels=int(stft_kwargs.get("out_channels", 16)),
+            )
+        elif self.stft_encoder_type == "cached_sequence_res_tcn":
+            self.stft_encoder = ResidualCachedSequenceEncoder(
+                in_channels=int(stft_kwargs["in_freq"]),
+                out_channels=int(stft_kwargs.get("out_channels", 16)),
+                hidden_channels=(
+                    int(stft_kwargs["hidden_channels"]) if stft_kwargs.get("hidden_channels") is not None else None
+                ),
             )
         else:
             self.stft_encoder = STFTEncoder(**dict(stft_kwargs))

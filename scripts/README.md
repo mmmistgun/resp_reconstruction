@@ -457,6 +457,30 @@ F-D 不改变 waveform 输出空间；第一批只比较 `F-D0_high_stft_anchor`
   --strata-output runs/f_d_highfreq_strata_delta.csv
 ```
 
+`run_f_d_feature_extractor_probe.py` 用于 F-D 特征提取网络小分支：复用
+`F0_native_stft_pre_mixer`、`F-D0_high_stft_anchor`、`F-D1_high_cwt` 和
+`F-D2_high_cwt_modulation`，只训练 `F-D1b_high_cwt_cnn_tcn` 与
+`F-D2b_high_cwt_modulation_res_tcn` 三个 seed。该 probe 不改变 high-CWT/modulation 缓存、loss 或输出定义。
+
+```bash
+./.venv/bin/python scripts/run_f_d_feature_extractor_probe.py \
+  --dry-run \
+  --manifest runs/f_d_feature_extractor_manifest.csv
+
+./.venv/bin/python scripts/run_f_d_feature_extractor_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_d_feature_extractor_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_d_feature_extractor_manifest.csv \
+  --output runs/f_d_feature_extractor_summary.csv \
+  --paired-output runs/f_d_feature_extractor_paired_delta.csv \
+  --strata-output runs/f_d_feature_extractor_strata_delta.csv
+```
+
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
 `runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
 
