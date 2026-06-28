@@ -172,7 +172,12 @@ def _matching_row(frame: pd.DataFrame, *, label: str, seed: int) -> dict[str, An
 
 def _candidate_label_mask(labels: pd.Series) -> pd.Series:
     text = labels.astype(str)
-    return text.str.startswith("F-A") | text.str.startswith("F-B") | text.str.startswith("F-C")
+    return (
+        text.str.startswith("F-A")
+        | text.str.startswith("F-B")
+        | text.str.startswith("F-C")
+        | text.str.startswith("F-D")
+    )
 
 
 def _delta(candidate: dict[str, Any], baseline: dict[str, Any], column: str) -> float:

@@ -119,6 +119,42 @@ def test_summarize_f_a_runs_includes_f_c_candidates(tmp_path):
     assert paired["delta_rr_peak_band_abs_error_mean"].iloc[0] < 0
 
 
+def test_summarize_f_a_runs_includes_f_d_candidates(tmp_path):
+    f0_root = tmp_path / "f0"
+    fd_root = tmp_path / "fd"
+    _write_run(f0_root, "20260626_000000", _metrics([1.0, 1.2], [0.9, 0.8], [14, 20]), seed=20260700)
+    _write_run(fd_root, "20260626_000001", _metrics([0.8, 1.0], [0.9, 0.8], [14, 20]), seed=20260700)
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        [
+            {
+                "tag": "f0_native_stft_pre_mixer_dual_20260700",
+                "label": "F0_native_stft_pre_mixer",
+                "branch_mode": "dual",
+                "seed": 20260700,
+                "paired_f0_label": "F0_native_stft_pre_mixer",
+                "paired_time_only_label": "F0_native_time_only",
+                "overrides": f"outputs.run_root={f0_root}",
+            },
+            {
+                "tag": "f_d0_high_stft_anchor_dual_20260700",
+                "label": "F-D0_high_stft_anchor",
+                "branch_mode": "dual",
+                "seed": 20260700,
+                "paired_f0_label": "F0_native_stft_pre_mixer",
+                "paired_time_only_label": "F0_native_time_only",
+                "overrides": f"outputs.run_root={fd_root}",
+            },
+        ]
+    ).to_csv(manifest, index=False)
+
+    _, paired, strata = summarize_f_a_runs(manifest)
+
+    assert paired["label"].tolist() == ["F-D0_high_stft_anchor"]
+    assert paired["delta_rr_peak_band_abs_error_mean"].iloc[0] < 0
+    assert set(strata["label"]) == {"F-D0_high_stft_anchor"}
+
+
 def test_summarize_f_a_runs_matches_run_dir_by_training_seed(tmp_path):
     f0_root = tmp_path / "f0"
     fa_root = tmp_path / "fa"

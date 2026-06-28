@@ -1080,6 +1080,26 @@ def test_build_time_stft_dual1d_sst_cached_native_inject():
     assert model.sst_cached is True
 
 
+def test_build_time_stft_dual1d_cached_sequence_native_inject():
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": "time_stft_dual1d", "in_channels": 1, "out_channels": 1, "base_channels": 8,
+                "branch_mode": "dual", "time_backbone": "patch_mixer1d",
+                "patch_len": 256, "patch_stride": 128, "mixer_layers": 1, "overlap_window": "hann",
+                "stft_out_channels": 16, "stft_encoder_type": "cached_sequence", "stft_cached_in_freq": 8,
+                "fusion_mode": "native_inject",
+            },
+        }
+    )
+    model = build_model(cfg)
+    y = model(torch.randn(2, 1, 18000), sst=torch.randn(2, 8, 180))
+    assert y.shape == (2, 1, 18000)
+    assert torch.isfinite(y).all()
+    assert model.cached_context is True
+
+
 def test_build_time_stft_dual1d_bandgroup_native_inject_preserves_shape():
     cfg = OmegaConf.create(
         {

@@ -834,6 +834,45 @@ class SSTCachedEncoder(nn.Module):
         return encoded.mean(dim=2)  # (B, out_ch, T)
 
 
+class CachedSequenceEncoder(nn.Module):
+    """预计算序列特征 (B, K, T) 的轻量 TCN 编码器，用于 F-D modulation features。"""
+
+    def __init__(self, in_channels: int, out_channels: int = 16, hidden_channels: int | None = None) -> None:
+        super().__init__()
+        self.in_channels = int(in_channels)
+        self.out_channels = int(out_channels)
+        hidden = int(hidden_channels or max(self.out_channels, self.in_channels))
+        if self.in_channels <= 0 or self.out_channels <= 0 or hidden <= 0:
+            raise ValueError("CachedSequenceEncoder 的 in_channels/out_channels/hidden_channels 必须大于 0")
+        layers: list[nn.Module] = [
+            nn.Conv1d(self.in_channels, hidden, kernel_size=3, padding=1),
+            nn.GroupNorm(1, hidden),
+            nn.SiLU(),
+        ]
+        for dilation in (1, 2, 4):
+            layers.extend(
+                [
+                    nn.Conv1d(hidden, hidden, kernel_size=3, padding=dilation, dilation=dilation),
+                    nn.GroupNorm(1, hidden),
+                    nn.SiLU(),
+                ]
+            )
+        layers.append(nn.Conv1d(hidden, self.out_channels, kernel_size=1))
+        self.encoder = nn.Sequential(*layers)
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if features.dim() != 3:
+            raise ValueError(f"CachedSequenceEncoder 期望输入 (B, K, T)，实际为 {tuple(features.shape)}")
+        if features.size(1) != self.in_channels:
+            raise ValueError(
+                f"CachedSequenceEncoder 输入通道必须为 {self.in_channels}，实际为 {features.size(1)}"
+            )
+        encoder_param = next(self.encoder.parameters(), None)
+        if encoder_param is not None:
+            features = features.to(dtype=encoder_param.dtype)
+        return self.encoder(features)
+
+
 class TokenCrossAttentionAdapter(nn.Module):
     """time token 查询 STFT token 的轻量 cross-attention 适配器。"""
 
@@ -946,17 +985,26 @@ class TimeStftDual1D(nn.Module):
         if self.fb_residual_energy_cap < 0:
             raise ValueError("fb_residual_energy_cap 必须非负")
 
-        # encoder_type=sst_cached：STFT 分支改读离线 SST 缓存，不从波形现场算。
-        self.sst_cached = str(dict(stft_kwargs).get("encoder_type", "conv1d")).lower() == "sst_cached"
-        if self.sst_cached and self.fusion_mode not in {"native_inject", "gated_native_inject", "cross_attention_inject"}:
-            raise ValueError("sst_cached 当前仅支持 fusion_mode=native_inject、gated_native_inject 或 cross_attention_inject")
+        # cached_*：分支改读离线时频/序列缓存，不从波形现场算；训练引擎仍通过 batch["sst"] 传入。
+        self.stft_encoder_type = str(dict(stft_kwargs).get("encoder_type", "conv1d")).lower()
+        self.sst_cached = self.stft_encoder_type == "sst_cached"
+        self.cached_context = self.stft_encoder_type in {"sst_cached", "cached_tf", "cached_sequence"}
+        if self.cached_context and self.fusion_mode not in {"native_inject", "gated_native_inject", "cross_attention_inject"}:
+            raise ValueError(
+                "cached context 当前仅支持 fusion_mode=native_inject、gated_native_inject 或 cross_attention_inject"
+            )
 
         self.time_backbone = _build_time_backbone(time_backbone_name, time_backbone_kwargs) if use_time else None
         if not use_stft:
             self.stft_encoder = None
-        elif self.sst_cached:
+        elif self.stft_encoder_type in {"sst_cached", "cached_tf"}:
             self.stft_encoder = SSTCachedEncoder(
                 in_freq=int(stft_kwargs["in_freq"]),
+                out_channels=int(stft_kwargs.get("out_channels", 16)),
+            )
+        elif self.stft_encoder_type == "cached_sequence":
+            self.stft_encoder = CachedSequenceEncoder(
+                in_channels=int(stft_kwargs["in_freq"]),
                 out_channels=int(stft_kwargs.get("out_channels", 16)),
             )
         else:
@@ -1126,9 +1174,9 @@ class TimeStftDual1D(nn.Module):
         sst: torch.Tensor | None,
         target_len: int,
     ) -> torch.Tensor:
-        if self.sst_cached:
+        if self.cached_context:
             if sst is None:
-                raise ValueError("sst_cached 模式需要传入预计算 sst 张量 (B, freq, T)")
+                raise ValueError("cached context 模式需要传入预计算缓存张量 (B, C, T)")
             branch_feats = self.stft_encoder(sst)
         else:
             branch_feats = self.stft_encoder(x)

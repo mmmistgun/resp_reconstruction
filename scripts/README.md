@@ -421,6 +421,42 @@ F-C0 会保留 `training.checkpoint_gate.metric=auto_direction`，但把 `traini
   --strata-output runs/f_c_stft_output_strata_delta.csv
 ```
 
+`precompute_f_d_highfreq_cache.py` 与 `run_f_d_highfreq_probe.py` 用于 F-D 高频输入表征受控 probe。
+F-D 不改变 waveform 输出空间；第一批只比较 `F-D0_high_stft_anchor`、`F-D1_high_cwt` 和
+`F-D2_high_cwt_modulation`，并复用 `F0_native_stft_pre_mixer` 作为 paired anchor。F-D1/F-D2
+使用离线缓存，缓存文件仍通过历史 `data.sst_cache_path` / batch `sst` 通道传入模型：
+
+```bash
+./.venv/bin/python scripts/precompute_f_d_highfreq_cache.py \
+  --config configs/tho_research_v2.yaml \
+  --mode cwt \
+  --out runs/f_d_highfreq_cache/high_cwt_1_8hz_36x180.npz \
+  --workers 1
+
+./.venv/bin/python scripts/precompute_f_d_highfreq_cache.py \
+  --config configs/tho_research_v2.yaml \
+  --mode modulation \
+  --out runs/f_d_highfreq_cache/high_cwt_modulation_1_8hz_8x180.npz \
+  --workers 1
+
+./.venv/bin/python scripts/run_f_d_highfreq_probe.py \
+  --dry-run \
+  --manifest runs/f_d_highfreq_manifest.csv
+
+./.venv/bin/python scripts/run_f_d_highfreq_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_d_highfreq_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_d_highfreq_manifest.csv \
+  --output runs/f_d_highfreq_summary.csv \
+  --paired-output runs/f_d_highfreq_paired_delta.csv \
+  --strata-output runs/f_d_highfreq_strata_delta.csv
+```
+
 每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
 `runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
 

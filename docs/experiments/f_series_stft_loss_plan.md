@@ -1751,6 +1751,114 @@ cap 失败与修复：
   sweep。
 - 若后续需要利用 STFT，优先回到输入/辅助/诊断分支，而不是把 STFT 作为主输出空间。
 
+### 7.24 F-D high-frequency input representation 准备（2026-06-28）
+
+背景：F-C0 已排除“低频 complex-STFT 主输出空间”作为当前主线；F-D 不沿输出空间继续扩展，而是回到第 5 节定义的
+输入/诊断分支问题：高频心冲击的短时多分辨率上下文是否能通过小扰动注入帮助 waveform 输出。
+
+本次准备范围：
+
+- runner：`scripts/run_f_d_highfreq_probe.py`，复用 `F0_native_stft_pre_mixer`，只新训练
+  `F-D0_high_stft_anchor`、`F-D1_high_cwt`、`F-D2_high_cwt_modulation` 三个候选。
+- precompute：`scripts/precompute_f_d_highfreq_cache.py`，输出仍保存为 `row_ids` + `sst` npz 结构，以复用现有
+  `data.sst_cache_path` / batch `sst` 通道；这里的 `sst` 字段实际表示 high-CWT map 或 modulation features。
+- model：`TimeStftDual1D` 新增 `cached_tf` 与 `cached_sequence` encoder type。`cached_tf` 复用轻量 Conv2D
+  时频缓存编码；`cached_sequence` 使用轻量 TCN 编码 8 维 modulation feature 序列。
+- summary：`scripts/summarize_f_a_stft_loss.py` 已扩展为识别 `F-D*` 候选，继续输出 detail、paired delta 与
+  strata delta。
+
+第一批矩阵：
+
+| label | 表征 | 训练/复用 | 说明 |
+|---|---|---:|---|
+| `F0_native_stft_pre_mixer` | 当前 30s/5s fullband STFT native inject | 复用 | F 系列 paired anchor |
+| `F-D0_high_stft_anchor` | 在线短窗 high-STFT `8s/1s, 1-8Hz` | 新训练 3 seed | 先验证高频短时分辨率变量 |
+| `F-D1_high_cwt` | 离线 high-CWT `1-8Hz, 36x180` | 新训练 3 seed | 验证 CWT dense map 是否优于 high-STFT |
+| `F-D2_high_cwt_modulation` | 离线 high-CWT 派生 8 维 modulation features | 新训练 3 seed | 验证收益是否主要来自能量/质量/ridge proxy |
+
+准备命令：
+
+```bash
+./.venv/bin/python scripts/precompute_f_d_highfreq_cache.py \
+  --config configs/tho_research_v2.yaml \
+  --mode cwt \
+  --out runs/f_d_highfreq_cache/high_cwt_1_8hz_36x180.npz \
+  --workers 1
+
+./.venv/bin/python scripts/precompute_f_d_highfreq_cache.py \
+  --config configs/tho_research_v2.yaml \
+  --mode modulation \
+  --out runs/f_d_highfreq_cache/high_cwt_modulation_1_8hz_8x180.npz \
+  --workers 1
+
+./.venv/bin/python scripts/run_f_d_highfreq_probe.py \
+  --dry-run \
+  --manifest runs/f_d_highfreq_manifest.csv
+
+./.venv/bin/python scripts/run_f_d_highfreq_probe.py \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --manifest runs/f_d_highfreq_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/f_d_highfreq_manifest.csv \
+  --output runs/f_d_highfreq_summary.csv \
+  --paired-output runs/f_d_highfreq_paired_delta.csv \
+  --strata-output runs/f_d_highfreq_strata_delta.csv
+```
+
+边界：
+
+- 不改 target、split、验证集、方向 gate、核心评价指标或 waveform 输出定义。
+- 不做 CWT/SST 输出空间、low-CWT 替换、dense SST map、full attention 或新 decoder。
+- `F-D1/F-D2` 只有在相对 `F-D0` 至少不恶化 easy/fast 护栏，并在 hard/low-spectrum 有合理收益时，才考虑
+  F-D3 SST ridge 或 high-CWT 参数扩展。
+
+### 7.25 F-D high-frequency input representation 结果（2026-06-28）
+
+运行范围：
+
+- cache：`runs/f_d_highfreq_cache/high_cwt_1_8hz_36x180.npz` 与
+  `runs/f_d_highfreq_cache/high_cwt_modulation_1_8hz_8x180.npz`。
+- manifest：`runs/f_d_highfreq_manifest.csv`，包含 3 个复用 `F0_native_stft_pre_mixer` anchor 与
+  `F-D0/F-D1/F-D2` 各 3 seed。
+- summary：`runs/f_d_highfreq_summary.csv`、`runs/f_d_highfreq_paired_delta.csv`、
+  `runs/f_d_highfreq_strata_delta.csv`。
+
+相对 `F0_native_stft_pre_mixer` 的 paired delta：
+
+| label | Δ rr_peak mean | peak 改善 | Δ rr_spec mean | spec 改善 | Δ frac_gt_1 | Δ frac_gt_2 | 相关性 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `F-D0_high_stft_anchor` | -0.033759 | 3/3 | -0.004381 | 2/3 | -0.012336 | -0.008474 | band/best-lag corr 2/3 小幅改善 |
+| `F-D1_high_cwt` | +0.008877 | 1/3 | -0.033769 | 3/3 | +0.004611 | +0.002492 | 混合，band corr 均值略降 |
+| `F-D2_high_cwt_modulation` | -0.009573 | 2/3 | -0.043808 | 3/3 | -0.003863 | -0.000872 | band/best-lag corr 3/3 小幅改善 |
+
+按 `rr_peak_band_abs_error_mean` 的关键分层：
+
+| label | overall | baseline_easy | baseline_hard | low_spectrum | fast_rr |
+|---|---:|---:|---:|---:|---:|
+| `F-D0_high_stft_anchor` | -0.033759 (3/3) | +0.031143 (0/3) | -0.381949 (3/3) | -0.031541 (3/3) | +0.013006 (1/3) |
+| `F-D1_high_cwt` | +0.008877 (1/3) | +0.043245 (0/3) | -0.147652 (2/3) | +0.025759 (2/3) | -0.000379 (2/3) |
+| `F-D2_high_cwt_modulation` | -0.009573 (2/3) | +0.045861 (0/3) | -0.303745 (3/3) | -0.017201 (2/3) | +0.003241 (1/3) |
+
+阶段判断：
+
+- `F-D0_high_stft_anchor` 是本批最清楚的正信号：overall RR、`frac_gt_1/frac_gt_2`、baseline hard 与
+  low-spectrum 都稳定改善，说明短窗高频 STFT 上下文确实能帮助 hard windows。
+- 但 `F-D0` 未通过护栏：baseline easy 3/3 变差，fast-RR 均值也变差。因此它不能直接扩 seed 或升级为主线结构。
+- `F-D1_high_cwt` 不通过：虽然 `rr_spec_abs_error` 3/3 改善，但 peak-band RR、`frac_gt_1/frac_gt_2`
+  和 easy 护栏均劣于 `F0`，也没有超过更简单的 `F-D0`。
+- `F-D2_high_cwt_modulation` 比 dense CWT 更稳，spec 和相关性改善更一致，但 peak-band/长尾仍弱于 `F-D0`，且同样系统性伤害
+  baseline easy。
+- 本批不进入 `F-D3_cardiac_sst_ridge`、`F-D4_low_capped_cwt` 或 high-CWT 参数扩展；当前证据不支持继续扩大 CWT/SST
+  输入分支。
+
+后续若继续 F-D，应把问题收窄到 `F-D0` 的选择性使用：基于无泄漏 hard/ambiguous window proxy 做 gating 或残差能量 cap，
+目标是保留 hard/low-spectrum 收益，同时阻止 clean/easy 与 fast-RR 窗口被高频上下文扰动。若不继续小分支探索，可以把 F-D
+结论作为“高频上下文有局部信号，但 CWT/SST 不值得扩大”的阶段记录，回到当前更高优先级主线。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
