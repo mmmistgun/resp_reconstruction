@@ -132,6 +132,26 @@ def test_eval_checkpoint_with_metrics_writes_only_metrics(tmp_path: Path):
     assert not (tmp_path / "eval_predictions.npz").exists()
 
 
+def test_eval_checkpoint_with_metrics_does_not_build_train_bundle(monkeypatch, tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    run_dir = ThoExperiment(cfg).train()
+    metrics_output = tmp_path / "eval_metrics.csv"
+
+    def fail_build_tho_data(*args, **kwargs):
+        raise AssertionError("checkpoint eval 不应构建 train+val 全量数据")
+
+    monkeypatch.setattr("resp_train.experiments.tho.build_tho_data", fail_build_tho_data)
+
+    evaluate_tho_checkpoint(
+        checkpoint_path=run_dir / "checkpoint.pt",
+        config_path=run_dir / "config.yaml",
+        metrics_output_path=metrics_output,
+    )
+
+    metrics = pd.read_csv(metrics_output)
+    assert len(metrics) == cfg.data.max_val_windows
+
+
 def test_tho_experiment_logs_final_metric_summary(monkeypatch, tmp_path: Path):
     cfg = _cfg(tmp_path)
     cfg.training.show_progress = True

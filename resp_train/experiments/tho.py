@@ -9,7 +9,7 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 
 from resp_train.config import load_config
-from resp_train.data.factory import build_tho_data
+from resp_train.data.factory import WindowDataBundle, build_tho_data, build_window_data
 from resp_train.engine import collect_predictions
 from resp_train.experiments.base import BaseExperiment, ExperimentData
 from resp_train.losses.weak import WeakSyncLoss
@@ -79,15 +79,14 @@ class ThoExperiment(BaseExperiment):
         checkpoint = torch.load(checkpoint_path, map_location=device)
         _validate_checkpoint_config(checkpoint.get("config"), self.cfg)
         model.load_state_dict(checkpoint["model_state_dict"])
-        data = self.build_data()
-        tho_data = data.extras["tho_data"]
         if metrics_output is not None:
             metrics_output.parent.mkdir(parents=True, exist_ok=True)
+            val_data = self._build_checkpoint_eval_val_data()
             eval_preds = collect_predictions(
                 model,
-                tho_data.val.loader,
+                val_data.loader,
                 device=device,
-                max_windows=len(tho_data.val.dataset),
+                max_windows=len(val_data.dataset),
             )
             show_progress = self._friendly_output_enabled(self._resolve_show_progress())
             evaluate_prediction_dict(
@@ -99,6 +98,18 @@ class ThoExperiment(BaseExperiment):
                 metrics_output,
                 index=False,
             )
+
+    def _build_checkpoint_eval_val_data(self) -> WindowDataBundle:
+        """checkpoint 复评只需要 val，避免预加载 train 窗口造成额外 I/O 和内存峰。"""
+
+        return build_window_data(
+            self.cfg,
+            split=str(self.cfg.data.val_split),
+            max_windows=self.cfg.data.get("max_val_windows"),
+            sample_strategy=str(self.cfg.data.val_sample_strategy),
+            sample_seed=int(self.cfg.data.val_sample_seed),
+            shuffle=False,
+        )
 
 
 def evaluate_tho_checkpoint(

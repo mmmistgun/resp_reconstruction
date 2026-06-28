@@ -466,6 +466,7 @@ F-D 不改变 waveform 输出空间；第一批只比较 `F-D0_high_stft_anchor`
 - `train_history.csv`：每轮训练和验证损失。
 - `metrics.csv`：best checkpoint 在 val 子集上的逐窗口指标。
 - `checkpoint.pt`：验证损失最优 checkpoint。
+- `checkpoint_top1/2/3.pt` 与 `checkpoint_topk.csv`：按 `val_loss` 排序保留的 topK checkpoint，用于探索期复评。
 - `train.log`：训练日志。
 
 ### `eval_tho_small.py`
@@ -479,6 +480,53 @@ F-D 不改变 waveform 输出空间；第一批只比较 `F-D0_high_stft_anchor`
 ```
 
 注意：显式传入 `--config` 或 `--set` 时，会校验模型结构、验证集定义、窗口参数和评价频带等关键字段，避免用不一致配置误评 checkpoint。
+checkpoint 复评只构建验证集数据；即使训练配置中 `data.preload_windows=true`，也不会为了评价预加载 train 窗口。
+逐窗口指标中的 Butterworth 带通滤波器系数会按 `(fs, low_hz, high_hz, order)` 缓存；缓存只跳过重复系数设计，不改变
+`sosfiltfilt` 的输出。同一窗口内还会复用 pred/target 的带通结果和频带功率分布，避免 RR peak-band、zero-cross、
+band-limited corr、best-lag corr、RR spec 和 spectrum similarity 重复计算同一中间量。
+
+### `eval_topk_checkpoints.py`
+
+重评一个 runs 根目录下每个 run 的 `checkpoint_top1/2/3.pt`，生成 `metrics_topN.csv`，并按任务主指标为每个 run
+选择一个 topK checkpoint。默认选择排序为：
+
+1. `rr_peak_band_abs_error_mean`
+2. `frac_gt_1`
+3. `frac_gt_2`
+4. `rr_spec_abs_error_mean`
+5. `breath_count_zero_cross_abs_error_mean`
+
+```bash
+./.venv/bin/python scripts/eval_topk_checkpoints.py \
+  --runs-root runs/f_d_highfreq \
+  --top-k 3 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --metric-workers 4 \
+  --start-stagger-sec 30 \
+  --output-prefix runs/f_d_highfreq_topk
+```
+
+输出：
+
+- `<output-prefix>_eval_manifest.csv`：本次 topK 评价任务。
+- `<output-prefix>_all_metrics.csv`：所有已评估 `metrics_topN.csv` 的逐 checkpoint 汇总。
+- `<output-prefix>_best_by_rr.csv`：每个 run 按上面排序择优后的 checkpoint。
+
+常用控制：
+
+- `--dry-run`：只写 manifest 并打印计划，不执行评价或择优。
+- `--eval-only`：只生成 `metrics_topN.csv`，不输出择优表。
+- `--select-only`：跳过评价，直接从已有 `metrics_topN.csv` 生成 all/best 表。
+- `--force`：覆盖已有 `metrics_topN.csv`。
+- `--metric-workers N`：每个评价进程用 N 个线程并行计算逐窗口指标。外层 `--max-parallel` 和内层
+  `--metric-workers` 会相乘占用 CPU；例如 `--max-parallel 4 --metric-workers 4` 约等于 16 个指标线程。
+  F-D 单 checkpoint 优化后实测中，`metric_workers=4` 相对 `1` 约有 14% wall-time 收益，适合作为默认轻量加速，不应期待线性扩展。
+- `--start-stagger-sec S`：按并发槽位错开启动，降低同时读取 checkpoint/config 和初始化评价进程造成的硬盘峰值。例如
+  `--max-parallel 4 --start-stagger-sec 30` 会给同一批并发任务分配 `0/30/60/90s` 启动延迟。
+
+注意：这是同一验证集内的 topK 任务指标择优，适合探索复核；正式结论需要标注为 validation top-k selection。
 
 ## 诊断分析
 

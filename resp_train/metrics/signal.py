@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 from scipy import signal as scipy_signal
 
@@ -192,8 +194,21 @@ def bandpass_filter(
         raise ValueError(f"fs 必须为正数，当前={fs}")
     if not 0 < low_hz < high_hz < fs / 2:
         raise ValueError(f"带通频率非法: low={low_hz} high={high_hz} fs={fs}")
-    sos = scipy_signal.butter(int(order), [low_hz, high_hz], btype="bandpass", fs=fs, output="sos")
+    sos = _bandpass_sos(fs, low_hz, high_hz, int(order))
     return scipy_signal.sosfiltfilt(sos, x)
+
+
+@lru_cache(maxsize=32)
+def _bandpass_sos(fs: float, low_hz: float, high_hz: float, order: int) -> np.ndarray:
+    """缓存固定带通参数的 Butterworth SOS 系数；不改变滤波数学定义。"""
+
+    return scipy_signal.butter(
+        int(order),
+        [float(low_hz), float(high_hz)],
+        btype="bandpass",
+        fs=float(fs),
+        output="sos",
+    )
 
 
 def band_limited_corr(
@@ -208,6 +223,12 @@ def band_limited_corr(
     """先限制到呼吸低频带，再计算预测与目标的相关系数。"""
     pred_filtered = bandpass_filter(pred, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
     target_filtered = bandpass_filter(target, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    return band_limited_corr_from_filtered(pred_filtered, target_filtered)
+
+
+def band_limited_corr_from_filtered(pred_filtered: np.ndarray, target_filtered: np.ndarray) -> float:
+    """复用已带通的 pred/target 计算低频相关。"""
+
     return _corrcoef_or_nan(pred_filtered, target_filtered)
 
 
@@ -231,6 +252,33 @@ def best_lag_correlation(
 
     pred_filtered = bandpass_filter(pred, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
     target_filtered = bandpass_filter(target, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    return best_lag_correlation_from_filtered(
+        pred_filtered,
+        target_filtered,
+        fs=fs,
+        max_lag_sec=max_lag_sec,
+        low_hz=low_hz,
+    )
+
+
+def best_lag_correlation_from_filtered(
+    pred_filtered: np.ndarray,
+    target_filtered: np.ndarray,
+    *,
+    fs: float,
+    max_lag_sec: float = 1.0,
+    low_hz: float = 0.05,
+) -> dict[str, float]:
+    """复用已带通的 pred/target 搜索最佳时延。"""
+
+    fs = float(fs)
+    max_lag_sec = float(max_lag_sec)
+    if fs <= 0:
+        raise ValueError(f"fs 必须为正数，当前={fs}")
+    if max_lag_sec < 0:
+        raise ValueError(f"max_lag_sec 必须非负，当前={max_lag_sec}")
+    pred_filtered = _as_1d_float(pred_filtered)
+    target_filtered = _as_1d_float(target_filtered)
     if pred_filtered.shape != target_filtered.shape:
         raise ValueError(f"pred 和 target 长度必须一致，当前 {pred_filtered.shape} != {target_filtered.shape}")
 
@@ -337,7 +385,13 @@ def estimate_spectral_rate_bpm(
     high_hz: float = 0.7,
 ) -> float:
     """用功率谱最大峰估计呼吸率，单位 bpm。"""
-    distribution = _band_distribution(signal, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    distribution = band_distribution(signal, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    return estimate_spectral_rate_bpm_from_distribution(distribution)
+
+
+def estimate_spectral_rate_bpm_from_distribution(distribution: dict[str, np.ndarray]) -> float:
+    """复用已计算的频带功率分布估计呼吸率。"""
+
     if not np.isfinite(distribution["power"]).all():
         return float("nan")
     return float(distribution["freqs"][int(np.argmax(distribution["power"]))] * 60.0)
@@ -437,14 +491,25 @@ def spectrum_similarity(
     high_hz: float = 0.7,
 ) -> float:
     """计算指定频带内归一化功率分布的 Bhattacharyya 相似度。"""
-    pred_dist = _band_distribution(pred, fs=fs, low_hz=low_hz, high_hz=high_hz)["power"]
-    target_dist = _band_distribution(target, fs=fs, low_hz=low_hz, high_hz=high_hz)["power"]
+    pred_dist = band_distribution(pred, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    target_dist = band_distribution(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    return spectrum_similarity_from_distributions(pred_dist, target_dist)
+
+
+def spectrum_similarity_from_distributions(
+    pred_distribution: dict[str, np.ndarray],
+    target_distribution: dict[str, np.ndarray],
+) -> float:
+    """复用已计算的频带功率分布计算 Bhattacharyya 相似度。"""
+
+    pred_dist = pred_distribution["power"]
+    target_dist = target_distribution["power"]
     if not np.isfinite(pred_dist).all() or not np.isfinite(target_dist).all():
         return float("nan")
     return float(np.sum(np.sqrt(pred_dist * target_dist)))
 
 
-def _band_distribution(
+def band_distribution(
     signal: np.ndarray,
     *,
     fs: float,
@@ -469,3 +534,13 @@ def _band_distribution(
     else:
         band_power = band_power / total
     return {"freqs": band_freqs, "power": band_power}
+
+
+def _band_distribution(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+) -> dict[str, np.ndarray]:
+    return band_distribution(signal, fs=fs, low_hz=low_hz, high_hz=high_hz)

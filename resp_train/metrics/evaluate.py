@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import sys
 from typing import Any
 
@@ -9,15 +10,16 @@ from omegaconf import DictConfig
 from tqdm.auto import tqdm
 
 from resp_train.metrics.signal import (
-    band_limited_corr,
-    best_lag_correlation,
-    estimate_bandpassed_peak_rate_bpm,
-    estimate_bandpassed_zero_crossing_breath_count,
+    band_distribution,
+    band_limited_corr_from_filtered,
+    bandpass_filter,
+    best_lag_correlation_from_filtered,
     estimate_peak_rate_bpm,
-    estimate_spectral_rate_bpm,
+    estimate_spectral_rate_bpm_from_distribution,
     relative_envelope_metrics,
     rms_envelope,
-    spectrum_similarity,
+    spectrum_similarity_from_distributions,
+    zero_crossing_count,
 )
 
 
@@ -38,145 +40,190 @@ def evaluate_prediction_dict(
     max_lag_sec = float(evaluation_cfg.get("max_lag_sec", 1.0))
     lag_bandpass_order = int(evaluation_cfg.get("lag_bandpass_order", 4))
     raw_peak_min_good_segment_sec = float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0))
+    metric_workers = _metric_worker_count(evaluation_cfg)
 
     preds = np.asarray(predictions["r_tho_hat"])
     targets = np.asarray(predictions["tho_ref"])
-    records: list[dict[str, Any]] = []
+    indices = range(preds.shape[0])
+
+    def evaluate_one(idx: int) -> dict[str, Any]:
+        return _evaluate_one_window(
+            idx,
+            predictions=predictions,
+            preds=preds,
+            targets=targets,
+            method=method,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            env_window=env_window,
+            envelope_window_sec=float(cfg.loss.envelope_window_sec),
+            max_lag_sec=max_lag_sec,
+            lag_bandpass_order=lag_bandpass_order,
+            raw_peak_min_good_segment_sec=raw_peak_min_good_segment_sec,
+        )
+
+    iterable = indices
+    if metric_workers > 1:
+        with ThreadPoolExecutor(max_workers=metric_workers) as pool:
+            progress = tqdm(
+                pool.map(evaluate_one, indices),
+                desc="compute val metrics",
+                leave=False,
+                disable=not _should_show_eval_progress(show_progress),
+            )
+            return pd.DataFrame.from_records(list(progress))
+
     progress = tqdm(
-        range(preds.shape[0]),
+        iterable,
         desc="compute val metrics",
         leave=False,
         disable=not _should_show_eval_progress(show_progress),
     )
-    for idx in progress:
-        pred = np.asarray(preds[idx], dtype=np.float64).reshape(-1)
-        target = np.asarray(targets[idx], dtype=np.float64).reshape(-1)
-        rr_peak_valid_mask = _rr_peak_valid_mask(predictions, idx, expected_size=pred.size)
-        pred_env = rms_envelope(pred, env_window)
-        target_env = rms_envelope(target, env_window)
-        pred_rr_spec = estimate_spectral_rate_bpm(pred, fs=fs, low_hz=low_hz, high_hz=high_hz)
-        target_rr_spec = estimate_spectral_rate_bpm(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
-        pred_rr_peak_unmasked = estimate_peak_rate_bpm(
-            pred,
-            fs=fs,
-            distance_sec=2.0,
-            low_hz=low_hz,
-            high_hz=high_hz,
-        )
-        target_rr_peak_unmasked = estimate_peak_rate_bpm(
-            target,
-            fs=fs,
-            distance_sec=2.0,
-            low_hz=low_hz,
-            high_hz=high_hz,
-        )
-        pred_rr_peak, rr_peak_segment_count = _estimate_masked_peak_rate_bpm(
-            pred,
-            rr_peak_valid_mask,
-            fs=fs,
-            distance_sec=2.0,
-            low_hz=low_hz,
-            high_hz=high_hz,
-            min_good_segment_sec=raw_peak_min_good_segment_sec,
-        )
-        target_rr_peak, _ = _estimate_masked_peak_rate_bpm(
-            target,
-            rr_peak_valid_mask,
-            fs=fs,
-            distance_sec=2.0,
-            low_hz=low_hz,
-            high_hz=high_hz,
-            min_good_segment_sec=raw_peak_min_good_segment_sec,
-        )
-        pred_rr_peak_band = estimate_bandpassed_peak_rate_bpm(
-            pred,
-            fs=fs,
-            distance_sec=2.0,
-            low_hz=low_hz,
-            high_hz=high_hz,
-            order=lag_bandpass_order,
-        )
-        target_rr_peak_band = estimate_bandpassed_peak_rate_bpm(
-            target,
-            fs=fs,
-            distance_sec=2.0,
-            low_hz=low_hz,
-            high_hz=high_hz,
-            order=lag_bandpass_order,
-        )
-        pred_breath_count_zero_cross = estimate_bandpassed_zero_crossing_breath_count(
-            pred,
-            fs=fs,
-            low_hz=low_hz,
-            high_hz=high_hz,
-            order=lag_bandpass_order,
-        )
-        target_breath_count_zero_cross = estimate_bandpassed_zero_crossing_breath_count(
-            target,
-            fs=fs,
-            low_hz=low_hz,
-            high_hz=high_hz,
-            order=lag_bandpass_order,
-        )
-        rel_env = relative_envelope_metrics(
-            pred,
-            target,
-            fs=fs,
-            envelope_window_sec=float(cfg.loss.envelope_window_sec),
-        )
-        lag_metrics = best_lag_correlation(
-            pred,
-            target,
-            fs=fs,
-            max_lag_sec=max_lag_sec,
-            low_hz=low_hz,
-            high_hz=high_hz,
-            order=lag_bandpass_order,
-        )
-
-        records.append(
-            {
-                "method": str(method),
-                "dataset_row_id": int(_meta_value(predictions, "dataset_row_id", idx, default=-1)),
-                "split": str(_meta_value(predictions, "split", idx, default="")),
-                "input_set": str(_meta_value(predictions, "input_set", idx, default="")),
-                "residual_quality_class": str(_meta_value(predictions, "residual_quality_class", idx, default="")),
-                "pred_rr_spec_bpm": pred_rr_spec,
-                "target_rr_spec_bpm": target_rr_spec,
-                "rr_spec_abs_error": _abs_error_or_nan(pred_rr_spec, target_rr_spec),
-                "pred_rr_peak_bpm": pred_rr_peak,
-                "target_rr_peak_bpm": target_rr_peak,
-                "rr_peak_abs_error": _abs_error_or_nan(pred_rr_peak, target_rr_peak),
-                "pred_rr_peak_unmasked_bpm": pred_rr_peak_unmasked,
-                "target_rr_peak_unmasked_bpm": target_rr_peak_unmasked,
-                "rr_peak_unmasked_abs_error": _abs_error_or_nan(pred_rr_peak_unmasked, target_rr_peak_unmasked),
-                "rr_peak_valid_ratio": float(np.mean(rr_peak_valid_mask)),
-                "rr_peak_valid_segment_count": int(rr_peak_segment_count),
-                "pred_rr_peak_band_bpm": pred_rr_peak_band,
-                "target_rr_peak_band_bpm": target_rr_peak_band,
-                "rr_peak_band_abs_error": _abs_error_or_nan(pred_rr_peak_band, target_rr_peak_band),
-                "pred_breath_count_zero_cross": pred_breath_count_zero_cross,
-                "target_breath_count_zero_cross": target_breath_count_zero_cross,
-                "breath_count_zero_cross_abs_error": abs(
-                    pred_breath_count_zero_cross - target_breath_count_zero_cross
-                ),
-                "envelope_corr": _corrcoef_or_nan(pred_env, target_env),
-                "relative_envelope_corr": rel_env["relative_envelope_corr"],
-                "relative_envelope_mae": rel_env["relative_envelope_mae"],
-                "spectrum_similarity": spectrum_similarity(pred, target, fs=fs, low_hz=low_hz, high_hz=high_hz),
-                "band_limited_corr": band_limited_corr(
-                    pred,
-                    target,
-                    fs=fs,
-                    low_hz=low_hz,
-                    high_hz=high_hz,
-                    order=lag_bandpass_order,
-                ),
-                "best_lag_corr": lag_metrics["best_lag_corr"],
-                "best_lag_sec": lag_metrics["best_lag_sec"],
-            }
-        )
+    records = [evaluate_one(idx) for idx in progress]
     return pd.DataFrame.from_records(records)
+
+
+def _metric_worker_count(evaluation_cfg: Any) -> int:
+    workers = int(evaluation_cfg.get("metric_workers", 1))
+    return max(1, workers)
+
+
+def _evaluate_one_window(
+    idx: int,
+    *,
+    predictions: dict[str, np.ndarray],
+    preds: np.ndarray,
+    targets: np.ndarray,
+    method: str,
+    fs: float,
+    low_hz: float,
+    high_hz: float,
+    env_window: int,
+    envelope_window_sec: float,
+    max_lag_sec: float,
+    lag_bandpass_order: int,
+    raw_peak_min_good_segment_sec: float,
+) -> dict[str, Any]:
+    pred = np.asarray(preds[idx], dtype=np.float64).reshape(-1)
+    target = np.asarray(targets[idx], dtype=np.float64).reshape(-1)
+    rr_peak_valid_mask = _rr_peak_valid_mask(predictions, idx, expected_size=pred.size)
+    pred_env = rms_envelope(pred, env_window)
+    target_env = rms_envelope(target, env_window)
+    pred_band_distribution = band_distribution(pred, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    target_band_distribution = band_distribution(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    pred_rr_spec = estimate_spectral_rate_bpm_from_distribution(pred_band_distribution)
+    target_rr_spec = estimate_spectral_rate_bpm_from_distribution(target_band_distribution)
+    pred_rr_peak_unmasked = estimate_peak_rate_bpm(
+        pred,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    target_rr_peak_unmasked = estimate_peak_rate_bpm(
+        target,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    pred_rr_peak, rr_peak_segment_count = _estimate_masked_peak_rate_bpm(
+        pred,
+        rr_peak_valid_mask,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        min_good_segment_sec=raw_peak_min_good_segment_sec,
+    )
+    target_rr_peak, _ = _estimate_masked_peak_rate_bpm(
+        target,
+        rr_peak_valid_mask,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        min_good_segment_sec=raw_peak_min_good_segment_sec,
+    )
+    pred_filtered = bandpass_filter(
+        pred,
+        fs=fs,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        order=lag_bandpass_order,
+    )
+    target_filtered = bandpass_filter(
+        target,
+        fs=fs,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        order=lag_bandpass_order,
+    )
+    pred_rr_peak_band = estimate_peak_rate_bpm(
+        pred_filtered,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    target_rr_peak_band = estimate_peak_rate_bpm(
+        target_filtered,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    pred_breath_count_zero_cross = zero_crossing_count(pred_filtered)
+    target_breath_count_zero_cross = zero_crossing_count(target_filtered)
+    rel_env = relative_envelope_metrics(
+        pred,
+        target,
+        fs=fs,
+        envelope_window_sec=envelope_window_sec,
+    )
+    lag_metrics = best_lag_correlation_from_filtered(
+        pred_filtered,
+        target_filtered,
+        fs=fs,
+        max_lag_sec=max_lag_sec,
+        low_hz=low_hz,
+    )
+
+    return {
+        "method": str(method),
+        "dataset_row_id": int(_meta_value(predictions, "dataset_row_id", idx, default=-1)),
+        "split": str(_meta_value(predictions, "split", idx, default="")),
+        "input_set": str(_meta_value(predictions, "input_set", idx, default="")),
+        "residual_quality_class": str(_meta_value(predictions, "residual_quality_class", idx, default="")),
+        "pred_rr_spec_bpm": pred_rr_spec,
+        "target_rr_spec_bpm": target_rr_spec,
+        "rr_spec_abs_error": _abs_error_or_nan(pred_rr_spec, target_rr_spec),
+        "pred_rr_peak_bpm": pred_rr_peak,
+        "target_rr_peak_bpm": target_rr_peak,
+        "rr_peak_abs_error": _abs_error_or_nan(pred_rr_peak, target_rr_peak),
+        "pred_rr_peak_unmasked_bpm": pred_rr_peak_unmasked,
+        "target_rr_peak_unmasked_bpm": target_rr_peak_unmasked,
+        "rr_peak_unmasked_abs_error": _abs_error_or_nan(pred_rr_peak_unmasked, target_rr_peak_unmasked),
+        "rr_peak_valid_ratio": float(np.mean(rr_peak_valid_mask)),
+        "rr_peak_valid_segment_count": int(rr_peak_segment_count),
+        "pred_rr_peak_band_bpm": pred_rr_peak_band,
+        "target_rr_peak_band_bpm": target_rr_peak_band,
+        "rr_peak_band_abs_error": _abs_error_or_nan(pred_rr_peak_band, target_rr_peak_band),
+        "pred_breath_count_zero_cross": pred_breath_count_zero_cross,
+        "target_breath_count_zero_cross": target_breath_count_zero_cross,
+        "breath_count_zero_cross_abs_error": abs(pred_breath_count_zero_cross - target_breath_count_zero_cross),
+        "envelope_corr": _corrcoef_or_nan(pred_env, target_env),
+        "relative_envelope_corr": rel_env["relative_envelope_corr"],
+        "relative_envelope_mae": rel_env["relative_envelope_mae"],
+        "spectrum_similarity": spectrum_similarity_from_distributions(
+            pred_band_distribution,
+            target_band_distribution,
+        ),
+        "band_limited_corr": band_limited_corr_from_filtered(pred_filtered, target_filtered),
+        "best_lag_corr": lag_metrics["best_lag_corr"],
+        "best_lag_sec": lag_metrics["best_lag_sec"],
+    }
 
 
 def _should_show_eval_progress(show_progress: bool | None) -> bool:

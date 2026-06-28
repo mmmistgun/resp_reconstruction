@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 from omegaconf import OmegaConf
@@ -7,6 +8,7 @@ from torch.utils.data import DataLoader, Dataset
 from resp_train.engine.train import collect_predictions, save_checkpoint
 import resp_train.metrics.evaluate as evaluate_module
 from resp_train.metrics.evaluate import evaluate_prediction_dict
+import resp_train.metrics.signal as signal_module
 from scripts.eval_tho_small import _resolve_config_path, _validate_checkpoint_config
 
 
@@ -161,6 +163,131 @@ def test_evaluate_prediction_dict_progress_follows_show_progress(monkeypatch):
     evaluate_prediction_dict(preds, _cfg(), method="model", show_progress=True)
 
     assert seen == [{"desc": "compute val metrics", "disable": False, "leave": False}]
+
+
+def test_evaluate_prediction_dict_parallel_workers_match_serial():
+    fs = 100
+    t = np.arange(0, 80, 1 / fs)
+    target = _modulated_breath_signal(fs, 80.0).astype(np.float32)
+    pred_a = target.copy()
+    pred_b = np.roll(target, 10).astype(np.float32)
+    pred_c = (target + 0.1 * np.sin(2 * np.pi * 0.6 * t)).astype(np.float32)
+    preds = {
+        "r_tho_hat": np.stack([pred_a, pred_b, pred_c]).reshape(3, 1, -1),
+        "tho_ref": np.stack([target, target, target]).reshape(3, 1, -1),
+        "dataset_row_id": np.asarray([1, 2, 3]),
+    }
+    serial_cfg = _cfg()
+    serial_cfg.evaluation = {"metric_workers": 1}
+    parallel_cfg = _cfg()
+    parallel_cfg.evaluation = {"metric_workers": 2}
+
+    serial = evaluate_prediction_dict(preds, serial_cfg, method="model")
+    parallel = evaluate_prediction_dict(preds, parallel_cfg, method="model")
+
+    pd.testing.assert_frame_equal(serial, parallel, check_exact=False, rtol=1e-10, atol=1e-10)
+
+
+def test_evaluate_prediction_dict_uses_thread_pool_for_metric_workers(monkeypatch):
+    fs = 100
+    t = np.arange(0, 40, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t).astype(np.float32)
+    preds = {
+        "r_tho_hat": np.stack([target, target]).reshape(2, 1, -1),
+        "tho_ref": np.stack([target, target]).reshape(2, 1, -1),
+    }
+    cfg = _cfg()
+    cfg.evaluation = {"metric_workers": 2}
+    seen_workers: list[int] = []
+
+    class FakeThreadPoolExecutor:
+        def __init__(self, max_workers: int):
+            seen_workers.append(max_workers)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, func, iterable):
+            return [func(item) for item in iterable]
+
+    monkeypatch.setattr(evaluate_module, "ThreadPoolExecutor", FakeThreadPoolExecutor, raising=False)
+
+    evaluate_prediction_dict(preds, cfg, method="model")
+
+    assert seen_workers == [2]
+
+
+def test_bandpass_filter_reuses_coefficients_without_changing_output(monkeypatch):
+    fs = 100.0
+    t = np.arange(0, 80, 1 / fs)
+    x = np.sin(2 * np.pi * 0.25 * t) + 0.2 * np.sin(2 * np.pi * 3.0 * t)
+    expected_sos = signal_module.scipy_signal.butter(4, [0.05, 0.7], btype="bandpass", fs=fs, output="sos")
+    expected = signal_module.scipy_signal.sosfiltfilt(expected_sos, x)
+    calls: list[tuple] = []
+    original_butter = signal_module.scipy_signal.butter
+
+    def counted_butter(*args, **kwargs):
+        calls.append((args, kwargs))
+        return original_butter(*args, **kwargs)
+
+    signal_module._bandpass_sos.cache_clear()
+    monkeypatch.setattr(signal_module.scipy_signal, "butter", counted_butter)
+
+    actual_a = signal_module.bandpass_filter(x, fs=fs, low_hz=0.05, high_hz=0.7, order=4)
+    actual_b = signal_module.bandpass_filter(x * 0.5, fs=fs, low_hz=0.05, high_hz=0.7, order=4)
+
+    np.testing.assert_allclose(actual_a, expected, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(actual_b, expected * 0.5, rtol=1e-12, atol=1e-12)
+    assert len(calls) == 1
+
+
+def test_evaluate_prediction_dict_reuses_bandpass_results_per_window(monkeypatch):
+    fs = 100
+    t = np.arange(0, 80, 1 / fs)
+    target = _modulated_breath_signal(fs, 80.0).astype(np.float32)
+    pred = (target + 0.1 * np.sin(2 * np.pi * 0.6 * t)).astype(np.float32)
+    preds = {
+        "r_tho_hat": np.stack([pred, pred]).reshape(2, 1, -1),
+        "tho_ref": np.stack([target, target]).reshape(2, 1, -1),
+    }
+    calls: list[tuple[float, float, float, int]] = []
+    original = signal_module.bandpass_filter
+
+    def counted_bandpass(signal, *, fs, low_hz, high_hz, order=4):
+        calls.append((float(fs), float(low_hz), float(high_hz), int(order)))
+        return original(signal, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+
+    monkeypatch.setattr(evaluate_module, "bandpass_filter", counted_bandpass, raising=False)
+
+    evaluate_prediction_dict(preds, _cfg(), method="model")
+
+    assert len(calls) == 4
+
+
+def test_evaluate_prediction_dict_reuses_band_distributions_per_window(monkeypatch):
+    fs = 100
+    t = np.arange(0, 80, 1 / fs)
+    target = _modulated_breath_signal(fs, 80.0).astype(np.float32)
+    pred = (target + 0.1 * np.sin(2 * np.pi * 0.6 * t)).astype(np.float32)
+    preds = {
+        "r_tho_hat": np.stack([pred, pred]).reshape(2, 1, -1),
+        "tho_ref": np.stack([target, target]).reshape(2, 1, -1),
+    }
+    calls: list[tuple[float, float, float]] = []
+    original = signal_module.band_distribution
+
+    def counted_distribution(signal, *, fs, low_hz=0.05, high_hz=0.7):
+        calls.append((float(fs), float(low_hz), float(high_hz)))
+        return original(signal, fs=fs, low_hz=low_hz, high_hz=high_hz)
+
+    monkeypatch.setattr(evaluate_module, "band_distribution", counted_distribution, raising=False)
+
+    evaluate_prediction_dict(preds, _cfg(), method="model")
+
+    assert len(calls) == 4
 
 
 class _MetaDataset(Dataset):
