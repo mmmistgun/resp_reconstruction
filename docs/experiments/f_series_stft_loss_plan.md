@@ -1703,6 +1703,54 @@ cap 失败与修复：
 - 失败 run 保留在 `runs/f_c_stft_output/f_c0_low_complex_stft_output/dual/`，summary 会忽略没有
   `metrics.csv` 的目录；使用修复后的 runner 重跑会新建 timestamp 目录。
 
+### 7.23 F-C0 low-complex-STFT 输出结果（2026-06-28）
+
+运行范围：
+
+- manifest：`runs/f_c_stft_output_manifest.csv`
+- summary：`runs/f_c_stft_output_summary.csv`
+- paired delta：`runs/f_c_stft_output_paired_delta.csv`
+- strata delta：`runs/f_c_stft_output_strata_delta.csv`
+- 完成情况：`F0_native_stft_pre_mixer` 3 seed 复用完成；`F-C0_low_complex_stft_output` 在放宽
+  `checkpoint_gate.max=1.0` 后 3 seed 训练完成。summary 6 行全部 `complete`，paired delta 3 行，
+  strata delta 15 行。
+
+相对 `F0_native_stft_pre_mixer` 的 paired 结果：
+
+| label | overall `rr_peak_band_abs_error_mean` delta | 改善 seed | `rr_spec_abs_error_mean` delta | `frac_gt_1` delta | `frac_gt_2` delta | 判断 |
+|---|---:|---:|---:|---:|---:|---|
+| `F-C0_low_complex_stft_output` | `+0.5070` | 0/3 | `+0.4269` | `+0.1288` | `+0.0785` | 不通过；大幅退化 |
+
+逐 seed：
+
+- seed `20260700`：peak-band RR `+0.3383`，spec RR `+0.4293`，`frac_gt_2 +0.0419`。
+- seed `20260837`：peak-band RR `+0.9068`，spec RR `+0.4770`，`frac_gt_2 +0.1675`，是最坏 seed。
+- seed `20260901`：peak-band RR `+0.2760`，spec RR `+0.3746`，`frac_gt_2 +0.0262`。
+
+关键分层：
+
+- baseline easy 明确失败：三 seed 全部变差，平均 peak-band RR `+0.5376`。
+- fast-RR 明确失败：三 seed 全部变差，平均 `+0.6197`。
+- low-spectrum 明确失败：三 seed 全部变差，平均 `+0.5106`。
+- baseline hard 不是稳定信号：平均 `-0.1405`，但 seed `20260837` 大幅变差 `+0.7656`，只能说明少数 hard
+  窗口可能被带限输出碰巧修正，不能支撑继续。
+- 波形相关性整体崩：overall `band_limited_corr` 平均 delta `-0.5626`，`best_lag_corr` 平均 delta
+  `-0.5657`；baseline easy 上分别约 `-0.5729` 和 `-0.5999`。
+
+极性/方向 gate 证据：
+
+- 使用放宽 gate 后，三个 best checkpoint 的 `val_signed_corr` 仍约 `0.770`，对应 bandpassed waveform
+  相关性只有约 `0.23`，远未达到原严格 gate `max=0.5` 的要求。
+- 因此 F-C0 的问题不是“缺少 checkpoint”，而是低频 complex-STFT 主输出学到了较弱同相波形；频谱/低频能量约束
+  没有转化为可用 RR 和波形相关性。
+
+阶段判断：
+
+- `F-C0_low_complex_stft_output` 不通过，不扩 seed。
+- F-C 输出空间路线停止：不继续 full-band complex STFT、magnitude-only 主输出、CWT/SST 输出空间或 lowpass target
+  sweep。
+- 若后续需要利用 STFT，优先回到输入/辅助/诊断分支，而不是把 STFT 作为主输出空间。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
