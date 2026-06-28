@@ -398,7 +398,9 @@ head 换成 TF-Grid-lite complex STFT head；后者在同一 head 后增加
 
 `run_f_c_stft_output_probe.py` 用于 F-C0 low-complex-STFT 主输出受控 probe：复用
 `F0_native_stft_pre_mixer`，只训练 `F-C0_low_complex_stft_output` 三个 seed。该版本不改 target
-或 metrics 口径，只把模型主输出改为 `0-3Hz` complex STFT real/imag，再经 iSTFT 还原 waveform：
+或 metrics 口径，只把模型主输出改为 `0-3Hz` complex STFT real/imag，再经 iSTFT 还原 waveform。
+F-C0 会保留 `training.checkpoint_gate.metric=auto_direction`，但把 `training.checkpoint_gate.max`
+放宽到 `1.0`，用于避免高风险输出空间在 `0.5` 严格方向护栏下完全不产出 checkpoint/metrics：
 
 ```bash
 ./.venv/bin/python scripts/run_f_c_stft_output_probe.py \

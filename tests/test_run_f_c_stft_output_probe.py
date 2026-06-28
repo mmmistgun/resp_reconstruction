@@ -24,3 +24,15 @@ def test_f_c_stft_output_probe_manifest_rows_include_output_stft_overrides():
     assert "model.output_stft_low_hz=0.0" in row_fc0["overrides"]
     assert "model.output_stft_high_hz=3.0" in row_fc0["overrides"]
     assert row_fc0["paired_f0_label"] == "F0_native_stft_pre_mixer"
+
+
+def test_f_c_stft_output_probe_relaxes_direction_gate_for_output_space_probe():
+    fc0 = next(spec for spec in fc.build_run_specs() if spec["label"] == "F-C0_low_complex_stft_output")
+
+    cmd = fc._command_for_spec(fc0, "cuda:0")
+    set_values = [cmd[idx + 1] for idx, item in enumerate(cmd) if item == "--set"]
+
+    max_overrides = [item for item in set_values if item.startswith("training.checkpoint_gate.max=")]
+    metric_overrides = [item for item in set_values if item.startswith("training.checkpoint_gate.metric=")]
+    assert metric_overrides[-1] == "training.checkpoint_gate.metric=auto_direction"
+    assert max_overrides[-1] == "training.checkpoint_gate.max=1.0"

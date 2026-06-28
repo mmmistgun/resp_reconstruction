@@ -25,6 +25,11 @@ F_C_OUTPUT_STFT_OVERRIDES = [
     "model.output_stft_scale=1.0",
 ]
 
+F_C_CHECKPOINT_GATE_OVERRIDES = [
+    "training.checkpoint_gate.metric=auto_direction",
+    "training.checkpoint_gate.max=1.0",
+]
+
 ARMS = [
     {
         "label": "F0_native_stft_pre_mixer",
@@ -58,7 +63,7 @@ def _tag(spec: dict) -> str:
 def _fc_overrides(arm: dict) -> list[str]:
     if not str(arm["label"]).startswith("F-C"):
         return []
-    return [*F_C_OUTPUT_STFT_OVERRIDES]
+    return [*F_C_OUTPUT_STFT_OVERRIDES, *F_C_CHECKPOINT_GATE_OVERRIDES]
 
 
 def _base_spec(arm: dict, seed: int) -> dict:

@@ -1652,6 +1652,10 @@ cap 失败与修复：
 - runner：`scripts/run_f_c_stft_output_probe.py`，只包含 `F0_native_stft_pre_mixer` 复用和
   `F-C0_low_complex_stft_output` 三 seed 新训练。
 - summary：`scripts/summarize_f_a_stft_loss.py` 已扩展为识别 `F-A*`、`F-B*` 和 `F-C*`。
+- checkpoint gate：`F-C0` 保留 `training.checkpoint_gate.metric=auto_direction`，但将
+  `training.checkpoint_gate.max` 从 F-A/F-B 继承的 `0.5` 放宽到 `1.0`。原因是首轮三 seed 在
+  `max=0.5` 下没有任何 epoch 通过 gate，无法保存 checkpoint/metrics；放宽后只用于生成 RR metrics，
+  不表示通过原严格方向护栏。
 
 本轮没有改变：
 
@@ -1684,8 +1688,20 @@ cap 失败与修复：
 
 - 至少 2/3 seed 的 overall `rr_peak_band_abs_error_mean` 优于 `F0_native_stft_pre_mixer`。
 - baseline easy 不能 3/3 同向变差；fast-RR 不能明显劣于 F0。
+- 需要额外报告 `train_history.csv` 中原始 `val_signed_corr` 是否低于 `0.5`；如果始终高于 `0.5`，
+  即使 RR metrics 偶然改善，也只能视为高风险输出空间信号。
 - 若 F-C0 只改善 `rr_spec_abs_error` 但 peak-band RR / easy 护栏失败，则判为输出空间不适合作为当前主线，不扩
   full-band 或 lowpass-target sweep。
+
+首轮执行记录：
+
+- 2026-06-28 首次正式运行沿用了 F-A/F-B 的 `checkpoint_gate.max=0.5`，三个 `F-C0` run 均完成
+  50 epoch 训练但没有任何 epoch 通过 gate，因此没有 `checkpoint.pt` 或 `metrics.csv`，runner 抛出
+  “没有 epoch 满足 checkpoint_gate”。
+- 三个 run 的 `val_signed_corr` 大致从 `0.92-0.93` 降到 `0.77` 左右，始终高于 `0.5`。这说明 F-C0
+  在严格方向护栏下已经失败；需要重跑只是为了补齐 RR metrics 和分层表，而不是因为已有结果通过。
+- 失败 run 保留在 `runs/f_c_stft_output/f_c0_low_complex_stft_output/dual/`，summary 会忽略没有
+  `metrics.csv` 的目录；使用修复后的 runner 重跑会新建 timestamp 目录。
 
 ## 8. 外部经验在本计划中的用法
 
