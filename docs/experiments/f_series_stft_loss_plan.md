@@ -1859,6 +1859,90 @@ cap 失败与修复：
 目标是保留 hard/low-spectrum 收益，同时阻止 clean/easy 与 fast-RR 窗口被高频上下文扰动。若不继续小分支探索，可以把 F-D
 结论作为“高频上下文有局部信号，但 CWT/SST 不值得扩大”的阶段记录，回到当前更高优先级主线。
 
+### 7.26 F-D topK checkpoint 复评结果（2026-06-28）
+
+背景：7.25 使用每个 run 的 `checkpoint.pt`，即训练流程按 `checkpoint_gate + val_loss + min_delta` 保存的官方 checkpoint。
+本次额外对每个 F-D run 的 `checkpoint_top1/2/3.pt` 做同验证集任务指标复评，并按
+`rr_peak_band_abs_error_mean -> frac_gt_1 -> frac_gt_2 -> rr_spec_abs_error_mean -> count error`
+择优。该口径属于 validation top-k selection，只用于探索复核；正式表述需标注选择口径。
+
+产物：
+
+- `runs/f_d_highfreq_topk_eval_manifest.csv`
+- `runs/f_d_highfreq_topk_all_metrics.csv`
+- `runs/f_d_highfreq_topk_best_by_rr.csv`
+- `runs/f_d_highfreq_topk_paired_delta.csv`
+- `runs/f_d_highfreq_topk_strata_delta.csv`
+
+注意：本次只对 F-D candidate 做 topK 任务指标择优；`F0_native_stft_pre_mixer` 仍使用 7.25 的官方
+`checkpoint.pt` 作为 paired anchor。因此下表用于判断 F-D candidate 内部是否因 checkpoint 选择改变，不等同于“所有 arm 都 topK
+公平择优”。
+
+相对官方 `F0_native_stft_pre_mixer` 的 topK paired delta：
+
+| label | topK rank 分布 | Δ rr_peak mean | peak 改善 | Δ rr_spec mean | spec 改善 | Δ frac_gt_1 | Δ frac_gt_2 | 相关性 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `F-D0_high_stft_anchor` | top1:1, top2:2 | -0.034084 | 3/3 | -0.015515 | 3/3 | -0.012212 | -0.007103 | band corr 1/3，best-lag corr 2/3 |
+| `F-D1_high_cwt` | top1:2, top3:1 | +0.006435 | 1/3 | -0.030848 | 3/3 | +0.002118 | +0.001745 | band corr 0/3，best-lag corr 2/3 |
+| `F-D2_high_cwt_modulation` | top2:2, top3:1 | -0.042441 | 3/3 | -0.041253 | 3/3 | -0.011589 | -0.007975 | band corr 3/3，best-lag corr 2/3 |
+
+按 `rr_peak_band_abs_error_mean` 的关键分层：
+
+| label | overall | baseline_easy | baseline_hard | low_spectrum | fast_rr |
+|---|---:|---:|---:|---:|---:|
+| `F-D0_high_stft_anchor` | -0.034084 (3/3) | +0.035387 (0/3) | -0.407395 (3/3) | -0.030607 (3/3) | +0.023192 (0/3) |
+| `F-D1_high_cwt` | +0.006435 (1/3) | +0.042432 (0/3) | -0.153698 (2/3) | +0.021658 (2/3) | -0.000132 (2/3) |
+| `F-D2_high_cwt_modulation` | -0.042441 (3/3) | +0.036858 (0/3) | -0.446187 (3/3) | -0.044652 (3/3) | +0.016796 (0/3) |
+
+相对 7.25 的变化：
+
+- `F-D2_high_cwt_modulation` 变化最大：topK 后主 RR 从 `-0.009573` 提升到 `-0.042441`，peak 改善从
+  2/3 变成 3/3，hard 与 low-spectrum 也变成最强；但 easy 和 fast-RR 仍 0/3 通过。
+- `F-D0_high_stft_anchor` 结论基本不变：仍是稳定 hard/low-spectrum 正信号，但 easy/fast 退化没有解决。
+- `F-D1_high_cwt` 仍不通过：topK 后略好于 7.25，但主 RR 均值仍劣于 F0，且 long-tail/easy 护栏仍失败。
+
+阶段判断更新：
+
+- 若只看 topK candidate 的探索口径，`F-D2_high_cwt_modulation` 从“低于 F-D0”变成“本批主 RR 最强候选”。
+- 但三条路线仍都没有通过 baseline easy 和 fast-RR 护栏；因此 F-D 不能直接扩 seed、不能进入 F-D3/SST ridge，也不能作为主线结构升级。
+- 后续若继续 F-D，优先对象应从 `F-D0` 扩展为 `F-D0/F-D2` 的选择性 gating 或 residual energy cap 对照；目标仍是保留
+  hard/low-spectrum 收益，同时保护 clean/easy 与 fast-RR 窗口。
+
+### 7.27 F 系列 topK 复评性能处理（2026-06-28）
+
+问题：topK 复评时 GPU 利用率低、CPU 利用率也不高，多个 eval 并发启动时有硬盘读取峰。
+
+定位结果：
+
+- 单个 checkpoint eval 的 GPU forward 不是瓶颈；主要耗时在 `evaluate_prediction_dict` 的逐窗口 RR/频谱/lag 指标。
+- 旧 checkpoint eval 会调用 `build_tho_data()`，在 F-D resolved config 的 `data.preload_windows=true` 下同时预加载 train 和 val。
+  对 `runs/f_d_highfreq/f_d0_high_stft_anchor/dual/20260628_205434_846338/checkpoint_top1.pt`，这意味着每次 eval 先读取
+  `10141` 个 train 窗口和 `2675` 个 val 窗口，但实际只使用 val。
+- 已改为 checkpoint eval 只构建 val bundle，并对 Butterworth 带通滤波器 SOS 系数做 `(fs, low_hz, high_hz, order)` 缓存。
+
+一致性与性能复核：
+
+- 旧输出 `/tmp/f_d_eval_workers4_metrics.csv`、优化后 `metric_workers=1`
+  `/tmp/f_d_eval_valonly_cached_w1_metrics.csv`、优化后 `metric_workers=4`
+  `/tmp/f_d_eval_valonly_cached_w4_metrics.csv` 三者逐值完全一致，窗口数均为 `2675`。
+- 优化后单 checkpoint 实测：`metric_workers=1` wall time `1:40.47`、RSS `3025320 KB`；
+  `metric_workers=4` wall time `1:27.97`、RSS `3021980 KB`。4 线程仍有约 `12%` wall-time 收益，但不是线性加速。
+- 修改前同 checkpoint `metric_workers=4` wall time 为 `2:23.41`、RSS `5524816 KB`；因此主要收益来自 val-only 构建和滤波器系数缓存。
+
+2026-06-29 追加优化：
+
+- `evaluate_prediction_dict` 已进一步复用同一窗口内的 pred/target 带通结果和频带功率分布，避免 RR peak-band、zero-cross、
+  band-limited corr、best-lag corr、RR spec 和 spectrum similarity 重复计算同一中间量。
+- 一致性复核：旧输出 `/tmp/f_d_eval_workers4_metrics.csv`、val-only+系数缓存输出
+  `/tmp/f_d_eval_valonly_cached_w1_metrics.csv`/`/tmp/f_d_eval_valonly_cached_w4_metrics.csv`、窗口内复用输出
+  `/tmp/f_d_eval_reuse_w1_metrics.csv`/`/tmp/f_d_eval_reuse_w4_metrics.csv` 五者逐值完全一致，窗口数均为 `2675`。
+- 窗口内复用后单 checkpoint 实测：`metric_workers=1` wall time `1:15.03`、RSS `3017460 KB`；
+  `metric_workers=4` wall time `1:04.24`、RSS `3043380 KB`。相对 val-only+系数缓存版本，4 线程 wall time 从
+  `1:27.97` 降到 `1:04.24`；相对最初修改前 `2:23.41`，单 checkpoint 复评耗时约下降 `55%`。
+
+运行建议：F 系列 topK 复评继续使用 `--start-stagger-sec 30` 缓解并发启动 I/O 峰；`--metric-workers 4` 可以保留为轻量加速，
+但不要为了追求 CPU 满载盲目放大，外层 `--max-parallel` 仍按 GPU/硬盘压力控制。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
