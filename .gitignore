@@ -23,3 +23,5 @@ __pycache__/
 
 # 本地实验产物不进入 Git，避免仓库体积膨胀。
 runs/
+
+docs/figure/
