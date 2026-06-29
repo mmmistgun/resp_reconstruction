@@ -323,44 +323,48 @@ F0 的 30s 窗未必过长，但 5s hop 很可能过粗。
 运行范围：
 
 - 训练 manifest：`runs/g_series_stft_input_manifest.csv`
+- 第三 seed 训练 manifest：`runs/g_series_stft_input_seed20260901_manifest.csv`
 - 普通 checkpoint 汇总：`runs/g_series_stft_input_summary.csv`
+- 第三 seed 普通 checkpoint 汇总：`runs/g_series_stft_input_seed20260901_summary.csv`
 - 普通 paired delta：`runs/g_series_stft_input_paired_delta.csv`
+- 第三 seed paired delta：`runs/g_series_stft_input_seed20260901_paired_delta.csv`
 - 普通分层 delta：`runs/g_series_stft_input_strata_delta.csv`
+- 第三 seed 分层 delta：`runs/g_series_stft_input_seed20260901_strata_delta.csv`
 - top3 复评 manifest：`runs/g_series_stft_input_topk_eval_manifest.csv`
 - top3 全量结果：`runs/g_series_stft_input_topk_all_metrics.csv`
 - top3 任务指标择优：`runs/g_series_stft_input_topk_best_by_rr.csv`
 
 完成性：
 
-- G0/G1 共 20 个训练 run 全部完成；每个 label 均有 `20260700`、`20260837` 两个 seed。
-- top3 复评共 60 个 checkpoint 评价结果，`best_by_rr` 共 20 行。
+- G0/G1 首批 20 个训练 run 与第三 seed 10 个训练 run 全部完成；每个 label 均有 `20260700`、`20260837`、`20260901` 三个 seed。
+- top3 复评共 90 个 checkpoint 评价结果，`best_by_rr` 共 30 行。
 - 未改变 split、target、metrics 或 checkpoint gate；top3 结论属于同验证集任务指标择优，后续表述需标注 validation top-k selection。
 
 G0 anchor：
 
-- top3 口径下，`G0_f0_native_stft_pre_mixer` 相对 `G0_time_only` 的 `rr_peak_band_abs_error_mean` 两 seed 均改善，平均 `-0.0551`。
-- `frac_gt_1` 平均下降 `-1.68pp`，`frac_gt_2` 平均下降 `-1.12pp`；说明当前 STFT 输入 anchor 仍有净贡献。
+- top3 口径下，`G0_f0_native_stft_pre_mixer` 相对 `G0_time_only` 的 `rr_peak_band_abs_error_mean` 三 seed 均改善，平均 `-0.0502`。
+- `frac_gt_1` 平均下降 `-1.47pp`，`frac_gt_2` 平均下降 `-0.96pp`；说明当前 STFT 输入 anchor 仍有净贡献。
 
 G1 时间参数结论：
 
 | label | top3 `rr_peak_band_abs_error_mean` Δ | top3 `rr_spec_abs_error_mean` Δ | top3 count Δ | 普通 checkpoint `rr_peak_band_abs_error_mean` Δ | 判断 |
 |---|---:|---:|---:|---:|---|
-| `G1B_wide` | -0.0241 | +0.0238 | -0.0490 | -0.0302 | 只提高 hop 有收益，但 spec 变差 |
-| `G1C_wide` | -0.0236 | -0.0005 | -0.0215 | -0.0382 | 最均衡，wide 下优先 |
-| `G1D_wide` | -0.0117 | -0.0003 | -0.0475 | -0.0223 | 收益较小，relative corr 退化更明显 |
-| `G1B_resp_mid` | -0.0061 | -0.0178 | +0.0052 | -0.0032 | 中频下收益弱且 count 不稳 |
-| `G1C_resp_mid` | -0.0193 | -0.0181 | -0.0322 | -0.0279 | 中频下也优于 B，支持 C |
-| `G1D_resp_mid` | +0.0101 | -0.0301 | -0.0082 | -0.0027 | peak-band 不稳，不作为默认 |
+| `G1B_wide` | -0.0138 | +0.0155 | -0.0209 | -0.0225 | 只提高 hop 有收益，但 spec 仍偏伤 |
+| `G1C_wide` | -0.0145 | +0.0057 | -0.0212 | -0.0351 | 普通 checkpoint 最稳，wide 下优先 |
+| `G1D_wide` | -0.0225 | -0.0078 | -0.0308 | -0.0249 | top3 peak 最强，但短窗同步/中频稳定性不足 |
+| `G1B_resp_mid` | -0.0039 | -0.0188 | +0.0110 | -0.0052 | 中频下收益弱且 count 不稳 |
+| `G1C_resp_mid` | -0.0044 | -0.0075 | -0.0233 | -0.0209 | 中频下仍优于 B，支持 C |
+| `G1D_resp_mid` | +0.0012 | -0.0411 | +0.0000 | -0.0181 | spec 强但 peak/count 不够稳 |
 
 分层观察：
 
-- `G1C_wide` 在 `baseline_hard` 上改善最明显：普通 checkpoint `rr_peak_band_abs_error_mean` 平均 `-0.3848`，`breath_count_zero_cross_abs_error_mean` 平均 `-0.1779`。
-- `G1C_wide` 在 `low_spectrum` 上也改善：peak-band 平均 `-0.0395`，spec 平均 `-0.0400`。
-- `baseline_easy` 上 B/C/D 都有 peak-band 小幅退化，`G1C_wide` 平均 `+0.0305`；因此 C 可进入下一阶段，但 G2 需要继续把 easy windows 作为护栏。
-- `G1D_*` 的短窗方向没有形成稳定主护栏收益，且 relative-envelope corr 退化更明显，暂不作为默认时间参数。
+- `G1C_wide` 在 `baseline_hard` 上改善最明显：普通 checkpoint `rr_peak_band_abs_error_mean` 平均 `-0.3435`，`breath_count_zero_cross_abs_error_mean` 平均 `-0.1259`。
+- `G1C_wide` 在 `low_spectrum` 上也改善：peak-band 平均 `-0.0371`，spec 平均 `-0.0270`。
+- `baseline_easy` 上 B/C/D 都有 peak-band 小幅退化，`G1C_wide` 平均 `+0.0242`；因此 G2 需要继续把 easy windows 作为护栏。
+- `G1D_wide` 第三 seed 后整体 top3 peak-band 最强，但 `G1D_resp_mid` top3 peak-band 不稳定，且 D 系列在 relative-envelope corr 上仍偏退化；短窗方向暂不作为默认时间参数。
 
 阶段判断：
 
-- G1 首批结果支持 `C: win2000/hop250` 作为 G2 主时间参数；`B: win3000/hop250` 保留为保守参照。
-- 按本文第 3.2 节规则，因 C 在 `wide_anchor` 与 `resp_mid` 两个代表频带上都优于 A，正式进入 G2 前建议先把 G1 扩到第三个 seed，优先补 `20260901`。
-- 若第三 seed 仍支持 C，则 G2 以 `T*=C` 扫 `0.05-1.2Hz`、`0.05-3Hz`、`0.067-1.2Hz`、`0.05-8Hz`、`bandgroup`、`bandenergy` 和 high-only ablation；若第三 seed 显示 C 不稳，则用 B 作为保守 T*。
+- G1 三 seed 结果支持 `C: win2000/hop250` 作为 G2 主时间参数；`B: win3000/hop250` 保留为保守参照，`D: win1500/hop128` 作为短窗边界/解释候选。
+- G2 建议以 `T*=C` 扫 `0.05-1.2Hz`、`0.05-3Hz`、`0.067-1.2Hz`、`0.05-8Hz`、`bandgroup`、`bandenergy` 和 high-only ablation。
+- 若 G2 中 C 的收窄频带候选只在 hard/low-spectrum 改善、easy 继续退化，应在 G3 用 `B` 或 `A` 做少量交互复核，避免把时间窗收益和 easy 退化绑定成默认方案。
