@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
+import scripts.summarize_f_a_stft_loss as summarize
 from scripts.summarize_f_a_stft_loss import summarize_f_a_runs
 
 
@@ -272,3 +273,11 @@ def test_summarize_f_a_runs_includes_f_b_candidates(tmp_path):
     assert paired.iloc[0]["label"] == "F-B0_aux_enc1"
     assert paired.iloc[0]["delta_rr_peak_band_abs_error_mean"] < 0
     assert set(strata["label"]) == {"F-B0_aux_enc1"}
+
+
+def test_candidate_label_mask_includes_g_series_labels_without_g0_anchors():
+    labels = pd.Series(["F0_native_stft_pre_mixer", "G0_time_only", "G1B_wide", "G2_R4_bandgroup"])
+
+    mask = summarize._candidate_label_mask(labels)
+
+    assert mask.tolist() == [False, False, True, True]

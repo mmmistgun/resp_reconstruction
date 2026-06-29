@@ -25,6 +25,7 @@
 
 - 需要调用 GPU 的命令应使用提权执行，让命令在沙盒外访问 GPU；不要为了绕过沙盒而改用 CPU 跑正式实验或验证。
 - Git 提交消息使用中文，保持简洁明确。
+- 正式实验开始前先保存 git 状态；实验结束并形成结论后，再把结论文档、manifest/summary 路径和必要脚本变化保存到 git。
 - 每次正式实验完成后，及时保存 git 状态；不要把多个实验结果、指标解释和代码变化长期混在一个未提交工作区里。
 - 允许更新长期文档来反映稳定结论；探索期的临时猜测、一次性失败记录和未复核判断不要写入长期文档。
 - 实验实现、runner/manifest、结果汇总脚本完成后，不能只交付命令和 CSV；汇总结论、通过/停止判断、后续动作必须回写到对应 `docs/experiments/*.md` 或 `findings.md`，并在不确定时标注证据缺口。
@@ -39,6 +40,8 @@
 
 - 对结构性问题优先根治，例如训练入口职责混乱、指标含义漂移、配置覆盖链条不清、脚本与训练工厂口径不一致。
 - 正式对照实验应固定验证 seed 和全量验证窗口，避免验证集变化掩盖模型、loss 或输入差异。
+- 批量训练或批量评价默认按 `--max-parallel 4` 组织；如显存、I/O 或 GPU 数量不足，再显式降级并说明原因。
+- 正式实验结论汇总前，默认先用 `scripts/eval_topk_checkpoints.py --top-k 3` 重评 `checkpoint_top1/2/3.pt`，并在结论中标注 validation top-k selection 口径。
 - F-A target STFT loss 这轮全量 pilot 由用户手动运行；agent 负责准备代码、测试、manifest、dry-run 和汇总命令。
 
 ## 运行环境
@@ -65,6 +68,7 @@
 - Split 独立性审计：`./.venv/bin/python scripts/audit_split_independence.py --config configs/tho_research_v2.yaml --output-dir runs/audits/split_independence_research_v2`。
 - 单 run 训练原子入口：`./.venv/bin/python scripts/train_tho_small.py --config configs/tho_research_v2.yaml --set ...`。
 - 从 checkpoint 复评：`./.venv/bin/python scripts/eval_tho_small.py --checkpoint runs/<root>/<timestamp>/checkpoint.pt --metrics-output /tmp/tho_metrics.csv`。
+- Top3 checkpoint 复评：`./.venv/bin/python scripts/eval_topk_checkpoints.py --runs-root runs/<root> --top-k 3 --device cuda:0 --device cuda:1 --max-parallel 4 --metric-workers 4 --output-prefix runs/<root>_topk`。
 - 预测图诊断：`./.venv/bin/python scripts/plot_tho_predictions.py --run-dir runs/<root>/<timestamp> --sort-by rr_peak_band_abs_error --max-plots 8`。
 - 多 run 汇总：`./.venv/bin/python scripts/summarize_tho_runs.py --runs-root runs/<root> --output /tmp/tho_runs_summary.csv`。
 - 当前批量实验、manifest 和 E3/E4/E5 入口不要从记忆中猜，先读 `scripts/README.md` 的对应小节。

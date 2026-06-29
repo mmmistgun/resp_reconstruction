@@ -177,6 +177,9 @@ def _candidate_label_mask(labels: pd.Series) -> pd.Series:
         | text.str.startswith("F-B")
         | text.str.startswith("F-C")
         | text.str.startswith("F-D")
+        | text.str.startswith("G1")
+        | text.str.startswith("G2")
+        | text.str.startswith("G3")
     )
 
 

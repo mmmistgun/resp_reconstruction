@@ -252,6 +252,30 @@ E1 STFT 信息增益实验的 manifest 生成器：
   --device cuda:1 \
   --max-parallel 2 \
   --manifest runs/e5_a2_manifest.csv
+
+# G 系列：STFT 输入时间分辨率和频带范围首批 G0/G1 pilot
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g0-g1 \
+  --dry-run \
+  --manifest runs/g_series_stft_input_manifest.csv
+
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g0-g1 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --manifest runs/g_series_stft_input_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/eval_topk_checkpoints.py \
+  --runs-root runs/g_series_stft_input \
+  --top-k 3 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --metric-workers 4 \
+  --start-stagger-sec 30 \
+  --output-prefix runs/g_series_stft_input_topk
 ```
 
 `run_f_a2_peak_anchor_probe.py` 用于 F-A2f：复用 `F0_native_stft_pre_mixer`、

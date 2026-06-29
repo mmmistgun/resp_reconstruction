@@ -248,14 +248,51 @@ G3 只复核 G1/G2 中最可能存在交互的少数组合。
 
 ## 7. 实验记录与后续实现要求
 
-本文档只定义 G 系列实验规划，不包含代码实现。
+当前已实现首批 G0/G1 编排脚手架：
 
-后续实现前需要补：
+- runner：`scripts/run_g_series_stft_input_probe.py`
+- 默认 manifest：`runs/g_series_stft_input_manifest.csv`
+- 阶段参数：`--stage g0`、`--stage g1` 或默认 `g0-g1`
+- pilot seed：`20260700`、`20260837`
+- summary：复用 `scripts/summarize_f_a_stft_loss.py`，已支持 `G1/G2/G3` 候选标签；`G0` anchor 不进入 candidate delta。
 
-- G 系列 manifest/runner，记录 `label`、`stage`、`seed`、`stft_win`、`stft_hop`、`stft_low_hz`、`stft_high_hz`、`stft_encoder_type`、`paired_anchor_label`。
-- dry-run 模式，先生成 manifest，不启动训练。
-- summary 脚本或复用现有 F/E 汇总逻辑，至少输出 overall paired delta、分层 delta 和 expected/missing 状态。
+准备命令：
+
+```bash
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g0-g1 \
+  --dry-run \
+  --manifest runs/g_series_stft_input_manifest.csv
+
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g0-g1 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --manifest runs/g_series_stft_input_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/eval_topk_checkpoints.py \
+  --runs-root runs/g_series_stft_input \
+  --top-k 3 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --metric-workers 4 \
+  --start-stagger-sec 30 \
+  --output-prefix runs/g_series_stft_input_topk
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/g_series_stft_input_manifest.csv \
+  --output runs/g_series_stft_input_summary.csv \
+  --paired-output runs/g_series_stft_input_paired_delta.csv \
+  --strata-output runs/g_series_stft_input_strata_delta.csv
+```
+
+正式训练前仍需要补：
+
 - smoke：小窗口或 1 epoch 验证 run 产物完整，不改变 split、标签、核心指标口径。
+- 结论汇总前跑 `eval_topk_checkpoints.py --top-k 3`；topK 结果属于同验证集任务指标择优，表述时必须标注 validation top-k selection。
 
 正式训练前必须确认：
 
