@@ -1,6 +1,33 @@
 import scripts.run_g_series_stft_input_probe as g
 
 
+def test_g_series_cli_seed_override_runs_only_requested_seed(tmp_path, monkeypatch, capsys):
+    manifest = tmp_path / "g_seed_manifest.csv"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_g_series_stft_input_probe.py",
+            "--stage",
+            "g0-g1",
+            "--seed",
+            "20260901",
+            "--dry-run",
+            "--manifest",
+            str(manifest),
+        ],
+    )
+
+    g.main()
+
+    out = capsys.readouterr().out
+    assert "manifest=" in out
+    assert "runs=10 runnable=0" in out
+
+    rows = manifest.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == 11
+    assert all("20260901" in row for row in rows[1:])
+
+
 def test_g_series_default_specs_cover_g0_and_g1_pilot_matrix():
     specs = g.build_run_specs()
 

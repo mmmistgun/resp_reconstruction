@@ -198,6 +198,13 @@ def _build_launch_plan(
 def main() -> None:
     parser = argparse.ArgumentParser(description="G 系列 STFT 输入时间分辨率与频带范围 pilot 编排")
     parser.add_argument("--stage", choices=["g0", "g1", "g0-g1"], default="g0-g1", help="生成/运行的实验阶段")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        action="append",
+        default=None,
+        help="覆盖默认 pilot seed，可重复传入；未传时使用默认两 seed",
+    )
     parser.add_argument("--skip", action="append", default=[], help="跳过的 run tag")
     parser.add_argument("--dry-run", action="store_true", help="只打印将运行的 tag，不实际训练")
     parser.add_argument("--device", action="append", default=None, help="训练设备，可重复传入；默认 cuda:0")
@@ -216,7 +223,7 @@ def main() -> None:
     if args.start_stagger_sec < 0:
         raise SystemExit("--start-stagger-sec 必须 >= 0")
 
-    specs = build_run_specs(stage=args.stage)
+    specs = build_run_specs(stage=args.stage, seeds=args.seed)
     manifest_path = Path(args.manifest)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     with manifest_path.open("w", newline="", encoding="utf-8") as fp:
