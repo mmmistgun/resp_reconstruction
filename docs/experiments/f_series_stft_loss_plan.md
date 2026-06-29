@@ -1997,6 +1997,49 @@ runner：`scripts/run_f_d_feature_extractor_probe.py`
 - `F-D2b` 必须相对 `F-D2` 至少保住 topK 后的 overall/spec 优势，并缓解 easy/fast 误伤，才有继续 gating/cap 的价值。
 - 若二者仍重复 hard 改善、easy/fast 退化，本分支停止；不要继续加更强 CWT-CNN、attention pooling 或 SST dense path。
 
+### 7.29 F-D 特征提取网络 probe 结果（2026-06-29）
+
+完成情况：`F-D1b_high_cwt_cnn_tcn` 与 `F-D2b_high_cwt_modulation_res_tcn` 各 3 seed 训练完成；
+`F0_native_stft_pre_mixer`、`F-D0_high_stft_anchor`、`F-D1_high_cwt`、`F-D2_high_cwt_modulation` 复用完成。
+
+产物：
+
+- `runs/f_d_feature_extractor_manifest.csv`
+- `runs/f_d_feature_extractor_summary.csv`
+- `runs/f_d_feature_extractor_paired_delta.csv`
+- `runs/f_d_feature_extractor_strata_delta.csv`
+
+相对官方 `F0_native_stft_pre_mixer` 的 paired delta：
+
+| label | Δ rr_peak mean | peak 改善 | Δ rr_spec mean | spec 改善 | Δ frac_gt_1 | Δ frac_gt_2 | 相关性 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `F-D0_high_stft_anchor` | -0.033759 | 3/3 | -0.004381 | 2/3 | -0.012336 | -0.008474 | band/best-lag corr 2/3 小幅改善 |
+| `F-D1_high_cwt` | +0.008877 | 1/3 | -0.033769 | 3/3 | +0.004611 | +0.002492 | 混合 |
+| `F-D1b_high_cwt_cnn_tcn` | +0.066229 | 0/3 | -0.060784 | 3/3 | +0.018193 | +0.014704 | band corr 3/3，但任务指标明显退化 |
+| `F-D2_high_cwt_modulation` | -0.009573 | 2/3 | -0.043808 | 3/3 | -0.003863 | -0.000872 | band/best-lag corr 3/3 |
+| `F-D2b_high_cwt_modulation_res_tcn` | -0.007016 | 2/3 | -0.033221 | 3/3 | -0.003240 | -0.000374 | band corr 3/3，略弱于 F-D2 |
+
+新旧同输入直接对比：
+
+| 对比 | Δ rr_peak mean | Δ rr_spec mean | Δ frac_gt_1 | Δ frac_gt_2 | 说明 |
+|---|---:|---:|---:|---:|---|
+| `F-D1b - F-D1` | +0.057352 | -0.027015 | +0.013583 | +0.012212 | dense CWT CNN+TCN 只改善 spec/相关性，主 RR 与长尾显著更差 |
+| `F-D2b - F-D2` | +0.002557 | +0.010587 | +0.000623 | +0.000498 | residual TCN 没有保住旧 modulation 的 spec/overall 优势 |
+
+按 `rr_peak_band_abs_error_mean` 的关键分层（相对 F0）：
+
+| label | overall | baseline_easy | baseline_hard | low_spectrum | fast_rr |
+|---|---:|---:|---:|---:|---:|
+| `F-D1b_high_cwt_cnn_tcn` | +0.066229 (0/3) | +0.074555 (0/3) | -0.142362 (2/3) | +0.064181 (1/3) | -0.007003 (2/3) |
+| `F-D2b_high_cwt_modulation_res_tcn` | -0.007016 (2/3) | +0.052464 (0/3) | -0.331525 (3/3) | -0.017071 (2/3) | +0.010226 (1/3) |
+
+阶段判断：
+
+- `F-D1b_high_cwt_cnn_tcn` 不通过：更强 dense CWT encoder 没有解决 CWT 路线主 RR 弱的问题，反而放大 long-tail 和 easy 误伤。
+- `F-D2b_high_cwt_modulation_res_tcn` 不通过：hard 收益略强于旧 `F-D2`，但 overall、spec、easy 和 fast-RR 均没有改善。
+- F-D 特征提取网络扩展停止：不继续更强 CWT-CNN、attention pooling、SST dense/ridge dual path 或更深 TCN。
+- 若后续仍要从 F-D 提取价值，只能回到 `F-D2` 原始 modulation features 的选择性 gating / residual cap 小分支；但当前证据不支持把 F-D 升级为主线结构。
+
 ## 8. 外部经验在本计划中的用法
 
 - 音频 waveform generation 中常用 multi-resolution STFT / spectrogram loss，但这是外部结构经验，不应直接照搬全频强匹配到呼吸任务。
