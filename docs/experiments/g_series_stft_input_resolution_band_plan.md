@@ -317,3 +317,50 @@ F0 的 30s 窗未必过长，但 5s hop 很可能过粗。
 因此第一优先级是 win=3000/hop=250；
 若它改善有限，再判断 20s 窗是否比 30s 更适合 waveform 重建。
 ```
+
+## 9. G0/G1 pilot 2026-06-29 结果
+
+运行范围：
+
+- 训练 manifest：`runs/g_series_stft_input_manifest.csv`
+- 普通 checkpoint 汇总：`runs/g_series_stft_input_summary.csv`
+- 普通 paired delta：`runs/g_series_stft_input_paired_delta.csv`
+- 普通分层 delta：`runs/g_series_stft_input_strata_delta.csv`
+- top3 复评 manifest：`runs/g_series_stft_input_topk_eval_manifest.csv`
+- top3 全量结果：`runs/g_series_stft_input_topk_all_metrics.csv`
+- top3 任务指标择优：`runs/g_series_stft_input_topk_best_by_rr.csv`
+
+完成性：
+
+- G0/G1 共 20 个训练 run 全部完成；每个 label 均有 `20260700`、`20260837` 两个 seed。
+- top3 复评共 60 个 checkpoint 评价结果，`best_by_rr` 共 20 行。
+- 未改变 split、target、metrics 或 checkpoint gate；top3 结论属于同验证集任务指标择优，后续表述需标注 validation top-k selection。
+
+G0 anchor：
+
+- top3 口径下，`G0_f0_native_stft_pre_mixer` 相对 `G0_time_only` 的 `rr_peak_band_abs_error_mean` 两 seed 均改善，平均 `-0.0551`。
+- `frac_gt_1` 平均下降 `-1.68pp`，`frac_gt_2` 平均下降 `-1.12pp`；说明当前 STFT 输入 anchor 仍有净贡献。
+
+G1 时间参数结论：
+
+| label | top3 `rr_peak_band_abs_error_mean` Δ | top3 `rr_spec_abs_error_mean` Δ | top3 count Δ | 普通 checkpoint `rr_peak_band_abs_error_mean` Δ | 判断 |
+|---|---:|---:|---:|---:|---|
+| `G1B_wide` | -0.0241 | +0.0238 | -0.0490 | -0.0302 | 只提高 hop 有收益，但 spec 变差 |
+| `G1C_wide` | -0.0236 | -0.0005 | -0.0215 | -0.0382 | 最均衡，wide 下优先 |
+| `G1D_wide` | -0.0117 | -0.0003 | -0.0475 | -0.0223 | 收益较小，relative corr 退化更明显 |
+| `G1B_resp_mid` | -0.0061 | -0.0178 | +0.0052 | -0.0032 | 中频下收益弱且 count 不稳 |
+| `G1C_resp_mid` | -0.0193 | -0.0181 | -0.0322 | -0.0279 | 中频下也优于 B，支持 C |
+| `G1D_resp_mid` | +0.0101 | -0.0301 | -0.0082 | -0.0027 | peak-band 不稳，不作为默认 |
+
+分层观察：
+
+- `G1C_wide` 在 `baseline_hard` 上改善最明显：普通 checkpoint `rr_peak_band_abs_error_mean` 平均 `-0.3848`，`breath_count_zero_cross_abs_error_mean` 平均 `-0.1779`。
+- `G1C_wide` 在 `low_spectrum` 上也改善：peak-band 平均 `-0.0395`，spec 平均 `-0.0400`。
+- `baseline_easy` 上 B/C/D 都有 peak-band 小幅退化，`G1C_wide` 平均 `+0.0305`；因此 C 可进入下一阶段，但 G2 需要继续把 easy windows 作为护栏。
+- `G1D_*` 的短窗方向没有形成稳定主护栏收益，且 relative-envelope corr 退化更明显，暂不作为默认时间参数。
+
+阶段判断：
+
+- G1 首批结果支持 `C: win2000/hop250` 作为 G2 主时间参数；`B: win3000/hop250` 保留为保守参照。
+- 按本文第 3.2 节规则，因 C 在 `wide_anchor` 与 `resp_mid` 两个代表频带上都优于 A，正式进入 G2 前建议先把 G1 扩到第三个 seed，优先补 `20260901`。
+- 若第三 seed 仍支持 C，则 G2 以 `T*=C` 扫 `0.05-1.2Hz`、`0.05-3Hz`、`0.067-1.2Hz`、`0.05-8Hz`、`bandgroup`、`bandenergy` 和 high-only ablation；若第三 seed 显示 C 不稳，则用 B 作为保守 T*。
