@@ -79,6 +79,47 @@ def test_g1_time_resolution_specs_change_only_declared_stft_parameters():
     }
 
 
+def test_g2_specs_use_c_time_parameter_and_band_matrix():
+    specs = {spec["label"]: spec for spec in g.build_run_specs(stage="g2", seeds=[20260901])}
+
+    assert set(specs) == {
+        "G2_R0_wide_8p0",
+        "G2_R1_resp_1p2",
+        "G2_R2_resp_3p0",
+        "G2_R3_strict_resp",
+        "G2_R4_bandgroup",
+        "G2_R5_bandenergy",
+        "G2_R6_high_1p2_8p0",
+        "G2_R6_high_3p0_8p0",
+    }
+
+    for spec in specs.values():
+        assert spec["stage"] == "G2"
+        assert spec["seed"] == 20260901
+        assert spec["paired_f0_label"] == "G2_R0_wide_8p0"
+        assert _override_set(spec) >= {
+            "model.stft_win=2000",
+            "model.stft_hop=250",
+            "model.stft_inject_position=pre_mixer",
+        }
+
+    assert _override_set(specs["G2_R1_resp_1p2"]) >= {
+        "model.stft_low_hz=0.05",
+        "model.stft_high_hz=1.2",
+        "model.stft_encoder_type=conv2d",
+    }
+    assert _override_set(specs["G2_R3_strict_resp"]) >= {
+        "model.stft_low_hz=0.067",
+        "model.stft_high_hz=1.2",
+    }
+    assert _override_set(specs["G2_R4_bandgroup"]) >= {"model.stft_encoder_type=bandgroup"}
+    assert _override_set(specs["G2_R5_bandenergy"]) >= {"model.stft_encoder_type=bandenergy"}
+    assert _override_set(specs["G2_R6_high_3p0_8p0"]) >= {
+        "model.stft_low_hz=3.0",
+        "model.stft_high_hz=8.0",
+    }
+
+
 def test_g_series_specs_keep_waveform_loss_and_native_pre_mixer_contract():
     dual_specs = [spec for spec in g.build_run_specs() if spec["branch_mode"] == "dual"]
 

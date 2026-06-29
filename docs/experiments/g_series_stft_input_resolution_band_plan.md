@@ -130,7 +130,7 @@ G1 推荐判定：
 
 ## 4. G2：在胜出 STFT 参数上扫频带与编码方式
 
-G2 使用 G1 选出的默认 STFT 参数 `T*`。如果 G1 不明确，默认选 `B: win3000/hop250` 作为 G2 主参数，并保留 A 做少量复核；因为 B 只提高时间栅格，不牺牲频率分辨率，风险最低。
+G2 使用 G1 选出的默认 STFT 参数 `T*`。截至 2026-06-29 的 G1 三 seed 结果，`T*=C: win2000/hop250`；`B: win3000/hop250` 保留为 G3 的保守交互复核候选。
 
 ### 4.1 G2 fullband 频带矩阵
 
@@ -248,11 +248,11 @@ G3 只复核 G1/G2 中最可能存在交互的少数组合。
 
 ## 7. 实验记录与后续实现要求
 
-当前已实现首批 G0/G1 编排脚手架：
+当前已实现 G0/G1/G2 编排脚手架：
 
 - runner：`scripts/run_g_series_stft_input_probe.py`
 - 默认 manifest：`runs/g_series_stft_input_manifest.csv`
-- 阶段参数：`--stage g0`、`--stage g1` 或默认 `g0-g1`
+- 阶段参数：`--stage g0`、`--stage g1`、`--stage g2` 或默认 `g0-g1`
 - pilot seed：`20260700`、`20260837`
 - summary：复用 `scripts/summarize_f_a_stft_loss.py`，已支持 `G1/G2/G3` 候选标签；`G0` anchor 不进入 candidate delta。
 
@@ -289,6 +289,45 @@ G3 只复核 G1/G2 中最可能存在交互的少数组合。
   --strata-output runs/g_series_stft_input_strata_delta.csv
 ```
 
+G2 频带探针命令：
+
+```bash
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g2 \
+  --seed 20260700 \
+  --seed 20260837 \
+  --seed 20260901 \
+  --dry-run \
+  --manifest runs/g_series_stft_input_g2_manifest.csv
+
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g2 \
+  --seed 20260700 \
+  --seed 20260837 \
+  --seed 20260901 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --manifest runs/g_series_stft_input_g2_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/eval_topk_checkpoints.py \
+  --runs-root runs/g_series_stft_input \
+  --top-k 3 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --metric-workers 4 \
+  --start-stagger-sec 30 \
+  --output-prefix runs/g_series_stft_input_topk
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/g_series_stft_input_g2_manifest.csv \
+  --output runs/g_series_stft_input_g2_summary.csv \
+  --paired-output runs/g_series_stft_input_g2_paired_delta.csv \
+  --strata-output runs/g_series_stft_input_g2_strata_delta.csv
+```
+
 正式训练前仍需要补：
 
 - smoke：小窗口或 1 epoch 验证 run 产物完整，不改变 split、标签、核心指标口径。
@@ -306,16 +345,17 @@ G3 只复核 G1/G2 中最可能存在交互的少数组合。
 
 1. `G0` 复现 anchor。
 2. `G1` 用 `0.05-8Hz` 与 `0.05-3Hz` 两个代表频带先筛 STFT 参数。
-3. 若 G1 没有明确胜者，G2 默认用 `win3000/hop250`，因为它只提高时间栅格、不牺牲频率分辨率。
+3. G1 三 seed 后，G2 默认用 `C: win2000/hop250`；`B: win3000/hop250` 保留为 G3 保守交互复核候选。
 4. `G2` 在 `T*` 上扫 `0.05-1.2Hz`、`0.05-3Hz`、`0.067-1.2Hz`、`0.05-8Hz`、`bandgroup`、`bandenergy` 和 high-only ablation。
 5. `G3` 只复核少量 `T* x R*` 交互，不扩成完整 24 配置全矩阵。
 
 当前最值得优先验证的假设是：
 
 ```text
-F0 的 30s 窗未必过长，但 5s hop 很可能过粗。
-因此第一优先级是 win=3000/hop=250；
-若它改善有限，再判断 20s 窗是否比 30s 更适合 waveform 重建。
+G1C_wide 显示 20s/2.5s STFT 输入在 hard 和 low-spectrum 分层上更有收益，
+但 easy windows 有轻微退化风险。
+因此 G2 优先在 win=2000/hop=250 上扫频带与编码方式，
+同时把 easy windows 作为护栏，并把 B 档留给 G3 交互复核。
 ```
 
 ## 9. G0/G1 pilot 2026-06-29 结果

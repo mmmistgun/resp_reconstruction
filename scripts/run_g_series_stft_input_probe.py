@@ -67,6 +67,21 @@ G1_ARMS = [
     ("G1D_resp_mid", 1500, 128, 0.05, 3.0),
 ]
 
+G2_STFT_WIN = 2000
+G2_STFT_HOP = 250
+G2_PAIRED_F0_LABEL = "G2_R0_wide_8p0"
+
+G2_ARMS = [
+    ("G2_R0_wide_8p0", 0.05, 8.0, "conv2d"),
+    ("G2_R1_resp_1p2", 0.05, 1.2, "conv2d"),
+    ("G2_R2_resp_3p0", 0.05, 3.0, "conv2d"),
+    ("G2_R3_strict_resp", 0.067, 1.2, "conv2d"),
+    ("G2_R4_bandgroup", 0.05, 8.0, "bandgroup"),
+    ("G2_R5_bandenergy", 0.05, 8.0, "bandenergy"),
+    ("G2_R6_high_1p2_8p0", 1.2, 8.0, "conv2d"),
+    ("G2_R6_high_3p0_8p0", 3.0, 8.0, "conv2d"),
+]
+
 
 def _g1_arm(label: str, stft_win: int, stft_hop: int, low_hz: float, high_hz: float) -> dict:
     return {
@@ -85,11 +100,30 @@ def _g1_arm(label: str, stft_win: int, stft_hop: int, low_hz: float, high_hz: fl
     }
 
 
+def _g2_arm(label: str, low_hz: float, high_hz: float, encoder_type: str) -> dict:
+    return {
+        "label": label,
+        "stage": "G2",
+        "branch_mode": "dual",
+        "stft_inject_position": "pre_mixer",
+        "stft_win": G2_STFT_WIN,
+        "stft_hop": G2_STFT_HOP,
+        "stft_low_hz": low_hz,
+        "stft_high_hz": high_hz,
+        "stft_encoder_type": encoder_type,
+        "paired_anchor_label": G2_PAIRED_F0_LABEL,
+        "paired_f0_label": G2_PAIRED_F0_LABEL,
+        "paired_time_only_label": "G0_time_only",
+    }
+
+
 def _arms_for_stage(stage: str) -> list[dict]:
     if stage == "g0":
         return [dict(arm) for arm in G0_ARMS]
     if stage == "g1":
         return [_g1_arm(*arm) for arm in G1_ARMS]
+    if stage == "g2":
+        return [_g2_arm(*arm) for arm in G2_ARMS]
     if stage == "g0-g1":
         return [dict(arm) for arm in G0_ARMS] + [_g1_arm(*arm) for arm in G1_ARMS]
     raise ValueError(f"未知 stage={stage!r}")
@@ -135,7 +169,7 @@ def _base_spec(arm: dict, seed: int) -> dict:
 
 
 def build_run_specs(*, stage: str = "g0-g1", seeds: list[int] | None = None) -> list[dict]:
-    """生成 G0/G1 STFT 输入分辨率 pilot；只定义矩阵，不隐式启动训练。"""
+    """生成 G 系列 STFT 输入分辨率/频带 pilot；只定义矩阵，不隐式启动训练。"""
 
     selected_seeds = seeds or PILOT_SEEDS
     specs: list[dict] = []
@@ -197,7 +231,7 @@ def _build_launch_plan(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="G 系列 STFT 输入时间分辨率与频带范围 pilot 编排")
-    parser.add_argument("--stage", choices=["g0", "g1", "g0-g1"], default="g0-g1", help="生成/运行的实验阶段")
+    parser.add_argument("--stage", choices=["g0", "g1", "g2", "g0-g1"], default="g0-g1", help="生成/运行的实验阶段")
     parser.add_argument(
         "--seed",
         type=int,
