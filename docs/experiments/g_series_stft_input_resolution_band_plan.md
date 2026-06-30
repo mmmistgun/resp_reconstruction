@@ -494,3 +494,69 @@ G2 相对 `G2_R0_wide_8p0` 的 top3 任务指标择优均值 delta：
 - `G2_R5_bandenergy` 是唯一值得进入 G3 的频带编码候选，但必须标注其证据来自 validation top-k selection，且需要用普通 checkpoint 或跨时间参数交互复核确认。
 - high-only 分支只保留为解释实验；若后续继续追，需要先检查 subject/session 捷径、运动高频和 split 泄漏风险。
 - 建议 G3 不扩大全矩阵，只复核 `C/B x {wide_8p0, bandenergy}`，可选加一个 `high_1p2_8p0` 解释臂。
+
+## 11. G3 pilot 2026-06-30 结果
+
+运行范围：
+
+- G3 manifest：`runs/g_series_stft_input_g3_manifest.csv`
+- 普通 checkpoint 汇总：`runs/g_series_stft_input_g3_summary.csv`
+- 普通 paired delta：`runs/g_series_stft_input_g3_paired_delta.csv`
+- 普通分层 delta：`runs/g_series_stft_input_g3_strata_delta.csv`
+- G3 top3 复评 manifest：`runs/g_series_stft_input_topk_g3_eval_manifest.csv`
+- top3 全量结果：`runs/g_series_stft_input_topk_all_metrics.csv`
+- top3 任务指标择优：`runs/g_series_stft_input_topk_best_by_rr.csv`
+
+完成性：
+
+- G3 共 18 个训练 run，`C/B x {wide_8p0, bandenergy, high_1p2_8p0}` 每个 3 seed，全部完成。
+- G3 top3 共 54 个 checkpoint 评价全部完成；当前 top3 全量结果共 216 行，`best_by_rr` 共 72 行。
+- 复查 `eval_topk_checkpoints.py --dry-run` 无待评价任务。
+- 未改变 split、target、metrics 或 checkpoint gate；top3 结论属于同验证集任务指标择优，表述时必须标注 validation top-k selection。
+
+普通 checkpoint 均值：
+
+| label | `rr_peak_band_abs_error_mean` | `rr_spec_abs_error_mean` | count | `frac_gt_1` | corr |
+|---|---:|---:|---:|---:|---:|
+| `G3_C_wide_8p0` | 0.4552 | 0.5571 | 1.0335 | 0.1107 | 0.5264 |
+| `G3_C_bandenergy` | 0.4802 | 0.5513 | 1.0320 | 0.1186 | 0.5233 |
+| `G3_C_high_1p2_8p0` | 0.4702 | 0.5684 | 1.0363 | 0.1140 | 0.5269 |
+| `G3_B_wide_8p0` | 0.4678 | 0.5806 | 1.0274 | 0.1138 | 0.5244 |
+| `G3_B_bandenergy` | 0.4950 | 0.5737 | 1.0562 | 0.1216 | 0.5215 |
+| `G3_B_high_1p2_8p0` | 0.4927 | 0.5620 | 1.0508 | 0.1198 | 0.5243 |
+
+普通 checkpoint 相对各自 wide anchor 的 paired delta：
+
+| label | `rr_peak_band_abs_error_mean` Δ | `rr_spec_abs_error_mean` Δ | count Δ | `frac_gt_1` Δ | 判断 |
+|---|---:|---:|---:|---:|---|
+| `G3_C_bandenergy` | +0.0250 | -0.0058 | -0.0015 | +0.0080 | spec/count 小改善，peak 护栏退化 |
+| `G3_C_high_1p2_8p0` | +0.0150 | +0.0113 | +0.0027 | +0.0034 | high-only 不成立 |
+| `G3_B_bandenergy` | +0.0272 | -0.0069 | +0.0288 | +0.0079 | B 档下 bandenergy 更差 |
+| `G3_B_high_1p2_8p0` | +0.0249 | -0.0186 | +0.0234 | +0.0060 | spec 改善但主护栏退化 |
+
+Top3 任务指标择优相对各自 wide anchor 的 paired delta：
+
+| label | `rr_peak_band_abs_error_mean` Δ | `rr_spec_abs_error_mean` Δ | count Δ | `frac_gt_1` Δ | 判断 |
+|---|---:|---:|---:|---:|---|
+| `g3_c_bandenergy` | -0.0098 | -0.0144 | -0.0174 | -0.0006 | top3 下最佳候选 |
+| `g3_c_high_1p2_8p0` | -0.0054 | -0.0051 | -0.0037 | +0.0004 | 小幅但不稳，解释臂 |
+| `g3_b_bandenergy` | +0.0276 | -0.0089 | +0.0177 | +0.0086 | B 档不支持 bandenergy |
+| `g3_b_high_1p2_8p0` | +0.0115 | -0.0115 | +0.0075 | -0.0006 | B 档 high-only 仍不稳 |
+
+时间参数交互：
+
+- `C` 相对 `B` 在 `bandenergy` 上的 top3 差异最大：peak `-0.0375`、spec `-0.0153`、count `-0.0353`，说明 bandenergy 的可用性依赖 C 档 `win2000/hop250`，不是泛化到 B 档的稳定编码收益。
+- `C_wide` 和 `B_wide` 的 top3 peak 几乎相同，但普通 checkpoint 下 `C_wide` peak 更低，corr 更高；G1/G3 合起来仍支持 C 档作为 STFT 输入默认时间参数。
+- high-only 在 C/B 两档都不能形成稳定主候选；它可以解释高频信息存在，但不能替代 fullband 或 bandenergy。
+
+分层观察：
+
+- `G3_C_bandenergy` 普通 checkpoint 在 `baseline_hard` 上 peak 改善 `-0.1696`、count 改善 `-0.0500`，但 `baseline_easy` peak 退化 `+0.0447`，overall peak 退化 `+0.0250`。
+- `G3_B_bandenergy` 在 `baseline_hard` 只有轻微 peak 改善 `-0.0239`，overall peak 退化 `+0.0272`，说明 bandenergy 与 B 档不匹配。
+- `G3_C_high_1p2_8p0` 在 `baseline_hard` peak 改善 `-0.0757`，但 spec、easy 和 overall 不支持作为默认。
+
+阶段判断：
+
+- 若按普通 checkpoint 口径收口，当前最稳默认仍是 `C_wide_8p0`：`win2000/hop250 + 0.05-8Hz + conv2d`。
+- 若允许 validation top-k selection 作为探索筛选，`C_bandenergy` 是唯一值得继续的候选；但它普通 checkpoint 仍伤 overall/easy peak，不能直接升级为 H 系列 anchor。
+- G 系列可以停止扩大 STFT 输入频带/编码搜索；下一步若继续，应只做 `C_wide_8p0` vs `C_bandenergy` 的稳定性复核，例如更多 seed、固定 checkpoint 选择口径或坏例波形复核。
