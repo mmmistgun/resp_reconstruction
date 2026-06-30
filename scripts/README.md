@@ -312,6 +312,43 @@ E1 STFT 信息增益实验的 manifest 生成器：
   --output runs/g_series_stft_input_g2_summary.csv \
   --paired-output runs/g_series_stft_input_g2_paired_delta.csv \
   --strata-output runs/g_series_stft_input_g2_strata_delta.csv
+
+# G3：复核 C/B x {wide_8p0, bandenergy, high_1p2_8p0}
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g3 \
+  --seed 20260700 \
+  --seed 20260837 \
+  --seed 20260901 \
+  --dry-run \
+  --manifest runs/g_series_stft_input_g3_manifest.csv
+
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g3 \
+  --seed 20260700 \
+  --seed 20260837 \
+  --seed 20260901 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --manifest runs/g_series_stft_input_g3_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/eval_topk_checkpoints.py \
+  --runs-root runs/g_series_stft_input \
+  --top-k 3 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --metric-workers 4 \
+  --start-stagger-sec 30 \
+  --manifest runs/g_series_stft_input_topk_g3_eval_manifest.csv \
+  --output-prefix runs/g_series_stft_input_topk
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/g_series_stft_input_g3_manifest.csv \
+  --output runs/g_series_stft_input_g3_summary.csv \
+  --paired-output runs/g_series_stft_input_g3_paired_delta.csv \
+  --strata-output runs/g_series_stft_input_g3_strata_delta.csv
 ```
 
 `run_f_a2_peak_anchor_probe.py` 用于 F-A2f：复用 `F0_native_stft_pre_mixer`、

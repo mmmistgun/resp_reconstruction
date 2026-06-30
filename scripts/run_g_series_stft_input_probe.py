@@ -82,6 +82,15 @@ G2_ARMS = [
     ("G2_R6_high_3p0_8p0", 3.0, 8.0, "conv2d"),
 ]
 
+G3_ARMS = [
+    ("G3_C_wide_8p0", 2000, 250, 0.05, 8.0, "conv2d", "G3_C_wide_8p0"),
+    ("G3_C_bandenergy", 2000, 250, 0.05, 8.0, "bandenergy", "G3_C_wide_8p0"),
+    ("G3_C_high_1p2_8p0", 2000, 250, 1.2, 8.0, "conv2d", "G3_C_wide_8p0"),
+    ("G3_B_wide_8p0", 3000, 250, 0.05, 8.0, "conv2d", "G3_B_wide_8p0"),
+    ("G3_B_bandenergy", 3000, 250, 0.05, 8.0, "bandenergy", "G3_B_wide_8p0"),
+    ("G3_B_high_1p2_8p0", 3000, 250, 1.2, 8.0, "conv2d", "G3_B_wide_8p0"),
+]
+
 
 def _g1_arm(label: str, stft_win: int, stft_hop: int, low_hz: float, high_hz: float) -> dict:
     return {
@@ -117,6 +126,31 @@ def _g2_arm(label: str, low_hz: float, high_hz: float, encoder_type: str) -> dic
     }
 
 
+def _g3_arm(
+    label: str,
+    stft_win: int,
+    stft_hop: int,
+    low_hz: float,
+    high_hz: float,
+    encoder_type: str,
+    paired_f0_label: str,
+) -> dict:
+    return {
+        "label": label,
+        "stage": "G3",
+        "branch_mode": "dual",
+        "stft_inject_position": "pre_mixer",
+        "stft_win": stft_win,
+        "stft_hop": stft_hop,
+        "stft_low_hz": low_hz,
+        "stft_high_hz": high_hz,
+        "stft_encoder_type": encoder_type,
+        "paired_anchor_label": paired_f0_label,
+        "paired_f0_label": paired_f0_label,
+        "paired_time_only_label": "G0_time_only",
+    }
+
+
 def _arms_for_stage(stage: str) -> list[dict]:
     if stage == "g0":
         return [dict(arm) for arm in G0_ARMS]
@@ -124,6 +158,8 @@ def _arms_for_stage(stage: str) -> list[dict]:
         return [_g1_arm(*arm) for arm in G1_ARMS]
     if stage == "g2":
         return [_g2_arm(*arm) for arm in G2_ARMS]
+    if stage == "g3":
+        return [_g3_arm(*arm) for arm in G3_ARMS]
     if stage == "g0-g1":
         return [dict(arm) for arm in G0_ARMS] + [_g1_arm(*arm) for arm in G1_ARMS]
     raise ValueError(f"未知 stage={stage!r}")
@@ -231,7 +267,7 @@ def _build_launch_plan(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="G 系列 STFT 输入时间分辨率与频带范围 pilot 编排")
-    parser.add_argument("--stage", choices=["g0", "g1", "g2", "g0-g1"], default="g0-g1", help="生成/运行的实验阶段")
+    parser.add_argument("--stage", choices=["g0", "g1", "g2", "g3", "g0-g1"], default="g0-g1", help="生成/运行的实验阶段")
     parser.add_argument(
         "--seed",
         type=int,

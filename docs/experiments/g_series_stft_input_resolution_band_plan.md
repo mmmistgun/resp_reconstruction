@@ -248,11 +248,11 @@ G3 只复核 G1/G2 中最可能存在交互的少数组合。
 
 ## 7. 实验记录与后续实现要求
 
-当前已实现 G0/G1/G2 编排脚手架：
+当前已实现 G0/G1/G2/G3 编排脚手架：
 
 - runner：`scripts/run_g_series_stft_input_probe.py`
 - 默认 manifest：`runs/g_series_stft_input_manifest.csv`
-- 阶段参数：`--stage g0`、`--stage g1`、`--stage g2` 或默认 `g0-g1`
+- 阶段参数：`--stage g0`、`--stage g1`、`--stage g2`、`--stage g3` 或默认 `g0-g1`
 - pilot seed：`20260700`、`20260837`
 - summary：复用 `scripts/summarize_f_a_stft_loss.py`，已支持 `G1/G2/G3` 候选标签；`G0` anchor 不进入 candidate delta。
 
@@ -326,6 +326,46 @@ G2 频带探针命令：
   --output runs/g_series_stft_input_g2_summary.csv \
   --paired-output runs/g_series_stft_input_g2_paired_delta.csv \
   --strata-output runs/g_series_stft_input_g2_strata_delta.csv
+```
+
+G3 交互复核命令：
+
+```bash
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g3 \
+  --seed 20260700 \
+  --seed 20260837 \
+  --seed 20260901 \
+  --dry-run \
+  --manifest runs/g_series_stft_input_g3_manifest.csv
+
+./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
+  --stage g3 \
+  --seed 20260700 \
+  --seed 20260837 \
+  --seed 20260901 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --manifest runs/g_series_stft_input_g3_manifest.csv \
+  --start-stagger-sec 90
+
+./.venv/bin/python scripts/eval_topk_checkpoints.py \
+  --runs-root runs/g_series_stft_input \
+  --top-k 3 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 4 \
+  --metric-workers 4 \
+  --start-stagger-sec 30 \
+  --manifest runs/g_series_stft_input_topk_g3_eval_manifest.csv \
+  --output-prefix runs/g_series_stft_input_topk
+
+./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
+  --manifest runs/g_series_stft_input_g3_manifest.csv \
+  --output runs/g_series_stft_input_g3_summary.csv \
+  --paired-output runs/g_series_stft_input_g3_paired_delta.csv \
+  --strata-output runs/g_series_stft_input_g3_strata_delta.csv
 ```
 
 正式训练前仍需要补：
