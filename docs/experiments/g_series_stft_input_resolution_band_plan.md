@@ -408,3 +408,49 @@ G1 时间参数结论：
 - G1 三 seed 结果支持 `C: win2000/hop250` 作为 G2 主时间参数；`B: win3000/hop250` 保留为保守参照，`D: win1500/hop128` 作为短窗边界/解释候选。
 - G2 建议以 `T*=C` 扫 `0.05-1.2Hz`、`0.05-3Hz`、`0.067-1.2Hz`、`0.05-8Hz`、`bandgroup`、`bandenergy` 和 high-only ablation。
 - 若 G2 中 C 的收窄频带候选只在 hard/low-spectrum 改善、easy 继续退化，应在 G3 用 `B` 或 `A` 做少量交互复核，避免把时间窗收益和 easy 退化绑定成默认方案。
+
+## 10. G2 pilot 2026-06-30 结果
+
+运行范围：
+
+- G2 manifest：`runs/g_series_stft_input_g2_manifest.csv`
+- 普通 checkpoint 汇总：`runs/g_series_stft_input_g2_summary.csv`
+- 普通 paired delta：`runs/g_series_stft_input_g2_paired_delta.csv`
+- 普通分层 delta：`runs/g_series_stft_input_g2_strata_delta.csv`
+- G2 top3 复评 manifest：`runs/g_series_stft_input_topk_g2_eval_manifest.csv`
+- top3 全量结果：`runs/g_series_stft_input_topk_all_metrics.csv`
+- top3 任务指标择优：`runs/g_series_stft_input_topk_best_by_rr.csv`
+
+完成性：
+
+- `runs/g_series_stft_input_g2_manifest.csv` 中 24 个训练 run 全部完成。
+- G2 top3 共 72 个 checkpoint 评价全部完成；当前 top3 全量结果共 162 行，`best_by_rr` 共 54 行。
+- 复查 `eval_topk_checkpoints.py --dry-run` 无待评价任务。
+- 未改变 split、target、metrics 或 checkpoint gate；top3 结论属于同验证集任务指标择优，表述时必须标注 validation top-k selection。
+
+G2 相对 `G2_R0_wide_8p0` 的 top3 任务指标择优均值 delta：
+
+| label | `rr_peak_band_abs_error_mean` Δ | `rr_spec_abs_error_mean` Δ | count Δ | `frac_gt_1` Δ | 判断 |
+|---|---:|---:|---:|---:|---|
+| `G2_R1_resp_1p2` | +0.0271 | -0.0336 | +0.0285 | +0.0041 | spec 改善但主护栏退化 |
+| `G2_R2_resp_3p0` | +0.0101 | -0.0122 | -0.0020 | +0.0052 | 接近 R0，但整体 peak 仍退化 |
+| `G2_R3_strict_resp` | +0.0231 | -0.0234 | +0.0606 | +0.0090 | strict resp 不适合作默认 |
+| `G2_R4_bandgroup` | +0.0134 | -0.0235 | +0.0239 | +0.0072 | 显式分组未超过 fullband |
+| `G2_R5_bandenergy` | -0.0099 | -0.0144 | -0.0172 | -0.0004 | top3 下最有希望，但 corr 略退化 |
+| `G2_R6_high_1p2_8p0` | -0.0054 | -0.0047 | -0.0032 | +0.0001 | high-only 有解释价值，不可直接默认 |
+| `G2_R6_high_3p0_8p0` | +0.0164 | -0.0046 | +0.0147 | +0.0056 | 更纯高频不成立 |
+
+普通 checkpoint 均值 delta 显示，所有非 R0 候选的 overall `rr_peak_band_abs_error_mean` 均比 `G2_R0_wide_8p0` 更差；其中 `G2_R5_bandenergy` 虽然 count 近似持平，但 peak 仍退化 `+0.0249`。因此 G2 的候选收益主要出现在 validation top-k selection 口径，不应直接升级为默认训练配置。
+
+分层观察：
+
+- `G2_R2_resp_3p0` 在普通 checkpoint 的 `baseline_hard` 分层 peak 改善 `-0.0792`，但 `baseline_easy` 退化 `+0.0317`，说明收窄到 3Hz 可能帮助困难窗口，却继续伤 easy 护栏。
+- `G2_R5_bandenergy` 在 `baseline_hard` 分层 peak 改善 `-0.1687`、count 改善 `-0.0513`，同时 overall peak 仍退化；它更像候选归纳偏置，而不是已验证默认输入。
+- `G2_R6_high_1p2_8p0` 的 top3 peak/count 相对 R0 有小幅改善，且相对 time-only 仍改善；但 seed 表现不一致，relative-envelope corr 下降，不能解释为稳定高频生理收益。
+
+阶段判断：
+
+- G2 不支持把 `0.05-1.2Hz`、`0.067-1.2Hz`、`0.05-3Hz` 或 `bandgroup` 直接设为默认 STFT 输入；`G2_R0_wide_8p0` 仍是普通 checkpoint 口径下最稳的 C 档 fullband anchor。
+- `G2_R5_bandenergy` 是唯一值得进入 G3 的频带编码候选，但必须标注其证据来自 validation top-k selection，且需要用普通 checkpoint 或跨时间参数交互复核确认。
+- high-only 分支只保留为解释实验；若后续继续追，需要先检查 subject/session 捷径、运动高频和 split 泄漏风险。
+- 建议 G3 不扩大全矩阵，只复核 `C/B x {wide_8p0, bandenergy}`，可选加一个 `high_1p2_8p0` 解释臂。
