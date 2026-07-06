@@ -11,9 +11,9 @@
 评价体系优先回答四个问题：
 
 1. 呼吸率是否一致，且不只是一整窗主频一致。
-2. 低频形态是否一致，并能区分形态错误和固定时延。
-3. 相对呼吸强弱变化是否一致，包括上沿、下沿和幅度带宽变化。
-4. 低质量信号下是否恢复了合理呼吸次数和逐呼吸事件。
+2. 低频形态是否一致，并能区分形态错误和持续时延。
+3. 相对呼吸强弱变化是否一致，优先关注幅度强弱而不是绝对上下边界形状。
+4. 低质量信号下是否恢复了合理呼吸次数；逐呼吸事件先作为探索性复核。
 
 ## 指标分层
 
@@ -27,26 +27,25 @@
 
 ### 低频形态与时延
 
-保留 `band_limited_corr`，作为 zero-lag 低频形态一致性指标。它回答“模型在原时间轴上是否同步恢复了目标形态”。
+保留 `band_limited_corr`，作为 zero-lag 低频形态一致性指标，但不把它解释为主要任务目标。BCG 和 THO 之间可能存在由多种耦合因素导致的持续、个体化且非线性的时延；让模型学习这个时延本身意义有限。因此 zero-lag 指标只用于判断“原时间轴上是否恰好同步”，不能过度惩罚可解释的生理/耦合延迟。
 
 新增或显式输出 `best_lag_corr_4s` 和 `best_lag_sec_4s`，搜索范围为 `+-4s`。`best_lag_corr_4s` 是核心辅助指标，回答“允许合理时延后形态是否恢复”；`best_lag_sec_4s` 用于解释延迟方向和大小，不单独作为越大越好的指标。
 
-zero-lag 和 lag-aligned 指标必须同时保留。`band_limited_corr` 低但 `best_lag_corr_4s` 高，表示形态可恢复但存在时延；二者都低才支持“形态没有恢复”的判断。
+zero-lag 和 lag-aligned 指标必须同时保留，但权重不同。`best_lag_corr_4s` 更贴近“低频形态是否恢复”，应作为主辅助指标；`band_limited_corr` 和 `best_lag_sec_4s` 主要解释时延。`band_limited_corr` 低但 `best_lag_corr_4s` 高，表示形态可恢复但存在时延；二者都低才支持“形态没有恢复”的判断。
 
 ### 相对变化与包络
 
-保留现有 `relative_envelope_mae` 和 `relative_envelope_corr`，但明确其局限：当前 RMS envelope 更接近强度包络，不区分上包络、下包络和中线变化。
+保留现有 `relative_envelope_mae` 和 `relative_envelope_corr`。当前 RMS envelope 是局部能量/幅度强度包络，正负振幅都会进入平方后求均方根，因此不是单纯只看上包络；它的局限在于不保留上沿、下沿和中线的符号化形态差异。
 
-新增双边包络指标：
+包络扩展先保持克制。优先探索一个幅度带宽候选：
 
-- `upper_envelope_corr` / `upper_envelope_mae`
-- `lower_envelope_corr` / `lower_envelope_mae`
 - `envelope_band_corr` / `envelope_band_mae`，其中 band 表示 `upper - lower`
-- `envelope_midline_corr` / `envelope_midline_mae`，其中 midline 表示 `(upper + lower) / 2`
 
-其中 `envelope_band_*` 最贴近相对呼吸强弱变化，应优先进入主表；`envelope_midline_*` 更偏基线漂移诊断。
+`envelope_band_*` 最贴近相对呼吸强弱变化，可与现有 RMS relative envelope 对照。如果它和人工复核、模型排序没有提供额外信息，就不进入主表。
 
-形态和包络指标应提供 zero-lag 与 lag-aligned 两类口径。主表保留 zero-lag 结果；lag-aligned 结果使用 `best_lag_sec_4s` 对齐后计算，并加 `_lag4s` 后缀，用于判断形态本身与时间延迟的贡献。
+`upper_envelope_*`、`lower_envelope_*` 和 `envelope_midline_*` 暂不进入第一轮实现，只在发现 RMS/band 包络无法解释上下不对称或基线漂移坏例时再补。
+
+形态和包络指标优先提供 lag-aligned 口径。zero-lag 结果可保留为诊断；lag-aligned 结果使用 `best_lag_sec_4s` 对齐后计算，并加 `_lag4s` 后缀，用于判断形态本身与时间延迟的贡献。
 
 ### 呼吸次数与逐呼吸事件
 
@@ -59,7 +58,7 @@ zero-lag 和 lag-aligned 指标必须同时保留。`band_limited_corr` 低但 `
 - `pred_breath_count_zero_cross_down`
 - `target_breath_count_zero_cross_down`
 
-新增逐呼吸事件指标：
+逐呼吸事件指标先作为探索性候选，不直接进入主排序：
 
 - `breath_event_precision`
 - `breath_event_recall`
@@ -68,7 +67,7 @@ zero-lag 和 lag-aligned 指标必须同时保留。`band_limited_corr` 低但 `
 - `cycle_rr_mae`
 - `cycle_rr_corr`
 
-事件匹配在带通信号上进行，默认以 target 事件为参照，使用与目标周期相关的容忍窗口。该组指标用于补上“整窗 RR 正确但局部呼吸变化没跟上”的盲点。
+事件匹配在带通信号上进行，默认以 target 事件为参照，使用与目标周期相关的容忍窗口。该组指标用于补上“整窗 RR 正确但局部呼吸变化没跟上”的盲点，但它对 target 局部质量、峰/谷选择、容忍窗口和信号双峰非常敏感。第一轮更适合先实现 `local_rr_mae` / `local_rr_corr` 和优化后的 zero-cross 计数；逐呼吸事件指标在小样本人工复核后再决定是否扩大使用。
 
 ## 旧指标处理
 
@@ -89,16 +88,15 @@ zero-lag 和 lag-aligned 指标必须同时保留。`band_limited_corr` 低但 `
 - `breath_count_zero_cross_abs_error_mean`
 - `relative_envelope_mae_mean`
 - `relative_envelope_corr_mean`
-- `envelope_band_mae_mean`
-- `envelope_band_corr_mean`
+- `relative_envelope_mae_lag4s_mean`
+- `relative_envelope_corr_lag4s_mean`
 - `band_limited_corr_mean`
 - `best_lag_corr_4s_mean`
 - `best_lag_sec_4s_median`
 - `local_rr_mae_mean`
 - `local_rr_corr_mean`
-- `breath_event_f1_mean`
-- `breath_timing_mae_sec_median`
-- `cycle_rr_mae_mean`
+
+第一轮候选表可额外包含 `envelope_band_mae_lag4s_mean`、`envelope_band_corr_lag4s_mean`、`breath_event_f1_mean`、`breath_timing_mae_sec_median` 和 `cycle_rr_mae_mean`，但这些列需通过人工复核后再决定是否进入主表。
 
 旧指标进入 diagnostic 表，避免主结论被 dominant rhythm 或历史兼容指标冲淡。
 
@@ -108,6 +106,6 @@ zero-lag 和 lag-aligned 指标必须同时保留。`band_limited_corr` 低但 `
 
 1. 新增指标不会改变旧指标数值。
 2. `best_lag_corr_4s` 与 `best_lag_sec_4s` 能把形态差和时延差分开。
-3. 双边包络指标在人工复核窗口中能反映上沿、下沿和幅度带宽变化。
-4. 逐呼吸事件指标能识别漏呼吸、多呼吸和局部 RR 漂移。
+3. RMS relative envelope 与 `envelope_band_*` 是否提供互补信息；若二者高度冗余，优先保留更稳定、更容易解释的一项。
+4. 逐呼吸事件指标能否稳定识别漏呼吸、多呼吸和局部 RR 漂移；若对峰检测参数过敏，则仅保留为诊断脚本输出。
 5. 新指标分层结论不被少数坏 target 或低质量窗口主导；必要时按 `rr_peak_valid_ratio`、质量标签和 baseline hard/easy 分层报告。
