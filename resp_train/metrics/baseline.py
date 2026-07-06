@@ -13,6 +13,7 @@ from resp_train.metrics.signal import (
     bandpass_filter,
     estimate_bandpassed_peak_rate_bpm,
     estimate_peak_rate_bpm,
+    estimate_robust_peak_rate_bpm,
     estimate_spectral_rate_bpm,
     rms_envelope,
     spectrum_similarity,
@@ -127,6 +128,20 @@ def _evaluate_baseline_sample(
         high_hz=high_hz,
         order=order,
     )
+    pred_filtered_for_peak = bandpass_filter(pred, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    target_filtered_for_peak = bandpass_filter(target_env, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    pred_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
+        pred_filtered_for_peak,
+        fs=fs,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    target_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
+        target_filtered_for_peak,
+        fs=fs,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
 
     return {
         **meta,
@@ -145,6 +160,12 @@ def _evaluate_baseline_sample(
         "pred_rr_peak_band_bpm": pred_rr_peak_band,
         "target_rr_peak_band_bpm": target_rr_peak_band,
         "rr_peak_band_abs_error": _abs_error_or_nan(pred_rr_peak_band, target_rr_peak_band),
+        "pred_rr_peak_band_robust_bpm": pred_rr_peak_band_robust,
+        "target_rr_peak_band_robust_bpm": target_rr_peak_band_robust,
+        "rr_peak_band_robust_abs_error": _abs_error_or_nan(
+            pred_rr_peak_band_robust,
+            target_rr_peak_band_robust,
+        ),
         "envelope_corr": _corrcoef_or_nan(pred, target_env),
         "spectrum_similarity": spectrum_similarity(pred, target_env, fs=fs, low_hz=low_hz, high_hz=high_hz),
     }

@@ -8,6 +8,7 @@ from resp_train.metrics.signal import (
     best_lag_correlation,
     estimate_bandpassed_peak_rate_bpm,
     estimate_peak_rate_bpm,
+    estimate_robust_peak_rate_bpm,
     estimate_spectral_rate_bpm,
     relative_envelope_metrics,
     rms_envelope,
@@ -135,6 +136,26 @@ def test_peak_rate_使用峰间距而不是峰数量():
     rate = estimate_peak_rate_bpm(x, fs=fs, distance_sec=10.0)
 
     assert abs(rate - 3.0) < 0.01
+
+
+def test_robust_peak_rate_忽略弱局部伪峰():
+    fs = 100.0
+    duration_sec = 90.0
+    t = np.arange(int(fs * duration_sec), dtype=np.float64) / fs
+    true_period_sec = 5.5
+    x = np.zeros_like(t)
+    true_peak_times = np.arange(1.0, duration_sec - 1.0, true_period_sec)
+    for peak_time in true_peak_times:
+        x += np.exp(-0.5 * ((t - peak_time) / 0.38) ** 2)
+    x -= 0.35 * np.sin(2 * np.pi * (1.0 / true_period_sec) * t + np.pi / 2)
+    for peak_time in true_peak_times[:-1]:
+        x += 0.20 * np.exp(-0.5 * ((t - (peak_time + 2.7)) / 0.22) ** 2)
+
+    naive_rate = estimate_peak_rate_bpm(x, fs=fs, distance_sec=2.0, low_hz=0.05, high_hz=0.7)
+    robust_rate = estimate_robust_peak_rate_bpm(x, fs=fs, low_hz=0.05, high_hz=0.7)
+
+    assert abs(naive_rate - 60.0 / true_period_sec) > 0.2
+    assert robust_rate == pytest.approx(60.0 / true_period_sec, abs=0.2)
 
 
 def test_bandpassed_peak_rate_忽略呼吸频带外尖峰():

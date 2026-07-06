@@ -426,6 +426,64 @@ def estimate_peak_rate_bpm(
     return rate
 
 
+def estimate_robust_peak_rate_bpm(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+    min_distance_sec: float = 2.0,
+    spectral_distance_fraction: float = 0.5,
+    prominence_std_factor: float = 0.2,
+    prominence_range_factor: float = 0.08,
+) -> float:
+    """用更保守的自适应峰约束估计呼吸率，降低弱局部伪峰影响。
+
+    输入信号通常已经被限制到呼吸频带。函数先用频谱主峰估计一个参考周期，
+    再把找峰最小间距放宽到参考周期的一定比例；峰突出度同时受标准差和
+    robust 振幅范围约束。旧 `estimate_peak_rate_bpm` 保持不变，本函数只用于
+    新增的辅助评价指标。
+    """
+    x = _as_1d_float(signal)
+    fs = float(fs)
+    if fs <= 0:
+        raise ValueError(f"fs 必须为正数，当前={fs}")
+    min_distance_sec = float(min_distance_sec)
+    spectral_distance_fraction = float(spectral_distance_fraction)
+    prominence_std_factor = float(prominence_std_factor)
+    prominence_range_factor = float(prominence_range_factor)
+    if min_distance_sec <= 0:
+        raise ValueError(f"min_distance_sec 必须为正数，当前={min_distance_sec}")
+    if spectral_distance_fraction < 0:
+        raise ValueError(f"spectral_distance_fraction 必须非负，当前={spectral_distance_fraction}")
+    if prominence_std_factor < 0 or prominence_range_factor < 0:
+        raise ValueError("prominence 系数必须非负")
+
+    spectral_rate_bpm = estimate_spectral_rate_bpm(x, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    adaptive_distance_sec = min_distance_sec
+    if np.isfinite(spectral_rate_bpm) and spectral_rate_bpm > 0:
+        adaptive_distance_sec = max(adaptive_distance_sec, spectral_distance_fraction * 60.0 / spectral_rate_bpm)
+    min_distance = max(1, int(round(adaptive_distance_sec * fs)))
+    robust_range = float(np.percentile(x, 95.0) - np.percentile(x, 5.0))
+    prominence = max(
+        float(np.std(x)) * prominence_std_factor,
+        robust_range * prominence_range_factor,
+        np.finfo(np.float64).eps,
+    )
+    peaks, _ = scipy_signal.find_peaks(x, distance=min_distance, prominence=prominence)
+    if peaks.size < 2:
+        return float("nan")
+    intervals = np.diff(peaks) / fs
+    if intervals.size == 0 or not np.isfinite(intervals).all():
+        return float("nan")
+    rate = 60.0 / float(np.median(intervals))
+    low_bpm = float(low_hz) * 60.0
+    high_bpm = float(high_hz) * 60.0
+    if not low_bpm <= rate <= high_bpm:
+        return float("nan")
+    return rate
+
+
 def estimate_bandpassed_peak_rate_bpm(
     signal: np.ndarray,
     *,

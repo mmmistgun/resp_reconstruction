@@ -15,6 +15,7 @@ from resp_train.metrics.signal import (
     bandpass_filter,
     best_lag_correlation_from_filtered,
     estimate_peak_rate_bpm,
+    estimate_robust_peak_rate_bpm,
     estimate_spectral_rate_bpm_from_distribution,
     relative_envelope_metrics,
     rms_envelope,
@@ -174,6 +175,18 @@ def _evaluate_one_window(
         low_hz=low_hz,
         high_hz=high_hz,
     )
+    pred_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
+        pred_filtered,
+        fs=fs,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    target_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
+        target_filtered,
+        fs=fs,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
     pred_breath_count_zero_cross = zero_crossing_count(pred_filtered)
     target_breath_count_zero_cross = zero_crossing_count(target_filtered)
     rel_env = relative_envelope_metrics(
@@ -210,6 +223,12 @@ def _evaluate_one_window(
         "pred_rr_peak_band_bpm": pred_rr_peak_band,
         "target_rr_peak_band_bpm": target_rr_peak_band,
         "rr_peak_band_abs_error": _abs_error_or_nan(pred_rr_peak_band, target_rr_peak_band),
+        "pred_rr_peak_band_robust_bpm": pred_rr_peak_band_robust,
+        "target_rr_peak_band_robust_bpm": target_rr_peak_band_robust,
+        "rr_peak_band_robust_abs_error": _abs_error_or_nan(
+            pred_rr_peak_band_robust,
+            target_rr_peak_band_robust,
+        ),
         "pred_breath_count_zero_cross": pred_breath_count_zero_cross,
         "target_breath_count_zero_cross": target_breath_count_zero_cross,
         "breath_count_zero_cross_abs_error": abs(pred_breath_count_zero_cross - target_breath_count_zero_cross),

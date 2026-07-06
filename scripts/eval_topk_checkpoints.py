@@ -17,6 +17,7 @@ from omegaconf import OmegaConf
 
 METRICS = [
     "rr_peak_band_abs_error",
+    "rr_peak_band_robust_abs_error",
     "rr_spec_abs_error",
     "breath_count_zero_cross_abs_error",
     "relative_envelope_mae",
