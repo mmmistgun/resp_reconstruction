@@ -588,6 +588,7 @@ F-D 不改变 waveform 输出空间；第一批只比较 `F-D0_high_stft_anchor`
 - `metrics.csv`：best checkpoint 在 val 子集上的逐窗口指标。
 - `checkpoint.pt`：验证损失最优 checkpoint。
 - `checkpoint_top1/2/3.pt` 与 `checkpoint_topk.csv`：按 `val_loss` 排序保留的 topK checkpoint，用于探索期复评。
+- `test_metrics.csv`、`test_summary.csv`、`test_eval_manifest.csv`：通过 `eval_tho_test.py` 对固定 checkpoint 做 held-out test 评价时生成。
 - `train.log`：训练日志。
 
 ### `eval_tho_small.py`
@@ -605,6 +606,47 @@ checkpoint 复评只构建验证集数据；即使训练配置中 `data.preload_
 逐窗口指标中的 Butterworth 带通滤波器系数会按 `(fs, low_hz, high_hz, order)` 缓存；缓存只跳过重复系数设计，不改变
 `sosfiltfilt` 的输出。同一窗口内还会复用 pred/target 的带通结果和频带功率分布，避免 RR peak-band、zero-cross、
 band-limited corr、best-lag corr、RR spec 和 spectrum similarity 重复计算同一中间量。
+
+### `eval_tho_test.py`
+
+固定一个已经由 val 选定的 checkpoint，在 held-out test split 上生成最终评价结果。默认读取 checkpoint 同目录的
+`config.yaml`，使用 `data.test_split` / `data.max_test_windows` / `data.test_sample_strategy` /
+`data.test_sample_seed`；旧 run 的配置若没有这些字段，则默认 `test_split=test`、全量 test 窗口、
+`test_sample_strategy=stratified_random`、`test_sample_seed=training.seed`。
+
+```bash
+./.venv/bin/python scripts/eval_tho_test.py \
+  --checkpoint runs/tho_research_v2/<timestamp>/checkpoint.pt
+```
+
+默认输出到 checkpoint 同目录：
+
+- `test_metrics.csv`：test split 逐窗口指标。
+- `test_summary.csv`：test split 汇总指标。
+- `test_eval_manifest.csv`：checkpoint、config、split、采样策略、窗口数和输出路径。
+
+脚本不会保存 `test_predictions.npz`；预测只在内存中用于计算指标，避免为全量 test 额外占用磁盘空间。test 结果只应在
+模型结构、seed 候选和 checkpoint/topK 选择已经由 val 固定后生成，不能反向参与模型选择。
+
+### `run_g_series_test_eval.py`
+
+按外部 specs CSV 并发运行一批 `eval_tho_test.py`。CSV 至少包含 `label,seed,checkpoint` 三列；当前 G 系列代表
+checkpoint 清单保存为 `configs/eval_specs/g_series_test_eval_20260705.csv`。脚本本身不内置 checkpoint，后续换模型时只需换
+`--specs`。
+
+```bash
+./.venv/bin/python scripts/run_g_series_test_eval.py \
+  --specs configs/eval_specs/g_series_test_eval_20260705.csv \
+  --output-dir runs/test_eval_g_series_20260705 \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --metric-workers 4
+```
+
+- `--max-parallel` 是总并发数；两块卡各一个进程时设为 `2`，两块卡各两个进程时设为 `4`。
+- `--dry-run` 只写调度 manifest 并打印计划。
+- 默认跳过已经存在完整 `metrics/summary/manifest` 输出的任务；需要覆盖时加 `--force`。
 
 ### `eval_topk_checkpoints.py`
 
@@ -828,10 +870,11 @@ scripts/
   train/
     train_tho_small.py
     eval_tho_small.py
+    eval_tho_test.py
   diagnostics/
     baseline_tho_hilbert.py
     plot_tho_predictions.py
-    summarize_tho_runs.py
+  summarize_tho_runs.py
 ```
 
 迁移前需要同步更新文档、测试和常用命令。

@@ -5,18 +5,22 @@ data:
   input_set: research_v2_waveform
   train_split: train
   val_split: val
+  test_split: test
   target_task: waveform
   bcg_input_key: bcg_rawish_segment_soft_z_key
   target_key: target_waveform_segment_soft_z_key
   max_train_windows: 1024
   max_val_windows: 256
+  max_test_windows: null
   filter_unusable: true
   drop_nonfinite_windows: false
   preload_windows: false
   train_sample_strategy: stratified_random
   val_sample_strategy: stratified_random
+  test_sample_strategy: stratified_random
   train_sample_seed: 20260610
   val_sample_seed: 20260611
+  test_sample_seed: 20260612
   stratify_column: allowed_losses
   min_hard_valid_ratio: 0.80
   min_state_alignment_valid_ratio: 0.80
