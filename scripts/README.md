@@ -112,6 +112,11 @@
 评估，不再作为当前默认训练入口。旧结论只能作为模型结构候选来源，不能作为新版
 数据的最终排序。
 
+`configs/tho_research_v2.yaml` 保留为小窗口 smoke / 调试默认口径；`configs/tho_research_v2_smoke.yaml`
+显式固定同一 smoke 口径，`configs/tho_research_v2_formal.yaml` 固定正式实验运行口径：全量窗口、
+`batch_size=128`、`data.preload_windows=true`、`training.num_workers=0`、方向 gate、epoch 级任务指标和
+`training.final_checkpoint=best_task`。批量 runner 仍可通过 `--set` 覆盖模型结构、输出目录和 seed。
+
 正式训练使用全量窗口和 batch128 效率口径。单个模型示例：
 
 ```bash
@@ -588,8 +593,12 @@ F-D 不改变 waveform 输出空间；第一批只比较 `F-D0_high_stft_anchor`
 - `audit.csv`：训练数据工厂生成的数据审计摘要。
 - `baseline_metrics.csv`：val 子集平凡基线指标。
 - `train_history.csv`：每轮训练和验证损失。
-- `metrics.csv`：best checkpoint 在 val 子集上的逐窗口指标。
+- `epoch_metrics.csv`：开启 `training.epoch_metrics.enabled=true` 时，每轮全量 val 的 epoch 级任务指标汇总。
+- `metrics.csv`：`training.final_checkpoint` 指定 checkpoint 在 val 子集上的逐窗口指标。
 - `checkpoint.pt`：验证损失最优 checkpoint。
+- `checkpoint_best_rr.pt` 与 `checkpoint_best_task.pt`：开启 epoch metrics 时，分别按 epoch 级 RR 误差和任务排序链择优的 checkpoint。
+- `metrics_val_loss.csv`、`metrics_best_rr.csv`、`metrics_best_task.csv`：开启对应 checkpoint 时的逐窗口指标；
+  `metrics.csv` 始终对应 `training.final_checkpoint` 指定的最终评价 checkpoint。
 - `checkpoint_top1/2/3.pt` 与 `checkpoint_topk.csv`：按 `val_loss` 排序保留的 topK checkpoint，用于探索期复评。
 - `test_metrics.csv`、`test_summary.csv`、`test_eval_manifest.csv`：通过 `eval_tho_test.py` 对固定 checkpoint 做 held-out test 评价时生成。
 - `train.log`：训练日志。
@@ -698,6 +707,13 @@ checkpoint 清单保存为 `configs/eval_specs/g_series_test_eval_20260705.csv`�
   `<output-prefix>_target_feature_cache`。同一 run 的 `checkpoint_top1/2/3.pt` 共享 val split、target 和 mask 时会复用 target 侧计算。
 - `--start-stagger-sec S`：按并发槽位错开启动，降低同时读取 checkpoint/config 和初始化评价进程造成的硬盘峰值。例如
   `--max-parallel 4 --start-stagger-sec 30` 会给同一批并发任务分配 `0/30/60/90s` 启动延迟。
+
+训练内 epoch metrics：每个 epoch 复用 `validate()` 的全量 val 预测计算任务指标。正式 runner 会传入
+`training.epoch_metrics.metrics_workers=auto` 和 `training.epoch_metrics.target_workers=auto`，并由
+`batch_utils.build_launch_plan()` 把实际并发槽数写入 `RESP_TRAIN_MAX_PARALLEL`，训练进程再按 CPU 核数和
+并发数自动下调每个 run 的 metrics / target worker。checkpoint 选择以 epoch 级汇总为颗粒度；默认任务排序链为
+`rr_peak_band_abs_error_mean -> frac_gt_1 -> frac_gt_2 -> rr_spec_abs_error_mean -> breath_count_zero_cross_abs_error_mean`。
+逐窗口 metrics 仍只用于诊断。
 
 注意：这是同一验证集内的 topK 任务指标择优，适合探索复核；正式结论需要标注为 validation top-k selection。
 
