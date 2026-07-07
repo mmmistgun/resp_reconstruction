@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 from omegaconf import OmegaConf
 
+from resp_train.experiments.selection import TASK_SELECTION_COLUMNS
+
 
 METRICS = [
     "rr_peak_band_abs_error",
@@ -28,13 +30,7 @@ METRICS = [
     "best_lag_sec",
 ]
 
-SELECTION_COLUMNS = [
-    "rr_peak_band_abs_error_mean",
-    "frac_gt_1",
-    "frac_gt_2",
-    "rr_spec_abs_error_mean",
-    "breath_count_zero_cross_abs_error_mean",
-]
+SELECTION_COLUMNS = list(TASK_SELECTION_COLUMNS)
 
 
 @dataclass(frozen=True)
@@ -149,6 +145,8 @@ def command_for_spec(
     if metric_workers is not None:
         command.extend(["--metrics-workers", str(int(metric_workers))])
         command.extend(["--metrics-chunk-size", str(int(metrics_chunk_size))])
+        command.extend(["--target-workers", str(int(metric_workers))])
+        command.extend(["--target-chunk-size", str(int(metrics_chunk_size))])
     if target_cache_dir is not None:
         command.extend(["--target-cache-dir", str(target_cache_dir)])
     command.extend(

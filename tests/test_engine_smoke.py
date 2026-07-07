@@ -187,6 +187,30 @@ def test_validate_passes_meta_derived_sample_weights_to_loss():
     assert summary["sample_weight_mean"] == pytest.approx(0.5)
 
 
+def test_validate_can_return_predictions_without_second_forward():
+    loader = DataLoader(DictDataset(duration_samples=32), batch_size=2, shuffle=False)
+    model = torch.nn.Conv1d(1, 1, kernel_size=1)
+
+    class SimpleLoss(torch.nn.Module):
+        def forward(self, pred, target):
+            return (pred - target).square().mean(), {}
+
+    loss_fn = SimpleLoss()
+
+    summary, predictions = validate(
+        model,
+        loader,
+        loss_fn,
+        torch.device("cpu"),
+        return_predictions=True,
+    )
+
+    assert summary["loss"] >= 0.0
+    assert predictions["r_tho_hat"].shape == (len(loader.dataset), 1, 32)
+    assert predictions["tho_ref"].shape == (len(loader.dataset), 1, 32)
+    assert predictions["dataset_row_id"].tolist() == [0, 1, 2, 3]
+
+
 def test_progress_description_includes_epoch_context():
     from resp_train.engine.train import _progress_description
 

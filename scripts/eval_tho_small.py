@@ -18,6 +18,8 @@ def main() -> None:
     parser.add_argument("--metrics-output", default="", help="指标 CSV 输出路径；为空时仅校验 checkpoint 可加载")
     parser.add_argument("--metrics-workers", type=int, default=1, help="metrics chunk 进程数；1 表示当前进程串行计算")
     parser.add_argument("--metrics-chunk-size", type=int, default=128, help="每个 metrics 进程任务处理的窗口数")
+    parser.add_argument("--target-workers", type=int, default=1, help="target feature chunk 进程数；1 表示串行计算")
+    parser.add_argument("--target-chunk-size", type=int, default=128, help="每个 target feature 进程任务处理的窗口数")
     parser.add_argument("--target-cache-dir", default="", help="target-side feature cache 目录；为空时只使用本进程内缓存")
     parser.add_argument("--set", dest="overrides", action="append", default=[], help="OmegaConf dotlist 覆盖，可重复传入")
     args = parser.parse_args()
@@ -25,6 +27,10 @@ def main() -> None:
         raise SystemExit("--metrics-workers 必须 >= 1")
     if args.metrics_chunk_size < 1:
         raise SystemExit("--metrics-chunk-size 必须 >= 1")
+    if args.target_workers < 1:
+        raise SystemExit("--target-workers 必须 >= 1")
+    if args.target_chunk_size < 1:
+        raise SystemExit("--target-chunk-size 必须 >= 1")
 
     output = evaluate_tho_checkpoint(
         checkpoint_path=args.checkpoint,
@@ -33,6 +39,8 @@ def main() -> None:
         overrides=args.overrides,
         metrics_workers=int(args.metrics_workers),
         metrics_chunk_size=int(args.metrics_chunk_size),
+        target_workers=int(args.target_workers),
+        target_chunk_size=int(args.target_chunk_size),
         target_cache_dir=Path(args.target_cache_dir) if args.target_cache_dir else None,
     )
     if args.metrics_output:

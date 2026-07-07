@@ -2,9 +2,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from omegaconf import OmegaConf
 
-from resp_train.experiments.tho import ThoExperiment, evaluate_tho_checkpoint
+from resp_train.experiments.tho import ThoExperiment, _validate_checkpoint_config, evaluate_tho_checkpoint
 
 
 def _prepare_dataset(root: Path):
@@ -173,6 +174,148 @@ def test_tho_experiment_logs_final_metric_summary(monkeypatch, tmp_path: Path):
 
     assert seen_show_progress == [True]
     assert "metrics: n=3 rr_peak_band_abs_error mean=1.300000 median=1.200000 p95=2.370000 frac_gt_1=0.666667" in log_text
+
+
+def test_tho_experiment_epoch_metrics_write_summary_and_task_checkpoints(monkeypatch, tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.epochs = 2
+    cfg.training.epoch_metrics = {
+        "enabled": True,
+        "metrics_workers": 2,
+        "metrics_chunk_size": 1,
+        "target_workers": 2,
+        "target_chunk_size": 1,
+    }
+    calls = []
+
+    def fake_load_or_build_target_feature_cache(preds, cfg_arg, **kwargs):
+        return {"target_env": np.zeros((len(preds["dataset_row_id"]), 1), dtype=np.float32)}
+
+    def fake_evaluate_predictions_chunked(preds, cfg_arg, **kwargs):
+        calls.append({"preds": preds, "kwargs": kwargs})
+        if len(calls) == 1:
+            errors = [2.0, 2.5, 3.0, 3.5]
+        else:
+            errors = [0.2, 0.3, 0.4, 0.5]
+        return pd.DataFrame(
+            {
+                "rr_peak_band_abs_error": errors,
+                "rr_spec_abs_error": [1.0 for _ in errors],
+                "breath_count_zero_cross_abs_error": [2.0 for _ in errors],
+                "relative_envelope_corr": [0.5 for _ in errors],
+            }
+        )
+
+    monkeypatch.setattr("resp_train.experiments.tho.load_or_build_target_feature_cache", fake_load_or_build_target_feature_cache)
+    monkeypatch.setattr("resp_train.experiments.tho.evaluate_predictions_chunked", fake_evaluate_predictions_chunked)
+    monkeypatch.setattr(
+        "resp_train.experiments.tho.evaluate_prediction_dict",
+        lambda *args, **kwargs: pd.DataFrame({"rr_peak_band_abs_error": [0.1]}),
+    )
+
+    run_dir = ThoExperiment(cfg).train()
+
+    epoch_metrics = pd.read_csv(run_dir / "epoch_metrics.csv")
+    history = pd.read_csv(run_dir / "train_history.csv")
+    assert epoch_metrics["epoch"].tolist() == [1, 2]
+    assert history["val_rr_peak_band_abs_error_mean"].tolist() == [2.75, 0.35]
+    assert history["val_frac_gt_1"].tolist() == [1.0, 0.0]
+    assert (run_dir / "checkpoint_best_rr.pt").exists()
+    assert (run_dir / "checkpoint_best_task.pt").exists()
+    assert calls[0]["kwargs"]["metrics_workers"] == 2
+    assert calls[0]["kwargs"]["metrics_chunk_size"] == 1
+
+
+def test_tho_experiment_epoch_metric_workers_auto_scale_with_parallel_env(monkeypatch, tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.epoch_metrics = {
+        "enabled": True,
+        "metrics_workers": "auto",
+        "metrics_chunk_size": 64,
+        "target_workers": "auto",
+        "target_chunk_size": 64,
+        "auto_max_workers": 32,
+    }
+    monkeypatch.setenv("RESP_TRAIN_MAX_PARALLEL", "4")
+    monkeypatch.setattr("resp_train.experiments.tho.os.cpu_count", lambda: 40)
+
+    options = ThoExperiment(cfg)._epoch_metrics_options()
+
+    assert options["metrics_workers"] == 10
+    assert options["target_workers"] == 10
+
+
+def test_tho_experiment_final_checkpoint_path_uses_task_checkpoint_when_requested(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.final_checkpoint = "best_task"
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "checkpoint_best_task.pt").write_bytes(b"checkpoint")
+
+    assert ThoExperiment(cfg).final_checkpoint_path(run_dir) == run_dir / "checkpoint_best_task.pt"
+
+
+def test_task_checkpoints_respect_checkpoint_gate(monkeypatch, tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.epoch_metrics = {"enabled": True}
+    experiment = ThoExperiment(cfg)
+    calls = []
+
+    monkeypatch.setattr("resp_train.experiments.tho.save_checkpoint", lambda *args, **kwargs: calls.append(args))
+
+    experiment.update_task_checkpoints(
+        run_dir=tmp_path,
+        model=None,
+        optimizer=None,
+        epoch=1,
+        record={
+            "checkpoint_gate_passed": False,
+            "val_rr_peak_band_abs_error_mean": 0.1,
+            "val_frac_gt_1": 0.0,
+            "val_frac_gt_2": 0.0,
+            "val_rr_spec_abs_error_mean": 0.1,
+            "val_breath_count_zero_cross_abs_error_mean": 0.1,
+        },
+    )
+
+    assert calls == []
+
+
+def test_validate_checkpoint_config_catches_stft_shape_mismatch():
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "dataset_root": "/data",
+                "index_csv": "training/dataset_index.csv",
+                "input_set": "research_v2_waveform",
+                "val_split": "val",
+                "max_val_windows": None,
+                "val_sample_strategy": "stratified_random",
+                "val_sample_seed": 1,
+                "stratify_column": "allowed_losses",
+                "filter_unusable": True,
+            },
+            "window": {"target_fs": 100, "duration_samples": 18000},
+            "model": {
+                "name": "time_stft_dual1d",
+                "in_channels": 1,
+                "out_channels": 1,
+                "base_channels": 16,
+                "patch_len": 256,
+                "patch_stride": 128,
+                "stft_win": 3000,
+                "stft_hop": 250,
+                "stft_high_hz": 8.0,
+            },
+            "loss": {"envelope_window_sec": 2.0, "spectrum_low_hz": 0.05, "spectrum_high_hz": 0.7},
+            "evaluation": {"max_lag_sec": 1.0},
+        }
+    )
+    checkpoint_config = OmegaConf.to_container(cfg, resolve=True)
+    checkpoint_config["model"]["stft_hop"] = 500
+
+    with pytest.raises(ValueError, match="model.stft_hop"):
+        _validate_checkpoint_config(checkpoint_config, cfg)
 
 
 def test_run_baseline_skips_when_disabled(monkeypatch, tmp_path: Path):

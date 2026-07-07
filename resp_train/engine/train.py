@@ -79,13 +79,17 @@ def validate(
     show_progress: bool | None = None,
     epoch: int | None = None,
     total_epochs: int | None = None,
-) -> dict[str, float]:
+    return_predictions: bool = False,
+):
     """执行验证循环，并返回平均 loss 摘要。"""
     resolved_device = torch.device(device)
     model.to(resolved_device)
     model.eval()
     meter = _LossMeter()
     non_blocking = resolved_device.type == "cuda"
+    pred_batches: list[np.ndarray] = []
+    target_batches: list[np.ndarray] = []
+    meta_records: list[dict[str, Any]] = []
 
     progress = tqdm(
         dataloader,
@@ -97,12 +101,27 @@ def validate(
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
         loss_kwargs = _loss_sample_weight_kwargs(loss_fn, batch, resolved_device)
-        pred = model(sensor, sst=sst) if sst is not None else model(sensor)
-        loss, parts = loss_fn(pred, target, **loss_kwargs)
+        raw_pred = model(sensor, sst=sst) if sst is not None else model(sensor)
+        loss, parts = loss_fn(raw_pred, target, **loss_kwargs)
         meter.update(loss, parts, batch_size=sensor.size(0))
+        if return_predictions:
+            _append_prediction_batch(
+                pred_batches=pred_batches,
+                target_batches=target_batches,
+                meta_records=meta_records,
+                batch=batch,
+                raw_pred=raw_pred,
+            )
         progress.set_postfix(loss=f"{meter.summary()['loss']:.4f}")
 
-    return meter.summary()
+    summary = meter.summary()
+    if not return_predictions:
+        return summary
+    return summary, _prediction_dict_from_batches(
+        pred_batches=pred_batches,
+        target_batches=target_batches,
+        meta_records=meta_records,
+    )
 
 
 def save_checkpoint(
@@ -170,6 +189,54 @@ def collect_predictions(
     pred_arr = np.concatenate(preds, axis=0)[: int(max_windows)]
     target_arr = np.concatenate(targets, axis=0)[: int(max_windows)]
     meta_records = meta_records[: int(max_windows)]
+    return _prediction_dict_from_arrays(pred_arr, target_arr, meta_records, pred_key=pred_key, target_key=target_key)
+
+
+def _append_prediction_batch(
+    *,
+    pred_batches: list[np.ndarray],
+    target_batches: list[np.ndarray],
+    meta_records: list[dict[str, Any]],
+    batch: Mapping[str, Any],
+    raw_pred: Any,
+) -> None:
+    if "meta" not in batch:
+        raise KeyError("batch 必须包含 meta")
+    pred = _waveform_output(raw_pred).detach().cpu().numpy()
+    target = batch["target"].detach().cpu().numpy()
+    pred_batches.append(pred)
+    target_batches.append(target)
+    for idx in range(pred.shape[0]):
+        meta_records.append(_extract_meta(batch["meta"], idx))
+
+
+def _prediction_dict_from_batches(
+    *,
+    pred_batches: list[np.ndarray],
+    target_batches: list[np.ndarray],
+    meta_records: list[dict[str, Any]],
+    pred_key: str = "r_tho_hat",
+    target_key: str = "tho_ref",
+) -> dict[str, np.ndarray]:
+    if not pred_batches:
+        raise RuntimeError("没有可收集的预测窗口")
+    return _prediction_dict_from_arrays(
+        np.concatenate(pred_batches, axis=0),
+        np.concatenate(target_batches, axis=0),
+        meta_records,
+        pred_key=pred_key,
+        target_key=target_key,
+    )
+
+
+def _prediction_dict_from_arrays(
+    pred_arr: np.ndarray,
+    target_arr: np.ndarray,
+    meta_records: list[dict[str, Any]],
+    *,
+    pred_key: str,
+    target_key: str,
+) -> dict[str, np.ndarray]:
     output = {
         pred_key: pred_arr,
         target_key: target_arr,

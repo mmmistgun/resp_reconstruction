@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from resp_train.experiments.selection import TASK_SELECTION_COLUMNS
 import scripts.eval_topk_checkpoints as topk
 
 
@@ -112,6 +113,10 @@ def test_command_for_spec_can_pass_metric_workers(tmp_path):
         "4",
         "--metrics-chunk-size",
         "64",
+        "--target-workers",
+        "4",
+        "--target-chunk-size",
+        "64",
         "--target-cache-dir",
         str(tmp_path / "topk_target_cache"),
         "--set",
@@ -169,6 +174,10 @@ def test_summarize_topk_results_selects_best_rank_by_task_metrics(tmp_path):
     assert best_frame.iloc[0]["rr_peak_band_abs_error_mean"] == 0.3
     assert best_frame.iloc[0]["frac_gt_1"] == 0.0
     assert best_frame.iloc[0]["seed"] == 20260700
+
+
+def test_topk_selection_columns_reuse_training_task_selection_contract():
+    assert topk.SELECTION_COLUMNS == list(TASK_SELECTION_COLUMNS)
 
 
 def test_output_paths_default_to_runs_root_name(tmp_path):

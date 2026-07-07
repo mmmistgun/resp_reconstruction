@@ -76,6 +76,7 @@ class BaseExperiment:
         total_epochs = int(self.cfg.training.epochs)
         checkpoint_top_k = max(1, int(self.cfg.training.get("checkpoint_top_k", 3)))
         top_checkpoints: list[dict[str, Any]] = []
+        collect_epoch_predictions = self.epoch_metrics_enabled()
 
         # 训练循环只关注通用 loss，不包含具体任务指标或数据逻辑。
         for epoch in range(1, total_epochs + 1):
@@ -93,7 +94,7 @@ class BaseExperiment:
                 epoch=epoch,
                 total_epochs=total_epochs,
             )
-            val_metrics = validate(
+            val_result = validate(
                 model,
                 data.val_loader,
                 loss_fn,
@@ -101,7 +102,13 @@ class BaseExperiment:
                 show_progress=show_progress,
                 epoch=epoch,
                 total_epochs=total_epochs,
+                return_predictions=collect_epoch_predictions,
             )
+            if collect_epoch_predictions:
+                val_metrics, val_predictions = val_result
+            else:
+                val_metrics = val_result
+                val_predictions = None
             record = {
                 "epoch": epoch,
                 "train_loss": train_metrics["loss"],
@@ -109,6 +116,15 @@ class BaseExperiment:
                 **{f"train_{k}": v for k, v in train_metrics.items() if k != "loss"},
                 **{f"val_{k}": v for k, v in val_metrics.items() if k != "loss"},
             }
+            if val_predictions is not None:
+                record.update(
+                    self.evaluate_epoch_metrics(
+                        predictions=val_predictions,
+                        run_dir=run_dir,
+                        epoch=epoch,
+                        show_progress=friendly_output,
+                    )
+                )
             record["checkpoint_gate_passed"] = self._checkpoint_gate_allows(record)
 
             improved = record["val_loss"] < (best_loss - min_delta)
@@ -121,6 +137,7 @@ class BaseExperiment:
                 stale_epochs += 1
 
             history_records.append(record)
+            pd.DataFrame(history_records).to_csv(run_dir / "train_history.csv", index=False)
             logger.info(
                 self._format_epoch_log(
                     record,
@@ -165,6 +182,13 @@ class BaseExperiment:
                     record=record,
                     top_k=checkpoint_top_k,
                 )
+            self.update_task_checkpoints(
+                run_dir=run_dir,
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch,
+                record=record,
+            )
             if not improved and patience > 0 and stale_epochs >= patience:
                 logger.info("early_stop epoch=%s best_epoch=%s best_val_loss=%.6f", epoch, best_epoch, best_loss)
                 break
@@ -178,7 +202,9 @@ class BaseExperiment:
                 "请放宽 gate 或检查方向约束。"
             )
         # 最终评价统一基于验证集最优模型，避免使用最后一个 epoch 的权重。
-        checkpoint = torch.load(run_dir / "checkpoint.pt", map_location=device)
+        final_checkpoint = self.final_checkpoint_path(run_dir)
+        logger.info("final_checkpoint=%s", final_checkpoint.name)
+        checkpoint = torch.load(final_checkpoint, map_location=device)
         model.load_state_dict(checkpoint["model_state_dict"])
         self.evaluate_best(model, data, run_dir)
         return run_dir
@@ -208,6 +234,33 @@ class BaseExperiment:
 
     def evaluate_best(self, model: torch.nn.Module, data: ExperimentData, run_dir: Path) -> None:
         raise NotImplementedError
+
+    def final_checkpoint_path(self, run_dir: Path) -> Path:
+        return run_dir / "checkpoint.pt"
+
+    def epoch_metrics_enabled(self) -> bool:
+        return False
+
+    def evaluate_epoch_metrics(
+        self,
+        *,
+        predictions: dict[str, Any],
+        run_dir: Path,
+        epoch: int,
+        show_progress: bool,
+    ) -> dict[str, float]:
+        return {}
+
+    def update_task_checkpoints(
+        self,
+        *,
+        run_dir: Path,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        epoch: int,
+        record: dict[str, Any],
+    ) -> None:
+        return None
 
     def _format_epoch_log(
         self,

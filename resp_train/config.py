@@ -76,3 +76,7 @@ def _validate_config(cfg: Any) -> None:
     lr_scheduler = OmegaConf.select(cfg, "training.lr_scheduler")
     if lr_scheduler not in lr_schedulers:
         raise ValueError(f"training.lr_scheduler 必须是 {sorted(lr_schedulers)} 之一，当前为: {lr_scheduler}")
+
+    final_checkpoint = OmegaConf.select(cfg, "training.final_checkpoint")
+    if final_checkpoint is not None and final_checkpoint not in {"val_loss", "best_rr", "best_task"}:
+        raise ValueError("training.final_checkpoint 必须是 val_loss/best_rr/best_task 之一")

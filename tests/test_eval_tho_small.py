@@ -27,6 +27,10 @@ def test_eval_tho_small_cli_passes_chunk_and_cache_args(monkeypatch, tmp_path: P
             "4",
             "--metrics-chunk-size",
             "64",
+            "--target-workers",
+            "3",
+            "--target-chunk-size",
+            "32",
             "--target-cache-dir",
             str(tmp_path / "target_cache"),
             "--set",
@@ -43,6 +47,8 @@ def test_eval_tho_small_cli_passes_chunk_and_cache_args(monkeypatch, tmp_path: P
         "overrides": ["training.device=cuda:1"],
         "metrics_workers": 4,
         "metrics_chunk_size": 64,
+        "target_workers": 3,
+        "target_chunk_size": 32,
         "target_cache_dir": tmp_path / "target_cache",
     }
     assert "写出指标" in capsys.readouterr().out
