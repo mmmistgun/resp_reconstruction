@@ -314,6 +314,25 @@ def best_lag_correlation_from_filtered(
     return {"best_lag_corr": float(best_corr), "best_lag_sec": float(best_lag_samples / fs)}
 
 
+def lag_aligned_overlap(pred: np.ndarray, target: np.ndarray, *, lag_samples: int) -> tuple[np.ndarray, np.ndarray]:
+    """按 best-lag 约定返回重叠切片；正 lag 表示 pred 相对 target 滞后。"""
+
+    pred_x = _as_1d_float(pred)
+    target_x = _as_1d_float(target)
+    if pred_x.shape != target_x.shape:
+        raise ValueError(f"pred 和 target 长度必须一致，当前 {pred_x.shape} != {target_x.shape}")
+    lag = int(lag_samples)
+    n_samples = int(pred_x.size)
+    if abs(lag) >= n_samples:
+        return pred_x[:0], target_x[:0]
+    if lag > 0:
+        return pred_x[lag:n_samples], target_x[: n_samples - lag]
+    if lag < 0:
+        lead = -lag
+        return pred_x[: n_samples - lead], target_x[lead:n_samples]
+    return pred_x, target_x
+
+
 def _prefix_sums(x: np.ndarray) -> np.ndarray:
     """返回前缀和，首元素为 0，便于 O(1) 计算任意半开区间求和。"""
     return np.concatenate(([0.0], np.cumsum(np.asarray(x, dtype=np.float64))))
@@ -524,20 +543,123 @@ def zero_crossing_count(signal: np.ndarray, *, edge: str = "cycle") -> int:
     `cycle` 同时利用上升与下降过零，并取平均后的整数，减少窗口边界只截到半个
     呼吸周期时的方向偏差。
     """
-    x = _as_1d_float(signal)
-    if x.size < 2:
-        return 0
     edge_name = str(edge).lower()
-    up = int(np.count_nonzero((x[:-1] <= 0.0) & (x[1:] > 0.0)))
-    down = int(np.count_nonzero((x[:-1] >= 0.0) & (x[1:] < 0.0)))
+    counts = zero_crossing_counts(signal)
     if edge_name in {"cycle", "both", "breath"}:
-        return int(np.floor(((up + down) / 2.0) + 0.5))
+        return counts["cycle"]
     if edge_name in {"up", "rising", "rise"}:
-        return up
+        return counts["up"]
     if edge_name in {"down", "falling", "fall"}:
-        return down
+        return counts["down"]
     else:
         raise ValueError(f"未知过零方向: {edge!r}，可选: cycle, up, down")
+
+
+def zero_crossing_counts(signal: np.ndarray) -> dict[str, int]:
+    """同时返回上升、下降和 cycle 口径的过零呼吸次数。"""
+
+    x = _as_1d_float(signal)
+    if x.size < 2:
+        return {"up": 0, "down": 0, "cycle": 0}
+    up = int(np.count_nonzero((x[:-1] <= 0.0) & (x[1:] > 0.0)))
+    down = int(np.count_nonzero((x[:-1] >= 0.0) & (x[1:] < 0.0)))
+    cycle = int(np.floor(((up + down) / 2.0) + 0.5))
+    return {"up": up, "down": down, "cycle": cycle}
+
+
+def local_rr_metrics(
+    pred: np.ndarray,
+    target: np.ndarray,
+    *,
+    fs: float,
+    window_sec: float = 20.0,
+    step_sec: float = 5.0,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+) -> dict[str, float]:
+    """用滑动窗口 robust peak RR 曲线评估局部呼吸率一致性。"""
+
+    pred_x = _as_1d_float(pred)
+    target_x = _as_1d_float(target)
+    if pred_x.shape != target_x.shape:
+        raise ValueError(f"pred 和 target 长度必须一致，当前 {pred_x.shape} != {target_x.shape}")
+    fs = float(fs)
+    window_sec = float(window_sec)
+    step_sec = float(step_sec)
+    if fs <= 0:
+        raise ValueError(f"fs 必须为正数，当前={fs}")
+    if window_sec <= 0:
+        raise ValueError(f"window_sec 必须为正数，当前={window_sec}")
+    if step_sec <= 0:
+        raise ValueError(f"step_sec 必须为正数，当前={step_sec}")
+
+    pred_arr = local_rr_rate_trace(pred_x, fs=fs, window_sec=window_sec, step_sec=step_sec, low_hz=low_hz, high_hz=high_hz)
+    target_arr = local_rr_rate_trace(
+        target_x,
+        fs=fs,
+        window_sec=window_sec,
+        step_sec=step_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    return local_rr_metrics_from_rate_traces(pred_arr, target_arr)
+
+
+def local_rr_rate_trace(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    window_sec: float = 20.0,
+    step_sec: float = 5.0,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+) -> np.ndarray:
+    """返回滑动窗口 robust peak RR 序列，便于复用 target 侧计算。"""
+
+    x = _as_1d_float(signal)
+    fs = float(fs)
+    window_sec = float(window_sec)
+    step_sec = float(step_sec)
+    if fs <= 0:
+        raise ValueError(f"fs 必须为正数，当前={fs}")
+    if window_sec <= 0:
+        raise ValueError(f"window_sec 必须为正数，当前={window_sec}")
+    if step_sec <= 0:
+        raise ValueError(f"step_sec 必须为正数，当前={step_sec}")
+
+    n_samples = int(x.size)
+    window_samples = min(n_samples, max(2, int(round(window_sec * fs))))
+    step_samples = max(1, int(round(step_sec * fs)))
+    starts = list(range(0, n_samples - window_samples + 1, step_samples))
+    if not starts:
+        starts = [0]
+    last_start = n_samples - window_samples
+    if starts[-1] != last_start:
+        starts.append(last_start)
+
+    rates: list[float] = []
+    for start in starts:
+        end = start + window_samples
+        rates.append(estimate_robust_peak_rate_bpm(x[start:end], fs=fs, low_hz=low_hz, high_hz=high_hz))
+    return np.asarray(rates, dtype=np.float64)
+
+
+def local_rr_metrics_from_rate_traces(pred_rates: np.ndarray, target_rates: np.ndarray) -> dict[str, float]:
+    """复用已计算的局部 RR 序列计算局部 RR 指标。"""
+
+    pred_arr = np.asarray(pred_rates, dtype=np.float64).reshape(-1)
+    target_arr = np.asarray(target_rates, dtype=np.float64).reshape(-1)
+    if pred_arr.shape != target_arr.shape:
+        raise ValueError(f"pred 和 target 局部 RR 数量必须一致，当前 {pred_arr.shape} != {target_arr.shape}")
+    valid = np.isfinite(pred_arr) & np.isfinite(target_arr)
+    valid_frac = float(np.mean(valid)) if valid.size else float("nan")
+    if not np.any(valid):
+        return {"local_rr_mae": float("nan"), "local_rr_corr": float("nan"), "local_rr_valid_frac": valid_frac}
+    pred_valid = pred_arr[valid]
+    target_valid = target_arr[valid]
+    mae = float(np.mean(np.abs(pred_valid - target_valid)))
+    corr = _corrcoef_or_nan(pred_valid, target_valid) if pred_valid.size >= 2 else float("nan")
+    return {"local_rr_mae": mae, "local_rr_corr": corr, "local_rr_valid_frac": valid_frac}
 
 
 def spectrum_similarity(

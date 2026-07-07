@@ -10,9 +10,12 @@ from resp_train.metrics.signal import (
     estimate_peak_rate_bpm,
     estimate_robust_peak_rate_bpm,
     estimate_spectral_rate_bpm,
+    lag_aligned_overlap,
+    local_rr_metrics,
     relative_envelope_metrics,
     rms_envelope,
     spectrum_similarity,
+    zero_crossing_counts,
 )
 
 
@@ -107,6 +110,56 @@ def test_relative_envelope_metrics_拒绝非正包络窗口():
 def test_relative_envelope_metrics_拒绝非正趋势窗口():
     with pytest.raises(ValueError, match="trend_window_sec 必须为正数"):
         relative_envelope_metrics(np.ones(10), np.ones(10), fs=100.0, trend_window_sec=0.0)
+
+
+def test_lag_aligned_overlap_uses_same_positive_lag_convention_as_best_lag():
+    pred = np.arange(10, dtype=np.float64) + 100.0
+    target = np.arange(10, dtype=np.float64)
+
+    pred_overlap, target_overlap = lag_aligned_overlap(pred, target, lag_samples=3)
+
+    np.testing.assert_array_equal(pred_overlap, pred[3:])
+    np.testing.assert_array_equal(target_overlap, target[:-3])
+
+
+def test_lag_aligned_overlap_uses_same_negative_lag_convention_as_best_lag():
+    pred = np.arange(10, dtype=np.float64) + 100.0
+    target = np.arange(10, dtype=np.float64)
+
+    pred_overlap, target_overlap = lag_aligned_overlap(pred, target, lag_samples=-2)
+
+    np.testing.assert_array_equal(pred_overlap, pred[:-2])
+    np.testing.assert_array_equal(target_overlap, target[2:])
+
+
+def test_zero_crossing_counts_reports_up_down_and_cycle_counts():
+    signal = np.asarray([-1.0, 1.0, -1.0, 1.0, -1.0])
+
+    counts = zero_crossing_counts(signal)
+
+    assert counts == {"up": 2, "down": 2, "cycle": 2}
+
+
+def test_local_rr_metrics_tracks_same_local_rate_curve():
+    fs = 100.0
+    first = _sine(0.20, fs, 60.0)
+    second = _sine(0.32, fs, 60.0)
+    target = np.concatenate([first, second])
+    pred = target.copy()
+
+    metrics = local_rr_metrics(
+        pred,
+        target,
+        fs=fs,
+        window_sec=20.0,
+        step_sec=5.0,
+        low_hz=0.05,
+        high_hz=0.7,
+    )
+
+    assert metrics["local_rr_mae"] < 0.1
+    assert metrics["local_rr_valid_frac"] == 1.0
+    assert metrics["local_rr_corr"] > 0.99
 
 
 def test_spectral_rate_识别正弦主频():

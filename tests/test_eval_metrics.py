@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from resp_train.engine.train import collect_predictions, save_checkpoint
 import resp_train.metrics.evaluate as evaluate_module
-from resp_train.metrics.evaluate import evaluate_prediction_dict
+from resp_train.metrics.evaluate import build_target_feature_cache, evaluate_prediction_dict
 import resp_train.metrics.signal as signal_module
 from scripts.eval_tho_small import _resolve_config_path, _validate_checkpoint_config
 
@@ -59,6 +59,12 @@ def test_evaluate_prediction_dict_returns_window_metrics():
     assert frame.loc[0, "band_limited_corr"] > 0.99
     assert frame.loc[0, "best_lag_corr"] > 0.99
     assert abs(frame.loc[0, "best_lag_sec"]) < 1e-6
+    assert frame.loc[0, "best_lag_corr_4s"] > 0.99
+    assert abs(frame.loc[0, "best_lag_sec_4s"]) < 1e-6
+    assert frame.loc[0, "relative_envelope_corr_lag4s"] > 0.99
+    assert frame.loc[0, "relative_envelope_mae_lag4s"] < 0.01
+    assert frame.loc[0, "local_rr_mae"] < 0.1
+    assert frame.loc[0, "local_rr_valid_frac"] == 1.0
 
 
 def test_evaluate_prediction_dict_reports_bandpassed_peak_rate_for_spiky_prediction():
@@ -119,6 +125,27 @@ def test_evaluate_prediction_dict_reports_best_lag_for_shifted_prediction():
     assert abs(frame.loc[0, "best_lag_sec"] - 0.5) < 1 / fs
 
 
+def test_evaluate_prediction_dict_reports_four_second_lag_metrics_for_large_shift():
+    fs = 100
+    target = _modulated_breath_signal(fs, 100.0).astype(np.float32)
+    delay_samples = int(round(2.0 * fs))
+    pred = np.zeros_like(target)
+    pred[delay_samples:] = target[:-delay_samples]
+    cfg = _cfg()
+    cfg.evaluation = {"max_lag_sec": 1.0, "lag_bandpass_order": 4}
+    preds = {
+        "r_tho_hat": pred.reshape(1, 1, -1),
+        "tho_ref": target.reshape(1, 1, -1),
+    }
+
+    frame = evaluate_prediction_dict(preds, cfg, method="model")
+
+    assert abs(frame.loc[0, "best_lag_sec_4s"] - 2.0) < 1 / fs
+    assert frame.loc[0, "best_lag_corr_4s"] > 0.99
+    assert frame.loc[0, "relative_envelope_corr_lag4s"] > frame.loc[0, "relative_envelope_corr"]
+    assert frame.loc[0, "relative_envelope_mae_lag4s"] < frame.loc[0, "relative_envelope_mae"]
+
+
 def test_evaluate_prediction_dict_reports_bandpassed_zero_crossing_breath_counts():
     fs = 100
     t = np.arange(0, 60, 1 / fs)
@@ -133,6 +160,10 @@ def test_evaluate_prediction_dict_reports_bandpassed_zero_crossing_breath_counts
 
     assert frame.loc[0, "pred_breath_count_zero_cross"] == 18
     assert frame.loc[0, "target_breath_count_zero_cross"] == 15
+    assert frame.loc[0, "pred_breath_count_zero_cross_up"] == 18
+    assert frame.loc[0, "target_breath_count_zero_cross_up"] == 15
+    assert frame.loc[0, "pred_breath_count_zero_cross_down"] == 17
+    assert frame.loc[0, "target_breath_count_zero_cross_down"] == 14
     assert frame.loc[0, "breath_count_zero_cross_abs_error"] == 3
 
 
@@ -291,6 +322,46 @@ def test_evaluate_prediction_dict_reuses_band_distributions_per_window(monkeypat
     evaluate_prediction_dict(preds, _cfg(), method="model")
 
     assert len(calls) == 4
+
+
+def test_evaluate_prediction_dict_uses_target_feature_cache_without_changing_metrics(monkeypatch):
+    fs = 100
+    t = np.arange(0, 80, 1 / fs)
+    target = _modulated_breath_signal(fs, 80.0).astype(np.float32)
+    pred_a = target.copy()
+    pred_b = (np.roll(target, 20) + 0.05 * np.sin(2 * np.pi * 0.6 * t)).astype(np.float32)
+    preds = {
+        "r_tho_hat": np.stack([pred_a, pred_b]).reshape(2, 1, -1),
+        "tho_ref": np.stack([target, target]).reshape(2, 1, -1),
+        "dataset_row_id": np.asarray([1, 2]),
+    }
+    cfg = _cfg()
+    baseline = evaluate_prediction_dict(preds, cfg, method="model")
+    target_features = build_target_feature_cache(preds, cfg)
+
+    bandpass_calls = 0
+    distribution_calls = 0
+    original_bandpass = signal_module.bandpass_filter
+    original_distribution = signal_module.band_distribution
+
+    def counted_bandpass(signal, *, fs, low_hz, high_hz, order=4):
+        nonlocal bandpass_calls
+        bandpass_calls += 1
+        return original_bandpass(signal, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+
+    def counted_distribution(signal, *, fs, low_hz=0.05, high_hz=0.7):
+        nonlocal distribution_calls
+        distribution_calls += 1
+        return original_distribution(signal, fs=fs, low_hz=low_hz, high_hz=high_hz)
+
+    monkeypatch.setattr(evaluate_module, "bandpass_filter", counted_bandpass, raising=False)
+    monkeypatch.setattr(evaluate_module, "band_distribution", counted_distribution, raising=False)
+
+    cached = evaluate_prediction_dict(preds, cfg, method="model", target_features=target_features)
+
+    pd.testing.assert_frame_equal(baseline, cached, check_exact=False, rtol=1e-10, atol=1e-10)
+    assert bandpass_calls == 2
+    assert distribution_calls == 2
 
 
 class _MetaDataset(Dataset):

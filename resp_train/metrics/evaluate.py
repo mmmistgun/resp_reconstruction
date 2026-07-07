@@ -17,10 +17,14 @@ from resp_train.metrics.signal import (
     estimate_peak_rate_bpm,
     estimate_robust_peak_rate_bpm,
     estimate_spectral_rate_bpm_from_distribution,
+    lag_aligned_overlap,
+    local_rr_metrics,
+    local_rr_metrics_from_rate_traces,
+    local_rr_rate_trace,
     relative_envelope_metrics,
     rms_envelope,
     spectrum_similarity_from_distributions,
-    zero_crossing_count,
+    zero_crossing_counts,
 )
 
 
@@ -30,9 +34,12 @@ def evaluate_prediction_dict(
     *,
     method: str,
     show_progress: bool | None = None,
+    target_features: dict[str, np.ndarray] | None = None,
 ) -> pd.DataFrame:
     """将模型预测字典转换为逐窗口评价指标表。"""
     _validate_predictions(predictions)
+    if target_features is not None:
+        _validate_target_feature_cache(predictions, target_features)
     fs = float(cfg.window.target_fs)
     low_hz = float(cfg.loss.spectrum_low_hz)
     high_hz = float(cfg.loss.spectrum_high_hz)
@@ -41,6 +48,8 @@ def evaluate_prediction_dict(
     max_lag_sec = float(evaluation_cfg.get("max_lag_sec", 1.0))
     lag_bandpass_order = int(evaluation_cfg.get("lag_bandpass_order", 4))
     raw_peak_min_good_segment_sec = float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0))
+    local_rr_window_sec = float(evaluation_cfg.get("local_rr_window_sec", 20.0))
+    local_rr_step_sec = float(evaluation_cfg.get("local_rr_step_sec", 5.0))
     metric_workers = _metric_worker_count(evaluation_cfg)
 
     preds = np.asarray(predictions["r_tho_hat"])
@@ -62,6 +71,9 @@ def evaluate_prediction_dict(
             max_lag_sec=max_lag_sec,
             lag_bandpass_order=lag_bandpass_order,
             raw_peak_min_good_segment_sec=raw_peak_min_good_segment_sec,
+            local_rr_window_sec=local_rr_window_sec,
+            local_rr_step_sec=local_rr_step_sec,
+            target_feature=_target_feature_at(target_features, idx) if target_features is not None else None,
         )
 
     iterable = indices
@@ -90,6 +102,137 @@ def _metric_worker_count(evaluation_cfg: Any) -> int:
     return max(1, workers)
 
 
+def build_target_feature_cache(
+    predictions: dict[str, np.ndarray],
+    cfg: DictConfig,
+    *,
+    show_progress: bool | None = None,
+) -> dict[str, np.ndarray]:
+    """预计算只依赖 target/mask/eval 配置的逐窗口特征，用于多模型评价复用。"""
+
+    _validate_predictions(predictions)
+    fs = float(cfg.window.target_fs)
+    low_hz = float(cfg.loss.spectrum_low_hz)
+    high_hz = float(cfg.loss.spectrum_high_hz)
+    env_window = max(1, int(round(fs * float(cfg.loss.envelope_window_sec))))
+    evaluation_cfg = cfg.get("evaluation", {})
+    lag_bandpass_order = int(evaluation_cfg.get("lag_bandpass_order", 4))
+    raw_peak_min_good_segment_sec = float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0))
+    local_rr_window_sec = float(evaluation_cfg.get("local_rr_window_sec", 20.0))
+    local_rr_step_sec = float(evaluation_cfg.get("local_rr_step_sec", 5.0))
+
+    targets = np.asarray(predictions["tho_ref"])
+    records: list[dict[str, Any]] = []
+    indices = range(targets.shape[0])
+    progress = tqdm(
+        indices,
+        desc="compute target features",
+        leave=False,
+        disable=not _should_show_eval_progress(show_progress),
+    )
+    for idx in progress:
+        target = np.asarray(targets[idx], dtype=np.float64).reshape(-1)
+        rr_peak_valid_mask = _rr_peak_valid_mask(predictions, idx, expected_size=target.size)
+        target_env = rms_envelope(target, env_window)
+        target_band_distribution = band_distribution(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
+        target_rr_peak, target_rr_peak_segment_count = _estimate_masked_peak_rate_bpm(
+            target,
+            rr_peak_valid_mask,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            min_good_segment_sec=raw_peak_min_good_segment_sec,
+        )
+        target_filtered = bandpass_filter(
+            target,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            order=lag_bandpass_order,
+        )
+        target_rr_peak_band = estimate_peak_rate_bpm(
+            target_filtered,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
+        target_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
+            target_filtered,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
+        target_breath_count_zero_cross_counts = zero_crossing_counts(target_filtered)
+        records.append(
+            {
+                "target_env": target_env,
+                "target_band_freqs": target_band_distribution["freqs"],
+                "target_band_power": target_band_distribution["power"],
+                "target_rr_spec_bpm": estimate_spectral_rate_bpm_from_distribution(target_band_distribution),
+                "target_rr_peak_bpm": target_rr_peak,
+                "target_rr_peak_segment_count": target_rr_peak_segment_count,
+                "target_rr_peak_unmasked_bpm": estimate_peak_rate_bpm(
+                    target,
+                    fs=fs,
+                    distance_sec=2.0,
+                    low_hz=low_hz,
+                    high_hz=high_hz,
+                ),
+                "target_filtered": target_filtered,
+                "target_rr_peak_band_bpm": target_rr_peak_band,
+                "target_rr_peak_band_robust_bpm": target_rr_peak_band_robust,
+                "target_breath_count_zero_cross": target_breath_count_zero_cross_counts["cycle"],
+                "target_breath_count_zero_cross_up": target_breath_count_zero_cross_counts["up"],
+                "target_breath_count_zero_cross_down": target_breath_count_zero_cross_counts["down"],
+                "target_local_rr_rates": local_rr_rate_trace(
+                    target_filtered,
+                    fs=fs,
+                    window_sec=local_rr_window_sec,
+                    step_sec=local_rr_step_sec,
+                    low_hz=low_hz,
+                    high_hz=high_hz,
+                ),
+            }
+        )
+    if not records:
+        raise ValueError("target feature cache 不能为空")
+    return {key: np.stack([np.asarray(record[key]) for record in records], axis=0) for key in records[0]}
+
+
+def _validate_target_feature_cache(predictions: dict[str, np.ndarray], target_features: dict[str, np.ndarray]) -> None:
+    required = {
+        "target_env",
+        "target_band_freqs",
+        "target_band_power",
+        "target_rr_spec_bpm",
+        "target_rr_peak_bpm",
+        "target_rr_peak_unmasked_bpm",
+        "target_filtered",
+        "target_rr_peak_band_bpm",
+        "target_rr_peak_band_robust_bpm",
+        "target_breath_count_zero_cross",
+        "target_breath_count_zero_cross_up",
+        "target_breath_count_zero_cross_down",
+        "target_local_rr_rates",
+    }
+    missing = sorted(required - set(target_features))
+    if missing:
+        raise KeyError(f"target feature cache 缺少字段: {missing}")
+    n_windows = int(np.asarray(predictions["tho_ref"]).shape[0])
+    for key in required:
+        value = np.asarray(target_features[key])
+        if value.shape[:1] != (n_windows,):
+            raise ValueError(f"target feature cache 字段 {key} 第一维必须等于窗口数: {value.shape} vs {n_windows}")
+
+
+def _target_feature_at(target_features: dict[str, np.ndarray] | None, idx: int) -> dict[str, np.ndarray] | None:
+    if target_features is None:
+        return None
+    return {key: np.asarray(value)[idx] for key, value in target_features.items()}
+
+
 def _evaluate_one_window(
     idx: int,
     *,
@@ -105,16 +248,34 @@ def _evaluate_one_window(
     max_lag_sec: float,
     lag_bandpass_order: int,
     raw_peak_min_good_segment_sec: float,
+    local_rr_window_sec: float,
+    local_rr_step_sec: float,
+    target_feature: dict[str, np.ndarray] | None = None,
 ) -> dict[str, Any]:
     pred = np.asarray(preds[idx], dtype=np.float64).reshape(-1)
     target = np.asarray(targets[idx], dtype=np.float64).reshape(-1)
     rr_peak_valid_mask = _rr_peak_valid_mask(predictions, idx, expected_size=pred.size)
     pred_env = rms_envelope(pred, env_window)
-    target_env = rms_envelope(target, env_window)
+    target_env = (
+        np.asarray(target_feature["target_env"], dtype=np.float64).reshape(-1)
+        if target_feature is not None
+        else rms_envelope(target, env_window)
+    )
     pred_band_distribution = band_distribution(pred, fs=fs, low_hz=low_hz, high_hz=high_hz)
-    target_band_distribution = band_distribution(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    target_band_distribution = (
+        {
+            "freqs": np.asarray(target_feature["target_band_freqs"], dtype=np.float64).reshape(-1),
+            "power": np.asarray(target_feature["target_band_power"], dtype=np.float64).reshape(-1),
+        }
+        if target_feature is not None
+        else band_distribution(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    )
     pred_rr_spec = estimate_spectral_rate_bpm_from_distribution(pred_band_distribution)
-    target_rr_spec = estimate_spectral_rate_bpm_from_distribution(target_band_distribution)
+    target_rr_spec = (
+        float(target_feature["target_rr_spec_bpm"])
+        if target_feature is not None
+        else estimate_spectral_rate_bpm_from_distribution(target_band_distribution)
+    )
     pred_rr_peak_unmasked = estimate_peak_rate_bpm(
         pred,
         fs=fs,
@@ -122,12 +283,16 @@ def _evaluate_one_window(
         low_hz=low_hz,
         high_hz=high_hz,
     )
-    target_rr_peak_unmasked = estimate_peak_rate_bpm(
-        target,
-        fs=fs,
-        distance_sec=2.0,
-        low_hz=low_hz,
-        high_hz=high_hz,
+    target_rr_peak_unmasked = (
+        float(target_feature["target_rr_peak_unmasked_bpm"])
+        if target_feature is not None
+        else estimate_peak_rate_bpm(
+            target,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
     )
     pred_rr_peak, rr_peak_segment_count = _estimate_masked_peak_rate_bpm(
         pred,
@@ -138,14 +303,18 @@ def _evaluate_one_window(
         high_hz=high_hz,
         min_good_segment_sec=raw_peak_min_good_segment_sec,
     )
-    target_rr_peak, _ = _estimate_masked_peak_rate_bpm(
-        target,
-        rr_peak_valid_mask,
-        fs=fs,
-        distance_sec=2.0,
-        low_hz=low_hz,
-        high_hz=high_hz,
-        min_good_segment_sec=raw_peak_min_good_segment_sec,
+    target_rr_peak = (
+        float(target_feature["target_rr_peak_bpm"])
+        if target_feature is not None
+        else _estimate_masked_peak_rate_bpm(
+            target,
+            rr_peak_valid_mask,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            min_good_segment_sec=raw_peak_min_good_segment_sec,
+        )[0]
     )
     pred_filtered = bandpass_filter(
         pred,
@@ -154,12 +323,16 @@ def _evaluate_one_window(
         high_hz=high_hz,
         order=lag_bandpass_order,
     )
-    target_filtered = bandpass_filter(
-        target,
-        fs=fs,
-        low_hz=low_hz,
-        high_hz=high_hz,
-        order=lag_bandpass_order,
+    target_filtered = (
+        np.asarray(target_feature["target_filtered"], dtype=np.float64).reshape(-1)
+        if target_feature is not None
+        else bandpass_filter(
+            target,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            order=lag_bandpass_order,
+        )
     )
     pred_rr_peak_band = estimate_peak_rate_bpm(
         pred_filtered,
@@ -168,12 +341,16 @@ def _evaluate_one_window(
         low_hz=low_hz,
         high_hz=high_hz,
     )
-    target_rr_peak_band = estimate_peak_rate_bpm(
-        target_filtered,
-        fs=fs,
-        distance_sec=2.0,
-        low_hz=low_hz,
-        high_hz=high_hz,
+    target_rr_peak_band = (
+        float(target_feature["target_rr_peak_band_bpm"])
+        if target_feature is not None
+        else estimate_peak_rate_bpm(
+            target_filtered,
+            fs=fs,
+            distance_sec=2.0,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
     )
     pred_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
         pred_filtered,
@@ -181,14 +358,28 @@ def _evaluate_one_window(
         low_hz=low_hz,
         high_hz=high_hz,
     )
-    target_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
-        target_filtered,
-        fs=fs,
-        low_hz=low_hz,
-        high_hz=high_hz,
+    target_rr_peak_band_robust = (
+        float(target_feature["target_rr_peak_band_robust_bpm"])
+        if target_feature is not None
+        else estimate_robust_peak_rate_bpm(
+            target_filtered,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
     )
-    pred_breath_count_zero_cross = zero_crossing_count(pred_filtered)
-    target_breath_count_zero_cross = zero_crossing_count(target_filtered)
+    pred_breath_count_zero_cross_counts = zero_crossing_counts(pred_filtered)
+    target_breath_count_zero_cross_counts = (
+        {
+            "cycle": int(target_feature["target_breath_count_zero_cross"]),
+            "up": int(target_feature["target_breath_count_zero_cross_up"]),
+            "down": int(target_feature["target_breath_count_zero_cross_down"]),
+        }
+        if target_feature is not None
+        else zero_crossing_counts(target_filtered)
+    )
+    pred_breath_count_zero_cross = pred_breath_count_zero_cross_counts["cycle"]
+    target_breath_count_zero_cross = target_breath_count_zero_cross_counts["cycle"]
     rel_env = relative_envelope_metrics(
         pred,
         target,
@@ -201,6 +392,43 @@ def _evaluate_one_window(
         fs=fs,
         max_lag_sec=max_lag_sec,
         low_hz=low_hz,
+    )
+    lag4_metrics = best_lag_correlation_from_filtered(
+        pred_filtered,
+        target_filtered,
+        fs=fs,
+        max_lag_sec=4.0,
+        low_hz=low_hz,
+    )
+    rel_env_lag4 = _lag_aligned_relative_envelope_metrics(
+        pred,
+        target,
+        lag_sec=lag4_metrics["best_lag_sec"],
+        fs=fs,
+        envelope_window_sec=envelope_window_sec,
+    )
+    local_rr = (
+        local_rr_metrics_from_rate_traces(
+            local_rr_rate_trace(
+                pred_filtered,
+                fs=fs,
+                window_sec=local_rr_window_sec,
+                step_sec=local_rr_step_sec,
+                low_hz=low_hz,
+                high_hz=high_hz,
+            ),
+            np.asarray(target_feature["target_local_rr_rates"], dtype=np.float64).reshape(-1),
+        )
+        if target_feature is not None
+        else local_rr_metrics(
+            pred_filtered,
+            target_filtered,
+            fs=fs,
+            window_sec=local_rr_window_sec,
+            step_sec=local_rr_step_sec,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
     )
 
     return {
@@ -231,10 +459,16 @@ def _evaluate_one_window(
         ),
         "pred_breath_count_zero_cross": pred_breath_count_zero_cross,
         "target_breath_count_zero_cross": target_breath_count_zero_cross,
+        "pred_breath_count_zero_cross_up": pred_breath_count_zero_cross_counts["up"],
+        "target_breath_count_zero_cross_up": target_breath_count_zero_cross_counts["up"],
+        "pred_breath_count_zero_cross_down": pred_breath_count_zero_cross_counts["down"],
+        "target_breath_count_zero_cross_down": target_breath_count_zero_cross_counts["down"],
         "breath_count_zero_cross_abs_error": abs(pred_breath_count_zero_cross - target_breath_count_zero_cross),
         "envelope_corr": _corrcoef_or_nan(pred_env, target_env),
         "relative_envelope_corr": rel_env["relative_envelope_corr"],
         "relative_envelope_mae": rel_env["relative_envelope_mae"],
+        "relative_envelope_corr_lag4s": rel_env_lag4["relative_envelope_corr"],
+        "relative_envelope_mae_lag4s": rel_env_lag4["relative_envelope_mae"],
         "spectrum_similarity": spectrum_similarity_from_distributions(
             pred_band_distribution,
             target_band_distribution,
@@ -242,6 +476,11 @@ def _evaluate_one_window(
         "band_limited_corr": band_limited_corr_from_filtered(pred_filtered, target_filtered),
         "best_lag_corr": lag_metrics["best_lag_corr"],
         "best_lag_sec": lag_metrics["best_lag_sec"],
+        "best_lag_corr_4s": lag4_metrics["best_lag_corr"],
+        "best_lag_sec_4s": lag4_metrics["best_lag_sec"],
+        "local_rr_mae": local_rr["local_rr_mae"],
+        "local_rr_corr": local_rr["local_rr_corr"],
+        "local_rr_valid_frac": local_rr["local_rr_valid_frac"],
     }
 
 
@@ -277,6 +516,28 @@ def _corrcoef_or_nan(a: np.ndarray, b: np.ndarray) -> float:
     if np.std(a) <= 0 or np.std(b) <= 0:
         return float("nan")
     return float(np.corrcoef(a, b)[0, 1])
+
+
+def _lag_aligned_relative_envelope_metrics(
+    pred: np.ndarray,
+    target: np.ndarray,
+    *,
+    lag_sec: float,
+    fs: float,
+    envelope_window_sec: float,
+) -> dict[str, float]:
+    if not np.isfinite(lag_sec):
+        return {"relative_envelope_corr": float("nan"), "relative_envelope_mae": float("nan")}
+    lag_samples = int(round(float(lag_sec) * float(fs)))
+    pred_overlap, target_overlap = lag_aligned_overlap(pred, target, lag_samples=lag_samples)
+    if pred_overlap.size < 2 or target_overlap.size < 2:
+        return {"relative_envelope_corr": float("nan"), "relative_envelope_mae": float("nan")}
+    return relative_envelope_metrics(
+        pred_overlap,
+        target_overlap,
+        fs=fs,
+        envelope_window_sec=envelope_window_sec,
+    )
 
 
 def _abs_error_or_nan(a: float, b: float) -> float:
