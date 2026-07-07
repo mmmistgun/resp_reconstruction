@@ -111,16 +111,7 @@ def build_target_feature_cache(
     """预计算只依赖 target/mask/eval 配置的逐窗口特征，用于多模型评价复用。"""
 
     _validate_predictions(predictions)
-    fs = float(cfg.window.target_fs)
-    low_hz = float(cfg.loss.spectrum_low_hz)
-    high_hz = float(cfg.loss.spectrum_high_hz)
-    env_window = max(1, int(round(fs * float(cfg.loss.envelope_window_sec))))
-    evaluation_cfg = cfg.get("evaluation", {})
-    lag_bandpass_order = int(evaluation_cfg.get("lag_bandpass_order", 4))
-    raw_peak_min_good_segment_sec = float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0))
-    local_rr_window_sec = float(evaluation_cfg.get("local_rr_window_sec", 20.0))
-    local_rr_step_sec = float(evaluation_cfg.get("local_rr_step_sec", 5.0))
-
+    context = target_feature_context(cfg)
     targets = np.asarray(predictions["tho_ref"])
     records: list[dict[str, Any]] = []
     indices = range(targets.shape[0])
@@ -133,69 +124,101 @@ def build_target_feature_cache(
     for idx in progress:
         target = np.asarray(targets[idx], dtype=np.float64).reshape(-1)
         rr_peak_valid_mask = _rr_peak_valid_mask(predictions, idx, expected_size=target.size)
-        target_env = rms_envelope(target, env_window)
-        target_band_distribution = band_distribution(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
-        target_rr_peak, target_rr_peak_segment_count = _estimate_masked_peak_rate_bpm(
+        records.append(build_target_feature_record(target, rr_peak_valid_mask, context))
+    return stack_target_feature_records(records)
+
+
+def target_feature_context(cfg: DictConfig) -> dict[str, float | int]:
+    """提取 target-side 特征计算所需的标量配置，便于进程间传递。"""
+
+    fs = float(cfg.window.target_fs)
+    evaluation_cfg = cfg.get("evaluation", {})
+    return {
+        "fs": fs,
+        "low_hz": float(cfg.loss.spectrum_low_hz),
+        "high_hz": float(cfg.loss.spectrum_high_hz),
+        "env_window": max(1, int(round(fs * float(cfg.loss.envelope_window_sec)))),
+        "lag_bandpass_order": int(evaluation_cfg.get("lag_bandpass_order", 4)),
+        "raw_peak_min_good_segment_sec": float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0)),
+        "local_rr_window_sec": float(evaluation_cfg.get("local_rr_window_sec", 20.0)),
+        "local_rr_step_sec": float(evaluation_cfg.get("local_rr_step_sec", 5.0)),
+    }
+
+
+def build_target_feature_record(
+    target: np.ndarray,
+    rr_peak_valid_mask: np.ndarray,
+    context: dict[str, float | int],
+) -> dict[str, Any]:
+    """计算单个窗口的 target-only 特征；串行和 chunk 并行共用。"""
+
+    fs = float(context["fs"])
+    low_hz = float(context["low_hz"])
+    high_hz = float(context["high_hz"])
+    target_env = rms_envelope(target, int(context["env_window"]))
+    target_band_distribution = band_distribution(target, fs=fs, low_hz=low_hz, high_hz=high_hz)
+    target_rr_peak, target_rr_peak_segment_count = _estimate_masked_peak_rate_bpm(
+        target,
+        rr_peak_valid_mask,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        min_good_segment_sec=float(context["raw_peak_min_good_segment_sec"]),
+    )
+    target_filtered = bandpass_filter(
+        target,
+        fs=fs,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        order=int(context["lag_bandpass_order"]),
+    )
+    target_rr_peak_band = estimate_peak_rate_bpm(
+        target_filtered,
+        fs=fs,
+        distance_sec=2.0,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    target_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
+        target_filtered,
+        fs=fs,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    target_breath_count_zero_cross_counts = zero_crossing_counts(target_filtered)
+    return {
+        "target_env": target_env,
+        "target_band_freqs": target_band_distribution["freqs"],
+        "target_band_power": target_band_distribution["power"],
+        "target_rr_spec_bpm": estimate_spectral_rate_bpm_from_distribution(target_band_distribution),
+        "target_rr_peak_bpm": target_rr_peak,
+        "target_rr_peak_segment_count": target_rr_peak_segment_count,
+        "target_rr_peak_unmasked_bpm": estimate_peak_rate_bpm(
             target,
-            rr_peak_valid_mask,
             fs=fs,
             distance_sec=2.0,
             low_hz=low_hz,
             high_hz=high_hz,
-            min_good_segment_sec=raw_peak_min_good_segment_sec,
-        )
-        target_filtered = bandpass_filter(
-            target,
-            fs=fs,
-            low_hz=low_hz,
-            high_hz=high_hz,
-            order=lag_bandpass_order,
-        )
-        target_rr_peak_band = estimate_peak_rate_bpm(
+        ),
+        "target_filtered": target_filtered,
+        "target_rr_peak_band_bpm": target_rr_peak_band,
+        "target_rr_peak_band_robust_bpm": target_rr_peak_band_robust,
+        "target_breath_count_zero_cross": target_breath_count_zero_cross_counts["cycle"],
+        "target_breath_count_zero_cross_up": target_breath_count_zero_cross_counts["up"],
+        "target_breath_count_zero_cross_down": target_breath_count_zero_cross_counts["down"],
+        "target_local_rr_rates": local_rr_rate_trace(
             target_filtered,
             fs=fs,
-            distance_sec=2.0,
+            window_sec=float(context["local_rr_window_sec"]),
+            step_sec=float(context["local_rr_step_sec"]),
             low_hz=low_hz,
             high_hz=high_hz,
-        )
-        target_rr_peak_band_robust = estimate_robust_peak_rate_bpm(
-            target_filtered,
-            fs=fs,
-            low_hz=low_hz,
-            high_hz=high_hz,
-        )
-        target_breath_count_zero_cross_counts = zero_crossing_counts(target_filtered)
-        records.append(
-            {
-                "target_env": target_env,
-                "target_band_freqs": target_band_distribution["freqs"],
-                "target_band_power": target_band_distribution["power"],
-                "target_rr_spec_bpm": estimate_spectral_rate_bpm_from_distribution(target_band_distribution),
-                "target_rr_peak_bpm": target_rr_peak,
-                "target_rr_peak_segment_count": target_rr_peak_segment_count,
-                "target_rr_peak_unmasked_bpm": estimate_peak_rate_bpm(
-                    target,
-                    fs=fs,
-                    distance_sec=2.0,
-                    low_hz=low_hz,
-                    high_hz=high_hz,
-                ),
-                "target_filtered": target_filtered,
-                "target_rr_peak_band_bpm": target_rr_peak_band,
-                "target_rr_peak_band_robust_bpm": target_rr_peak_band_robust,
-                "target_breath_count_zero_cross": target_breath_count_zero_cross_counts["cycle"],
-                "target_breath_count_zero_cross_up": target_breath_count_zero_cross_counts["up"],
-                "target_breath_count_zero_cross_down": target_breath_count_zero_cross_counts["down"],
-                "target_local_rr_rates": local_rr_rate_trace(
-                    target_filtered,
-                    fs=fs,
-                    window_sec=local_rr_window_sec,
-                    step_sec=local_rr_step_sec,
-                    low_hz=low_hz,
-                    high_hz=high_hz,
-                ),
-            }
-        )
+        ),
+    }
+
+
+def stack_target_feature_records(records: list[dict[str, Any]]) -> dict[str, np.ndarray]:
     if not records:
         raise ValueError("target feature cache 不能为空")
     return {key: np.stack([np.asarray(record[key]) for record in records], axis=0) for key in records[0]}
