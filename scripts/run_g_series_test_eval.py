@@ -96,6 +96,8 @@ def command_for_spec(
     output_dir: Path,
     python: str = sys.executable,
     metric_workers: int = 1,
+    metrics_chunk_size: int = 128,
+    target_cache_dir: Path | None = None,
 ) -> list[str]:
     metrics_output, summary_output, manifest_output = output_paths(spec, output_dir)
     command = [
@@ -109,15 +111,32 @@ def command_for_spec(
         str(summary_output),
         "--manifest-output",
         str(manifest_output),
-        "--set",
-        f"training.device={device}",
+        "--metrics-workers",
+        str(int(metric_workers)),
+        "--metrics-chunk-size",
+        str(int(metrics_chunk_size)),
     ]
-    if int(metric_workers) > 1:
-        command.extend(["--set", f"evaluation.metric_workers={int(metric_workers)}"])
+    if target_cache_dir is not None:
+        command.extend(["--target-cache-dir", str(target_cache_dir)])
+    command.extend(
+        [
+            "--set",
+            f"training.device={device}",
+        ]
+    )
     return command
 
 
-def manifest_row(spec: TestEvalSpec, device: str, output_dir: Path, launch_delay_sec: float) -> dict[str, str | int | float]:
+def manifest_row(
+    spec: TestEvalSpec,
+    device: str,
+    output_dir: Path,
+    launch_delay_sec: float,
+    *,
+    metric_workers: int,
+    metrics_chunk_size: int,
+    target_cache_dir: Path | None,
+) -> dict[str, str | int | float]:
     metrics_output, summary_output, manifest_output = output_paths(spec, output_dir)
     return {
         "tag": spec.tag,
@@ -125,6 +144,9 @@ def manifest_row(spec: TestEvalSpec, device: str, output_dir: Path, launch_delay
         "seed": int(spec.seed),
         "device": device,
         "launch_delay_sec": float(launch_delay_sec),
+        "metric_workers": int(metric_workers),
+        "metrics_chunk_size": int(metrics_chunk_size),
+        "target_cache_dir": "" if target_cache_dir is None else str(target_cache_dir),
         "checkpoint": str(spec.checkpoint),
         "metrics_output": str(metrics_output),
         "summary_output": str(summary_output),
@@ -132,7 +154,15 @@ def manifest_row(spec: TestEvalSpec, device: str, output_dir: Path, launch_delay
     }
 
 
-def write_manifest(path: Path, launch_plan: list[tuple[TestEvalSpec, str, float]], output_dir: Path) -> None:
+def write_manifest(
+    path: Path,
+    launch_plan: list[tuple[TestEvalSpec, str, float]],
+    output_dir: Path,
+    *,
+    metric_workers: int,
+    metrics_chunk_size: int,
+    target_cache_dir: Path | None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fp:
         writer = csv.DictWriter(
@@ -143,6 +173,9 @@ def write_manifest(path: Path, launch_plan: list[tuple[TestEvalSpec, str, float]
                 "seed",
                 "device",
                 "launch_delay_sec",
+                "metric_workers",
+                "metrics_chunk_size",
+                "target_cache_dir",
                 "checkpoint",
                 "metrics_output",
                 "summary_output",
@@ -150,7 +183,18 @@ def write_manifest(path: Path, launch_plan: list[tuple[TestEvalSpec, str, float]
             ],
         )
         writer.writeheader()
-        writer.writerows(manifest_row(spec, device, output_dir, delay) for spec, device, delay in launch_plan)
+        writer.writerows(
+            manifest_row(
+                spec,
+                device,
+                output_dir,
+                delay,
+                metric_workers=metric_workers,
+                metrics_chunk_size=metrics_chunk_size,
+                target_cache_dir=target_cache_dir,
+            )
+            for spec, device, delay in launch_plan
+        )
 
 
 def run_one(
@@ -159,6 +203,8 @@ def run_one(
     *,
     output_dir: Path,
     metric_workers: int,
+    metrics_chunk_size: int,
+    target_cache_dir: Path | None,
     launch_delay_sec: float,
 ) -> str:
     if float(launch_delay_sec) > 0.0:
@@ -166,7 +212,14 @@ def run_one(
         time.sleep(float(launch_delay_sec))
     print(f"start {spec.tag} device={device}", flush=True)
     subprocess.run(
-        command_for_spec(spec, device, output_dir=output_dir, metric_workers=metric_workers),
+        command_for_spec(
+            spec,
+            device,
+            output_dir=output_dir,
+            metric_workers=metric_workers,
+            metrics_chunk_size=metrics_chunk_size,
+            target_cache_dir=target_cache_dir,
+        ),
         check=True,
     )
     print(f"done {spec.tag}", flush=True)
@@ -179,6 +232,8 @@ def run_eval(
     output_dir: Path,
     max_parallel: int,
     metric_workers: int,
+    metrics_chunk_size: int,
+    target_cache_dir: Path | None,
 ) -> None:
     if not launch_plan:
         print("no pending test eval tasks", flush=True)
@@ -192,6 +247,8 @@ def run_eval(
                 device,
                 output_dir=output_dir,
                 metric_workers=int(metric_workers),
+                metrics_chunk_size=int(metrics_chunk_size),
+                target_cache_dir=target_cache_dir,
                 launch_delay_sec=delay,
             )
             for spec, device, delay in launch_plan
@@ -207,7 +264,13 @@ def main() -> None:
     parser.add_argument("--manifest", default="", help="调度 manifest；默认写入 output-dir/g_series_test_eval_manifest.csv")
     parser.add_argument("--device", action="append", default=None, help="评价设备，可重复传入；默认 cuda:0 和 cuda:1")
     parser.add_argument("--max-parallel", type=int, default=2, help="总并发 test 进程数；两卡各一个时设为 2")
-    parser.add_argument("--metric-workers", type=int, default=4, help="每个 test 进程的指标线程数")
+    parser.add_argument("--metric-workers", type=int, default=4, help="每个 test 进程的 metrics chunk 进程数")
+    parser.add_argument("--metrics-chunk-size", type=int, default=128, help="metrics 并行时每个 CPU 任务处理的窗口数")
+    parser.add_argument(
+        "--target-cache-dir",
+        default="",
+        help="target-side feature cache 目录；默认 output-dir/target_feature_cache",
+    )
     parser.add_argument("--start-stagger-sec", type=float, default=0.0, help="按并发槽位错开启动秒数")
     parser.add_argument("--force", action="store_true", help="重新运行已存在完整输出的任务")
     parser.add_argument("--dry-run", action="store_true", help="只写调度 manifest 并打印计划")
@@ -217,11 +280,14 @@ def main() -> None:
         raise SystemExit("--max-parallel 必须 >= 1")
     if args.metric_workers < 1:
         raise SystemExit("--metric-workers 必须 >= 1")
+    if args.metrics_chunk_size < 1:
+        raise SystemExit("--metrics-chunk-size 必须 >= 1")
     if args.start_stagger_sec < 0:
         raise SystemExit("--start-stagger-sec 必须 >= 0")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    target_cache_dir = Path(args.target_cache_dir) if args.target_cache_dir else output_dir / "target_feature_cache"
     devices = resolve_devices(args.device)
     specs = pending_specs(load_specs(args.specs), output_dir=output_dir, force=bool(args.force))
     assignments = assign_devices(specs, devices)
@@ -231,7 +297,14 @@ def main() -> None:
         start_stagger_sec=float(args.start_stagger_sec),
     )
     manifest = Path(args.manifest) if args.manifest else output_dir / "g_series_test_eval_manifest.csv"
-    write_manifest(manifest, launch_plan, output_dir)
+    write_manifest(
+        manifest,
+        launch_plan,
+        output_dir,
+        metric_workers=int(args.metric_workers),
+        metrics_chunk_size=int(args.metrics_chunk_size),
+        target_cache_dir=target_cache_dir,
+    )
 
     if args.dry_run:
         for spec, device, delay in launch_plan:
@@ -244,6 +317,8 @@ def main() -> None:
         output_dir=output_dir,
         max_parallel=int(args.max_parallel),
         metric_workers=int(args.metric_workers),
+        metrics_chunk_size=int(args.metrics_chunk_size),
+        target_cache_dir=target_cache_dir,
     )
     print(f"manifest: {manifest} rows={len(launch_plan)}", flush=True)
     print(f"output_dir: {output_dir}", flush=True)

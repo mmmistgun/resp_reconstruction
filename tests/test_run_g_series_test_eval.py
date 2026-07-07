@@ -52,6 +52,8 @@ def test_command_for_spec_uses_test_eval_outputs_and_device(tmp_path: Path):
         output_dir=tmp_path,
         python="python",
         metric_workers=4,
+        metrics_chunk_size=64,
+        target_cache_dir=tmp_path / "target_feature_cache",
     )
 
     assert command == [
@@ -65,10 +67,14 @@ def test_command_for_spec_uses_test_eval_outputs_and_device(tmp_path: Path):
         str(tmp_path / "g0_time_only_20260700_test_summary.csv"),
         "--manifest-output",
         str(tmp_path / "g0_time_only_20260700_test_manifest.csv"),
+        "--metrics-workers",
+        "4",
+        "--metrics-chunk-size",
+        "64",
+        "--target-cache-dir",
+        str(tmp_path / "target_feature_cache"),
         "--set",
         "training.device=cuda:1",
-        "--set",
-        "evaluation.metric_workers=4",
     ]
 
 

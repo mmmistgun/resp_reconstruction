@@ -15,6 +15,7 @@ from resp_train.experiments.base import BaseExperiment, ExperimentData
 from resp_train.losses.weak import WeakSyncLoss
 from resp_train.metrics.baseline import evaluate_baseline_dataset
 from resp_train.metrics.evaluate import evaluate_prediction_dict
+from resp_train.metrics.parallel import evaluate_predictions_chunked, load_or_build_target_feature_cache
 from resp_train.models.registry import build_model
 from resp_train.utils.run import resolve_device
 
@@ -73,7 +74,15 @@ class ThoExperiment(BaseExperiment):
         if summary:
             logging.getLogger("resp_train").info(summary)
 
-    def evaluate_checkpoint(self, checkpoint_path: Path, *, metrics_output: Path | None) -> None:
+    def evaluate_checkpoint(
+        self,
+        checkpoint_path: Path,
+        *,
+        metrics_output: Path | None,
+        metrics_workers: int = 1,
+        metrics_chunk_size: int = 128,
+        target_cache_dir: str | Path | None = None,
+    ) -> None:
         device = self.device or resolve_device(str(self.cfg.training.device))
         model = self.build_model().to(device)
         checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -89,10 +98,19 @@ class ThoExperiment(BaseExperiment):
                 max_windows=len(val_data.dataset),
             )
             show_progress = self._friendly_output_enabled(self._resolve_show_progress())
-            evaluate_prediction_dict(
+            target_features = load_or_build_target_feature_cache(
+                eval_preds,
+                self.cfg,
+                cache_dir=target_cache_dir,
+                show_progress=show_progress,
+            )
+            evaluate_predictions_chunked(
                 eval_preds,
                 self.cfg,
                 method=str(self.cfg.model.name),
+                metrics_workers=int(metrics_workers),
+                metrics_chunk_size=int(metrics_chunk_size),
+                target_features=target_features,
                 show_progress=show_progress,
             ).to_csv(
                 metrics_output,
@@ -118,6 +136,9 @@ def evaluate_tho_checkpoint(
     config_path: str | Path | None,
     metrics_output_path: str | Path | None,
     overrides: list[str] | None = None,
+    metrics_workers: int = 1,
+    metrics_chunk_size: int = 128,
+    target_cache_dir: str | Path | None = None,
 ) -> Path:
     resolved_checkpoint = Path(checkpoint_path)
     resolved_config = _resolve_config_path(config_path, resolved_checkpoint)
@@ -126,6 +147,9 @@ def evaluate_tho_checkpoint(
     experiment.evaluate_checkpoint(
         resolved_checkpoint,
         metrics_output=Path(metrics_output_path) if metrics_output_path else None,
+        metrics_workers=int(metrics_workers),
+        metrics_chunk_size=int(metrics_chunk_size),
+        target_cache_dir=target_cache_dir,
     )
     return Path(metrics_output_path) if metrics_output_path else resolved_checkpoint.parent / "metrics.csv"
 

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from omegaconf import OmegaConf
 
 import scripts.eval_tho_test as eval_test
@@ -136,3 +137,102 @@ def test_evaluate_tho_test_checkpoint_writes_test_metrics_summary_and_manifest_w
     assert manifest.loc[0, "split"] == "test"
     assert manifest.loc[0, "n_windows"] == cfg.data.max_test_windows
     assert manifest.loc[0, "metrics_output"] == str(outputs.metrics)
+
+
+def test_summarize_test_metrics_includes_detail_metrics():
+    metrics = pd.DataFrame(
+        {
+            "rr_peak_band_robust_abs_error": [0.2, 0.6],
+            "breath_count_zero_cross_abs_error": [1.0, 3.0],
+            "relative_envelope_mae_lag4s": [0.1, 0.3],
+            "relative_envelope_corr_lag4s": [0.7, 0.9],
+            "band_limited_corr": [0.4, 0.8],
+            "best_lag_corr_4s": [0.6, 0.9],
+            "best_lag_sec_4s": [-2.0, 1.0],
+            "local_rr_mae": [0.4, 0.8],
+            "local_rr_corr": [0.5, 0.7],
+            "local_rr_valid_frac": [1.0, 0.5],
+        }
+    )
+
+    summary = eval_test.summarize_test_metrics(metrics, split="test", method="model")
+
+    assert summary.loc[0, "relative_envelope_mae_lag4s_mean"] == 0.2
+    assert summary.loc[0, "relative_envelope_corr_lag4s_median"] == 0.8
+    assert summary.loc[0, "best_lag_corr_4s_mean"] == 0.75
+    assert summary.loc[0, "best_lag_sec_4s_median"] == -0.5
+    assert summary.loc[0, "local_rr_mae_mean"] == pytest.approx(0.6)
+    assert summary.loc[0, "local_rr_corr_median"] == pytest.approx(0.6)
+    assert summary.loc[0, "local_rr_valid_frac_mean"] == 0.75
+
+
+def test_evaluate_predictions_chunked_matches_direct_metrics():
+    fs = 100
+    t = np.arange(0, 80, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t).astype(np.float32)
+    pred_a = target.copy()
+    pred_b = np.roll(target, 15).astype(np.float32)
+    preds = {
+        "r_tho_hat": np.stack([pred_a, pred_b, pred_a]).reshape(3, 1, -1),
+        "tho_ref": np.stack([target, target, target]).reshape(3, 1, -1),
+        "dataset_row_id": np.asarray([1, 2, 3]),
+    }
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": fs},
+            "loss": {
+                "envelope_window_sec": 2.0,
+                "spectrum_low_hz": 0.05,
+                "spectrum_high_hz": 0.7,
+            },
+            "evaluation": {"metric_workers": 1},
+        }
+    )
+
+    direct = eval_test.evaluate_prediction_dict(preds, cfg, method="model")
+    target_features = eval_test.build_target_feature_cache(preds, cfg)
+    chunked = eval_test.evaluate_predictions_chunked(
+        preds,
+        cfg,
+        method="model",
+        metrics_workers=2,
+        metrics_chunk_size=1,
+        target_features=target_features,
+        show_progress=False,
+    )
+
+    pd.testing.assert_frame_equal(direct, chunked, check_exact=False, rtol=1e-10, atol=1e-10)
+
+
+def test_target_feature_cache_round_trips_through_file(tmp_path: Path, monkeypatch):
+    fs = 100
+    t = np.arange(0, 80, 1 / fs)
+    target = np.sin(2 * np.pi * 0.25 * t).astype(np.float32)
+    preds = {
+        "r_tho_hat": np.stack([target]).reshape(1, 1, -1),
+        "tho_ref": np.stack([target]).reshape(1, 1, -1),
+        "dataset_row_id": np.asarray([1]),
+    }
+    cfg = OmegaConf.create(
+        {
+            "window": {"target_fs": fs},
+            "loss": {
+                "envelope_window_sec": 2.0,
+                "spectrum_low_hz": 0.05,
+                "spectrum_high_hz": 0.7,
+            },
+            "evaluation": {"metric_workers": 1},
+        }
+    )
+    cache_dir = tmp_path / "target_cache"
+    first = eval_test.load_or_build_target_feature_cache(preds, cfg, cache_dir=cache_dir, show_progress=False)
+
+    def fail_build(*args, **kwargs):
+        raise AssertionError("cache hit should not rebuild target features")
+
+    monkeypatch.setattr(eval_test, "build_target_feature_cache", fail_build)
+    second = eval_test.load_or_build_target_feature_cache(preds, cfg, cache_dir=cache_dir, show_progress=False)
+
+    assert list(cache_dir.glob("*.npz"))
+    for key, value in first.items():
+        np.testing.assert_array_equal(value, second[key])

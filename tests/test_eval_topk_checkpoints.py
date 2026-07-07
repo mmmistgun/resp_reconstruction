@@ -90,7 +90,14 @@ def test_command_for_spec_can_pass_metric_workers(tmp_path):
     run_dir = _make_run(tmp_path)
     spec = topk.discover_eval_specs(tmp_path, top_k=3, force=False)[0]
 
-    cmd = topk.command_for_spec(spec, "cuda:1", python="python", metric_workers=4)
+    cmd = topk.command_for_spec(
+        spec,
+        "cuda:1",
+        python="python",
+        metric_workers=4,
+        metrics_chunk_size=64,
+        target_cache_dir=tmp_path / "topk_target_cache",
+    )
 
     assert cmd == [
         "python",
@@ -101,10 +108,14 @@ def test_command_for_spec_can_pass_metric_workers(tmp_path):
         str(run_dir / "config.yaml"),
         "--metrics-output",
         str(run_dir / "metrics_top1.csv"),
+        "--metrics-workers",
+        "4",
+        "--metrics-chunk-size",
+        "64",
+        "--target-cache-dir",
+        str(tmp_path / "topk_target_cache"),
         "--set",
         "training.device=cuda:1",
-        "--set",
-        "evaluation.metric_workers=4",
     ]
 
 

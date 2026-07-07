@@ -131,6 +131,8 @@ def command_for_spec(
     *,
     python: str = sys.executable,
     metric_workers: int | None = None,
+    metrics_chunk_size: int = 128,
+    target_cache_dir: Path | None = None,
 ) -> list[str]:
     """生成单个 checkpoint 评价命令。"""
 
@@ -143,15 +145,30 @@ def command_for_spec(
         str(spec.config_path),
         "--metrics-output",
         str(spec.metrics_output),
-        "--set",
-        f"training.device={device}",
     ]
-    if metric_workers is not None and int(metric_workers) > 1:
-        command.extend(["--set", f"evaluation.metric_workers={int(metric_workers)}"])
+    if metric_workers is not None:
+        command.extend(["--metrics-workers", str(int(metric_workers))])
+        command.extend(["--metrics-chunk-size", str(int(metrics_chunk_size))])
+    if target_cache_dir is not None:
+        command.extend(["--target-cache-dir", str(target_cache_dir)])
+    command.extend(
+        [
+            "--set",
+            f"training.device={device}",
+        ]
+    )
     return command
 
 
-def manifest_row(spec: EvalSpec, device: str, launch_delay_sec: float = 0.0) -> dict[str, str | int | float]:
+def manifest_row(
+    spec: EvalSpec,
+    device: str,
+    launch_delay_sec: float = 0.0,
+    *,
+    metric_workers: int | None = None,
+    metrics_chunk_size: int = 128,
+    target_cache_dir: Path | None = None,
+) -> dict[str, str | int | float]:
     return {
         "tag": spec.tag,
         "arm_slug": spec.arm_slug,
@@ -160,6 +177,9 @@ def manifest_row(spec: EvalSpec, device: str, launch_delay_sec: float = 0.0) -> 
         "rank": spec.rank,
         "device": device,
         "launch_delay_sec": float(launch_delay_sec),
+        "metric_workers": "" if metric_workers is None else int(metric_workers),
+        "metrics_chunk_size": "" if metric_workers is None else int(metrics_chunk_size),
+        "target_cache_dir": "" if target_cache_dir is None else str(target_cache_dir),
         "checkpoint": str(spec.checkpoint_path),
         "config": str(spec.config_path),
         "metrics_output": str(spec.metrics_output),
@@ -259,17 +279,41 @@ def _iter_run_dirs(runs_root: Path) -> list[Path]:
     return sorted(path for path in runs_root.glob("*/*/*") if path.is_dir())
 
 
-def _run_one(spec: EvalSpec, device: str, *, metric_workers: int, launch_delay_sec: float = 0.0) -> str:
+def _run_one(
+    spec: EvalSpec,
+    device: str,
+    *,
+    metric_workers: int,
+    metrics_chunk_size: int = 128,
+    target_cache_dir: Path | None = None,
+    launch_delay_sec: float = 0.0,
+) -> str:
     if float(launch_delay_sec) > 0.0:
         print(f"delay {spec.tag} device={device} sleep={float(launch_delay_sec):.1f}s", flush=True)
         time.sleep(float(launch_delay_sec))
     print(f"start {spec.tag} device={device}", flush=True)
-    subprocess.run(command_for_spec(spec, device, metric_workers=metric_workers), check=True)
+    subprocess.run(
+        command_for_spec(
+            spec,
+            device,
+            metric_workers=metric_workers,
+            metrics_chunk_size=metrics_chunk_size,
+            target_cache_dir=target_cache_dir,
+        ),
+        check=True,
+    )
     print(f"done {spec.tag}", flush=True)
     return spec.tag
 
 
-def _write_manifest(path: Path, launch_plan: list[tuple[EvalSpec, str, float]]) -> None:
+def _write_manifest(
+    path: Path,
+    launch_plan: list[tuple[EvalSpec, str, float]],
+    *,
+    metric_workers: int | None = None,
+    metrics_chunk_size: int = 128,
+    target_cache_dir: Path | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fp:
         writer = csv.DictWriter(
@@ -282,23 +326,51 @@ def _write_manifest(path: Path, launch_plan: list[tuple[EvalSpec, str, float]]) 
                 "rank",
                 "device",
                 "launch_delay_sec",
+                "metric_workers",
+                "metrics_chunk_size",
+                "target_cache_dir",
                 "checkpoint",
                 "config",
                 "metrics_output",
             ],
         )
         writer.writeheader()
-        writer.writerows(manifest_row(spec, device, delay) for spec, device, delay in launch_plan)
+        writer.writerows(
+            manifest_row(
+                spec,
+                device,
+                delay,
+                metric_workers=metric_workers,
+                metrics_chunk_size=metrics_chunk_size,
+                target_cache_dir=target_cache_dir,
+            )
+            for spec, device, delay in launch_plan
+        )
 
 
-def _run_eval(launch_plan: list[tuple[EvalSpec, str, float]], *, max_parallel: int, metric_workers: int) -> None:
+def _run_eval(
+    launch_plan: list[tuple[EvalSpec, str, float]],
+    *,
+    max_parallel: int,
+    metric_workers: int,
+    metrics_chunk_size: int,
+    target_cache_dir: Path | None,
+) -> None:
     if not launch_plan:
         print("no pending topK eval tasks", flush=True)
         return
     workers = min(max_parallel, len(launch_plan))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [
-            pool.submit(_run_one, spec, device, metric_workers=metric_workers, launch_delay_sec=delay)
+            pool.submit(
+                _run_one,
+                spec,
+                device,
+                metric_workers=metric_workers,
+                metrics_chunk_size=metrics_chunk_size,
+                target_cache_dir=target_cache_dir,
+                launch_delay_sec=delay,
+            )
             for spec, device, delay in launch_plan
         ]
         for future in as_completed(futures):
@@ -315,7 +387,13 @@ def main() -> None:
     parser.add_argument("--select-only", action="store_true", help="跳过重评，只读取已有 metrics_topN.csv 并择优")
     parser.add_argument("--device", action="append", default=None, help="评价设备，可重复传入；默认 cuda:0")
     parser.add_argument("--max-parallel", type=int, default=1, help="并发评价进程数；默认 1")
-    parser.add_argument("--metric-workers", type=int, default=1, help="每个评价进程的指标计算线程数；默认 1")
+    parser.add_argument("--metric-workers", type=int, default=1, help="每个评价进程的 metrics chunk 进程数；默认 1")
+    parser.add_argument("--metrics-chunk-size", type=int, default=128, help="metrics 并行时每个 CPU 任务处理的窗口数")
+    parser.add_argument(
+        "--target-cache-dir",
+        default="",
+        help="target-side feature cache 目录；默认 <output-prefix>_target_feature_cache",
+    )
     parser.add_argument("--start-stagger-sec", type=float, default=0.0, help="按并发槽位错开启动秒数；默认 0")
     parser.add_argument("--output-prefix", default="", help="输出前缀；默认为 <runs-root>_topk")
     parser.add_argument("--manifest", default="", help="评价任务 manifest 输出路径；默认由 output-prefix 推导")
@@ -327,6 +405,8 @@ def main() -> None:
         raise SystemExit("--max-parallel 必须 >= 1")
     if args.metric_workers < 1:
         raise SystemExit("--metric-workers 必须 >= 1")
+    if args.metrics_chunk_size < 1:
+        raise SystemExit("--metrics-chunk-size 必须 >= 1")
     if args.start_stagger_sec < 0:
         raise SystemExit("--start-stagger-sec 必须 >= 0")
     if args.eval_only and args.select_only:
@@ -335,6 +415,11 @@ def main() -> None:
     runs_root = Path(args.runs_root)
     paths = output_paths(runs_root, output_prefix=args.output_prefix or None)
     manifest_path = Path(args.manifest) if args.manifest else paths.manifest
+    target_cache_dir = (
+        Path(args.target_cache_dir)
+        if args.target_cache_dir
+        else Path(f"{Path(str(paths.manifest).removesuffix('_eval_manifest.csv'))}_target_feature_cache")
+    )
 
     if not args.select_only:
         specs = discover_eval_specs(runs_root, top_k=args.top_k, force=args.force)
@@ -344,12 +429,24 @@ def main() -> None:
             max_parallel=int(args.max_parallel),
             start_stagger_sec=float(args.start_stagger_sec),
         )
-        _write_manifest(manifest_path, launch_plan)
+        _write_manifest(
+            manifest_path,
+            launch_plan,
+            metric_workers=int(args.metric_workers),
+            metrics_chunk_size=int(args.metrics_chunk_size),
+            target_cache_dir=target_cache_dir,
+        )
         if args.dry_run:
             for spec, device, delay in launch_plan:
                 print(f"plan {spec.tag} device={device} delay={delay:.1f}s", flush=True)
             return
-        _run_eval(launch_plan, max_parallel=int(args.max_parallel), metric_workers=int(args.metric_workers))
+        _run_eval(
+            launch_plan,
+            max_parallel=int(args.max_parallel),
+            metric_workers=int(args.metric_workers),
+            metrics_chunk_size=int(args.metrics_chunk_size),
+            target_cache_dir=target_cache_dir,
+        )
 
     if args.eval_only:
         return
