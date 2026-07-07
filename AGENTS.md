@@ -68,7 +68,7 @@
 - Split 独立性审计：`./.venv/bin/python scripts/audit_split_independence.py --config configs/tho_research_v2.yaml --output-dir runs/audits/split_independence_research_v2`。
 - 单 run 训练原子入口：`./.venv/bin/python scripts/train_tho_small.py --config configs/tho_research_v2.yaml --set ...`。
 - 从 checkpoint 复评：`./.venv/bin/python scripts/eval_tho_small.py --checkpoint runs/<root>/<timestamp>/checkpoint.pt --metrics-output /tmp/tho_metrics.csv`。
-- Top3 checkpoint 复评：`./.venv/bin/python scripts/eval_topk_checkpoints.py --runs-root runs/<root> --top-k 3 --device cuda:0 --device cuda:1 --max-parallel 4 --metric-workers 4 --output-prefix runs/<root>_topk`。
+- Top3 checkpoint 复评：`./.venv/bin/python scripts/eval_topk_checkpoints.py --runs-root runs/<root> --top-k 3 --device cuda:0 --device cuda:1 --max-parallel 4 --metric-workers 4 --metrics-chunk-size 128 --output-prefix runs/<root>_topk`。其中 `--metric-workers` 是每个评价进程内的 metrics chunk 子进程数，默认 target-side cache 写入 `<output-prefix>_target_feature_cache`。
 - 预测图诊断：`./.venv/bin/python scripts/plot_tho_predictions.py --run-dir runs/<root>/<timestamp> --sort-by rr_peak_band_abs_error --max-plots 8`。
 - 多 run 汇总：`./.venv/bin/python scripts/summarize_tho_runs.py --runs-root runs/<root> --output /tmp/tho_runs_summary.csv`。
 - 当前批量实验、manifest 和 E3/E4/E5 入口不要从记忆中猜，先读 `scripts/README.md` 的对应小节。

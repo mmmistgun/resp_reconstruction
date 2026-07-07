@@ -279,6 +279,7 @@ G3 只复核 G1/G2 中最可能存在交互的少数组合。
   --device cuda:1 \
   --max-parallel 4 \
   --metric-workers 4 \
+  --metrics-chunk-size 128 \
   --start-stagger-sec 30 \
   --output-prefix runs/g_series_stft_input_topk
 
@@ -318,6 +319,7 @@ G2 频带探针命令：
   --device cuda:1 \
   --max-parallel 4 \
   --metric-workers 4 \
+  --metrics-chunk-size 128 \
   --start-stagger-sec 30 \
   --output-prefix runs/g_series_stft_input_topk
 
@@ -357,6 +359,7 @@ G3 交互复核命令：
   --device cuda:1 \
   --max-parallel 4 \
   --metric-workers 4 \
+  --metrics-chunk-size 128 \
   --start-stagger-sec 30 \
   --manifest runs/g_series_stft_input_topk_g3_eval_manifest.csv \
   --output-prefix runs/g_series_stft_input_topk
@@ -371,7 +374,7 @@ G3 交互复核命令：
 正式训练前仍需要补：
 
 - smoke：小窗口或 1 epoch 验证 run 产物完整，不改变 split、标签、核心指标口径。
-- 结论汇总前跑 `eval_topk_checkpoints.py --top-k 3`；topK 结果属于同验证集任务指标择优，表述时必须标注 validation top-k selection。
+- 结论汇总前跑 `eval_topk_checkpoints.py --top-k 3`；topK 结果属于同验证集任务指标择优，表述时必须标注 validation top-k selection。`--metric-workers` 现在表示每个评价进程内的 metrics chunk 子进程数，默认 target-side cache 写入 `<output-prefix>_target_feature_cache` 并可在同一批 topK 复评中复用 val target 特征。
 
 正式训练前必须确认：
 

@@ -98,8 +98,8 @@
 1. 先运行 split 独立性审计，确认当前结果应解释为 within-subject 开发指标，还是可以支撑跨 `samp_id` 泛化结论。
 2. 使用同一个验证 seed 和全量窗口，避免验证集变化掩盖 loss 差异。
 3. 每完成一次正式实验 run 后提交一次仓库状态，提交信息写明实验口径和关键权重。
-4. 先按任务指标筛选：`rr_peak_band_abs_error` 和 `rr_spec_abs_error` 不应明显恶化；再看 `relative_envelope_mae`、`relative_envelope_corr` 和 `spectrum_similarity`。
-5. `rr_peak_abs_error` 保留为原始尖峰诊断；当前代码会在 research v2 数据中先按 THO/BCG 共同好段 mask 去掉坏段，再按连续好段计算 raw peak RR。未遮罩旧式诊断保存在 `rr_peak_unmasked_abs_error`。`band_limited_corr`、`best_lag_corr`、`best_lag_sec` 用于解释低频波形形态和小范围时移，不能单独作为通过标准。
+4. 先按任务指标筛选：`rr_peak_band_robust_abs_error` 守住整窗呼吸率护栏；再看 `best_lag_corr_4s`、`best_lag_sec_4s`、`relative_envelope_mae_lag4s`、`relative_envelope_corr_lag4s`、`local_rr_mae` 和 `local_rr_corr`，确认允许持续时延后的低频形态、相对强弱和局部 RR 是否改善。`local_rr_*` 默认使用 20 秒窗口、5 秒步长，是局部 RR 曲线指标，不是逐呼吸事件匹配。`rr_peak_band_abs_error` 和 `rr_spec_abs_error` 保留为历史/频域兼容护栏，不再单独主导排序。
+5. `rr_peak_abs_error` 保留为原始尖峰诊断；当前代码会在 research v2 数据中先按 THO/BCG 共同好段 mask 去掉坏段，再按连续好段计算 raw peak RR。未遮罩旧式诊断保存在 `rr_peak_unmasked_abs_error`。`band_limited_corr` 是 zero-lag 形态诊断；BCG 与 THO 可能存在个体化持续时延，因此主要结合 `best_lag_corr_4s` 和 `best_lag_sec_4s` 解释低频形态是否恢复。`breath_count_zero_cross_abs_error` 继续作为低质量信号下是否恢复合理周期数量的轻量护栏，并额外输出上升/下降过零计数供边界诊断。
 
 效率口径建议：正式对照实验仍应显式记录 `training.batch_size`。当前
 `patch_mixer1d + WeakSyncLoss` 在 RTX 4070 Ti SUPER 上建议先用
@@ -274,6 +274,7 @@ E1 STFT 信息增益实验的 manifest 生成器：
   --device cuda:1 \
   --max-parallel 4 \
   --metric-workers 4 \
+  --metrics-chunk-size 128 \
   --start-stagger-sec 30 \
   --output-prefix runs/g_series_stft_input_topk
 
@@ -304,6 +305,7 @@ E1 STFT 信息增益实验的 manifest 生成器：
   --device cuda:1 \
   --max-parallel 4 \
   --metric-workers 4 \
+  --metrics-chunk-size 128 \
   --start-stagger-sec 30 \
   --output-prefix runs/g_series_stft_input_topk
 
@@ -340,6 +342,7 @@ E1 STFT 信息增益实验的 manifest 生成器：
   --device cuda:1 \
   --max-parallel 4 \
   --metric-workers 4 \
+  --metrics-chunk-size 128 \
   --start-stagger-sec 30 \
   --manifest runs/g_series_stft_input_topk_g3_eval_manifest.csv \
   --output-prefix runs/g_series_stft_input_topk
@@ -641,10 +644,13 @@ checkpoint 清单保存为 `configs/eval_specs/g_series_test_eval_20260705.csv`�
   --device cuda:0 \
   --device cuda:1 \
   --max-parallel 2 \
-  --metric-workers 4
+  --metric-workers 4 \
+  --metrics-chunk-size 128
 ```
 
 - `--max-parallel` 是总并发数；两块卡各一个进程时设为 `2`，两块卡各两个进程时设为 `4`。
+- `--metric-workers` 是每个 test 进程内的 metrics chunk 子进程数；`--metrics-chunk-size` 控制每个 chunk 处理的窗口数。
+- 默认 `--target-cache-dir` 为 `output-dir/target_feature_cache`。同一批 test 评价中，共享 test split、target 和 mask 的 checkpoint 会复用 target 侧 envelope、频谱、带通、RR 和局部 RR 特征；cache key 包含 target 数组、`dataset_row_id`、`rr_peak_valid_mask` 和相关评价配置。
 - `--dry-run` 只写调度 manifest 并打印计划。
 - 默认跳过已经存在完整 `metrics/summary/manifest` 输出的任务；需要覆盖时加 `--force`。
 
@@ -667,6 +673,7 @@ checkpoint 清单保存为 `configs/eval_specs/g_series_test_eval_20260705.csv`�
   --device cuda:1 \
   --max-parallel 2 \
   --metric-workers 4 \
+  --metrics-chunk-size 128 \
   --start-stagger-sec 30 \
   --output-prefix runs/f_d_highfreq_topk
 ```
@@ -683,9 +690,12 @@ checkpoint 清单保存为 `configs/eval_specs/g_series_test_eval_20260705.csv`�
 - `--eval-only`：只生成 `metrics_topN.csv`，不输出择优表。
 - `--select-only`：跳过评价，直接从已有 `metrics_topN.csv` 生成 all/best 表。
 - `--force`：覆盖已有 `metrics_topN.csv`。
-- `--metric-workers N`：每个评价进程用 N 个线程并行计算逐窗口指标。外层 `--max-parallel` 和内层
-  `--metric-workers` 会相乘占用 CPU；例如 `--max-parallel 4 --metric-workers 4` 约等于 16 个指标线程。
-  F-D 单 checkpoint 优化后实测中，`metric_workers=4` 相对 `1` 约有 14% wall-time 收益，适合作为默认轻量加速，不应期待线性扩展。
+- `--metric-workers N`：每个评价进程用 N 个 metrics chunk 子进程并行计算逐窗口指标。worker 内会把
+  `evaluation.metric_workers` 固定为 `1`，避免外层进程池和旧线程池嵌套。外层 `--max-parallel` 与内层
+  `--metric-workers` 会相乘占用 CPU；例如 `--max-parallel 4 --metric-workers 4` 最多会有 16 个 metrics 子进程。
+- `--metrics-chunk-size N`：每个 metrics chunk 处理的窗口数，默认 `128`。窗口很多时可保留默认；窗口较少时 worker 数会自动受 chunk 数限制。
+- `--target-cache-dir DIR`：target-side feature cache 目录。默认根据 `output-prefix` 生成
+  `<output-prefix>_target_feature_cache`。同一 run 的 `checkpoint_top1/2/3.pt` 共享 val split、target 和 mask 时会复用 target 侧计算。
 - `--start-stagger-sec S`：按并发槽位错开启动，降低同时读取 checkpoint/config 和初始化评价进程造成的硬盘峰值。例如
   `--max-parallel 4 --start-stagger-sec 30` 会给同一批并发任务分配 `0/30/60/90s` 启动延迟。
 

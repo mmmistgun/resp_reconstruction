@@ -1940,8 +1940,10 @@ cap 失败与修复：
   `metric_workers=4` wall time `1:04.24`、RSS `3043380 KB`。相对 val-only+系数缓存版本，4 线程 wall time 从
   `1:27.97` 降到 `1:04.24`；相对最初修改前 `2:23.41`，单 checkpoint 复评耗时约下降 `55%`。
 
-运行建议：F 系列 topK 复评继续使用 `--start-stagger-sec 30` 缓解并发启动 I/O 峰；`--metric-workers 4` 可以保留为轻量加速，
-但不要为了追求 CPU 满载盲目放大，外层 `--max-parallel` 仍按 GPU/硬盘压力控制。
+运行建议：F 系列 topK 复评继续使用 `--start-stagger-sec 30` 缓解并发启动 I/O 峰；`--metric-workers 4`
+现在表示每个评价进程内的 metrics chunk 子进程数，默认配合 `--metrics-chunk-size 128` 和
+`<output-prefix>_target_feature_cache` 复用 val target 侧特征。不要为了追求 CPU 满载盲目放大，
+外层 `--max-parallel` 仍按 GPU/硬盘压力控制。
 
 ### 7.28 F-D 特征提取网络 probe 准备（2026-06-29）
 
