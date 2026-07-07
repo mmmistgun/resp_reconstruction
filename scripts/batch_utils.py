@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 
 
 DATALOADER_WORKER_OVERRIDES = [
-    # 完整多 epoch 训练优先复用内存窗口；streaming 多 worker 只用于内存受限诊断。
+    # 历史名称保留给已有 runner；这里集中放正式多 run 的运行时效率/选择口径。
     "data.preload_windows=true",
     "training.num_workers=0",
+    "training.final_checkpoint=best_task",
+    "training.epoch_metrics.metrics_workers=auto",
+    "training.epoch_metrics.target_workers=auto",
 ]
 
 
@@ -34,6 +38,7 @@ def build_launch_plan(
     if not specs:
         return []
     workers = min(max(1, int(max_parallel)), len(specs))
+    os.environ["RESP_TRAIN_MAX_PARALLEL"] = str(workers)
     stagger = max(0.0, float(start_stagger_sec))
     plan: list[tuple[dict, str, float]] = []
     for idx, (spec, device) in enumerate(assign_devices(specs, devices)):

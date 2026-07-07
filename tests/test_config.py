@@ -103,6 +103,35 @@ def test_load_research_v2_config_has_expected_format():
     assert cfg.loss.smooth_weight == 0.10
 
 
+def test_research_v2_smoke_and_formal_configs_split_protocols():
+    smoke = load_config("configs/tho_research_v2_smoke.yaml")
+    formal = load_config("configs/tho_research_v2_formal.yaml")
+
+    assert smoke.data.max_train_windows == 1024
+    assert smoke.data.max_val_windows == 256
+    assert smoke.data.preload_windows is False
+    assert smoke.training.batch_size == 8
+    assert smoke.training.epochs == 3
+    assert smoke.training.num_workers == 4
+
+    assert formal.data.max_train_windows is None
+    assert formal.data.max_val_windows is None
+    assert formal.data.preload_windows is True
+    assert formal.loss.phase_alignment_weight == 0.0
+    assert formal.training.batch_size == 128
+    assert formal.training.epochs == 50
+    assert formal.training.num_workers == 0
+    assert formal.training.persistent_workers is False
+    assert formal.training.prefetch_factor is None
+    assert formal.training.patience == 8
+    assert formal.training.min_delta == 0.001
+    assert formal.training.checkpoint_gate.metric == "auto_direction"
+    assert formal.training.checkpoint_gate.max == 0.5
+    assert formal.training.final_checkpoint == "best_task"
+    assert formal.training.epoch_metrics.metrics_workers == "auto"
+    assert formal.training.epoch_metrics.target_workers == "auto"
+
+
 def test_e4_experiment_presets_capture_sanity_and_sst_contracts():
     sanity = load_config("configs/e4_fullband_sanity.yaml")
     sst = load_config("configs/e4_sst_cached_dual.yaml")

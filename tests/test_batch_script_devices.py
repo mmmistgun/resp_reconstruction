@@ -1,6 +1,9 @@
 import importlib
+import os
 
 import pytest
+
+from scripts import batch_utils
 
 
 BATCH_MODULES = [
@@ -40,6 +43,8 @@ def test_batch_script_commands_default_to_preloaded_windows(module_name):
 
     assert "data.preload_windows=true" in command
     assert "training.num_workers=0" in command
+    assert "training.epoch_metrics.metrics_workers=auto" in command
+    assert "training.epoch_metrics.target_workers=auto" in command
     assert "training.persistent_workers=true" not in command
     assert "training.prefetch_factor=2" not in command
 
@@ -62,3 +67,16 @@ def test_batch_script_launch_plan_staggers_parallel_slots(module_name):
         ("cuda:1", 30.0),
         ("cuda:0", 0.0),
     ]
+
+
+def test_batch_launch_plan_exports_parallelism_for_auto_epoch_metric_workers(monkeypatch):
+    monkeypatch.delenv("RESP_TRAIN_MAX_PARALLEL", raising=False)
+
+    batch_utils.build_launch_plan(
+        specs=[{"tag": "a"}, {"tag": "b"}, {"tag": "c"}],
+        devices=["cuda:0"],
+        max_parallel=2,
+        start_stagger_sec=0.0,
+    )
+
+    assert os.environ["RESP_TRAIN_MAX_PARALLEL"] == "2"

@@ -9,12 +9,12 @@ data:
   target_task: waveform
   bcg_input_key: bcg_rawish_segment_soft_z_key
   target_key: target_waveform_segment_soft_z_key
-  max_train_windows: 1024
-  max_val_windows: 256
+  max_train_windows: null
+  max_val_windows: null
   max_test_windows: null
   filter_unusable: true
   drop_nonfinite_windows: false
-  preload_windows: false
+  preload_windows: true
   train_sample_strategy: stratified_random
   val_sample_strategy: stratified_random
   test_sample_strategy: stratified_random
@@ -42,22 +42,17 @@ loss:
   smooth_weight: 0.10
   high_freq_weight: 0.2
   relative_envelope_weight: 0.03
-  phase_alignment_weight: 0.005
+  phase_alignment_weight: 0.0
   band_waveform_weight: 0.0
   curvature_weight: 0.0
   rhythm_weight: 0.0
   signed_cosine_weight: 0.0
-  # 极性 warmup（E1-C/D 定稿，两项叠加）：把反相 basin 填浅，避免约 1/3 seed 因初始化
-  # 落入反极性被方向门控拦掉。验证：E1-C1 5/5 seed 不翻转、E1-D 6/6 配对仍保住 STFT
-  # 净增益（Δfrac_gt_1≈-2.3pp）、且 band/best-lag corr 同向提升、gate fail 降为 0。
-  # signed_cosine：纯早期 warmup，0.1→0.0（ep6 后归零，不影响后期增益判定）。
   signed_cosine_schedule:
     mode: linear
     start_epoch: 1
     end_epoch: 6
     start_weight: 0.1
     end_weight: 0.0
-  # signed_corr：早期加强 + 常驻方向项，0.6→0.2（ep6 后保留 0.2 作为持续极性约束）。
   signed_corr_weight: 0.2
   signed_corr_schedule:
     mode: linear
@@ -89,30 +84,32 @@ evaluation:
   lag_bandpass_order: 4
 
 training:
-  epochs: 3
-  batch_size: 8
+  epochs: 50
+  batch_size: 128
   learning_rate: 0.001
-  num_workers: 4
-  persistent_workers: true
-  prefetch_factor: 2
+  num_workers: 0
+  persistent_workers: false
+  prefetch_factor: null
   seed: 20260610
   device: auto
-  patience: 5
-  min_delta: 0.0
+  patience: 8
+  min_delta: 0.001
   lr_scheduler: none
   grad_clip_norm: null
   use_amp: false
-  show_progress: auto
+  show_progress: false
+  final_checkpoint: best_task
   checkpoint_gate:
-    metric: ""
+    metric: auto_direction
     min: null
-    max: null
+    max: 0.5
   epoch_metrics:
     enabled: true
-    metrics_workers: 32
+    metrics_workers: auto
     metrics_chunk_size: 64
-    target_workers: 32
+    target_workers: auto
     target_chunk_size: 64
+    auto_max_workers: 32
 
 baseline:
   enabled: true
@@ -121,5 +118,6 @@ baseline:
   filter_order: 4
 
 outputs:
-  run_root: runs/tho_research_v2
+  run_root: runs/tho_research_v2_formal
   max_prediction_windows: 32
+
