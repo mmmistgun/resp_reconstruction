@@ -5,6 +5,9 @@
 - 通用协作偏好遵循全局记忆；本文只记录本仓库特有规则、入口、约束和验证方式。
 - 本仓库属于深度学习科研代码；涉及数据探索、模型训练、消融、baseline、评价指标或结果表述时，先读取并遵循 `~/.codex/AGENTS.dl.md`。
 - 长实验背景、阶段结论和命令细节按需读取 `scripts/README.md` 与 `docs/experiments/*.md`。
+- 改指标、解释指标或横向比较当前 THO research v2 结果前，先读 `docs/experiments/metric_schema.md`。
+- 选择当前默认方案、停止路线或下一步实验前，先读 `docs/experiments/current_evidence_ledger.md`。
+- 准备阶段汇报时读 `docs/stage_reports/`；汇报底稿不进入常驻规则。
 
 ## 项目速览
 
@@ -28,12 +31,15 @@
 - 正式实验开始前先保存 git 状态；实验结束并形成结论后，再把结论文档、manifest/summary 路径和必要脚本变化保存到 git。
 - 每次正式实验完成后，及时保存 git 状态；不要把多个实验结果、指标解释和代码变化长期混在一个未提交工作区里。
 - 允许更新长期文档来反映稳定结论；探索期的临时猜测、一次性失败记录和未复核判断不要写入长期文档。
+- 被确认淘汰的指标、模型路线或实验口径，应退出当前代码默认路径、summary、证据账本和汇报正文；只在一处归档说明淘汰原因和替代方案。
+- 旧实验若仍要参与当前讨论，必须按当前指标重评；若 checkpoint 选择或训练期目标已改变，则先判断是否需要重训。
 - 实验实现、runner/manifest、结果汇总脚本完成后，不能只交付命令和 CSV；汇总结论、通过/停止判断、后续动作必须回写到对应 `docs/experiments/*.md` 或 `findings.md`，并在不确定时标注证据缺口。
 - 引入新第三方依赖前仍需说明理由并确认，除非它只用于本地一次性分析且不会进入仓库依赖或主流程。
 - 以下属于本仓库高后悔成本操作，必须先说明风险并得到明确指令：改动原始数据、历史实验结果、checkpoint、日志、图表；改变 split、subject/session 隔离、标签定义或核心指标口径；启动长训练、大规模搜索/下载；安装或升级影响复现的依赖。
 - 训练、评价或诊断流程不得绕过数据泄漏、标签/时间对齐、shape、split 和指标合理性检查；发现风险先报告。
 - 多因素对照 run 必须能追溯配置和配对关系；同一计算图的对照 run 可以复用 `time_only` substrate，但 manifest 中必须记录复用关系。
 - 解释模型结果前，优先检查 run 目录中的 `config.yaml`、`audit.csv`、`baseline_metrics.csv`、`train_history.csv`、`metrics.csv` 和诊断图。
+- 训练期 `epoch_metrics.csv`、`checkpoint_best_task.pt` 与旧 `checkpoint.pt` 语义不同；解释结果时必须区分 task-metric checkpoint 和 val-loss checkpoint。
 - 默认不要替用户启动正式全量训练；优先准备实现、单测、smoke、manifest、dry-run 和可复制命令，待用户确认后由用户或按明确指令提权运行。
 
 ## 实验策略
@@ -78,14 +84,20 @@
 - 单元/回归测试优先使用 `./.venv/bin/python -m pytest tests`。
 - 修改配置解析、数据工厂、loss、metrics、模型注册或脚本 override 后，至少运行对应 `tests/test_*.py`；影响共享路径时再跑全量 `tests`。
 - 修改训练入口或实验生命周期后，补跑最小 smoke：小窗口、1 epoch、低通道数，并检查 run 产物是否完整。
-- 修改评价指标、mask、RR 口径或 split 逻辑后，必须说明旧 run 是否需要重算，并同步更新相关实验文档。
+- 修改评价指标、mask、RR 口径、cache key 或 split 逻辑后，必须说明旧 run 是重算 summary、重评 checkpoint、重训，还是归档退场，并同步更新相关实验文档。
+- 修改 `resp_train/metrics/` 后，至少跑 `tests/test_signal_metrics.py` 和 `tests/test_eval_metrics.py`；影响 test eval、topK 或训练期指标时，再补对应脚本/实验流程测试。
+- target-side feature cache 字段变化时，同步更新 cache key、round-trip 测试和指标口径文档。
 - 正式实验验证要保留 resolved `config.yaml`、manifest、summary 和诊断图；单个 summary 表不能替代波形复核。
 - 正式实验汇总后，相关计划文档应记录运行范围、manifest/summary 路径、主指标结论、分层结论、是否进入下一阶段；若结论不足以推进，也要明确停止或补跑条件。
 
 ## 详细背景索引
 
 - `scripts/README.md`：脚本职责、推荐 THO workflow、当前 soft-z/research v2 训练口径、批量实验和诊断命令。涉及运行命令时先读。
+- `findings.md`：跨阶段稳定结论和当前主线判断。需要快速了解“现在认什么、不再背什么历史包袱”时读取。
 - `docs/tho_small_training.md`：早期小规模 THO 训练设计、产物说明、评价口径和历史阶段结论。维护旧小规模入口时读取。
+- `docs/experiments/metric_schema.md`：当前指标口径、淘汰记录和重算/重评/重训边界。改指标或解释指标前读取。
+- `docs/experiments/current_evidence_ledger.md`：当前 active 证据、默认 anchor 和停止路线。整理阶段结论或决定下一步实验时读取。
+- `docs/stage_reports/2026-07-08-tho-research-v2-group-meeting-stage-report.md`：组会阶段汇报底稿。准备汇报或需要面向听众解释任务、数据、指标、模型和训练设置时读取。
 - `docs/experiments/time_frequency_input_fusion_plan.md`：时频输入、多分支融合、E1-E5 路线和当前建议。修改 STFT/fusion/E3/E4/E5 相关代码或结论时读取。
 - `docs/experiments/e1_stft_info_gain_20260622.md`：E1 STFT 信息增益、疑点核查和频域输入探索收口。复核 STFT 是否提供信息增益时读取。
 - `docs/experiments/softz_20260620_model_candidates.md`：20260620 soft-z 模型候选重跑。比较 soft-z 模型候选时读取。
@@ -96,5 +108,4 @@
 
 ## 待确认事项
 
-- 当前没有 `findings.md`。若后续需要沉淀跨阶段稳定结论，优先新建 `findings.md` 并在本文件只保留读取条件。
 - 若 `scripts/` 迁移到子目录结构，需要同步更新本文件、`scripts/README.md`、测试和常用命令。
