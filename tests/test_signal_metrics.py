@@ -13,10 +13,6 @@ from resp_train.metrics.signal import (
     lag_aligned_overlap,
     local_rr_metrics,
     local_rr_rate_trace,
-    local_rr_v2_metrics,
-    local_rr_v2_rate_trace,
-    local_rr_v3_metrics,
-    local_rr_v3_rate_trace,
     relative_envelope_metrics,
     rms_envelope,
     spectrum_similarity,
@@ -177,47 +173,26 @@ def test_local_rr_metrics_tracks_same_local_rate_curve():
     assert metrics["local_rr_corr"] > 0.99
 
 
-def test_local_rr_v2_uses_stricter_peak_spacing_to_reject_double_peak_alias():
+def test_local_rr_uses_v2_peak_spacing_to_reject_double_peak_alias():
     fs = 100.0
     target = _double_peak_breath_signal(fs, 180.0, period_sec=6.0)
 
-    current_rates = local_rr_rate_trace(
-        target,
-        fs=fs,
-        window_sec=40.0,
-        step_sec=10.0,
-        low_hz=0.05,
-        high_hz=0.7,
-    )
-    v2_rates = local_rr_v2_rate_trace(target, fs=fs, low_hz=0.05, high_hz=0.7)
+    local_rates = local_rr_rate_trace(target, fs=fs, low_hz=0.05, high_hz=0.7)
 
-    assert np.nanmedian(current_rates) > 15.0
-    assert np.nanmedian(v2_rates) == pytest.approx(10.0, abs=0.2)
+    assert local_rates.size == 15
+    assert np.nanmedian(local_rates) == pytest.approx(10.0, abs=0.2)
 
 
-def test_local_rr_v3_uses_zero_crossing_rate_for_double_peak_alias():
-    fs = 100.0
-    target = _double_peak_breath_signal(fs, 180.0, period_sec=6.0)
-
-    v3_rates = local_rr_v3_rate_trace(target, fs=fs, low_hz=0.05, high_hz=0.7)
-
-    assert np.nanmedian(v3_rates) == pytest.approx(10.5, abs=0.1)
-
-
-def test_local_rr_v2_and_v3_metrics_track_identical_curves():
+def test_local_rr_metrics_tracks_identical_double_peak_curves():
     fs = 100.0
     target = _double_peak_breath_signal(fs, 180.0, period_sec=6.0)
     pred = target.copy()
 
-    v2 = local_rr_v2_metrics(pred, target, fs=fs, low_hz=0.05, high_hz=0.7)
-    v3 = local_rr_v3_metrics(pred, target, fs=fs, low_hz=0.05, high_hz=0.7)
+    metrics = local_rr_metrics(pred, target, fs=fs, low_hz=0.05, high_hz=0.7)
 
-    assert v2["local_rr_v2_mae"] < 0.01
-    assert v2["local_rr_v2_valid_frac"] == 1.0
-    assert np.isnan(v2["local_rr_v2_corr"])
-    assert v3["local_rr_v3_mae"] < 0.01
-    assert v3["local_rr_v3_valid_frac"] == 1.0
-    assert np.isnan(v3["local_rr_v3_corr"])
+    assert metrics["local_rr_mae"] < 0.01
+    assert metrics["local_rr_valid_frac"] == 1.0
+    assert np.isnan(metrics["local_rr_corr"])
 
 
 def test_spectral_rate_识别正弦主频():

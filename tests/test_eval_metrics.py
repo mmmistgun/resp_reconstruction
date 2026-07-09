@@ -65,10 +65,8 @@ def test_evaluate_prediction_dict_returns_window_metrics():
     assert frame.loc[0, "relative_envelope_mae_lag4s"] < 0.01
     assert frame.loc[0, "local_rr_mae"] < 0.1
     assert frame.loc[0, "local_rr_valid_frac"] == 1.0
-    assert frame.loc[0, "local_rr_v2_mae"] < 0.1
-    assert frame.loc[0, "local_rr_v2_valid_frac"] == 1.0
-    assert frame.loc[0, "local_rr_v3_mae"] < 0.1
-    assert frame.loc[0, "local_rr_v3_valid_frac"] == 1.0
+    assert "local_rr_v2_mae" not in frame.columns
+    assert "local_rr_v3_mae" not in frame.columns
 
 
 def test_evaluate_prediction_dict_reports_bandpassed_peak_rate_for_spiky_prediction():

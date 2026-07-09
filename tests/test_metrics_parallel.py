@@ -17,8 +17,8 @@ def _cfg():
             "evaluation": {
                 "lag_bandpass_order": 4,
                 "raw_peak_min_good_segment_sec": 20.0,
-                "local_rr_window_sec": 20.0,
-                "local_rr_step_sec": 5.0,
+                "local_rr_window_sec": 40.0,
+                "local_rr_step_sec": 10.0,
             },
         }
     )
