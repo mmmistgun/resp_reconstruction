@@ -221,7 +221,7 @@ def load_target_feature_cache(path: Path, *, expected_key: str | None = None) ->
 
 def target_feature_cache_key(predictions: dict[str, np.ndarray], cfg: DictConfig) -> str:
     h = hashlib.sha256()
-    h.update(b"tho_target_feature_cache_v1")
+    h.update(b"tho_target_feature_cache_v2")
     relevant_cfg = {
         "target_fs": float(cfg.window.target_fs),
         "envelope_window_sec": float(cfg.loss.envelope_window_sec),
@@ -234,6 +234,10 @@ def target_feature_cache_key(predictions: dict[str, np.ndarray], cfg: DictConfig
             ),
             "local_rr_window_sec": float(cfg.get("evaluation", {}).get("local_rr_window_sec", 20.0)),
             "local_rr_step_sec": float(cfg.get("evaluation", {}).get("local_rr_step_sec", 5.0)),
+            "local_rr_v2_window_sec": float(cfg.get("evaluation", {}).get("local_rr_v2_window_sec", 40.0)),
+            "local_rr_v2_step_sec": float(cfg.get("evaluation", {}).get("local_rr_v2_step_sec", 10.0)),
+            "local_rr_v3_window_sec": float(cfg.get("evaluation", {}).get("local_rr_v3_window_sec", 40.0)),
+            "local_rr_v3_step_sec": float(cfg.get("evaluation", {}).get("local_rr_v3_step_sec", 10.0)),
         },
     }
     h.update(repr(relevant_cfg).encode("utf-8"))

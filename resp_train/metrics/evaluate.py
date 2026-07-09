@@ -21,6 +21,10 @@ from resp_train.metrics.signal import (
     local_rr_metrics,
     local_rr_metrics_from_rate_traces,
     local_rr_rate_trace,
+    local_rr_v2_metrics,
+    local_rr_v2_rate_trace,
+    local_rr_v3_metrics,
+    local_rr_v3_rate_trace,
     relative_envelope_metrics,
     rms_envelope,
     spectrum_similarity_from_distributions,
@@ -50,6 +54,10 @@ def evaluate_prediction_dict(
     raw_peak_min_good_segment_sec = float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0))
     local_rr_window_sec = float(evaluation_cfg.get("local_rr_window_sec", 20.0))
     local_rr_step_sec = float(evaluation_cfg.get("local_rr_step_sec", 5.0))
+    local_rr_v2_window_sec = float(evaluation_cfg.get("local_rr_v2_window_sec", 40.0))
+    local_rr_v2_step_sec = float(evaluation_cfg.get("local_rr_v2_step_sec", 10.0))
+    local_rr_v3_window_sec = float(evaluation_cfg.get("local_rr_v3_window_sec", 40.0))
+    local_rr_v3_step_sec = float(evaluation_cfg.get("local_rr_v3_step_sec", 10.0))
     metric_workers = _metric_worker_count(evaluation_cfg)
 
     preds = np.asarray(predictions["r_tho_hat"])
@@ -73,6 +81,10 @@ def evaluate_prediction_dict(
             raw_peak_min_good_segment_sec=raw_peak_min_good_segment_sec,
             local_rr_window_sec=local_rr_window_sec,
             local_rr_step_sec=local_rr_step_sec,
+            local_rr_v2_window_sec=local_rr_v2_window_sec,
+            local_rr_v2_step_sec=local_rr_v2_step_sec,
+            local_rr_v3_window_sec=local_rr_v3_window_sec,
+            local_rr_v3_step_sec=local_rr_v3_step_sec,
             target_feature=_target_feature_at(target_features, idx) if target_features is not None else None,
         )
 
@@ -142,6 +154,10 @@ def target_feature_context(cfg: DictConfig) -> dict[str, float | int]:
         "raw_peak_min_good_segment_sec": float(evaluation_cfg.get("raw_peak_min_good_segment_sec", 20.0)),
         "local_rr_window_sec": float(evaluation_cfg.get("local_rr_window_sec", 20.0)),
         "local_rr_step_sec": float(evaluation_cfg.get("local_rr_step_sec", 5.0)),
+        "local_rr_v2_window_sec": float(evaluation_cfg.get("local_rr_v2_window_sec", 40.0)),
+        "local_rr_v2_step_sec": float(evaluation_cfg.get("local_rr_v2_step_sec", 10.0)),
+        "local_rr_v3_window_sec": float(evaluation_cfg.get("local_rr_v3_window_sec", 40.0)),
+        "local_rr_v3_step_sec": float(evaluation_cfg.get("local_rr_v3_step_sec", 10.0)),
     }
 
 
@@ -215,6 +231,22 @@ def build_target_feature_record(
             low_hz=low_hz,
             high_hz=high_hz,
         ),
+        "target_local_rr_v2_rates": local_rr_v2_rate_trace(
+            target_filtered,
+            fs=fs,
+            window_sec=float(context["local_rr_v2_window_sec"]),
+            step_sec=float(context["local_rr_v2_step_sec"]),
+            low_hz=low_hz,
+            high_hz=high_hz,
+        ),
+        "target_local_rr_v3_rates": local_rr_v3_rate_trace(
+            target_filtered,
+            fs=fs,
+            window_sec=float(context["local_rr_v3_window_sec"]),
+            step_sec=float(context["local_rr_v3_step_sec"]),
+            low_hz=low_hz,
+            high_hz=high_hz,
+        ),
     }
 
 
@@ -239,6 +271,8 @@ def _validate_target_feature_cache(predictions: dict[str, np.ndarray], target_fe
         "target_breath_count_zero_cross_up",
         "target_breath_count_zero_cross_down",
         "target_local_rr_rates",
+        "target_local_rr_v2_rates",
+        "target_local_rr_v3_rates",
     }
     missing = sorted(required - set(target_features))
     if missing:
@@ -273,6 +307,10 @@ def _evaluate_one_window(
     raw_peak_min_good_segment_sec: float,
     local_rr_window_sec: float,
     local_rr_step_sec: float,
+    local_rr_v2_window_sec: float,
+    local_rr_v2_step_sec: float,
+    local_rr_v3_window_sec: float,
+    local_rr_v3_step_sec: float,
     target_feature: dict[str, np.ndarray] | None = None,
 ) -> dict[str, Any]:
     pred = np.asarray(preds[idx], dtype=np.float64).reshape(-1)
@@ -453,6 +491,52 @@ def _evaluate_one_window(
             high_hz=high_hz,
         )
     )
+    local_rr_v2 = (
+        local_rr_metrics_from_rate_traces(
+            local_rr_v2_rate_trace(
+                pred_filtered,
+                fs=fs,
+                window_sec=local_rr_v2_window_sec,
+                step_sec=local_rr_v2_step_sec,
+                low_hz=low_hz,
+                high_hz=high_hz,
+            ),
+            np.asarray(target_feature["target_local_rr_v2_rates"], dtype=np.float64).reshape(-1),
+        )
+        if target_feature is not None
+        else local_rr_v2_metrics(
+            pred_filtered,
+            target_filtered,
+            fs=fs,
+            window_sec=local_rr_v2_window_sec,
+            step_sec=local_rr_v2_step_sec,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
+    )
+    local_rr_v3 = (
+        local_rr_metrics_from_rate_traces(
+            local_rr_v3_rate_trace(
+                pred_filtered,
+                fs=fs,
+                window_sec=local_rr_v3_window_sec,
+                step_sec=local_rr_v3_step_sec,
+                low_hz=low_hz,
+                high_hz=high_hz,
+            ),
+            np.asarray(target_feature["target_local_rr_v3_rates"], dtype=np.float64).reshape(-1),
+        )
+        if target_feature is not None
+        else local_rr_v3_metrics(
+            pred_filtered,
+            target_filtered,
+            fs=fs,
+            window_sec=local_rr_v3_window_sec,
+            step_sec=local_rr_v3_step_sec,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        )
+    )
 
     return {
         "method": str(method),
@@ -504,7 +588,20 @@ def _evaluate_one_window(
         "local_rr_mae": local_rr["local_rr_mae"],
         "local_rr_corr": local_rr["local_rr_corr"],
         "local_rr_valid_frac": local_rr["local_rr_valid_frac"],
+        "local_rr_v2_mae": _local_rr_value(local_rr_v2, prefix="local_rr_v2", suffix="mae"),
+        "local_rr_v2_corr": _local_rr_value(local_rr_v2, prefix="local_rr_v2", suffix="corr"),
+        "local_rr_v2_valid_frac": _local_rr_value(local_rr_v2, prefix="local_rr_v2", suffix="valid_frac"),
+        "local_rr_v3_mae": _local_rr_value(local_rr_v3, prefix="local_rr_v3", suffix="mae"),
+        "local_rr_v3_corr": _local_rr_value(local_rr_v3, prefix="local_rr_v3", suffix="corr"),
+        "local_rr_v3_valid_frac": _local_rr_value(local_rr_v3, prefix="local_rr_v3", suffix="valid_frac"),
     }
+
+
+def _local_rr_value(metrics: dict[str, float], *, prefix: str, suffix: str) -> float:
+    prefixed = f"{prefix}_{suffix}"
+    if prefixed in metrics:
+        return metrics[prefixed]
+    return metrics[f"local_rr_{suffix}"]
 
 
 def _should_show_eval_progress(show_progress: bool | None) -> bool:

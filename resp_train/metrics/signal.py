@@ -577,7 +577,7 @@ def local_rr_metrics(
     low_hz: float = 0.05,
     high_hz: float = 0.7,
 ) -> dict[str, float]:
-    """用滑动窗口 robust peak RR 曲线评估局部呼吸率一致性。"""
+    """legacy/current 局部 RR 探针：20s/5s robust peak 曲线，仅作反例筛查。"""
 
     pred_x = _as_1d_float(pred)
     target_x = _as_1d_float(target)
@@ -614,8 +614,159 @@ def local_rr_rate_trace(
     low_hz: float = 0.05,
     high_hz: float = 0.7,
 ) -> np.ndarray:
-    """返回滑动窗口 robust peak RR 序列，便于复用 target 侧计算。"""
+    """返回 legacy/current 滑动窗口 robust peak RR 序列，便于复用 target 侧计算。"""
 
+    return _local_rr_rate_trace_with_estimator(
+        signal,
+        fs=fs,
+        window_sec=window_sec,
+        step_sec=step_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        estimator=lambda segment: estimate_robust_peak_rate_bpm(
+            segment,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        ),
+    )
+
+
+def local_rr_v2_metrics(
+    pred: np.ndarray,
+    target: np.ndarray,
+    *,
+    fs: float,
+    window_sec: float = 40.0,
+    step_sec: float = 10.0,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+) -> dict[str, float]:
+    """v2 局部 RR：40s/10s + 更严格的 spectral-guided peak 间距。"""
+
+    pred_x = _as_1d_float(pred)
+    target_x = _as_1d_float(target)
+    if pred_x.shape != target_x.shape:
+        raise ValueError(f"pred 和 target 长度必须一致，当前 {pred_x.shape} != {target_x.shape}")
+    pred_arr = local_rr_v2_rate_trace(
+        pred_x,
+        fs=fs,
+        window_sec=window_sec,
+        step_sec=step_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    target_arr = local_rr_v2_rate_trace(
+        target_x,
+        fs=fs,
+        window_sec=window_sec,
+        step_sec=step_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    return _rename_local_rr_metrics(local_rr_metrics_from_rate_traces(pred_arr, target_arr), prefix="local_rr_v2")
+
+
+def local_rr_v2_rate_trace(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    window_sec: float = 40.0,
+    step_sec: float = 10.0,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+) -> np.ndarray:
+    """v2 局部 RR 曲线，降低同一呼吸周期内双峰被当作两个周期的概率。"""
+
+    return _local_rr_rate_trace_with_estimator(
+        signal,
+        fs=fs,
+        window_sec=window_sec,
+        step_sec=step_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        estimator=lambda segment: estimate_robust_peak_rate_bpm(
+            segment,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+            spectral_distance_fraction=0.8,
+        ),
+    )
+
+
+def local_rr_v3_metrics(
+    pred: np.ndarray,
+    target: np.ndarray,
+    *,
+    fs: float,
+    window_sec: float = 40.0,
+    step_sec: float = 10.0,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+) -> dict[str, float]:
+    """v3 局部 RR：40s/10s + 过零周期率，作为不依赖寻峰的对照探针。"""
+
+    pred_x = _as_1d_float(pred)
+    target_x = _as_1d_float(target)
+    if pred_x.shape != target_x.shape:
+        raise ValueError(f"pred 和 target 长度必须一致，当前 {pred_x.shape} != {target_x.shape}")
+    pred_arr = local_rr_v3_rate_trace(
+        pred_x,
+        fs=fs,
+        window_sec=window_sec,
+        step_sec=step_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    target_arr = local_rr_v3_rate_trace(
+        target_x,
+        fs=fs,
+        window_sec=window_sec,
+        step_sec=step_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+    )
+    return _rename_local_rr_metrics(local_rr_metrics_from_rate_traces(pred_arr, target_arr), prefix="local_rr_v3")
+
+
+def local_rr_v3_rate_trace(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    window_sec: float = 40.0,
+    step_sec: float = 10.0,
+    low_hz: float = 0.05,
+    high_hz: float = 0.7,
+) -> np.ndarray:
+    """v3 局部 RR 曲线，用过零周期数估计每个局部窗的平均呼吸率。"""
+
+    return _local_rr_rate_trace_with_estimator(
+        signal,
+        fs=fs,
+        window_sec=window_sec,
+        step_sec=step_sec,
+        low_hz=low_hz,
+        high_hz=high_hz,
+        estimator=lambda segment: _zero_crossing_rate_bpm(
+            segment,
+            fs=fs,
+            low_hz=low_hz,
+            high_hz=high_hz,
+        ),
+    )
+
+
+def _local_rr_rate_trace_with_estimator(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    window_sec: float,
+    step_sec: float,
+    low_hz: float,
+    high_hz: float,
+    estimator,
+) -> np.ndarray:
     x = _as_1d_float(signal)
     fs = float(fs)
     window_sec = float(window_sec)
@@ -640,8 +791,41 @@ def local_rr_rate_trace(
     rates: list[float] = []
     for start in starts:
         end = start + window_samples
-        rates.append(estimate_robust_peak_rate_bpm(x[start:end], fs=fs, low_hz=low_hz, high_hz=high_hz))
+        rates.append(float(estimator(x[start:end])))
     return np.asarray(rates, dtype=np.float64)
+
+
+def _zero_crossing_rate_bpm(
+    signal: np.ndarray,
+    *,
+    fs: float,
+    low_hz: float,
+    high_hz: float,
+) -> float:
+    x = _as_1d_float(signal)
+    fs = float(fs)
+    if fs <= 0:
+        raise ValueError(f"fs 必须为正数，当前={fs}")
+    duration_sec = float(x.size) / fs
+    if duration_sec <= 0:
+        return float("nan")
+    cycles = int(zero_crossing_counts(x)["cycle"])
+    if cycles < 1:
+        return float("nan")
+    rate = float(cycles) * 60.0 / duration_sec
+    low_bpm = float(low_hz) * 60.0
+    high_bpm = float(high_hz) * 60.0
+    if not low_bpm <= rate <= high_bpm:
+        return float("nan")
+    return rate
+
+
+def _rename_local_rr_metrics(metrics: dict[str, float], *, prefix: str) -> dict[str, float]:
+    return {
+        f"{prefix}_mae": metrics["local_rr_mae"],
+        f"{prefix}_corr": metrics["local_rr_corr"],
+        f"{prefix}_valid_frac": metrics["local_rr_valid_frac"],
+    }
 
 
 def local_rr_metrics_from_rate_traces(pred_rates: np.ndarray, target_rates: np.ndarray) -> dict[str, float]:

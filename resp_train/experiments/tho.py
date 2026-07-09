@@ -373,6 +373,12 @@ EPOCH_SUMMARY_METRICS = [
     "local_rr_mae",
     "local_rr_corr",
     "local_rr_valid_frac",
+    "local_rr_v2_mae",
+    "local_rr_v2_corr",
+    "local_rr_v2_valid_frac",
+    "local_rr_v3_mae",
+    "local_rr_v3_corr",
+    "local_rr_v3_valid_frac",
 ]
 
 
