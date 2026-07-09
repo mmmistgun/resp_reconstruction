@@ -67,15 +67,14 @@
   呼吸强弱诊断，优先于 zero-lag 相对包络列解释波形强弱是否恢复。
 - `relative_envelope_mae`、`relative_envelope_corr`：zero-lag 相对包络诊断，保留用于
   旧记录解释和不考虑持续时延的坏例定位。
-- `local_rr_mae`、`local_rr_corr`、`local_rr_valid_frac`：局部 RR 曲线指标，默认 20 秒
-  窗口、5 秒步长。它不是逐呼吸事件匹配指标，应结合 valid fraction 解释。2026-07-09
-  复核发现该列容易受局部双峰寻峰影响，暂按 legacy exploratory diagnostic 解释，不作为
-  正式排序列。
-- `local_rr_v2_mae`、`local_rr_v2_corr`、`local_rr_v2_valid_frac`：局部 RR v2 探针，
-  默认 40 秒窗口、10 秒步长，并使用更严格的 spectral-guided peak 间距，降低同一呼吸周期
-  双峰被算成两个周期的概率。当前仅作为候选诊断列。
-- `local_rr_v3_mae`、`local_rr_v3_corr`、`local_rr_v3_valid_frac`：局部 RR v3 探针，
-  默认 40 秒窗口、10 秒步长，用过零周期数估计局部平均 RR，作为不依赖寻峰的对照列。
+- `local_rr_mae`、`local_rr_corr`、`local_rr_valid_frac`：当前 canonical 局部 RR
+  曲线指标。2026-07-09 起采用原 v2 口径：默认 40 秒窗口、10 秒步长，并使用更严格的
+  spectral-guided peak 间距，降低同一呼吸周期双峰被算成两个周期的概率。它不是逐呼吸
+  事件匹配指标，应结合 `valid_frac`、目标侧局部 RR 跳变和波形复核解释。
+- legacy local RR：旧 `local_rr_*` 20 秒窗口、5 秒步长口径已退场；旧 CSV 中的
+  `local_rr_*` 若生成于 2026-07-09 转正前，只能作为历史反例筛查列。
+- local RR v3：40 秒/10 秒过零周期率探针已退场；它只保留为 2026-07-09 探索记录，
+  不进入当前默认评价输出、summary 或排序链。
 
 ## 当前排序建议
 
@@ -85,14 +84,13 @@
 1. 先确认同数据口径、同 split、同验证窗口、同 seed 配对和同 checkpoint 选择口径。
 2. 看 `rr_peak_band_robust_abs_error` 与 `breath_count_zero_cross_abs_error` 是否守住主护栏。
 3. 用 `rr_peak_band_abs_error`、`rr_spec_abs_error` 和长尾比例辅助解释误拣来源。
-4. 用 `best_lag_corr_4s`、`best_lag_sec_4s`、`relative_envelope_*_lag4s` 和局部 RR
-   探针解释低频形态、强弱和局部节律；其中 current `local_rr_*` 统一降级为
-   legacy 反例筛查列，优先复核 `local_rr_v2_*` 与 `local_rr_v3_*` 是否在人工样本上
-   符合波形观察。
+4. 用 `best_lag_corr_4s`、`best_lag_sec_4s`、`relative_envelope_*_lag4s` 和当前
+   `local_rr_*` 解释低频形态、强弱和局部节律；局部 RR 仍需结合目标侧跳变和波形复核，
+   不用 legacy/v3 探针参与当前排序。
 5. `val_loss`、`band_limited_corr`、`spectrum_similarity` 或单个频谱收益不能单独决定模型
    通过。
 
-## 2026-07-09 局部 RR v2/v3 探针
+## 2026-07-09 局部 RR 转正记录
 
 本次只对 `g3_c_wide_8p0_20260837` 的 held-out test checkpoint 做一次探索性复评，
 输出保存在 `runs/local_rr_v2_v3_probe_20260709/`：
@@ -102,22 +100,23 @@
 - `g3_c_wide_8p0_20260837_v2_v3_test_manifest.csv`
 - `g3_c_wide_8p0_20260837_v2_v3_case_eval.csv`
 
-结果显示：current `local_rr_mae` mean/median 为 `1.029/0.470`；v2 降到
+结果显示：当时的 current/legacy `local_rr_mae` mean/median 为 `1.029/0.470`；v2 降到
 `0.790/0.297`；v3 为 `0.864/0.400`。在 `rr_peak_band_robust_abs_error < 0.5`
-但局部 RR 误差大于 `2 bpm` 的窗口数上，current 为 `120`，v2 降到 `49`，
-v3 为 `101`。关键样本 row 3718 从 current `5.413` 降到 v2 `0.563`，支持“20 秒
+但局部 RR 误差大于 `2 bpm` 的窗口数上，当时的 current/legacy 为 `120`，v2 降到 `49`，
+v3 为 `101`。关键样本 row 3718 从当时的 current/legacy `5.413` 降到 v2 `0.563`，支持“20 秒
 寻峰把标签双峰化”的判断；v3 对该样本仍为 `6.0`，说明过零对局部振荡形态也敏感。
 
-当前判断：v2 比 current 更适合作为后续局部节律候选探针；v3 可保留为不依赖寻峰的
-对照，但不能直接替代。两者都尚未升级为正式主指标，需要更多人工坏例复核。
-
-稳健性补查：v2 的中位数、90 分位和 95 分位优于 current，但极端尾部仍未消失；
-`local_rr_v2_mae > 5 bpm` 的窗口数为 `67/2310`，高于 current 的 `48/2310`。
+稳健性补查：v2 的中位数、90 分位和 95 分位优于当时的 current/legacy，但极端尾部仍未消失；
+`local_rr_v2_mae > 5 bpm` 的窗口数为 `67/2310`，高于当时 current/legacy 的 `48/2310`。
 target 侧 v2 局部曲线自身有 `80/2310` 个 180 秒窗口出现超过 `15 bpm` 的窗内
 范围跳变，且 v2 高误差窗口中 `48/67` 个伴随这类 target 侧局部 RR 跳变。说明
 40 秒局部频谱周期约束能修复一部分同周期双峰，但仍会受谱峰硬切换、谐波抢峰和
-低质量局部窗影响。若后续要升级 v2，需要增加 target 侧可靠性门控，例如谱峰优势度、
-相邻局部窗跳变、v2 与 spectral/zero-cross 的一致性、以及 `valid_frac` 下限。
+低质量局部窗影响。
+
+2026-07-09 人工坏例复核后接受原 v2 作为当前 canonical `local_rr_*`。legacy 20s/5s
+寻峰口径和 v3 过零口径同时退入历史，不再作为默认评价列输出。旧结果若要进入当前
+local RR 讨论，必须按转正后的 `local_rr_*` 口径重评 checkpoint；只重算旧 summary 不足以
+改变该指标语义。
 
 ## 重算、重评与重训边界
 
@@ -135,7 +134,7 @@ target 侧 v2 局部曲线自身有 `80/2310` 个 180 秒窗口出现超过 `15 
 当前问题仍需要该模型或候选，且满足任一条件时，归为 `needs_reeval_for_active`：
 
 - 逐窗口指标缺少 `rr_peak_band_robust_abs_error`、`best_lag_corr_4s`、
-  `relative_envelope_*_lag4s`、legacy `local_rr_*` 或候选 `local_rr_v2/v3_*` 等当前列。
+  `relative_envelope_*_lag4s` 或 2026-07-09 后 canonical `local_rr_*` 等当前列。
 - `rr_peak_abs_error` 生成于旧口径，未区分 masked 与 unmasked raw peak。
 - target-side cache、评价 mask、lag 搜索、local RR 或 robust peak 估计逻辑变化后，
   旧 CSV 无法证明满足当前口径。
@@ -157,8 +156,9 @@ target 侧 v2 局部曲线自身有 `80/2310` 个 180 秒窗口出现超过 `15 
 `g0_f0_native_stft_pre_mixer`、`g3_c_wide_8p0`、`g3_c_bandenergy` 各 3 个 seed。
 
 本次复评确认逐窗口 metrics 已包含 `rr_peak_band_robust_abs_error`、
-`best_lag_corr_4s`、`relative_envelope_*_lag4s` 和 legacy `local_rr_*` 当前列；
-2026-07-09 后续探针另补 `local_rr_v2/v3_*` 候选列。派生汇总见：
+`best_lag_corr_4s`、`relative_envelope_*_lag4s` 和 legacy `local_rr_*` 旧列；
+2026-07-09 该局部 RR 旧列已退场，进入当前 local RR 讨论前需要按转正后的
+`local_rr_*` 口径重评。派生汇总见：
 
 - `runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_seed_summary.csv`
 - `runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_label_summary.csv`

@@ -29,7 +29,7 @@
 | 对象 | 状态 | 当前判断 | 证据路径 | 下一步 |
 |---|---|---|---|---|
 | `G3_C_wide_8p0` | `active_current` | 当前最稳默认 STFT 输入：`win2000/hop250 + 0.05-8Hz + conv2d + native_inject pre_mixer`。普通 checkpoint、validation top-k、held-out robust test 和 2026-07-08 当前指标复评都支持它优于 time-only / F0 anchor。 | `docs/experiments/g_series_stft_input_resolution_band_plan.md`；`runs/g_series_stft_input_g3_summary.csv`；`runs/g_series_stft_input_g3_paired_delta.csv`；`runs/g_series_stft_input_topk_best_by_rr.csv`；`runs/test_eval_g_series_20260705_robust_v1/g_series_robust_v1_label_summary.csv`；`runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_label_summary.csv`；`runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_delta_vs_time_label.csv` | 作为当前默认 anchor；后续若继续模型结构研究，应以它为 baseline。 |
-| `G3_C_bandenergy` | `active_current` | 唯一仍有讨论价值的分频带/低维编码候选。2026-07-08 当前指标复评中 breath count 和 legacy local RR MAE 最好，但 current `local_rr_*` 已在 2026-07-09 降级为反例筛查列；robust RR、lag-aware 形态和 legacy local RR corr 不如 `G3_C_wide_8p0`，不能升级为默认。 | `docs/experiments/g_series_stft_input_resolution_band_plan.md`；`runs/g_series_stft_input_g3_summary.csv`；`runs/g_series_stft_input_g3_paired_delta.csv`；`runs/g_series_stft_input_topk_best_by_rr.csv`；`runs/test_eval_g_series_20260705_robust_v1/g_series_robust_v1_label_summary.csv`；`runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_label_summary.csv`；`runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_delta_vs_time_label.csv` | 只在要验证“选择性/条件注入”时保留；不扩大全矩阵，不直接作为 H 系列 anchor。 |
+| `G3_C_bandenergy` | `active_current` | 唯一仍有讨论价值的分频带/低维编码候选。2026-07-08 当前指标复评中 breath count 和旧 local RR MAE 最好，但该 local RR 列生成于 2026-07-09 转正前，不能再作为当前排序依据；robust RR、lag-aware 形态和旧 local RR corr 不如 `G3_C_wide_8p0`，不能升级为默认。 | `docs/experiments/g_series_stft_input_resolution_band_plan.md`；`runs/g_series_stft_input_g3_summary.csv`；`runs/g_series_stft_input_g3_paired_delta.csv`；`runs/g_series_stft_input_topk_best_by_rr.csv`；`runs/test_eval_g_series_20260705_robust_v1/g_series_robust_v1_label_summary.csv`；`runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_label_summary.csv`；`runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_delta_vs_time_label.csv` | 只在要验证“选择性/条件注入”时保留；不扩大全矩阵，不直接作为 H 系列 anchor。 |
 | `F-D0_high_stft_anchor` / `F-D2_high_cwt_modulation` | `reference_only` | 高频上下文对 hard/low-spectrum 窗口有局部信号，但 easy/fast-RR 护栏失败；不能升级主线。若后续研究选择性 gating，可作为局部信号来源参考。 | `docs/experiments/f_series_stft_loss_plan.md`；`runs/f_d_highfreq_summary.csv`；`runs/f_d_highfreq_paired_delta.csv`；`runs/f_d_highfreq_topk_best_by_rr.csv`；`runs/f_d_feature_extractor_summary.csv` | 不扩 seed，不继续 CWT/SST dense path。只有明确做无泄漏 hard/easy proxy 时再引用。 |
 
 ## 2026-07-08 当前指标复评
@@ -40,9 +40,9 @@
 输出在 `runs/test_eval_g_series_20260708_current_metrics/`。
 
 完整性检查通过：12 个 `metrics/summary/manifest` 全部存在，逐窗口 metrics 包含
-`rr_peak_band_robust_abs_error`、4s lag-aware envelope/corr 和 legacy `local_rr_*` 当前口径列。
-注意：2026-07-09 复核后，current `local_rr_*` 统一降级为反例筛查列；局部 RR 候选解释
-优先看后续 `local_rr_v2/v3_*` 探针。
+`rr_peak_band_robust_abs_error`、4s lag-aware envelope/corr 和旧 `local_rr_*` 列。
+注意：2026-07-09 复核后，原 v2 口径转正为当前 `local_rr_*`；本节表格中的 local RR
+数值生成于转正前，只能作为历史参考，不能替代按新口径重评。
 
 | 对象 | robust RR mean | count error mean | lag4 envelope corr mean | lag4 corr mean | local RR MAE mean | local RR corr mean | 解释 |
 |---|---:|---:|---:|---:|---:|---:|---|

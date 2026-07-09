@@ -98,7 +98,7 @@
 1. 先运行 split 独立性审计，确认当前结果应解释为 within-subject 开发指标，还是可以支撑跨 `samp_id` 泛化结论。
 2. 使用同一个验证 seed 和全量窗口，避免验证集变化掩盖 loss 差异。
 3. 每完成一次正式实验 run 后提交一次仓库状态，提交信息写明实验口径和关键权重。
-4. 先按任务指标筛选：`rr_peak_band_robust_abs_error` 守住整窗呼吸率护栏；再看 `best_lag_corr_4s`、`best_lag_sec_4s`、`relative_envelope_mae_lag4s`、`relative_envelope_corr_lag4s` 和局部 RR 探针，确认允许持续时延后的低频形态、相对强弱和局部 RR 是否改善。legacy `local_rr_*` 默认使用 20 秒窗口、5 秒步长，是局部 RR 曲线指标，不是逐呼吸事件匹配；2026-07-09 起新增探索列 `local_rr_v2_*`（40 秒/10 秒 + 更严格 spectral-guided peak 间距）和 `local_rr_v3_*`（40 秒/10 秒 + 过零周期率）。current `local_rr_*` 暂只作反例筛查，v2/v3 仍是候选诊断列。`rr_peak_band_abs_error` 和 `rr_spec_abs_error` 保留为历史/频域兼容护栏，不再单独主导排序。
+4. 先按任务指标筛选：`rr_peak_band_robust_abs_error` 守住整窗呼吸率护栏；再看 `best_lag_corr_4s`、`best_lag_sec_4s`、`relative_envelope_mae_lag4s`、`relative_envelope_corr_lag4s` 和当前 `local_rr_*`，确认允许持续时延后的低频形态、相对强弱和局部 RR 是否改善。2026-07-09 起 `local_rr_*` 转为 40 秒窗口、10 秒步长 + 更严格 spectral-guided peak 间距口径；legacy 20 秒/5 秒寻峰口径和 v3 过零探针退入历史，不再作为默认评价列输出。`rr_peak_band_abs_error` 和 `rr_spec_abs_error` 保留为历史/频域兼容护栏，不再单独主导排序。
 5. `rr_peak_abs_error` 保留为原始尖峰诊断；当前代码会在 research v2 数据中先按 THO/BCG 共同好段 mask 去掉坏段，再按连续好段计算 raw peak RR。未遮罩旧式诊断保存在 `rr_peak_unmasked_abs_error`。`band_limited_corr` 是 zero-lag 形态诊断；BCG 与 THO 可能存在个体化持续时延，因此主要结合 `best_lag_corr_4s` 和 `best_lag_sec_4s` 解释低频形态是否恢复。`breath_count_zero_cross_abs_error` 继续作为低质量信号下是否恢复合理周期数量的轻量护栏，并额外输出上升/下降过零计数供边界诊断。
 
 效率口径建议：正式对照实验仍应显式记录 `training.batch_size`。当前
