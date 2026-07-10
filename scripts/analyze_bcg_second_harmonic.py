@@ -19,7 +19,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from resp_train.analysis.second_harmonic import (
     HarmonicFeatureConfig,
+    HarmonicFeatures,
     HarmonicThresholds,
+    classify_model_correction,
     extract_harmonic_features,
 )
 from resp_train.config import load_config
@@ -421,6 +423,248 @@ def summarize_existing_metrics(
     return outputs
 
 
+def summarize_prediction_corrections(
+    *,
+    labels_path: Path,
+    thresholds: HarmonicThresholds,
+    feature_cfg: HarmonicFeatureConfig,
+    predictions_dir: Path,
+    output_dir: Path,
+    expected_runs: list[tuple[str, int]] | tuple[tuple[str, int], ...] | None = None,
+) -> dict[str, Path]:
+    labels_path = Path(labels_path)
+    labels_bytes = labels_path.read_bytes()
+    labels_sha256 = hashlib.sha256(labels_bytes).hexdigest()
+    labels = pd.read_csv(labels_path)
+    required = {
+        "dataset_row_id",
+        "samp_id",
+        "stratum",
+        "harmonic_positive",
+        "status",
+        "tho_reference_hz",
+        "tho_robust_rr_bpm",
+        "tho_spectral_rr_bpm",
+        "bcg_peak_hz",
+        "peak_to_tho_ratio",
+        "peak_second_harmonic_relative_error",
+        "fundamental_energy",
+        "second_harmonic_energy",
+        "band_energy",
+        "harmonic_to_fundamental_ratio",
+        "harmonic_band_fraction",
+    }
+    missing = required - set(labels.columns)
+    if missing:
+        raise ValueError(f"测试标签缺少纠正率分析列: {sorted(missing)}")
+    if labels["dataset_row_id"].duplicated().any():
+        raise ValueError("测试标签存在重复 dataset_row_id")
+    positive = labels[labels["harmonic_positive"].astype(bool)].copy()
+    if positive.empty:
+        raise ValueError("测试标签没有谐波阳性窗口")
+    positive_ids = positive["dataset_row_id"].astype(int).tolist()
+    positive_lookup = positive.set_index("dataset_row_id", drop=False)
+
+    prediction_dir = Path(predictions_dir)
+    manifest_paths = sorted(prediction_dir.glob("*_harmonic_predictions_manifest.json"))
+    if not manifest_paths:
+        raise FileNotFoundError(f"预测目录没有 harmonic prediction manifest: {prediction_dir}")
+    runs: list[tuple[str, int, Path, dict[str, Any]]] = []
+    seen_runs: set[tuple[str, int]] = set()
+    for manifest_path in manifest_paths:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        label = str(manifest.get("label", ""))
+        seed = int(manifest.get("seed"))
+        run_key = (label, seed)
+        if run_key in seen_runs:
+            raise ValueError(f"预测 manifest 存在重复 label/seed: {run_key}")
+        seen_runs.add(run_key)
+        if manifest.get("labels_sha256") != labels_sha256:
+            raise ValueError(f"预测 manifest 标签哈希不一致: {manifest_path}")
+        prediction_path = Path(str(manifest.get("output_path", "")))
+        if not prediction_path.is_absolute() and not prediction_path.exists():
+            prediction_path = prediction_dir / prediction_path.name
+        if not prediction_path.exists():
+            raise FileNotFoundError(f"预测 NPZ 不存在: {prediction_path}")
+        runs.append((label, seed, prediction_path, manifest))
+    if expected_runs is None:
+        expected_runs = [(label, seed) for label in G_SERIES_LABELS for seed in G_SERIES_SEEDS]
+    expected_set = {(str(label), int(seed)) for label, seed in expected_runs}
+    if seen_runs != expected_set:
+        raise ValueError(
+            f"预测 run 集合不完整: missing={sorted(expected_set - seen_runs)} "
+            f"extra={sorted(seen_runs - expected_set)}"
+        )
+
+    detail_records: list[dict[str, Any]] = []
+    for label, seed, prediction_path, _ in sorted(runs, key=lambda item: (item[0], item[1])):
+        with np.load(prediction_path, allow_pickle=False) as blob:
+            row_ids = np.asarray(blob["dataset_row_id"], dtype=np.int64).reshape(-1)
+            predictions = np.asarray(blob["r_tho_hat"], dtype=np.float64)
+            targets = np.asarray(blob["tho_ref"], dtype=np.float64)
+        if row_ids.tolist() != positive_ids:
+            raise ValueError(f"预测 row 顺序与固定阳性标签不一致: label={label} seed={seed}")
+        predictions = _prediction_matrix(predictions, name="r_tho_hat")
+        targets = _prediction_matrix(targets, name="tho_ref")
+        if predictions.shape != targets.shape or predictions.shape[0] != len(row_ids):
+            raise ValueError(f"预测/目标/row shape 不一致: label={label} seed={seed}")
+        for index, row_id in enumerate(row_ids.tolist()):
+            input_row = positive_lookup.loc[int(row_id)]
+            input_features = _features_from_row(input_row)
+            output_features = extract_harmonic_features(
+                predictions[index],
+                targets[index],
+                cfg=feature_cfg,
+            )
+            correction_status = classify_model_correction(
+                input_features,
+                output_features,
+                thresholds,
+            )
+            input_ratio = float(input_features.harmonic_to_fundamental_ratio)
+            output_ratio = float(output_features.harmonic_to_fundamental_ratio)
+            ratio_drop = (
+                (input_ratio - output_ratio) / max(input_ratio, np.finfo(np.float64).eps)
+                if np.isfinite(input_ratio) and np.isfinite(output_ratio) and input_ratio > 0
+                else float("nan")
+            )
+            detail_records.append(
+                {
+                    "label": label,
+                    "seed": seed,
+                    "dataset_row_id": int(row_id),
+                    "samp_id": int(input_row["samp_id"]),
+                    "input_stratum": str(input_row["stratum"]),
+                    "correction_status": correction_status,
+                    "input_peak_to_tho_ratio": input_features.peak_to_tho_ratio,
+                    "output_peak_to_tho_ratio": output_features.peak_to_tho_ratio,
+                    "input_harmonic_to_fundamental_ratio": input_ratio,
+                    "output_harmonic_to_fundamental_ratio": output_ratio,
+                    "harmonic_ratio_relative_drop": ratio_drop,
+                    "input_harmonic_band_fraction": input_features.harmonic_band_fraction,
+                    "output_harmonic_band_fraction": output_features.harmonic_band_fraction,
+                }
+            )
+    detail = pd.DataFrame.from_records(detail_records)
+    seed_summary = _correction_seed_summary(detail)
+    summary = _aggregate_correction_seed_summary(seed_summary)
+    output_dir = Path(output_dir)
+    outputs = {
+        "detail": output_dir / "model_harmonic_correction.csv",
+        "seed_summary": output_dir / "model_harmonic_correction_seed_summary.csv",
+        "summary": output_dir / "model_harmonic_correction_summary.csv",
+        "manifest": output_dir / "analysis_manifest.json",
+    }
+    _write_csv_exclusive(detail, outputs["detail"])
+    _write_csv_exclusive(seed_summary, outputs["seed_summary"])
+    _write_csv_exclusive(summary, outputs["summary"])
+    manifest = {
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "operation": "summarize-corrections",
+        "labels_path": str(labels_path),
+        "labels_sha256": labels_sha256,
+        "predictions_dir": str(prediction_dir),
+        "threshold_version": thresholds.version,
+        "feature_config": asdict(feature_cfg),
+        "runs": [{"label": label, "seed": seed} for label, seed in sorted(seen_runs)],
+        "n_positive_windows": int(len(positive_ids)),
+        "outputs": {name: str(path) for name, path in outputs.items() if name != "manifest"},
+    }
+    _write_json_exclusive(manifest, outputs["manifest"])
+    return outputs
+
+
+def _features_from_row(row: pd.Series) -> HarmonicFeatures:
+    return HarmonicFeatures(
+        status=str(row["status"]),
+        tho_reference_hz=float(row["tho_reference_hz"]),
+        tho_robust_rr_bpm=float(row["tho_robust_rr_bpm"]),
+        tho_spectral_rr_bpm=float(row["tho_spectral_rr_bpm"]),
+        bcg_peak_hz=float(row["bcg_peak_hz"]),
+        peak_to_tho_ratio=float(row["peak_to_tho_ratio"]),
+        peak_second_harmonic_relative_error=float(row["peak_second_harmonic_relative_error"]),
+        fundamental_energy=float(row["fundamental_energy"]),
+        second_harmonic_energy=float(row["second_harmonic_energy"]),
+        band_energy=float(row["band_energy"]),
+        harmonic_to_fundamental_ratio=float(row["harmonic_to_fundamental_ratio"]),
+        harmonic_band_fraction=float(row["harmonic_band_fraction"]),
+    )
+
+
+def _prediction_matrix(values: np.ndarray, *, name: str) -> np.ndarray:
+    array = np.asarray(values, dtype=np.float64)
+    if array.ndim == 3 and array.shape[1] == 1:
+        array = array[:, 0, :]
+    if array.ndim != 2:
+        raise ValueError(f"{name} 必须为 [N,T] 或 [N,1,T]，当前={array.shape}")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{name} 包含非有限值")
+    return array
+
+
+def _correction_seed_summary(detail: pd.DataFrame) -> pd.DataFrame:
+    records: list[dict[str, Any]] = []
+    for (label, seed), run_frame in detail.groupby(["label", "seed"], sort=True):
+        strata = ["harmonic_positive_union", *sorted(run_frame["input_stratum"].unique().tolist())]
+        for input_stratum in strata:
+            frame = (
+                run_frame
+                if input_stratum == "harmonic_positive_union"
+                else run_frame[run_frame["input_stratum"].eq(input_stratum)]
+            )
+            n_windows = int(len(frame))
+            if n_windows == 0:
+                continue
+            counts = frame["correction_status"].value_counts()
+            records.append(
+                {
+                    "label": label,
+                    "seed": int(seed),
+                    "input_stratum": input_stratum,
+                    "n_windows": n_windows,
+                    "n_subjects": int(frame["samp_id"].nunique()),
+                    "corrected_fraction": float(counts.get("corrected", 0) / n_windows),
+                    "partially_corrected_fraction": float(
+                        counts.get("partially_corrected", 0) / n_windows
+                    ),
+                    "not_corrected_fraction": float(counts.get("not_corrected", 0) / n_windows),
+                    "harmonic_ratio_relative_drop_mean": float(
+                        pd.to_numeric(frame["harmonic_ratio_relative_drop"], errors="coerce").mean()
+                    ),
+                    "output_peak_to_tho_ratio_mean": float(
+                        pd.to_numeric(frame["output_peak_to_tho_ratio"], errors="coerce").mean()
+                    ),
+                }
+            )
+    return pd.DataFrame.from_records(records)
+
+
+def _aggregate_correction_seed_summary(seed_summary: pd.DataFrame) -> pd.DataFrame:
+    numeric = [
+        column
+        for column in seed_summary.columns
+        if column not in {"label", "seed", "input_stratum"}
+        and pd.api.types.is_numeric_dtype(seed_summary[column])
+    ]
+    grouped = seed_summary.groupby(["label", "input_stratum"], dropna=False)
+    mean = grouped[numeric].mean().reset_index()
+    std = grouped[numeric].std(ddof=1).reset_index().rename(
+        columns={column: f"{column}_std" for column in numeric}
+    )
+    return mean.merge(std, on=["label", "input_stratum"], how="left")
+
+
+def _feature_config_from_labels_manifest(labels_path: Path) -> HarmonicFeatureConfig:
+    manifest_path = Path(labels_path).parent / "analysis_manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"标签同目录缺少 analysis_manifest.json: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    values = manifest.get("feature_config")
+    if not isinstance(values, dict):
+        raise ValueError(f"标签 manifest 缺少 feature_config: {manifest_path}")
+    return HarmonicFeatureConfig(**values)
+
+
 def discover(
     *,
     config_path: Path,
@@ -584,6 +828,15 @@ def _parse_args() -> argparse.Namespace:
     summary_parser.add_argument("--eval-root", type=Path, required=True)
     summary_parser.add_argument("--dataset-index", type=Path, default=None)
     summary_parser.add_argument("--output-dir", type=Path, required=True)
+
+    corrections_parser = subparsers.add_parser(
+        "summarize-corrections",
+        help="计算模型输出对二次谐波的窗口级纠正状态",
+    )
+    corrections_parser.add_argument("--labels", type=Path, required=True)
+    corrections_parser.add_argument("--thresholds", type=Path, required=True)
+    corrections_parser.add_argument("--predictions-dir", type=Path, required=True)
+    corrections_parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
 
 
@@ -620,6 +873,19 @@ def main() -> None:
             eval_root=args.eval_root,
             output_dir=args.output_dir,
             dataset_index=args.dataset_index,
+        )
+        for name, path in outputs.items():
+            print(f"{name}: {path}")
+        return
+    if args.command == "summarize-corrections":
+        thresholds = load_frozen_thresholds(args.thresholds)
+        feature_cfg = _feature_config_from_labels_manifest(args.labels)
+        outputs = summarize_prediction_corrections(
+            labels_path=args.labels,
+            thresholds=thresholds,
+            feature_cfg=feature_cfg,
+            predictions_dir=args.predictions_dir,
+            output_dir=args.output_dir,
         )
         for name, path in outputs.items():
             print(f"{name}: {path}")

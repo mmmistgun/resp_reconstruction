@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from omegaconf import OmegaConf
 from resp_train.analysis.second_harmonic import (
     HarmonicFeatureConfig,
     HarmonicThresholds,
+    extract_harmonic_features,
 )
 import scripts.analyze_bcg_second_harmonic as analysis_script
 from scripts.analyze_bcg_second_harmonic import (
@@ -21,9 +23,16 @@ from scripts.analyze_bcg_second_harmonic import (
     freeze_threshold_candidate,
     load_frozen_thresholds,
     summarize_existing_metrics,
+    summarize_prediction_corrections,
     summarize_coverage,
 )
-from scripts.plot_bcg_second_harmonic import plot_validation_review, select_review_cases
+from scripts.export_harmonic_predictions import save_prediction_payload
+from scripts.plot_bcg_second_harmonic import (
+    plot_model_cases,
+    plot_validation_review,
+    select_model_case_rows,
+    select_review_cases,
+)
 
 
 class _FakeDataset:
@@ -359,3 +368,163 @@ def test_summarize_existing_metrics_writes_four_model_outputs(tmp_path: Path) ->
     paired = pd.read_csv(outputs["paired_seed"])
     positive = paired[paired["stratum"] == "harmonic_positive_union"].iloc[0]
     assert positive["delta_rr_peak_band_robust_abs_error_mean"] < 0
+
+
+def test_summarize_prediction_corrections_classifies_and_aggregates(tmp_path: Path) -> None:
+    cfg = HarmonicFeatureConfig(
+        fs=100.0,
+        low_hz=0.05,
+        high_hz=0.7,
+        filter_order=4,
+        welch_nperseg=4096,
+        neighborhood_hz=0.025,
+        energy_floor=1e-12,
+        tho_rr_agreement_bpm=1.0,
+    )
+    thresholds = HarmonicThresholds(
+        version="test-frozen",
+        tho_rr_agreement_bpm=1.0,
+        peak_relative_tolerance=0.1,
+        harmonic_to_fundamental_min=1.0,
+        harmonic_band_fraction_min=0.2,
+        correction_ratio_drop_min=0.2,
+    )
+    fs = 100.0
+    time = np.arange(18000, dtype=np.float64) / fs
+    fundamental = np.sin(2.0 * np.pi * 0.20 * time)
+    harmonic = np.sin(2.0 * np.pi * 0.40 * time)
+    input_signal = 0.25 * fundamental + harmonic
+    input_features = extract_harmonic_features(input_signal, fundamental, cfg=cfg)
+    labels = pd.DataFrame(
+        [
+            {
+                "dataset_row_id": row_id,
+                "samp_id": 220,
+                "split": "test",
+                "stratum": "strong_harmonic",
+                "harmonic_positive": True,
+                **input_features.__dict__,
+            }
+            for row_id in (1, 2, 3)
+        ]
+    )
+    labels_path = tmp_path / "labels.csv"
+    labels.to_csv(labels_path, index=False)
+    labels_sha256 = hashlib.sha256(labels_path.read_bytes()).hexdigest()
+    predictions_dir = tmp_path / "predictions"
+    corrected = fundamental
+    partial = 0.6 * harmonic + 0.5 * fundamental
+    unchanged = input_signal
+    save_prediction_payload(
+        predictions_dir / "wide_101_harmonic_predictions.npz",
+        dataset_row_id=np.asarray([1, 2, 3]),
+        r_tho_hat=np.stack([corrected, partial, unchanged]),
+        tho_ref=np.stack([fundamental, fundamental, fundamental]),
+        manifest={"label": "wide", "seed": 101, "labels_sha256": labels_sha256},
+    )
+
+    outputs = summarize_prediction_corrections(
+        labels_path=labels_path,
+        thresholds=thresholds,
+        feature_cfg=cfg,
+        predictions_dir=predictions_dir,
+        output_dir=tmp_path / "corrections",
+        expected_runs=[("wide", 101)],
+    )
+
+    detail = pd.read_csv(outputs["detail"])
+    assert detail["correction_status"].tolist() == [
+        "corrected",
+        "partially_corrected",
+        "not_corrected",
+    ]
+    seed_summary = pd.read_csv(outputs["seed_summary"])
+    union = seed_summary[seed_summary["input_stratum"] == "harmonic_positive_union"].iloc[0]
+    assert union["n_windows"] == 3
+    assert union["corrected_fraction"] == pytest.approx(1.0 / 3.0)
+    assert union["partially_corrected_fraction"] == pytest.approx(1.0 / 3.0)
+    assert union["not_corrected_fraction"] == pytest.approx(1.0 / 3.0)
+
+
+def test_model_case_selection_and_plot_cover_balanced_categories(tmp_path: Path) -> None:
+    model_labels = ["time", "f0", "wide", "bandenergy"]
+    statuses_by_row = {
+        1: ["corrected"] * 4,
+        2: ["not_corrected"] * 4,
+        3: ["corrected", "partially_corrected", "not_corrected", "corrected"],
+        4: ["partially_corrected"] * 4,
+    }
+    correction_records = []
+    for row_id, statuses in statuses_by_row.items():
+        for label, status in zip(model_labels, statuses):
+            correction_records.append(
+                {
+                    "label": label,
+                    "seed": 101,
+                    "dataset_row_id": row_id,
+                    "correction_status": status,
+                }
+            )
+    corrections = pd.DataFrame.from_records(correction_records)
+    labels = pd.DataFrame(
+        {
+            "dataset_row_id": [1, 2, 3, 4],
+            "samp_id": [220, 229, 671, 704],
+            "peak_second_harmonic_relative_error": [0.02, 0.03, 0.04, 0.11],
+            "harmonic_to_fundamental_ratio": [3.0, 2.5, 2.0, 1.02],
+            "harmonic_band_fraction": [0.5, 0.4, 0.3, 0.21],
+        }
+    )
+    thresholds = HarmonicThresholds(
+        version="test-frozen",
+        tho_rr_agreement_bpm=1.0,
+        peak_relative_tolerance=0.1,
+        harmonic_to_fundamental_min=1.0,
+        harmonic_band_fraction_min=0.2,
+        correction_ratio_drop_min=0.2,
+    )
+
+    selected = select_model_case_rows(
+        corrections,
+        labels,
+        thresholds=thresholds,
+        seed=101,
+        model_labels=model_labels,
+        max_cases=4,
+    )
+
+    assert set(selected["case_category"]) == {
+        "all_corrected",
+        "all_not_corrected",
+        "model_disagreement",
+        "threshold_boundary",
+    }
+    assert not selected["dataset_row_id"].duplicated().any()
+
+    fs = 100.0
+    time = np.arange(2000, dtype=np.float64) / fs
+    tho = np.sin(2.0 * np.pi * 0.20 * time)
+    input_lookup = {
+        row_id: {"bcg": 0.4 * tho + np.sin(2.0 * np.pi * 0.40 * time), "tho": tho}
+        for row_id in statuses_by_row
+    }
+    prediction_lookup = {
+        (label, 101, row_id): np.roll(tho, label_index + row_id)
+        for label_index, label in enumerate(model_labels)
+        for row_id in statuses_by_row
+    }
+    manifest = plot_model_cases(
+        selected,
+        input_lookup=input_lookup,
+        prediction_lookup=prediction_lookup,
+        output_dir=tmp_path / "model_figures",
+        model_labels=model_labels,
+        fs=fs,
+        low_hz=0.05,
+        high_hz=0.7,
+        filter_order=4,
+    )
+
+    assert len(manifest) == 4
+    assert all(Path(path).exists() for path in manifest["figure_path"])
+    assert (tmp_path / "model_figures" / "model_case_manifest.csv").exists()
