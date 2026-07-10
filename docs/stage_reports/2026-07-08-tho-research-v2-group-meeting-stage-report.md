@@ -2,6 +2,8 @@
 
 日期：2026-07-08
 
+更新：2026-07-09 按 `local_rr_*` 口径重评 G 系列测试指标，并同步更新相关表格与解释。
+
 ## 文档定位
 
 本文是面向组会阶段汇报的整理底稿，不是论文正文、完整实验清单或最终结论文件。
@@ -21,7 +23,8 @@
 本阶段的核心进展是：项目已经从“是否需要时频输入”推进到“确定一个可信的 STFT 输入基准方案”。
 当前证据支持以宽频、更高时间分辨率的 STFT 辅助信息作为本阶段基准方案
 （内部代号 `G3_C_wide_8p0`）；`G3_C_bandenergy` 保留为后续选择性修正的候选特征，
-但暂不替代宽频 STFT。2026-07-08 独立测试集复评已覆盖当前比较方案，结论仍支持这一判断。
+但暂不替代宽频 STFT。2026-07-09 `local_rr_*` 复评已覆盖当前比较方案，
+结论仍支持这一判断。
 
 ## 汇报主线
 
@@ -42,7 +45,7 @@ BCG 到 THO 呼吸重建为什么难
 - 再说明当前只比较哪些方案，以及为什么这些方案足够回答当前问题。
 - 最后把听众带到当前决策：宽频 STFT 配置作为本阶段基准方案，后续围绕难恢复窗口和不确定窗口做选择性修正。
 
-## 项目背景
+## 任务动机与问题定义
 
 当前任务可以表述为：
 
@@ -62,7 +65,7 @@ BCG 窗口 -> THO-like 呼吸波形 / 呼吸状态
 - 哪些指标能稳定反映呼吸任务，而不是只反映波形拟合误差？
 - 下一步应如何从平均指标推进到难恢复样本分析？
 
-## 当前实验设置
+## 实验范围与控制变量
 
 当前主线默认指 THO research v2 soft-z 实验设置：
 
@@ -244,6 +247,17 @@ breath_count_zero_cross_abs_error
 这个指标不关心每个峰的细节位置，更像是在问：“180 秒窗口里，模型恢复出的呼吸次数是否差不多？”
 它对低质量窗口、低频形态不稳定窗口很有用。
 
+为了和 RR 误差放在同一量级阅读，后文表格把这个周期数误差除以 3，换算为 180 秒窗口的
+平均周期率误差：
+
+```text
+breath_count_zero_cross_bpm_error
+  = breath_count_zero_cross_abs_error / 3
+```
+
+这个派生量的单位是 bpm，可理解为整窗平均意义上的周期计数误差；它不等同于 robust RR
+或 local RR。
+
 ### 低频形态与时延
 
 `band_limited_corr` 是零时延低频相关：
@@ -300,16 +314,16 @@ relative_envelope_mae_lag4s  = mean(|r_{\hat y} - r_y|)
 
 ### 局部呼吸率
 
-`local_rr_mae`、`local_rr_corr` 和 `local_rr_valid_frac` 原本用于评估局部节律曲线。
-2026-07-09 复核后，该 current 口径统一降级为 legacy exploratory diagnostic：它可以
-筛出“整窗 RR 正确但局部节律可能异常”的反例，但不再作为正式排序或稳定结论指标。
+`local_rr_mae`、`local_rr_corr` 和 `local_rr_valid_frac` 用于评估局部节律曲线。
+2026-07-09 复核后，`local_rr_*` 已切换为当前口径：40 秒滑动窗口、10 秒步长，
+并使用更严格的 spectral-guided peak 间距，降低同一呼吸周期内双峰被误计为两个周期的概率。
 计算过程是：
 
 1. 先对预测和目标做呼吸带滤波。
-2. 用 20 秒滑动窗口、5 秒步长，逐段计算稳健峰值呼吸率：
+2. 用 40 秒滑动窗口、10 秒步长，逐段计算局部稳健峰值呼吸率：
 
 ```text
-RR_local(x, j) = RR_robust(x_b[t_j : t_j + 20s])
+RR_local(x, j) = RR_robust_strict(x_b[t_j : t_j + 40s])
 ```
 
 3. 只保留预测和目标都能得到有效呼吸率的局部窗口，记为集合 `V`：
@@ -320,11 +334,10 @@ local_rr_corr = corr({\hat RR_j}_{j in V}, {RR_j}_{j in V})
 local_rr_valid_frac = |V| / N_local
 ```
 
-在 legacy 口径下，`local_rr_mae` 越低只说明 20 秒寻峰局部 RR 更接近；`local_rr_corr`
-越高只说明该寻峰曲线的快慢变化趋势更同步。若 `valid_frac` 很低，或 target 侧出现局部
-双峰/多峰，不能只看 MAE 或相关性。后续局部 RR 候选解释优先参考 `local_rr_v2_*`
-（40 秒/10 秒 + 更严格 spectral-guided peak 间距）和 `local_rr_v3_*`（40 秒/10 秒 +
-过零周期率）探针。
+`local_rr_mae` 越低，说明局部 RR 曲线的绝对差更小；`local_rr_corr` 越高，说明局部
+快慢变化趋势更同步。它仍不是逐呼吸事件匹配指标：若 `valid_frac` 很低，或 target 侧局部
+RR 曲线本身有硬切换、谐波抢峰或低质量片段，仍需回到波形复核。legacy 20 秒 / 5 秒
+寻峰口径和 v3 过零探针已退入历史，不再进入当前默认评价输出或汇报排序。
 
 ### 汇报时的判断原则
 
@@ -482,12 +495,12 @@ F-B 辅助 STFT 分支相关损失；这些字段保留在配置中，主要是�
 但保留了慢呼吸、常规呼吸主带、谐波 / 波形尖锐度、偏快呼吸和高频上下文等频带强弱变化。
 因此它适合回答“频带能量特征是否足够”，不适合直接和宽频 STFT 混成同一种输入。
 
-## 阶段发现 1：时频信息能补充纯时序模型对呼吸节律的判断
+## 关键证据 1：时频信息能补充纯时序模型对呼吸节律的判断
 
 四类比较方案的目的不是让听众记住实验编号，而是回答一个基础问题：
 BCG 的原始时序波形之外，频率结构是否还能提供额外的呼吸信息。
 
-从纯时序参照到 STFT 辅助信息，呼吸率、低频形态和 legacy 局部呼吸率相关指标都有改善。
+从纯时序参照到 STFT 辅助信息，呼吸率、低频形态和局部呼吸率指标整体有改善。
 这说明 STFT 的作用不是替代时序主干，而是帮助模型识别呼吸节律结构，尤其是在波形形态不稳定、
 局部节律容易混淆的窗口中提供额外依据。
 
@@ -495,7 +508,7 @@ BCG 的原始时序波形之外，频率结构是否还能提供额外的呼吸�
 
 > STFT 辅助信息值得保留；当前问题已经从“是否需要时频信息”转向“哪一种时频表示更适合作为当前基准”。
 
-## 阶段发现 2：宽频、更高时间分辨率的 STFT 更适合作为当前基准配置
+## 关键证据 2：宽频、更高时间分辨率的 STFT 更适合作为当前基准配置
 
 G 系列回答两个问题：
 
@@ -506,45 +519,33 @@ G 系列回答两个问题：
 
 | 方案 | 本阶段定位 | 汇报解释 |
 |---|---|---|
-| `G3_C_wide_8p0` | 本阶段基准方案 | 宽频 STFT，时间分辨率高于上一版参照；稳健带通呼吸率误差、时延校正后形态和 legacy 局部呼吸率相关性综合表现更稳定 |
-| `G3_C_bandenergy` | 选择性修正候选特征 | 频带能量特征，周期计数和 legacy 局部呼吸率误差较低，但整体稳定性不如宽频 STFT |
+| `G3_C_wide_8p0` | 本阶段基准方案 | 宽频 STFT，时间分辨率高于上一版参照；稳健带通呼吸率误差和时延校正后形态综合表现更稳定 |
+| `G3_C_bandenergy` | 选择性修正候选特征 | 频带能量特征，周期计数 bpm 误差和局部 RR 略优，但稳健带通 RR 和时延校正后形态不如宽频 STFT |
 
-2026-07-08 独立测试集复评结果如下。该批结果来自
-`runs/test_eval_g_series_20260708_group_meeting`。指标先在测试窗口上逐个计算，再汇总到单次训练级；
+2026-07-09 按 `local_rr_*` 口径重评后的独立测试集结果如下。该批结果来自
+`runs/test_eval_g_series_20260709_local_rr_canonical`。指标先在测试窗口上逐个计算，再汇总到单次训练级；
 表中数值为每个方案 3 次独立训练的均值 ± 标准差。
 
-| 方案 | 稳健带通 RR 误差 | 周期计数误差 | 4 秒时延校正相关 | legacy 局部 RR MAE | legacy 局部 RR 相关 |
+| 方案 | 稳健带通 RR 误差 | 周期计数 bpm 误差 | 4 秒时延校正相关 | 局部 RR MAE | 局部 RR 相关 |
 |---|---:|---:|---:|---:|---:|
-| `g0_time_only` | 0.773193 ± 0.017278 | 2.334776 ± 0.244266 | 0.865265 ± 0.002625 | 1.100312 ± 0.033263 | 0.534687 ± 0.006692 |
-| `g0_f0_native_stft_pre_mixer` | 0.733281 ± 0.006125 | 2.350216 ± 0.080959 | 0.868751 ± 0.003796 | 1.071699 ± 0.021596 | 0.565080 ± 0.011830 |
-| `g3_c_wide_8p0` | 0.712186 ± 0.023403 | 2.150216 ± 0.075016 | 0.870774 ± 0.003077 | 1.045303 ± 0.018266 | 0.568746 ± 0.022573 |
-| `g3_c_bandenergy` | 0.729792 ± 0.022269 | 2.054401 ± 0.172923 | 0.867238 ± 0.001328 | 1.039168 ± 0.002338 | 0.557832 ± 0.006622 |
+| `g0_time_only` | 0.773193 ± 0.017278 | 0.778259 ± 0.081422 | 0.865265 ± 0.002625 | 0.786678 ± 0.015852 | 0.663619 ± 0.008084 |
+| `g0_f0_native_stft_pre_mixer` | 0.733281 ± 0.006125 | 0.783405 ± 0.026986 | 0.868751 ± 0.003796 | 0.791792 ± 0.013671 | 0.660398 ± 0.003614 |
+| `g3_c_wide_8p0` | 0.712186 ± 0.023403 | 0.716739 ± 0.025005 | 0.870774 ± 0.003077 | 0.780002 ± 0.021617 | 0.664304 ± 0.005835 |
+| `g3_c_bandenergy` | 0.729792 ± 0.022269 | 0.684800 ± 0.057641 | 0.867238 ± 0.001328 | 0.773299 ± 0.017622 | 0.665137 ± 0.009487 |
 
-相对 `g0_time_only`，`g3_c_wide_8p0` 同时改善稳健带通呼吸率误差、周期计数、
-时延校正后形态和 legacy 局部呼吸率；`g3_c_bandenergy` 在周期计数和 legacy 局部呼吸率误差上表现更好，
-但整体稳定性不如宽频方案。因此当前推荐：
+相对 `g0_time_only`，`g3_c_wide_8p0` 同时改善稳健带通呼吸率误差、周期计数 bpm 误差、
+时延校正后形态；局部 RR 也略有改善，但幅度明显小于旧 legacy 口径下的差异。
+`g3_c_bandenergy` 在周期计数 bpm 误差和局部 RR 上略优，但整体稳定性不如宽频方案。因此当前推荐：
 
 - 本阶段基准方案：宽频、更高时间分辨率的 STFT 方案（`G3_C_wide_8p0`）。
 - 选择性修正候选特征：`G3_C_bandenergy`，仅在后续做选择性 / 条件融合时使用。
 - 不建议动作：为不进入当前问题的分支补测试集指标。
 
-关键相对变化：
+## 关键证据 3：频带能量特征提示了局部改进方向，但还不足以替代宽频 STFT
 
-- `g3_c_wide_8p0` 相对 `g0_time_only`：稳健带通 RR 误差 `-0.061007`，周期计数误差
-  `-0.184560`，4 秒时延校正相关 `+0.005509`，legacy 局部 RR MAE `-0.055009`，
-  legacy 局部 RR 相关 `+0.034058`。
-- `g3_c_wide_8p0` 相对 `g0_f0_native_stft_pre_mixer`：稳健带通 RR 误差 `-0.021095`，
-  周期计数误差 `-0.200000`，4 秒时延校正相关 `+0.002023`，legacy 局部 RR MAE `-0.026396`，
-  legacy 局部 RR 相关 `+0.003666`。
-- `g3_c_bandenergy` 相对 `g3_c_wide_8p0`：周期计数误差 `-0.095815`、legacy 局部 RR MAE
-  `-0.006135`，但稳健带通 RR 误差 `+0.017606`、4 秒时延校正相关 `-0.003536`、
-  legacy 局部 RR 相关 `-0.010913`。因此它更适合作为选择性修正的候选特征，而不是本阶段基准方案。
-
-## 阶段发现 3：频带能量特征提示了局部改进方向，但还不足以替代宽频 STFT
-
-`G3_C_bandenergy` 的结果说明，频带能量特征不是没有价值；它在周期计数误差和 legacy 局部 RR MAE 上略优，
-提示这类频带特征可能对一部分窗口有帮助。但它在稳健带通 RR、时延校正后形态和 legacy 局部 RR 相关性上
-不如宽频 STFT 稳定，因此目前还不足以作为当前基准输入配置。
+`G3_C_bandenergy` 的结果说明，频带能量特征不是没有价值；它在周期计数 bpm 误差和局部 RR 上略优，
+提示这类频带特征可能对一部分窗口有帮助。但它在稳健带通 RR 和时延校正后形态上不如宽频 STFT 稳定，
+因此目前还不足以作为当前基准输入配置。
 
 因此，第一次汇报里建议把它讲成下一阶段选择性修正的候选特征：
 
@@ -552,9 +553,114 @@ G 系列回答两个问题：
 频带能量特征不是当前基准方案，而是后续做难恢复窗口选择性修正时值得保留的候选特征。
 ```
 
+## 关键证据 4：分层结果揭示选择性修正的潜在收益
+
+整体均值只能说明当前方案的平均表现，不能回答“收益来自哪些窗口”。因此在 2026-07-09
+测试集复评结果上，又基于逐窗口 metrics 做了离线分层分析。该分析不重新推理、
+不重评 checkpoint、不覆盖历史 run；它按 `dataset_row_id` 对齐各方案的可用窗口，直接统计
+每个分层中各模型的原始指标均值，不以方案间 delta 作为汇报结果。分层汇总输出在：
+
+```text
+runs/test_eval_g_series_20260709_local_rr_canonical/stratified_analysis_20260709/
+```
+
+### Baseline hard / easy 与低谱相似窗口
+
+为了直接横向比较，这里的 baseline 指用于定义窗口难度的参考模型 `g0_time_only`，
+不是最终推荐方案。`baseline hard` 指 `g0_time_only` 在该窗口上的
+`rr_peak_band_robust_abs_error > 1.0 bpm`；`baseline easy` 指同一指标
+`<= 0.25 bpm`。同一分层内各模型对应同一批窗口。`low spectrum` 指
+`g0_time_only` 输出与 target 的 `spectrum_similarity` 不高于该次结果中的中位数。三种分层
+都使用了目标侧评价信息，因此只用于回顾性理解收益出现的位置，不能直接作为推理时的窗口选择条件。
+
+| 分层 | 模型 | 窗口数 | robust RR | count bpm | lag4 corr | local RR MAE |
+|---|---|---:|---:|---:|---:|---:|
+| overall | `g0_time_only` | 2310 | 0.7732 | 0.7783 | 0.8653 | 0.7867 |
+|  | `g0_f0_native_stft_pre_mixer` | 2310 | 0.7333 | 0.7834 | 0.8688 | 0.7918 |
+|  | `g3_c_wide_8p0` | 2310 | 0.7122 | 0.7167 | 0.8708 | 0.7800 |
+|  | `g3_c_bandenergy` | 2310 | 0.7298 | 0.6848 | 0.8672 | 0.7733 |
+| baseline hard | `g0_time_only` | 308 | 4.3790 | 1.8908 | 0.7375 | 2.5755 |
+|  | `g0_f0_native_stft_pre_mixer` | 308 | 3.8786 | 1.8884 | 0.7425 | 2.5792 |
+|  | `g3_c_wide_8p0` | 308 | 3.8079 | 1.8448 | 0.7407 | 2.5697 |
+|  | `g3_c_bandenergy` | 308 | 3.9029 | 1.8362 | 0.7463 | 2.5723 |
+| baseline easy | `g0_time_only` | 1396 | 0.0968 | 0.4158 | 0.9042 | 0.3528 |
+|  | `g0_f0_native_stft_pre_mixer` | 1396 | 0.1420 | 0.4167 | 0.9077 | 0.3539 |
+|  | `g3_c_wide_8p0` | 1396 | 0.1380 | 0.3563 | 0.9104 | 0.3523 |
+|  | `g3_c_bandenergy` | 1396 | 0.1437 | 0.3452 | 0.9051 | 0.3526 |
+| low spectrum | `g0_time_only` | 1155 | 1.3275 | 1.0742 | 0.8094 | 1.2631 |
+|  | `g0_f0_native_stft_pre_mixer` | 1155 | 1.2757 | 1.0914 | 0.8124 | 1.2733 |
+|  | `g3_c_wide_8p0` | 1155 | 1.2362 | 1.0369 | 0.8142 | 1.2552 |
+|  | `g3_c_bandenergy` | 1155 | 1.2588 | 0.9873 | 0.8127 | 1.2458 |
+
+这张表的核心读法是：`G3_C_wide_8p0` 的整体 robust RR 最低，从 `g0_time_only` 的
+`0.7732` 降到 `0.7122`；收益主要来自 baseline hard 和 low-spectrum 窗口。baseline hard
+中，wide 的 robust RR 是 `3.8079`，优于 F0 的 `3.8786` 和 bandenergy 的 `3.9029`；
+low-spectrum 中，wide 也是 robust RR 最低的方案。bandenergy 的价值更偏 count bpm 和 local：
+整体 count bpm 为 `0.6848`、local RR MAE 为 `0.7733`，baseline hard 的 count bpm 也最低。
+但 baseline easy 中，所有时频方案的 robust RR 都高于 `g0_time_only`。这提示后续若设计
+选择性修正，easy 窗口应被视为需要保护的对象；这一点仍需用不依赖目标信息的判据另行验证。
+
+### 周期计数失败窗口
+
+周期计数分层用 `g0_time_only` 的 `breath_count_zero_cross_abs_error` 定义。
+`baseline count-error > 0` 指参考模型已经数错呼吸周期数；`baseline count-error = 0`
+指参考模型周期数完全正确，也就是 clean count 窗口。这个分层提示后续如果做选择性修正，
+应优先考虑保护 clean count 窗口，并验证 count-error 或 ambiguous 窗口是否更适合开放更强修正。
+
+| 分层 | 模型 | 窗口数 | robust RR | count bpm | local RR MAE |
+|---|---|---:|---:|---:|---:|
+| baseline count-error > 0 | `g0_time_only` | 1259 | 1.2386 | 1.4277 | 1.1846 |
+|  | `g0_f0_native_stft_pre_mixer` | 1259 | 1.1800 | 1.3877 | 1.1911 |
+|  | `g3_c_wide_8p0` | 1259 | 1.1453 | 1.2598 | 1.1711 |
+|  | `g3_c_bandenergy` | 1259 | 1.1705 | 1.2008 | 1.1565 |
+| baseline count-error = 0 | `g0_time_only` | 1051 | 0.2157 | 0.0000 | 0.3104 |
+|  | `g0_f0_native_stft_pre_mixer` | 1051 | 0.1978 | 0.0593 | 0.3133 |
+|  | `g3_c_wide_8p0` | 1051 | 0.1927 | 0.0656 | 0.3116 |
+|  | `g3_c_bandenergy` | 1051 | 0.2019 | 0.0677 | 0.3144 |
+
+在已有 count-error 的窗口中，`G3_C_wide_8p0` 的 robust RR 最低，为 `1.1453`；
+`G3_C_bandenergy` 的 count bpm 和 local RR MAE 最低，分别为 `1.2008` 和 `1.1565`。
+这提示 bandenergy 对“周期数修正”和局部 RR 长尾可能有价值，但不一定带来最好的整窗 RR。
+在 baseline count-error 为 0 的 clean 窗口中，`g0_time_only` 的 count bpm 本来就是
+`0.0000`，所有时频方案都会引入非零 count bpm 误差。因此 count-error 窗口适合作为修正入口，
+clean count 窗口需要保护。count-error 窗口能否作为实际修正入口，仍需用不依赖目标信息的判据验证。
+
+### RR 分层
+
+RR 分层不只看 fast RR，而是按 target 的整窗呼吸率分成慢、中、偏快几档。脚本优先使用
+`target_rr_peak_band_robust_bpm`，缺失时才回退到旧 RR 列。当前测试集中没有 `rr_ge24`
+档样本，因此本轮只解释 `<10`、`10-14`、`14-18` 和 `18-24 bpm`。
+
+| RR 档 | 模型 | 窗口数 | robust RR | count bpm | rel env corr | local RR MAE |
+|---|---|---:|---:|---:|---:|---:|
+| `<10 bpm` | `g0_time_only` | 230 | 4.2577 | 1.4425 | 0.5889 | 2.1106 |
+|  | `g0_f0_native_stft_pre_mixer` | 230 | 3.8698 | 1.4324 | 0.6179 | 2.1675 |
+|  | `g3_c_wide_8p0` | 230 | 3.8450 | 1.3850 | 0.6140 | 2.1636 |
+|  | `g3_c_bandenergy` | 230 | 4.0787 | 1.4411 | 0.6066 | 2.2515 |
+| `10-14 bpm` | `g0_time_only` | 1339 | 0.4070 | 0.8805 | 0.6730 | 0.5367 |
+|  | `g0_f0_native_stft_pre_mixer` | 1339 | 0.3821 | 0.8841 | 0.6939 | 0.5436 |
+|  | `g3_c_wide_8p0` | 1339 | 0.3691 | 0.7823 | 0.6981 | 0.5209 |
+|  | `g3_c_bandenergy` | 1339 | 0.3600 | 0.7222 | 0.6850 | 0.4964 |
+| `14-18 bpm` | `g0_time_only` | 545 | 0.2761 | 0.3539 | 0.4336 | 0.6293 |
+|  | `g0_f0_native_stft_pre_mixer` | 545 | 0.3024 | 0.3725 | 0.4369 | 0.6194 |
+|  | `g3_c_wide_8p0` | 545 | 0.2635 | 0.3649 | 0.4352 | 0.6228 |
+|  | `g3_c_bandenergy` | 545 | 0.2697 | 0.3537 | 0.4400 | 0.6205 |
+| `18-24 bpm` | `g0_time_only` | 196 | 0.5684 | 0.4802 | 0.5359 | 1.3785 |
+|  | `g0_f0_native_stft_pre_mixer` | 196 | 0.6497 | 0.4768 | 0.5280 | 1.3519 |
+|  | `g3_c_wide_8p0` | 196 | 0.6275 | 0.4626 | 0.5280 | 1.3637 |
+|  | `g3_c_bandenergy` | 196 | 0.6058 | 0.4626 | 0.5461 | 1.3552 |
+
+RR 分层的直接横向结论更清楚：`G3_C_wide_8p0` 在 `<10 bpm` 和 `14-18 bpm` 的
+robust RR 最低，说明宽频 STFT 对慢 RR 和中等 RR 更稳；但 `10-14 bpm` 和
+`18-24 bpm` 中，`G3_C_bandenergy` 的 robust RR 更低，且 local RR MAE 也最低。
+不过 bandenergy 在 `<10 bpm` 明显失败，robust RR 为 `4.0787`，count bpm 为 `1.4411`，
+都接近或劣于 `g0_time_only`。因此 RR 分层提示 bandenergy 更适合探索条件使用，而不是统一替换；
+其具体选择条件仍是下一阶段需要独立验证的问题。
+
 ## 测试集复评记录
 
-测试集复评已经完成，范围只覆盖当前比较方案。复评目的不是重排所有做过的实验，
+测试集复评已经完成，范围只覆盖当前比较方案。2026-07-09 补充复评只更新
+`local_rr_*` 口径，不重训、不重选 checkpoint。复评目的不是重排所有做过的实验，
 而是确认当前阶段结论在独立测试集上是否仍成立：
 
 1. `G3_C_wide_8p0` 是否仍优于 `G0_time_only` 和 `G0_f0_native_stft_pre_mixer`。
@@ -565,71 +671,11 @@ G 系列回答两个问题：
 
 派生汇总文件：
 
-- 单次训练级汇总：`runs/test_eval_g_series_20260708_group_meeting/g_series_group_meeting_seed_summary.csv`
-- 方案级汇总：`runs/test_eval_g_series_20260708_group_meeting/g_series_group_meeting_label_summary.csv`
-- 相对变化汇总：`runs/test_eval_g_series_20260708_group_meeting/g_series_group_meeting_delta_summary.csv`
+- 单次训练级汇总：`runs/test_eval_g_series_20260709_local_rr_canonical/g_series_local_rr_canonical_seed_summary.csv`
+- 方案级汇总：`runs/test_eval_g_series_20260709_local_rr_canonical/g_series_local_rr_canonical_label_summary.csv`
+- 分层分析汇总：`runs/test_eval_g_series_20260709_local_rr_canonical/stratified_analysis_20260709/`
 
 不建议为非重点方案补测试集指标。那些结果即使补齐，也不会改变当前阶段决策，反而会增加汇报噪声和整理成本。
-
-## 复现实验命令
-
-先做预演，确认 12 个复评任务、设备分配和输出路径：
-
-```bash
-./.venv/bin/python scripts/run_g_series_test_eval.py \
-  --specs configs/eval_specs/g_series_test_eval_20260705.csv \
-  --output-dir runs/test_eval_g_series_20260708_group_meeting \
-  --manifest runs/test_eval_g_series_20260708_group_meeting/g_series_test_eval_manifest.csv \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --metric-workers 16 \
-  --metrics-chunk-size 64 \
-  --start-stagger-sec 30 \
-  --dry-run
-```
-
-确认预演没问题后正式运行：
-
-```bash
-./.venv/bin/python scripts/run_g_series_test_eval.py \
-  --specs configs/eval_specs/g_series_test_eval_20260705.csv \
-  --output-dir runs/test_eval_g_series_20260708_group_meeting \
-  --manifest runs/test_eval_g_series_20260708_group_meeting/g_series_test_eval_manifest.csv \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --metric-workers 16 \
-  --metrics-chunk-size 64 \
-  --start-stagger-sec 30
-```
-
-如果只用一张 GPU，把设备和并发改成：
-
-```bash
-./.venv/bin/python scripts/run_g_series_test_eval.py \
-  --specs configs/eval_specs/g_series_test_eval_20260705.csv \
-  --output-dir runs/test_eval_g_series_20260708_group_meeting \
-  --manifest runs/test_eval_g_series_20260708_group_meeting/g_series_test_eval_manifest.csv \
-  --device cuda:0 \
-  --max-parallel 1 \
-  --metric-workers 16 \
-  --metrics-chunk-size 64 \
-  --start-stagger-sec 30
-```
-
-运行结束后，汇总以下目录：
-
-```text
-runs/test_eval_g_series_20260708_group_meeting
-```
-
-重点汇总：
-
-- 方案级均值和多次训练间差异。
-- `G3_C_wide_8p0` 相对 `G0_time_only`、`G0_f0_native_stft_pre_mixer` 的变化。
-- `G3_C_bandenergy` 与 `G3_C_wide_8p0` 的指标分歧。
-- 是否支持当前基准配置判断，以及是否需要补代表预测图。
 
 ## 阶段结论
 
@@ -637,9 +683,12 @@ runs/test_eval_g_series_20260708_group_meeting
 
 1. 在纯时序 BCG 输入之外，STFT 辅助信息能提供额外的呼吸节律信息。
 2. 当前更适合作为基准的是宽频、更高时间分辨率的 STFT 配置（`G3_C_wide_8p0`）。
-3. 频带能量特征有局部价值，但更适合用于后续选择性修正，不适合直接替代宽频 STFT。
-4. 本次测试集复评只覆盖当前比较方案，不补不服务当前问题的分支。
-5. 下一阶段关键问题从“继续扩大输入表示”转向“什么时候使用辅助时频信息”。
+3. 频带能量特征呈现局部收益信号，但更适合作为后续选择性修正的候选特征，不适合直接替代宽频 STFT。
+4. 回顾性分层显示，宽频 STFT 在 baseline hard、low-spectrum 和 count-error 窗口中有较明显的
+   收益；bandenergy 的正信号也集中在困难或部分 RR 分层中，但会误伤 easy、慢 RR 和部分 subject。
+   这些结果揭示了选择性修正的潜在收益，尚不能直接证明可部署的选择条件。
+5. 本次测试集复评只覆盖当前比较方案，不补不服务当前问题的分支。
+6. 下一阶段关键问题从“继续扩大输入表示”转向“什么时候使用辅助时频信息”。
 
 ## 风险与不确定性
 
@@ -648,6 +697,7 @@ runs/test_eval_g_series_20260708_group_meeting
 - 当前整理只适用于 THO research v2 soft-z 实验设置。
 - 波形目标可能不是唯一合理输出，呼吸状态、事件和局部呼吸率可能更接近真实任务目标。
 - 难恢复窗口和不确定窗口的后续定义必须避免数据泄漏，不能直接用目标信号上的失败结果作为训练期选择条件。
+- 当前 hard/easy、count-error 和 low-spectrum 分层均含有目标侧评价信息；它们只用于事后理解，不能直接作为推理时的窗口选择规则。
 - 当前结论基于重点方案，不代表所有既有实验都需要或已经按当前指标完整复评。
 - 当前测试集统计单位首先是 180 秒窗口；同一受试者内相邻窗口通常有重叠，因此这些窗口不能理解为彼此完全独立的受试者样本。
 
@@ -656,7 +706,7 @@ runs/test_eval_g_series_20260708_group_meeting
 ### 短期整理
 
 - 基于本次测试集复评结果准备 G 系列代表结果表。
-- 补充代表性预测图，优先展示易恢复、难恢复、低频谱相似度、快呼吸或周期计数误差大的典型样本。
+- 代表性预测图留待明确预先声明的抽样规则后再补，避免事后挑选样本。
 - 将当前稳定结论沉淀到 `findings.md` 或阶段报告中。
 
 ### 中期研究
@@ -671,212 +721,153 @@ runs/test_eval_g_series_20260708_group_meeting
 - 不对所有既有实验做全量重评。
 - 不用单次实验或单个指标改善作为新主线依据。
 
-## 首次汇报补充建议
+## PPT 页面骨架与备份页
 
-第一次组会汇报的重点不是把所有实验细节讲完，而是让听众快速理解：
-
-```text
-为什么这个问题值得做
-  -> 为什么要按呼吸任务指标判断结果
-  -> 当前证据支持什么结论
-  -> 下一步为什么这样推进
-```
-
-因此，PPT 正文建议额外补充以下内容。
-
-### 正文和备份页取舍
-
-第一次汇报不建议把“评价不能只看验证集损失”这类基础评价前提包装成正文结论。
-它应该作为指标页的前提说明，帮助听众理解为什么后续表格要同时看 RR、周期数、形态和局部 RR 探针。
-
-正文建议只保留会影响当前阶段决策的内容：
-
-- 共性模型结构是什么，四个比较方案只改了哪里。
-- 训练 / 验证 / 测试如何分工，损失函数约束了哪些性质。
-- 时频信息是否确实补充了纯时序输入。
-- 哪一种时频表示更适合作为当前基准。
-- 频带能量特征提供了什么选择性修正依据。
-- 下一阶段为什么转向难恢复窗口和条件使用时频信息。
-
-以下内容建议放入备份页或现场问答，不占正文发现位置：
-
-- 为什么不用 `val_loss` 直接排序。
-- 为什么不补非重点方案的测试集指标。
-- 完整损失权重、训练配置和训练曲线。
-- 完整指标公式、完整运行命令、数据导出 provenance。
-
-### 任务动机页
-
-建议在任务定义之后补一页“为什么要从 BCG 重建 THO / 呼吸状态”：
-
-- BCG 更容易无感采集，但混有心冲击、体动、姿态和接触条件变化。
-- THO 胸带更直接反映呼吸，但不是所有应用场景都适合长期佩戴。
-- 本项目不是简单做一个波形拟合器，而是希望从 BCG 中恢复可用于呼吸分析的节律、形态和状态信息。
-
-这一页的作用是把听众从“这是一个回归任务”带到“这是一个信号解耦和呼吸状态恢复问题”。
-
-### 信号示意图页
-
-第一次汇报必须有图。建议至少准备两类窗口：
-
-- 易恢复窗口：展示 BCG 输入、THO 目标和模型预测在主要呼吸节律上能对齐。
-- 难恢复窗口：展示呼吸率接近但局部形态、相对强弱或时延仍有偏差。
-
-图中不需要堆太多指标，建议只标注 3-5 个最关键数值，例如稳健带通 RR 误差、周期计数误差、
-4 秒时延校正相关和 legacy 局部 RR MAE。听众第一次看时，先让他们看到“问题长什么样”，再解释指标。
-
-代表图建议按以下优先级准备：
-
-- 正文图 1：一个容易恢复的窗口，用来建立“模型在什么情况下是有效的”。
-- 正文图 2：一个纯时序模型和 STFT 辅助信息差异明显的窗口，用来解释为什么时频信息有价值。
-- 正文图 3：一个频带能量特征和宽频 STFT 指标分歧的窗口，用来解释为什么它只作为选择性修正的候选特征。
-- 备份图：明显失败或质量较差的窗口，用来回答“失败模式是什么”。
-
-正文不建议放太多坏例，否则第一次汇报容易从阶段结论滑向错误分析会；坏例适合放在备份页，
-现场被问到时再展开。
-
-### 整体流程图页
-
-建议补一页流程图，串起数据、模型和评价：
-
-```text
-BCG 原始信号
-  -> 宽频带通 / 状态对齐 / 分段归一化 / soft-z
-  -> 180 秒 BCG 窗口
-  -> 时序主干 + STFT 辅助信息
-  -> THO-like soft-z 波形
-  -> RR、周期数、低频形态、相对强弱、局部 RR 探针
-```
-
-这页不用展开实现细节，只回答“输入是什么、模型看什么、输出是什么、怎么评价”。
-
-### 模型结构概览页
-
-建议在整体流程后补一页简化模型图，不画每层网络细节，只画分支关系：
-
-```text
-BCG soft-z 波形
-  -> patch_mixer1d 时序主干
-  -> THO-like soft-z 波形
-
-可选时频辅助分支：
-  BCG soft-z 波形
-  -> STFT / 频带能量
-  -> 在 pre_mixer 位置与时序表示融合
-```
-
-这页需要强调三点：
-
-- 四个比较方案共享时序主干、训练目标、数据划分和评价指标。
-- 差异主要是是否加入时频辅助分支，以及时频分支用完整 STFT 还是频带能量特征。
-- 当前比较不是在同时更换模型、目标和数据，而是在相对受控地回答“时频信息如何使用”。
-
-详细配置如窗口长度、步长、encoder 类型和融合位置，可以放在下一页对照表里，不建议在结构图页堆满参数。
-
-### 训练与损失设置页
-
-建议在模型结构之后补一页训练设置，让听众知道结果不是直接从单次训练损失读出来的：
-
-```text
-训练集：更新模型参数
-验证集：早停、过滤方向明显不一致的训练结果
-测试集：当前比较方案确定后做最终复评
-```
-
-这一页不需要展开所有配置字段，但要讲清楚训练损失的设计意图：
-
-- 它不是单一 MSE，也不是要求预测波形和 THO 逐采样点完全重合，而是弱同步约束。
-- 包络损失让呼吸强弱起伏同步，频谱损失让主呼吸频率和频率分布接近。
-- 平滑项和高频惩罚抑制不合理抖动，相对包络项保留局部呼吸强弱变化。
-- `signed_corr` 和 `signed_cos` 用于缓解方向不一致问题；它们在训练早期权重更高，随后减弱。
-  这是方向一致性 warmup，不是学习率 warmup。
-- 当前比较没有启用基于目标信号的 STFT 损失，因此 STFT 只是输入侧辅助信息，不是额外监督目标。
-
-备份页可以放完整配置表：`50` 轮训练、批量大小 `128`、Adam、学习率 `1e-3`、早停
-`patience=8`、方向一致性筛选条件和 3 次独立训练。
-也可以放一张损失分项表，列出包络、频谱、平滑 / 高频、相对包络、方向一致性，以及关闭的
-基于目标信号的 STFT 损失。
-
-### 对照设计页
-
-建议在结果表之前补一页“本轮比较回答什么问题”。这页不讲完整实验树，只把四类方案压缩成三组对照：
-
-- 纯时序参照 vs STFT 辅助信息：回答“时频信息是否提供额外呼吸依据”。
-- 上一版 STFT 参照 vs 更高时间分辨率的宽频 STFT：回答“当前基准配置是否需要更新”。
-- 宽频 STFT vs 频带能量特征：回答“更简单的频带特征能否替代宽频 STFT”。
-
-这页的作用是让听众先知道表格为什么只出现这几个方案。否则他们第一次听到实验代号时，
-容易误以为这是随意挑出的几个 run，而不是围绕阶段问题设计的对照。
-
-### 方案代号说明
-
-第一次讲当前比较方案时，需要解释实验代号对应的对照含义。这部分可以并入“对照设计页”，
-不必单独占一页：
-
-- `G0_time_only`：没有 STFT 的纯时序参照，用来判断 STFT 是否有净贡献。
-- `G0_f0_native_stft_pre_mixer`：上一版 STFT 参照，用来判断 G 系列是否超过已有方案。
-- `G3_C_wide_8p0`：宽频、更高时间分辨率的 STFT 方案，用来代表当前基准配置。
-- `G3_C_bandenergy`：频带能量特征方案，用来判断更简单的频带特征能否替代宽频 STFT。
-
-这部分的目标是降低听众对实验编号的负担。讲清楚四个方案各自回答的问题，比讲完整实验树更重要。
-如果版面允许，建议直接使用正文中的“结构差异表”，让听众同时看到输入分支、时间设置、融合位置和回答的问题。
-
-### 结果表读法页
-
-测试集复评表建议不要只展示表格本身，还要在表格旁边给出简短读法：
-
-```text
-先看稳健带通 RR 和周期数，确认整窗节律是否恢复；
-再看 4 秒时延校正相关和局部 RR 探针，判断低频形态和局部节律是否稳定；
-最后解释频带能量特征在哪些指标上有优势、为什么仍不替代宽频 STFT。
-```
-
-正文中不建议逐列讲所有数字。更好的讲法是先给出三句结论：
-
-- STFT 辅助信息相对纯时序参照有整体改善。
-- 宽频、更高时间分辨率的 STFT 在多项呼吸任务指标上表现更稳定。
-- 频带能量特征在周期计数和 legacy 局部 RR MAE 上有优势，但整体稳定性不足。
-
-这样听众能先获得判断，再回到表格核对证据。
-
-### 现场问答准备
-
-建议备一页 Q&A 风险预案，正文中不一定展开，但现场被问到时可以直接回答：
-
-- 受试者是否独立：当前可用窗口池中 train / val / test 没有受试者编号重叠。
-- soft-z 是否改变原始幅值含义：当前模型学习的是归一化和软压缩后的波形映射，结论主要服务呼吸节律、形态和状态恢复，不直接解释为原始胸带幅值重建。
-- 为什么不用 `val_loss` 排序：波形损失、频谱误差和呼吸任务指标并不总是一致，当前按呼吸任务指标链判断。
-- 为什么 `bandenergy` 不作为当前基准：它在周期计数和 legacy 局部 RR MAE 上有优势，但稳健带通 RR、时延校正后形态和 legacy 局部 RR 相关性不如宽频方案稳定。
-- 下一步如何避免数据泄漏：难恢复 / 不确定窗口判据不能直接使用目标信号上的失败结果作为训练期选择条件。
-
-## 后续转 PPT 的页面骨架
-
-后续转成第一次组会 PPT 时，建议拆成“正文 12 页 + 备份页”。
+后续转成第一次组会 PPT 时，不预设固定页数；以首次接触本研究的听众能够完整理解任务、方法、
+证据和边界为准，预计正文约 15--18 页。完整公式、复现实验命令和历史分支退场原因放到备份页或现场问答。
 
 正文页：
 
-1. 标题与汇报问题。
+1. 标题、汇报问题与一句话结论。
 2. 任务动机：为什么要从 BCG 恢复 THO-like 呼吸信息。
 3. 任务定义与难点：BCG 窗口到 THO-like 波形 / 呼吸状态，难点包括信号混杂、方向不一致、时延和低质量窗口。
-4. 数据集与预处理：窗口、滤波、归一化、受试者分配。
-5. 整体流程与模型结构：输入、时序主干、可选时频分支和输出。
-6. 训练与损失设置：训练 / 验证 / 测试分工、损失组成、方向一致性 warmup 和重复训练。
-7. 指标解释：按呼吸任务指标判断结果。
-8. 对照设计与结构差异：四类方案分别回答什么问题。
-9. 测试集复评结果：重点方案表和读表方式。
-10. 当前结论：宽频、更高时间分辨率的 STFT 作为本阶段基准方案。
-11. 频带能量特征提供的选择性修正依据。
-12. 下一步：难恢复窗口判据与选择性修正。
+4. 数据集：窗口构成、受试者划分和可用窗口筛选。
+5. 预处理：滤波、状态对齐、归一化和 soft-z。
+6. 整体流程与模型结构：输入、时序主干、可选时频分支和输出。
+7. 训练流程与损失设置：训练 / 验证 / 测试分工、损失组成、方向一致性 warmup 和重复训练。
+8. 指标解释：按呼吸任务指标判断结果。
+9. 对照设计与结构差异：四类方案分别回答什么问题。
+10. 测试集复评结果：重点方案表和读表方式。
+11. 阶段决策：为什么宽频、更高时间分辨率的 STFT 是本阶段基准方案。
+12. 分层分析的定位：回顾性地寻找收益出现的位置，而不是构造推理时 gate。
+13. 分层结果：hard/easy 与 low-spectrum。
+14. 分层结果：count-error 与 RR 档。
+15. 频带能量特征的潜在收益与当前不能直接替代宽频 STFT 的原因。
+16. 风险与统计边界：soft-z 口径、窗口重叠、受试者数量和数据泄漏风险。
+17. 下一步：无泄漏难恢复窗口判据与选择性修正。
 
 备份页：
 
-- 代表性预测图：易恢复窗口、难恢复窗口、周期计数误差大窗口。
+- 代表性预测图：待预先声明抽样规则后，再展示易恢复窗口、纯时序和 STFT 差异明显窗口、频带能量与宽频 STFT 指标分歧窗口及明显失败窗口。
 - 模型结构细节：`patch_mixer1d`、STFT 窗长 / 步长、encoder 类型和 `pre_mixer` 融合位置。
 - 训练配置细节：损失权重、warmup、早停、方向一致性筛选条件和 3 次独立训练。
-- 指标公式：稳健带通 RR、周期计数、4 秒时延校正相关、相对包络和局部 RR 探针。
+- 指标公式：稳健带通 RR、周期计数、4 秒时延校正相关、相对包络和局部 RR。
+- 分层分析细节：长尾表、RR 分层、8 名受试者直接结果表和 analysis manifest。
 - 数据导出包 provenance：commit、配置快照和实际 metadata。
 - 复现实验命令和输出路径。
-- 现场问答：受试者独立性、soft-z 含义、为什么不用 `val_loss` 排序、如何避免数据泄漏。
+- 现场问答：受试者独立性、soft-z 含义、为什么不用 `val_loss` 排序、为什么不补非重点方案测试集、如何避免数据泄漏。
+
+## 备份页材料
+
+### 长尾和灾难性错误
+
+这里的长尾指逐窗口误差分布的高端部分，主要看 p95 和超过固定阈值的窗口比例；灾难性错误
+指 `robust RR >1 bpm` 或 `>2 bpm` 的窗口占比。长尾统计显示，`G3_C_wide_8p0`
+对稳健带通 RR 的灾难性错误最稳，而 `G3_C_bandenergy` 更擅长压低周期计数和局部 RR 长尾。
+
+| 方案 | robust RR mean | robust RR p95 | robust RR >1 bpm | robust RR >2 bpm | count bpm mean | count bpm p95 | local RR MAE p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `g0_time_only` | 0.7732 | 3.5090 | 0.1333 | 0.0661 | 0.7783 | 4.0111 | 3.2778 |
+| `g0_f0_native_stft_pre_mixer` | 0.7333 | 3.1780 | 0.1198 | 0.0638 | 0.7834 | 4.0000 | 3.3840 |
+| `g3_c_wide_8p0` | 0.7122 | 2.7691 | 0.1153 | 0.0589 | 0.7167 | 3.5556 | 3.2492 |
+| `g3_c_bandenergy` | 0.7298 | 2.7883 | 0.1163 | 0.0605 | 0.6848 | 3.2222 | 3.1019 |
+
+### 8 名测试受试者的直接结果
+
+本表按测试集中的 `samp_id` 聚合逐窗口指标，用来检查宽频 STFT 的收益是否集中在少数受试者。
+数值为 3 次独立训练的方案内均值；测试集只有 8 名受试者，且同一受试者内相邻窗口有重叠，
+因此本表只作为备份页和坏例选择依据，不作为正式统计推断。
+
+表内每项均按“`g0_time_only` / `g3_c_wide_8p0`”顺序直接列出，不表示 delta。
+
+| subject | 窗口数 | robust RR | count bpm | lag4 corr | local RR MAE |
+|---:|---:|---:|---:|---:|---:|
+| 220 | 283 | 0.7083 / 0.6924 | 0.2760 / 0.2748 | 0.8599 / 0.8645 | 0.5862 / 0.5750 |
+| 229 | 298 | 0.2760 / 0.2597 | 0.1864 / 0.1805 | 0.9211 / 0.9231 | 0.2676 / 0.2630 |
+| 286 | 302 | 0.7298 / 0.6424 | 0.5717 / 0.5530 | 0.8691 / 0.8707 | 0.5919 / 0.5713 |
+| 670 | 79 | 7.4582 / 7.1635 | 2.0394 / 1.9606 | 0.6234 / 0.6378 | 5.3693 / 5.6486 |
+| 671 | 504 | 0.7482 / 0.6743 | 2.1122 / 1.8247 | 0.8058 / 0.8204 | 0.9801 / 0.9326 |
+| 704 | 575 | 0.3467 / 0.2748 | 0.3480 / 0.3766 | 0.9108 / 0.9134 | 0.5197 / 0.5228 |
+| 726 | 214 | 0.3840 / 0.3769 | 0.2056 / 0.2056 | 0.8976 / 0.8988 | 0.6015 / 0.5873 |
+| 1006 | 55 | 0.6390 / 0.6071 | 0.3939 / 0.4000 | 0.8593 / 0.8618 | 0.8565 / 0.8294 |
+
+宽频 STFT 在 8 名测试受试者上的 robust RR 均低于纯时序方案，说明当前整体收益并非由单一受试者拉动；
+但 count bpm、lag4 corr 和 local RR MAE 的受试者内表现并不完全一致，仍需结合波形复核理解。
+
+## 复现实验命令
+
+先做预演，确认 12 个复评任务、设备分配和输出路径：
+
+```bash
+./.venv/bin/python scripts/run_g_series_test_eval.py \
+  --specs configs/eval_specs/g_series_test_eval_20260705.csv \
+  --output-dir runs/test_eval_g_series_20260709_local_rr_canonical \
+  --manifest runs/test_eval_g_series_20260709_local_rr_canonical/g_series_test_eval_manifest.csv \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --metric-workers 16 \
+  --metrics-chunk-size 64 \
+  --start-stagger-sec 30 \
+  --dry-run
+```
+
+确认预演没问题后正式运行：
+
+```bash
+./.venv/bin/python scripts/run_g_series_test_eval.py \
+  --specs configs/eval_specs/g_series_test_eval_20260705.csv \
+  --output-dir runs/test_eval_g_series_20260709_local_rr_canonical \
+  --manifest runs/test_eval_g_series_20260709_local_rr_canonical/g_series_test_eval_manifest.csv \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --metric-workers 16 \
+  --metrics-chunk-size 64 \
+  --start-stagger-sec 30
+```
+
+如果只用一张 GPU，把设备和并发改成：
+
+```bash
+./.venv/bin/python scripts/run_g_series_test_eval.py \
+  --specs configs/eval_specs/g_series_test_eval_20260705.csv \
+  --output-dir runs/test_eval_g_series_20260709_local_rr_canonical \
+  --manifest runs/test_eval_g_series_20260709_local_rr_canonical/g_series_test_eval_manifest.csv \
+  --device cuda:0 \
+  --max-parallel 1 \
+  --metric-workers 16 \
+  --metrics-chunk-size 64 \
+  --start-stagger-sec 30
+```
+
+运行结束后，汇总以下目录：
+
+```text
+runs/test_eval_g_series_20260709_local_rr_canonical
+```
+
+重点汇总：
+
+- 方案级均值和多次训练间差异。
+- `G3_C_wide_8p0` 相对 `G0_time_only`、`G0_f0_native_stft_pre_mixer` 的变化。
+- `G3_C_bandenergy` 与 `G3_C_wide_8p0` 的指标分歧。
+- 是否支持当前基准配置判断，以及是否需要补代表预测图。
+
+测试集复评完成后，生成分层分析表：
+
+```bash
+./.venv/bin/python scripts/stratified_eval_analysis.py \
+  --eval-root runs/test_eval_g_series_20260709_local_rr_canonical \
+  --output-dir runs/test_eval_g_series_20260709_local_rr_canonical/stratified_analysis_20260709 \
+  --dataset-index /mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/training/dataset_index.csv \
+  --seeds 20260700 20260837 20260901 \
+  --comparison wide_vs_time=g3_c_wide_8p0:g0_time_only \
+  --comparison bandenergy_vs_wide=g3_c_bandenergy:g3_c_wide_8p0 \
+  --comparison bandenergy_vs_time=g3_c_bandenergy:g0_time_only \
+  --comparison f0_vs_time=g0_f0_native_stft_pre_mixer:g0_time_only \
+  --window-seconds 180
+```
 
 ## 证据索引
 
@@ -885,6 +876,8 @@ BCG soft-z 波形
 - G 系列规划与结果解释：`docs/experiments/g_series_stft_input_resolution_band_plan.md`
 - 测试集复评任务清单：`configs/eval_specs/g_series_test_eval_20260705.csv`
 - 测试集复评脚本：`scripts/run_g_series_test_eval.py`
+- 分层分析脚本：`scripts/stratified_eval_analysis.py`
+- 分层分析输出：`runs/test_eval_g_series_20260709_local_rr_canonical/stratified_analysis_20260709/`
 - 数据导出包 README：`/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/README.md`
 - 数据导出包 manifest：`/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/manifest.json`
 - 数据导出包配置快照：`/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/provenance/config_default.yaml`

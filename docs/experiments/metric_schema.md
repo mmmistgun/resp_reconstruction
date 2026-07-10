@@ -42,6 +42,9 @@
   至少保留逐窗口列以便补算。
 - `breath_count_zero_cross_abs_error`：低质量或低频形态不稳定窗口中，是否恢复合理周期
   数量的轻量护栏。
+- `breath_count_zero_cross_bpm_error`：`breath_count_zero_cross_abs_error / (window_seconds / 60)`。
+  当前 180 秒窗口下等于原始周期数误差除以 3，只作为汇报和分层表中的平均周期率误差展示口径；
+  原始 count-error 分层仍用 `breath_count_zero_cross_abs_error` 判断。
 
 ### 辅助诊断与旧结果解释
 
@@ -67,7 +70,7 @@
   呼吸强弱诊断，优先于 zero-lag 相对包络列解释波形强弱是否恢复。
 - `relative_envelope_mae`、`relative_envelope_corr`：zero-lag 相对包络诊断，保留用于
   旧记录解释和不考虑持续时延的坏例定位。
-- `local_rr_mae`、`local_rr_corr`、`local_rr_valid_frac`：当前 canonical 局部 RR
+- `local_rr_mae`、`local_rr_corr`、`local_rr_valid_frac`：局部 RR
   曲线指标。2026-07-09 起采用原 v2 口径：默认 40 秒窗口、10 秒步长，并使用更严格的
   spectral-guided peak 间距，降低同一呼吸周期双峰被算成两个周期的概率。它不是逐呼吸
   事件匹配指标，应结合 `valid_frac`、目标侧局部 RR 跳变和波形复核解释。
@@ -113,7 +116,7 @@ target 侧 v2 局部曲线自身有 `80/2310` 个 180 秒窗口出现超过 `15 
 40 秒局部频谱周期约束能修复一部分同周期双峰，但仍会受谱峰硬切换、谐波抢峰和
 低质量局部窗影响。
 
-2026-07-09 人工坏例复核后接受原 v2 作为当前 canonical `local_rr_*`。legacy 20s/5s
+2026-07-09 人工坏例复核后接受原 v2 作为 `local_rr_*` 口径。legacy 20s/5s
 寻峰口径和 v3 过零口径同时退入历史，不再作为默认评价列输出。旧结果若要进入当前
 local RR 讨论，必须按转正后的 `local_rr_*` 口径重评 checkpoint；只重算旧 summary 不足以
 改变该指标语义。
@@ -134,7 +137,7 @@ local RR 讨论，必须按转正后的 `local_rr_*` 口径重评 checkpoint；�
 当前问题仍需要该模型或候选，且满足任一条件时，归为 `needs_reeval_for_active`：
 
 - 逐窗口指标缺少 `rr_peak_band_robust_abs_error`、`best_lag_corr_4s`、
-  `relative_envelope_*_lag4s` 或 2026-07-09 后 canonical `local_rr_*` 等当前列。
+  `relative_envelope_*_lag4s` 或 2026-07-09 后的 `local_rr_*` 等当前列。
 - `rr_peak_abs_error` 生成于旧口径，未区分 masked 与 unmasked raw peak。
 - target-side cache、评价 mask、lag 搜索、local RR 或 robust peak 估计逻辑变化后，
   旧 CSV 无法证明满足当前口径。
@@ -157,15 +160,26 @@ local RR 讨论，必须按转正后的 `local_rr_*` 口径重评 checkpoint；�
 
 本次复评确认逐窗口 metrics 已包含 `rr_peak_band_robust_abs_error`、
 `best_lag_corr_4s`、`relative_envelope_*_lag4s` 和 legacy `local_rr_*` 旧列；
-2026-07-09 该局部 RR 旧列已退场，进入当前 local RR 讨论前需要按转正后的
-`local_rr_*` 口径重评。派生汇总见：
+2026-07-09 该局部 RR 旧列已退场，因此这批旧 local RR 数值只作为历史参考；
+local RR 讨论使用下一节的复评结果。派生汇总见：
 
 - `runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_seed_summary.csv`
 - `runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_label_summary.csv`
 - `runs/test_eval_g_series_20260708_current_metrics/g_series_current_metrics_delta_vs_time_label.csv`
 
-当前解释：`G3_C_wide_8p0` 仍是默认 anchor；`G3_C_bandenergy` 只作为选择性/条件注入
-线索保留。本次结果不触发全历史重评，也不触发重训。
+### 2026-07-09 local RR 口径已完成复评
+
+已按转正后的 `local_rr_*` 口径重评同一批 G 系列 active checkpoint，输出在
+`runs/test_eval_g_series_20260709_local_rr_canonical/`：
+
+- `g_series_local_rr_canonical_seed_summary.csv`
+- `g_series_local_rr_canonical_label_summary.csv`
+- `g_series_local_rr_canonical_delta_summary.csv`
+- `g_series_test_eval_manifest.csv`
+
+当前解释：`G3_C_wide_8p0` 仍是默认 anchor；`G3_C_bandenergy` 在 breath count 和
+local RR 上略优，但 robust RR 与 lag-aware 形态不如 wide anchor，只作为
+选择性/条件注入线索保留。本次结果不触发全历史重评，也不触发重训。
 
 ### 需要重评 top-k，而非直接重训
 
