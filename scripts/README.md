@@ -719,6 +719,115 @@ checkpoint 清单保存为 `configs/eval_specs/g_series_test_eval_20260705.csv`�
 
 ## 诊断分析
 
+### BCG 呼吸带二次谐波显著窗口分层
+
+`analyze_bcg_second_harmonic.py` 用于离线回答：当输入 BCG 的低频呼吸成分在 THO
+参考呼吸率二倍频附近出现显著峰值或能量时，四个 G 系列模型能否恢复正确的呼吸节律。
+它是使用 THO 参考构造的先验分析，不是推理时质量检测器，也不改变训练、checkpoint、
+测试指标或数据划分。
+
+分析只使用 `0.05-0.7Hz` 的 BCG / THO 低频分量。先要求 THO 的稳健呼吸率与频谱呼吸率
+相差不超过 `1 bpm`，且 `2*f_THO` 仍在 `0.7Hz` 内，再按验证集冻结的阈值分层：
+
+- `strong_harmonic`：BCG 主峰接近 `2*f_THO`，且二倍频相对基频、全带能量占比均达到阈值。
+- `peak_doubling`：只有 BCG 主峰接近 `2*f_THO`，能量条件未同时达到阈值。
+- `harmonic_prominent`：二倍频能量显著，但 BCG 主峰未落在 `2*f_THO` 容差内。
+- `harmonic_negative`：上述倍频证据均不成立。
+
+前三层的并集记为 `harmonic_positive_union`。正式汇报必须同时给出各子层覆盖率，不能只报告并集。
+
+完整流程如下。`discover` 和 `apply` 会主动移除配置中的 smoke 窗口上限，覆盖完整 val / test split；
+输出文件使用排他写入，若目标目录已有同名文件应换新目录，避免覆盖既有结果。
+
+1. 在完整验证集生成形态特征和候选阈值：
+
+```bash
+./.venv/bin/python scripts/analyze_bcg_second_harmonic.py discover \
+  --config configs/tho_research_v2.yaml \
+  --split val \
+  --output-dir runs/bcg_second_harmonic_20260710/validation_full_v2
+```
+
+2. 画高值、阈值附近和低值窗口，人工复核候选：
+
+```bash
+./.venv/bin/python scripts/plot_bcg_second_harmonic.py validation-review \
+  --config configs/tho_research_v2.yaml \
+  --features runs/bcg_second_harmonic_20260710/validation_full_v2/validation_harmonic_features.csv \
+  --proposal runs/bcg_second_harmonic_20260710/validation_full_v2/proposed_harmonic_thresholds.json \
+  --candidate-id candidate_040 \
+  --output-dir runs/bcg_second_harmonic_20260710/validation_full_v2/figures_candidate_040
+```
+
+3. 写下复核说明并冻结阈值。冻结文件只允许由 val proposal 产生，后续 `apply` 不会修改它：
+
+```bash
+./.venv/bin/python scripts/analyze_bcg_second_harmonic.py freeze \
+  --proposal runs/bcg_second_harmonic_20260710/validation_full_v2/proposed_harmonic_thresholds.json \
+  --candidate-id candidate_040 \
+  --output runs/bcg_second_harmonic_20260710/harmonic_thresholds.json \
+  --review-note "已复核高值、阈值附近和低值案例；正式结果分 strong/peak/prominent 子层报告"
+```
+
+4. 将冻结阈值一次性应用到完整独立测试集，并单独检查不可判定窗口覆盖率：
+
+```bash
+./.venv/bin/python scripts/analyze_bcg_second_harmonic.py apply \
+  --config configs/tho_research_v2.yaml \
+  --split test \
+  --thresholds runs/bcg_second_harmonic_20260710/harmonic_thresholds.json \
+  --output-dir runs/bcg_second_harmonic_20260710/test_v2
+```
+
+5. 复用现有 12 份逐窗口 metrics，按固定标签比较四个模型：
+
+```bash
+./.venv/bin/python scripts/analyze_bcg_second_harmonic.py summarize-metrics \
+  --labels runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv \
+  --eval-root runs/test_eval_g_series_20260709_local_rr_canonical \
+  --dataset-index /mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/training/dataset_index.csv \
+  --output-dir runs/bcg_second_harmonic_20260710/model_metrics
+```
+
+6. 先预演 checkpoint、设备和阳性窗口数；正式导出涉及 GPU 和较大预测文件，由用户手动运行：
+
+```bash
+./.venv/bin/python scripts/export_harmonic_predictions.py \
+  --spec configs/eval_specs/g_series_test_eval_20260705.csv \
+  --labels runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv \
+  --output-dir runs/bcg_second_harmonic_20260710/predictions \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --dry-run
+```
+
+去掉 `--dry-run` 后正式导出。每个 NPZ 保存固定阳性窗口的 `r_tho_hat`、`tho_ref` 和 `dataset_row_id`，
+旁边的 manifest 记录 checkpoint、配置与标签哈希。
+
+7. 对导出的模型输出计算纠正状态并画平衡案例：
+
+```bash
+./.venv/bin/python scripts/analyze_bcg_second_harmonic.py summarize-corrections \
+  --labels runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv \
+  --thresholds runs/bcg_second_harmonic_20260710/harmonic_thresholds.json \
+  --predictions-dir runs/bcg_second_harmonic_20260710/predictions \
+  --output-dir runs/bcg_second_harmonic_20260710/corrections
+
+./.venv/bin/python scripts/plot_bcg_second_harmonic.py model-cases \
+  --config configs/tho_research_v2.yaml \
+  --labels runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv \
+  --thresholds runs/bcg_second_harmonic_20260710/harmonic_thresholds.json \
+  --corrections runs/bcg_second_harmonic_20260710/corrections/model_harmonic_correction.csv \
+  --predictions-dir runs/bcg_second_harmonic_20260710/predictions \
+  --output-dir runs/bcg_second_harmonic_20260710/figures \
+  --seed 20260837
+```
+
+“已纠正”定义为模型输出主峰回到 THO 基频容差内，且二倍频 / 基频能量比相对输入下降至少
+`20%`；只满足能量比下降记为“部分纠正”。这一判据用于解释模型是否抑制倍频，不替代
+稳健 RR、周期计数、局部 RR 和时延校正后形态指标。
+
 ### `baseline_tho_hilbert.py`
 
 在 val 子集运行平凡基线，输出逐窗口 RR/主频、峰谷、包络相关和频谱相似度指标。脚本复用训练数据工厂口径，保证 baseline 与训练验证子集一致。

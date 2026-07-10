@@ -4,6 +4,8 @@
 
 更新：2026-07-09 按 `local_rr_*` 口径重评 G 系列测试指标，并同步更新相关表格与解释。
 
+更新：2026-07-10 冻结 BCG 呼吸带二次谐波显著窗口定义，补充四模型在这类已知困难窗口上的离线分层结果。
+
 ## 文档定位
 
 本文是面向组会阶段汇报的整理底稿，不是论文正文、完整实验清单或最终结论文件。
@@ -24,7 +26,10 @@
 当前证据支持以宽频、更高时间分辨率的 STFT 辅助信息作为本阶段基准方案
 （内部代号 `G3_C_wide_8p0`）；`G3_C_bandenergy` 保留为后续选择性修正的候选特征，
 但暂不替代宽频 STFT。2026-07-09 `local_rr_*` 复评已覆盖当前比较方案，
-结论仍支持这一判断。
+结论仍支持这一判断。进一步的 THO 参考离线分析显示，四类网络都能在多数 BCG 二次谐波显著窗口中
+抑制倍频并恢复目标基频；其中 `G3_C_bandenergy` 的呼吸率和周期计数误差最低，
+`G3_C_wide_8p0` 的时延校正后形态更好。这一结果支持保留 bandenergy 作为选择性修正候选，
+但不足以改变当前宽频 STFT 基准方案。
 
 ## 汇报主线
 
@@ -657,6 +662,114 @@ robust RR 最低，说明宽频 STFT 对慢 RR 和中等 RR 更稳；但 `10-14 
 都接近或劣于 `g0_time_only`。因此 RR 分层提示 bandenergy 更适合探索条件使用，而不是统一替换；
 其具体选择条件仍是下一阶段需要独立验证的问题。
 
+## 关键证据 5：BCG 二次谐波显著窗口大多可以恢复，但不是时频分支独有能力
+
+前面的 hard / easy 分层从模型误差出发，不能直接说明输入 BCG 为什么难。为了更贴近“原始 BCG
+呼吸节律不对，但其中双峰或倍频结构仍可能被网络恢复”的问题，本轮又建立了一个 THO 参考的离线
+先验分层。该分析只回答“模型在这类已知困难窗口上表现如何”，不参与训练、不重新选择 checkpoint，
+也不构造推理时 gate。
+
+### 冻结规则与覆盖率
+
+分析先对 BCG 和 THO 的 `0.05-0.7Hz` 低频分量计算频谱。THO 的稳健呼吸率与频谱呼吸率相差
+不超过 `1 bpm`，且 `2*f_THO` 仍位于分析频带内时，窗口才进入可判定集合。随后只在完整验证集
+的 2675 个窗口、7 名受试者上生成并人工复核候选，冻结 `candidate_040`：
+
+- BCG 主峰与 `2*f_THO` 的相对偏差不超过 `10%`，记为主峰倍频证据。
+- 二倍频 / 基频邻域能量比不低于 `0.5393`，且二倍频占全分析带能量不低于 `0.1647`，
+  记为谐波能量显著证据。
+- 两类证据都成立为 `strong_harmonic`；只有主峰证据为 `peak_doubling`；只有能量证据为
+  `harmonic_prominent`。三者并集称为 BCG 呼吸带二次谐波显著窗口。
+
+冻结后一次性应用到完整独立测试集，覆盖率如下。不可判定窗口被排除，但单独报告覆盖率；
+`占可判定窗口` 只对可判定集合计算。
+
+| 状态 / 分层 | 窗口数 | 占全部窗口 | 占可判定窗口 | 受试者数 |
+|---|---:|---:|---:|---:|
+| 全部测试窗口 | 2310 | 100.00% | — | 8 |
+| THO 参考不稳定 | 373 | 16.15% | — | 8 |
+| THO 二倍频超出 `0.7Hz` | 13 | 0.56% | — | 3 |
+| 可判定窗口 | 1924 | 83.29% | 100.00% | 8 |
+| `strong_harmonic` | 214 | 9.26% | 11.12% | 5 |
+| `peak_doubling` | 5 | 0.22% | 0.26% | 2 |
+| `harmonic_prominent` | 233 | 10.09% | 12.11% | 5 |
+| 二次谐波显著窗口并集 | 452 | 19.57% | 23.49% | 6 |
+| `harmonic_negative` | 1472 | 63.72% | 76.51% | 8 |
+
+`peak_doubling` 只有 5 个窗口，不能单独形成稳定结论；本轮的主要证据来自
+`strong_harmonic` 和 `harmonic_prominent`，两层在汇总中保持分开。
+
+### 四模型在固定阳性窗口上的任务表现
+
+下表只统计同一批 452 个二次谐波显著窗口。数值仍是逐窗口计算后先汇总到单次训练级，
+再对 3 次独立训练取均值。谐波纠正定义为：模型输出主峰回到 THO 基频的 `10%` 容差内，
+且二倍频 / 基频能量比相对输入下降至少 `20%`。
+
+| 方案 | 稳健带通 RR 误差 | 周期计数 bpm 误差 | 4 秒时延校正相关 | 相对包络相关 | 局部 RR MAE | 谐波纠正率 |
+|---|---:|---:|---:|---:|---:|---:|
+| `g0_time_only` | 0.6343 | 2.0973 | 0.8252 | 0.6018 | 0.6520 | 95.94% |
+| `g0_f0_native_stft_pre_mixer` | 0.5984 | 2.1013 | 0.8353 | 0.6219 | 0.6743 | 95.94% |
+| `g3_c_wide_8p0` | 0.5192 | 1.7652 | **0.8475** | **0.6525** | 0.5897 | 96.24% |
+| `g3_c_bandenergy` | **0.4734** | **1.5541** | 0.8278 | 0.5994 | **0.5455** | **97.20%** |
+
+在定义更严格的 214 个 `strong_harmonic` 窗口中，方向更加清楚：
+
+| 方案 | 稳健带通 RR 误差 | 周期计数 bpm 误差 | 4 秒时延校正相关 | 相对包络相关 | 局部 RR MAE | 谐波纠正率 |
+|---|---:|---:|---:|---:|---:|---:|
+| `g0_time_only` | 0.6576 | 3.4278 | 0.7997 | 0.6136 | 0.8616 | 94.86% |
+| `g0_f0_native_stft_pre_mixer` | 0.6984 | 3.4361 | 0.8132 | 0.6363 | 0.9166 | 95.02% |
+| `g3_c_wide_8p0` | 0.5543 | 2.8769 | **0.8318** | **0.6800** | 0.7430 | 95.79% |
+| `g3_c_bandenergy` | **0.4716** | **2.4564** | 0.8039 | 0.6077 | **0.6552** | **97.82%** |
+
+作为参照，1472 个 `harmonic_negative` 窗口上的五项任务指标如下：
+
+| 方案 | 稳健带通 RR 误差 | 周期计数 bpm 误差 | 4 秒时延校正相关 | 相对包络相关 | 局部 RR MAE |
+|---|---:|---:|---:|---:|---:|
+| `g0_time_only` | 0.4082 | **0.3311** | 0.8982 | 0.5996 | 0.5613 |
+| `g0_f0_native_stft_pre_mixer` | 0.3826 | 0.3374 | **0.8999** | **0.6126** | **0.5574** |
+| `g3_c_wide_8p0` | **0.3752** | 0.3371 | 0.8992 | 0.6063 | 0.5618 |
+| `g3_c_bandenergy` | 0.3912 | 0.3459 | 0.8991 | 0.6101 | 0.5584 |
+
+阳性并集的纠正状态完整分布为：
+
+| 方案 | 已纠正 | 部分纠正 | 未纠正 |
+|---|---:|---:|---:|
+| `g0_time_only` | 95.94% | 2.88% | 1.18% |
+| `g0_f0_native_stft_pre_mixer` | 95.94% | 3.02% | 1.03% |
+| `g3_c_wide_8p0` | 96.24% | 2.88% | 0.89% |
+| `g3_c_bandenergy` | 97.20% | 2.14% | 0.66% |
+
+这组结果有四层含义：
+
+1. 四类网络的谐波纠正率都在约 `95%` 或以上，说明从 BCG 倍频恢复 THO 基频主要是当前网络和
+   监督目标共同学到的能力，不是 STFT 分支独有能力。纯时序模型也能解决其中大多数窗口。
+2. 高纠正率不等于呼吸任务已经完全解决。尤其在 `strong_harmonic` 层，纯时序和 F0 的周期计数
+   误差仍超过 `3.4 bpm`。因此必须同时看 RR、周期计数、局部 RR 和形态指标，不能只报纠正状态。
+3. `G3_C_bandenergy` 在阳性并集和 strong 层的稳健 RR、周期计数与局部 RR 均最低；
+   `G3_C_wide_8p0` 的时延校正后形态相关最高。这与整体测试集上的角色分工一致：bandenergy
+   更像选择性修正候选，wide 仍是综合表现更稳定的本阶段基准方案。
+4. 在 harmonic-negative 参照层中，四模型差异明显收窄，bandenergy 也不再占优；这进一步说明
+   它的价值更可能集中在特定困难形态，而不是全窗口统一替换 wide。
+
+### 代表案例与证据边界
+
+案例图按预先定义的类别平衡选择，而不是只挑成功样本：`dataset_row_id=640` 为四模型均纠正，
+`873` 为四模型均未纠正，`1353` 为模型间分歧，`3584` 为阈值附近案例。案例清单和图位于：
+
+```text
+runs/bcg_second_harmonic_20260710/figures/model_case_manifest.csv
+runs/bcg_second_harmonic_20260710/figures/
+```
+
+代表性全模型纠正案例：
+
+![BCG 二次谐波显著窗口中四模型均恢复目标基频的案例](../../runs/bcg_second_harmonic_20260710/figures/all_corrected_seed_20260837_row_640.png)
+
+统计边界也很明显：452 个阳性窗口中有 285 个来自受试者 671；214 个 strong 窗口中有
+175 个来自该受试者。再加上 180 秒窗口之间存在重叠，窗口级结果不能当作 452 个独立样本进行
+统计推断。本结果适合证明“存在一类可恢复的输入倍频困难窗口”并比较四模型的初步表现，
+不适合宣称某个方案已经在跨受试者层面稳定解决双峰问题。
+
 ## 测试集复评记录
 
 测试集复评已经完成，范围只覆盖当前比较方案。2026-07-09 补充复评只更新
@@ -674,6 +787,9 @@ robust RR 最低，说明宽频 STFT 对慢 RR 和中等 RR 更稳；但 `10-14 
 - 单次训练级汇总：`runs/test_eval_g_series_20260709_local_rr_canonical/g_series_local_rr_canonical_seed_summary.csv`
 - 方案级汇总：`runs/test_eval_g_series_20260709_local_rr_canonical/g_series_local_rr_canonical_label_summary.csv`
 - 分层分析汇总：`runs/test_eval_g_series_20260709_local_rr_canonical/stratified_analysis_20260709/`
+- 二次谐波测试标签与覆盖率：`runs/bcg_second_harmonic_20260710/test_v2/`
+- 二次谐波四模型任务汇总：`runs/bcg_second_harmonic_20260710/model_metrics/`
+- 二次谐波模型输出纠正汇总：`runs/bcg_second_harmonic_20260710/corrections/`
 
 不建议为非重点方案补测试集指标。那些结果即使补齐，也不会改变当前阶段决策，反而会增加汇报噪声和整理成本。
 
@@ -687,8 +803,11 @@ robust RR 最低，说明宽频 STFT 对慢 RR 和中等 RR 更稳；但 `10-14 
 4. 回顾性分层显示，宽频 STFT 在 baseline hard、low-spectrum 和 count-error 窗口中有较明显的
    收益；bandenergy 的正信号也集中在困难或部分 RR 分层中，但会误伤 easy、慢 RR 和部分 subject。
    这些结果揭示了选择性修正的潜在收益，尚不能直接证明可部署的选择条件。
-5. 本次测试集复评只覆盖当前比较方案，不补不服务当前问题的分支。
-6. 下一阶段关键问题从“继续扩大输入表示”转向“什么时候使用辅助时频信息”。
+5. 在 THO 参考定义的 BCG 二次谐波显著窗口中，四类网络都能在多数窗口抑制倍频并恢复基频，
+   说明这是一种网络共有的可恢复能力；bandenergy 的呼吸率和周期计数误差最低，wide 的时延校正后
+   形态最好。该结果支持 bandenergy 作为选择性修正候选，但不改变 wide 的本阶段基准地位。
+6. 本次测试集复评只覆盖当前比较方案，不补不服务当前问题的分支。
+7. 下一阶段关键问题从“继续扩大输入表示”转向“什么时候使用辅助时频信息”。
 
 ## 风险与不确定性
 
@@ -698,6 +817,8 @@ robust RR 最低，说明宽频 STFT 对慢 RR 和中等 RR 更稳；但 `10-14 
 - 波形目标可能不是唯一合理输出，呼吸状态、事件和局部呼吸率可能更接近真实任务目标。
 - 难恢复窗口和不确定窗口的后续定义必须避免数据泄漏，不能直接用目标信号上的失败结果作为训练期选择条件。
 - 当前 hard/easy、count-error 和 low-spectrum 分层均含有目标侧评价信息；它们只用于事后理解，不能直接作为推理时的窗口选择规则。
+- BCG 二次谐波分层同样使用 THO 参考频率，只是离线先验分析，不是 BCG-only 质量检测器或推理时 gate。
+- 二次谐波阳性窗口集中在少数受试者，且 peak-only 层只有 5 个窗口；纠正率和模型差异不能外推为跨受试者稳定结论。
 - 当前结论基于重点方案，不代表所有既有实验都需要或已经按当前指标完整复评。
 - 当前测试集统计单位首先是 180 秒窗口；同一受试者内相邻窗口通常有重叠，因此这些窗口不能理解为彼此完全独立的受试者样本。
 
@@ -706,13 +827,15 @@ robust RR 最低，说明宽频 STFT 对慢 RR 和中等 RR 更稳；但 `10-14 
 ### 短期整理
 
 - 基于本次测试集复评结果准备 G 系列代表结果表。
-- 代表性预测图留待明确预先声明的抽样规则后再补，避免事后挑选样本。
+- 将二次谐波的全模型纠正、全模型失败、模型分歧和阈值边界案例作为平衡备份页，不用单个案例替代定量结果。
 - 将当前稳定结论沉淀到 `findings.md` 或阶段报告中。
 
 ### 中期研究
 
 - 设计不泄漏目标信息的难恢复 / 不确定窗口判据。
-- 验证 `bandenergy` 或高频上下文是否能作为条件使用的修正信息，而不是全窗口无差别融合。
+- 在更多受试者或受试者级重采样下验证二次谐波分层，重点确认 bandenergy 在 strong 层的收益是否稳定。
+- 验证 `bandenergy` 或高频上下文是否能作为条件使用的修正信息，而不是全窗口无差别融合；
+  若未来要做在线选择，再另行设计完全由 BCG 输入计算的无泄漏判据。
 - 重新思考输出空间：从单一波形回归，逐步转向 latent respiratory state、局部呼吸率、事件或不确定性辅助目标。
 
 ### 暂不建议继续的方向
@@ -724,7 +847,7 @@ robust RR 最低，说明宽频 STFT 对慢 RR 和中等 RR 更稳；但 `10-14 
 ## PPT 页面骨架与备份页
 
 后续转成第一次组会 PPT 时，不预设固定页数；以首次接触本研究的听众能够完整理解任务、方法、
-证据和边界为准，预计正文约 15--18 页。完整公式、复现实验命令和历史分支退场原因放到备份页或现场问答。
+证据和边界为准，预计正文约 18--20 页。完整公式、复现实验命令和历史分支退场原因放到备份页或现场问答。
 
 正文页：
 
@@ -743,16 +866,18 @@ robust RR 最低，说明宽频 STFT 对慢 RR 和中等 RR 更稳；但 `10-14 
 13. 分层结果：hard/easy 与 low-spectrum。
 14. 分层结果：count-error 与 RR 档。
 15. 频带能量特征的潜在收益与当前不能直接替代宽频 STFT 的原因。
-16. 风险与统计边界：soft-z 口径、窗口重叠、受试者数量和数据泄漏风险。
-17. 下一步：无泄漏难恢复窗口判据与选择性修正。
+16. 特殊困难窗口定义：BCG 呼吸带二次谐波显著的冻结规则、子层和覆盖率。
+17. 特殊困难窗口结果：四模型任务指标与谐波纠正率，强调共有恢复能力和模型角色分工。
+18. 风险与统计边界：soft-z 口径、窗口重叠、受试者集中、peak-only 小样本和数据泄漏风险。
+19. 下一步：受试者级复核、无泄漏难恢复窗口判据与选择性修正。
 
 备份页：
 
-- 代表性预测图：待预先声明抽样规则后，再展示易恢复窗口、纯时序和 STFT 差异明显窗口、频带能量与宽频 STFT 指标分歧窗口及明显失败窗口。
+- 代表性预测图：展示预先定义的四模型均纠正、四模型均失败、模型分歧和阈值边界案例；同时保留易恢复窗口、纯时序和 STFT 差异明显窗口。
 - 模型结构细节：`patch_mixer1d`、STFT 窗长 / 步长、encoder 类型和 `pre_mixer` 融合位置。
 - 训练配置细节：损失权重、warmup、早停、方向一致性筛选条件和 3 次独立训练。
 - 指标公式：稳健带通 RR、周期计数、4 秒时延校正相关、相对包络和局部 RR。
-- 分层分析细节：长尾表、RR 分层、8 名受试者直接结果表和 analysis manifest。
+- 分层分析细节：长尾表、RR 分层、8 名受试者直接结果表、二次谐波子层覆盖率和 analysis manifest。
 - 数据导出包 provenance：commit、配置快照和实际 metadata。
 - 复现实验命令和输出路径。
 - 现场问答：受试者独立性、soft-z 含义、为什么不用 `val_loss` 排序、为什么不补非重点方案测试集、如何避免数据泄漏。
@@ -869,6 +994,23 @@ runs/test_eval_g_series_20260709_local_rr_canonical
   --window-seconds 180
 ```
 
+BCG 二次谐波分层的完整 discover、验证图复核、freeze、apply、预测导出和纠正汇总命令见
+`scripts/README.md` 的“BCG 呼吸带二次谐波显著窗口分层”。本轮活动口径对应：
+
+```text
+验证集特征与复核：runs/bcg_second_harmonic_20260710/validation_full_v2/
+冻结阈值：runs/bcg_second_harmonic_20260710/harmonic_thresholds.json
+测试集固定标签：runs/bcg_second_harmonic_20260710/test_v2/
+四模型任务指标：runs/bcg_second_harmonic_20260710/model_metrics/
+模型阳性窗口预测：runs/bcg_second_harmonic_20260710/predictions/
+谐波纠正汇总：runs/bcg_second_harmonic_20260710/corrections/
+平衡案例图：runs/bcg_second_harmonic_20260710/figures/
+```
+
+其中 12 个 checkpoint 的预测导出是长时间 GPU 命令，由用户手动执行；分析脚本只读取保存后的
+预测并生成派生统计。`validation/`、`validation_full/` 和 `test/` 是阈值冻结前的早期检查目录，
+不进入本报告结论。
+
 ## 证据索引
 
 - 当前证据账本：`docs/experiments/current_evidence_ledger.md`
@@ -878,6 +1020,16 @@ runs/test_eval_g_series_20260709_local_rr_canonical
 - 测试集复评脚本：`scripts/run_g_series_test_eval.py`
 - 分层分析脚本：`scripts/stratified_eval_analysis.py`
 - 分层分析输出：`runs/test_eval_g_series_20260709_local_rr_canonical/stratified_analysis_20260709/`
+- 二次谐波分析设计：`docs/superpowers/specs/2026-07-10-bcg-second-harmonic-stratified-analysis-design.md`
+- 二次谐波信号与标签实现：`resp_train/analysis/second_harmonic.py`
+- 二次谐波特征、冻结和汇总脚本：`scripts/analyze_bcg_second_harmonic.py`
+- 二次谐波预测导出脚本：`scripts/export_harmonic_predictions.py`
+- 二次谐波复核与案例图脚本：`scripts/plot_bcg_second_harmonic.py`
+- 二次谐波冻结阈值：`runs/bcg_second_harmonic_20260710/harmonic_thresholds.json`
+- 二次谐波测试标签与覆盖率：`runs/bcg_second_harmonic_20260710/test_v2/`
+- 二次谐波四模型任务指标：`runs/bcg_second_harmonic_20260710/model_metrics/`
+- 二次谐波纠正率与案例：`runs/bcg_second_harmonic_20260710/corrections/`
+  与 `runs/bcg_second_harmonic_20260710/figures/`
 - 数据导出包 README：`/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/README.md`
 - 数据导出包 manifest：`/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/manifest.json`
 - 数据导出包配置快照：`/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/provenance/config_default.yaml`

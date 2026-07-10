@@ -25,3 +25,5 @@ __pycache__/
 runs/
 
 docs/figure/
+# 阶段汇报 PPT 仅保留在本地，不进入版本库。
+docs/stage_reports/*/*.pptx
