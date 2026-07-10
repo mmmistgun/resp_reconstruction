@@ -64,6 +64,12 @@ RENDER_METRIC_COLUMNS = (
 )
 
 THREAD_ENV = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS")
+MODEL_COLORS = {
+    "g0_time_only": "#7f7f7f",
+    "g0_f0_native_stft_pre_mixer": "#ff7f0e",
+    "g3_c_wide_8p0": "#1f77b4",
+    "g3_c_bandenergy": "#2ca02c",
+}
 
 
 @dataclass(frozen=True)
@@ -347,7 +353,8 @@ def _format_metric(value: float | int | None, *, digits: int = 3) -> str:
     return f"{number:.{digits}f}" if np.isfinite(number) else "nan"
 
 
-def render_one_window(task: RenderTask) -> RenderResult:
+def build_comparison_figure(task: RenderTask):
+    """建立单窗口图：输入、4 个带通 THO/预测子图，以及频谱/指标并排底行。"""
     if _RENDER_CACHE is None or _RENDER_PARAMS is None:
         raise RuntimeError("绘图 worker 尚未初始化")
     if task.row_index < 0 or task.row_index >= len(_RENDER_CACHE.dataset_row_id):
@@ -368,33 +375,41 @@ def render_one_window(task: RenderTask) -> RenderResult:
     tho = np.asarray(_RENDER_CACHE.tho_ref[task.row_index], dtype=np.float64)
     predictions = {label: np.asarray(values[task.row_index], dtype=np.float64) for label, values in _RENDER_CACHE.predictions.items()}
     bcg_band = bandpass_filter(bcg, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    tho_band = bandpass_filter(tho, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    prediction_band = {
+        label: bandpass_filter(values, fs=fs, low_hz=low_hz, high_hz=high_hz, order=order)
+        for label, values in predictions.items()
+    }
     time = np.arange(bcg.size, dtype=np.float64) / fs
-    task.output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = task.output_dir / f"row_{int(task.dataset_row_id)}.png"
-    if output_path.exists():
-        raise FileExistsError(f"PNG 已存在，拒绝覆盖: {output_path}")
-    figure = plt.figure(figsize=(18, 17))
-    grid = GridSpec(4, 1, figure=figure, height_ratios=(1.0, 1.2, 1.0, 1.35))
-    input_ax = figure.add_subplot(grid[0])
-    output_ax = figure.add_subplot(grid[1], sharex=input_ax)
-    spectrum_ax = figure.add_subplot(grid[2])
-    table_ax = figure.add_subplot(grid[3])
+    figure = plt.figure(figsize=(20, 23))
+    grid = GridSpec(
+        6,
+        2,
+        figure=figure,
+        height_ratios=(1.0, 1.0, 1.0, 1.0, 1.0, 1.35),
+        width_ratios=(1.0, 1.55),
+    )
+    input_ax = figure.add_subplot(grid[0, :])
+    model_axes = [figure.add_subplot(grid[index, :], sharex=input_ax) for index in range(1, 5)]
+    spectrum_ax = figure.add_subplot(grid[5, 0])
+    table_ax = figure.add_subplot(grid[5, 1])
     input_ax.plot(time, bcg, color="#7f7f7f", linewidth=0.55, label="BCG soft-z input")
     input_ax.plot(time, bcg_band, color="#1f77b4", linewidth=0.9, label="BCG resp-band (0.05–0.7 Hz)")
     input_ax.set_ylim(*_panel_limits(bcg, bcg_band))
     input_ax.set_ylabel("soft-z")
     input_ax.legend(loc="upper right")
     input_ax.grid(alpha=0.2)
-    output_ax.plot(time, tho, color="#111111", linewidth=1.35, label="THO target")
-    colors = {"g0_time_only": "#7f7f7f", "g0_f0_native_stft_pre_mixer": "#ff7f0e", "g3_c_wide_8p0": "#1f77b4", "g3_c_bandenergy": "#2ca02c"}
-    for label in REQUIRED_MODELS:
-        output_ax.plot(time, predictions[label], color=colors[label], linewidth=0.75, alpha=0.85, label=label)
-    output_ax.set_ylim(*_panel_limits(tho, *predictions.values()))
-    output_ax.set_ylabel("soft-z")
-    output_ax.set_xlabel("time (s)")
-    output_ax.legend(loc="upper right", ncol=2)
-    output_ax.grid(alpha=0.2)
-    for label, values, color in (("BCG resp-band", bcg_band, "#1f77b4"), ("THO target", tho, "#111111"), *((label, predictions[label], colors[label]) for label in REQUIRED_MODELS)):
+    output_limits = _panel_limits(tho_band, *prediction_band.values())
+    for axis, label in zip(model_axes, REQUIRED_MODELS, strict=True):
+        axis.plot(time, tho_band, color="#111111", linewidth=1.15, label="THO resp-band")
+        axis.plot(time, prediction_band[label], color=MODEL_COLORS[label], linewidth=0.9, alpha=0.90, label=f"{label} resp-band")
+        axis.set_ylim(*output_limits)
+        axis.set_ylabel("soft-z")
+        axis.set_title(label, fontsize=10)
+        axis.legend(loc="upper right")
+        axis.grid(alpha=0.2)
+    model_axes[-1].set_xlabel("time (s)")
+    for label, values, color in (("BCG resp-band", bcg_band, "#1f77b4"), ("THO target", tho, "#111111"), *((label, predictions[label], MODEL_COLORS[label]) for label in REQUIRED_MODELS)):
         freqs, power = _normalized_band_psd(values, fs=fs, low_hz=low_hz, high_hz=high_hz)
         spectrum_ax.plot(freqs, power, color=color, linewidth=1.0, label=label)
     spectrum_ax.set_xlim(low_hz, high_hz)
@@ -420,9 +435,23 @@ def render_one_window(task: RenderTask) -> RenderResult:
             else:
                 row.append(" / ".join(_format_metric(metrics.get(key)) for key in ("local_rr_mae", "local_rr_corr", "local_rr_valid_frac")))
         table_values.append(row)
-    table_ax.table(cellText=table_values, rowLabels=row_labels, colLabels=list(REQUIRED_MODELS), loc="center", cellLoc="center")
+    table = table_ax.table(cellText=table_values, rowLabels=row_labels, colLabels=list(REQUIRED_MODELS), loc="center", cellLoc="center")
+    table.auto_set_font_size(False)
+    table.set_fontsize(7.5)
+    table.scale(1.0, 1.35)
     figure.suptitle(f"G-series comparison | test row={int(task.dataset_row_id)}", fontsize=14)
     figure.tight_layout(rect=(0, 0, 1, 0.98))
+    return figure
+
+
+def render_one_window(task: RenderTask) -> RenderResult:
+    task.output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = task.output_dir / f"row_{int(task.dataset_row_id)}.png"
+    if output_path.exists():
+        raise FileExistsError(f"PNG 已存在，拒绝覆盖: {output_path}")
+    figure = build_comparison_figure(task)
+    from matplotlib import pyplot as plt
+
     temporary_path = output_path.with_name(f".{output_path.stem}.{os.getpid()}.{uuid.uuid4().hex}.tmp.png")
     try:
         figure.savefig(temporary_path, dpi=140)

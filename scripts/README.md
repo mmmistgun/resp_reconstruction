@@ -705,8 +705,9 @@ OMP/MKL/OpenBLAS/NUMEXPR 为单线程。
   --workers auto
 ```
 
-每张 PNG 包含 BCG soft-z 输入与 `0.05–0.7 Hz` 呼吸带分量、THO 与 4 个输出叠加、归一化 Welch 频谱和逐窗口
-canonical 指标表。输入与输出波形面板各自共用 y 轴尺度；频谱仅用于比较频率结构，不比较绝对能量。
+每张 PNG 顶部包含 BCG soft-z 输入与 `0.05–0.7 Hz` 呼吸带分量；中间依次为 4 个子图，每张叠加同一呼吸带滤波后的
+THO 与一个模型的滤波预测，并在 4 张模型图间共用 y 轴尺度。归一化 Welch 频谱与逐窗口 canonical 指标表位于同一底行；
+频谱仅用于比较频率结构，不比较绝对能量。
 默认过滤只从 BCG 输入计算稳定度，排除稳定度最高的 20%，不读取 THO、任何模型输出或 test metrics；它不是目标侧或
 模型侧的后验挑样。输出目录不可覆盖，完整成功时包含 `window_index.csv`、`filter_summary.csv`、`figures/` 和
 `plot_manifest.json`。任一窗口失败时只写 `plot_failure_manifest.json`，不发布 `plot_manifest.json`。小规模 CPU
