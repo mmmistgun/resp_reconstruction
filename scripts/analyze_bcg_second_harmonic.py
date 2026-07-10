@@ -251,7 +251,8 @@ def _build_split_data(cfg, *, split: str):
     return build_window_data(
         cfg,
         split=split,
-        max_windows=cfg.data.get(f"max_{prefix}_windows", None),
+        # 阈值开发和正式分层必须覆盖完整 split，不能继承训练 smoke 的窗口上限。
+        max_windows=None,
         sample_strategy=str(cfg.data.get(f"{prefix}_sample_strategy", "stratified_random")),
         sample_seed=int(cfg.data.get(f"{prefix}_sample_seed", 0)),
         shuffle=False,

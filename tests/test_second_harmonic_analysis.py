@@ -8,6 +8,8 @@ import pytest
 from resp_train.analysis.second_harmonic import (
     HarmonicFeatureConfig,
     HarmonicThresholds,
+    _band_energy,
+    _neighborhood_energy,
     classify_harmonic_window,
     classify_model_correction,
     extract_harmonic_features,
@@ -84,6 +86,22 @@ def test_zero_energy_input_uses_finite_ratio_protection() -> None:
     assert result.second_harmonic_energy == pytest.approx(0.0, abs=1e-20)
     assert np.isfinite(result.harmonic_to_fundamental_ratio)
     assert np.isfinite(result.harmonic_band_fraction)
+
+
+def test_harmonic_band_fraction_stays_bounded_near_upper_band_edge() -> None:
+    freqs = np.asarray([0.650, 0.675, 0.700])
+    power = np.asarray([1.0, 1.0, 10.0])
+
+    harmonic_energy = _neighborhood_energy(
+        freqs,
+        power,
+        center_hz=0.700,
+        half_width_hz=0.001,
+    )
+    band_energy = _band_energy(freqs, power)
+
+    assert harmonic_energy <= band_energy
+    assert 0.0 <= harmonic_energy / band_energy <= 1.0
 
 
 def test_extract_harmonic_features_rejects_nonfinite_input() -> None:

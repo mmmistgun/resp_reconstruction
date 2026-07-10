@@ -274,16 +274,19 @@ def _neighborhood_energy(
     mask = np.abs(freqs - float(center_hz)) <= float(half_width_hz)
     if not mask.any():
         return 0.0
-    return _integrate_power(freqs[mask], power[mask])
+    return float(max(np.sum(power[mask]) * _frequency_bin_width(freqs), 0.0))
 
 
 def _band_energy(freqs: np.ndarray, power: np.ndarray) -> float:
-    return _integrate_power(freqs, power)
-
-
-def _integrate_power(freqs: np.ndarray, power: np.ndarray) -> float:
     if power.size == 0:
         return 0.0
-    if power.size == 1:
-        return float(max(power[0], 0.0))
-    return float(max(np.trapz(power, freqs), 0.0))
+    return float(max(np.sum(power) * _frequency_bin_width(freqs), 0.0))
+
+
+def _frequency_bin_width(freqs: np.ndarray) -> float:
+    if freqs.size < 2:
+        raise ValueError("频谱能量计算至少需要两个频率点")
+    differences = np.diff(freqs)
+    if not np.isfinite(differences).all() or np.any(differences <= 0):
+        raise ValueError("频率网格必须有限且严格递增")
+    return float(np.median(differences))
