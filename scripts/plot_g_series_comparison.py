@@ -437,17 +437,22 @@ def render_one_window(task: RenderTask) -> RenderResult:
 def compute_input_stability_frame(
     cache: CacheArrays,
     *,
+    specs: Iterable[ComparisonSpec],
     fs: float,
     low_hz: float,
     high_hz: float,
     order: int,
+    workers: int,
 ) -> pd.DataFrame:
     """从完整共享 BCG 缓存构建输入侧稳定度表，不读取目标、预测或指标。"""
-    rows = []
-    for row_index, dataset_row_id in enumerate(cache.dataset_row_id):
-        rows.append(
+    if workers < 1:
+        raise ValueError("输入稳定度 workers 必须 >= 1")
+    resolved_specs = tuple(specs)
+    row_indices = tuple(range(len(cache.dataset_row_id)))
+    if workers == 1:
+        rows = [
             {
-                "dataset_row_id": int(dataset_row_id),
+                "dataset_row_id": int(cache.dataset_row_id[row_index]),
                 **input_stability_features(
                     cache.bcg_input[row_index],
                     fs=fs,
@@ -456,8 +461,35 @@ def compute_input_stability_frame(
                     order=order,
                 ),
             }
-        )
+            for row_index in row_indices
+        ]
+    else:
+        context = mp.get_context("spawn")
+        with ProcessPoolExecutor(
+            max_workers=min(int(workers), len(row_indices)),
+            mp_context=context,
+            initializer=initialize_render_worker,
+            initargs=(str(cache.root), resolved_specs, fs, low_hz, high_hz, order),
+        ) as executor:
+            rows = list(executor.map(_compute_input_stability_row, row_indices))
     return pd.DataFrame(rows)
+
+
+def _compute_input_stability_row(row_index: int) -> dict[str, float | int]:
+    if _RENDER_CACHE is None or _RENDER_PARAMS is None:
+        raise RuntimeError("输入稳定度 worker 尚未初始化")
+    if row_index < 0 or row_index >= len(_RENDER_CACHE.dataset_row_id):
+        raise IndexError(f"row_index 越界: {row_index}")
+    return {
+        "dataset_row_id": int(_RENDER_CACHE.dataset_row_id[row_index]),
+        **input_stability_features(
+            _RENDER_CACHE.bcg_input[row_index],
+            fs=float(_RENDER_PARAMS["fs"]),
+            low_hz=float(_RENDER_PARAMS["low_hz"]),
+            high_hz=float(_RENDER_PARAMS["high_hz"]),
+            order=int(_RENDER_PARAMS["order"]),
+        ),
+    }
 
 
 def _render_parameters(spec: ComparisonSpec) -> dict[str, float | int]:
@@ -648,7 +680,13 @@ def run_plot_comparison(
     cache = load_cache(cache_dir, resolved_specs)
     aligned_metrics = load_canonical_metrics(metrics_dir, resolved_specs, cache_row_ids=cache.dataset_row_id)
     render_params = _render_parameters(resolved_specs[0])
-    feature_frame = compute_input_stability_frame(cache, **render_params)
+    feature_worker_count = resolve_workers(workers, n_tasks=len(cache.dataset_row_id))
+    feature_frame = compute_input_stability_frame(
+        cache,
+        specs=resolved_specs,
+        workers=feature_worker_count,
+        **render_params,
+    )
     selected_rows = select_plot_rows(
         feature_frame,
         filter_mode=filter_mode,
@@ -687,6 +725,7 @@ def run_plot_comparison(
         "filter": filter_mode,
         "stable_fraction": float(stable_fraction),
         "max_plots": max_plots,
+        "feature_worker_count": feature_worker_count,
         "worker_count": worker_count,
         "render_parameters": render_params,
         "n_total": int(len(window_index)),

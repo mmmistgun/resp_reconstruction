@@ -14,6 +14,7 @@ from scripts.plot_g_series_comparison import (
     _build_window_index,
     align_canonical_metrics,
     build_render_tasks,
+    compute_input_stability_frame,
     input_stability_features,
     initialize_render_worker,
     load_cache,
@@ -204,6 +205,29 @@ def test_load_cache_and_render_one_window_writes_png(tmp_path: Path) -> None:
     assert result.status == "written"
     assert result.figure_path.exists()
     assert result.figure_path.suffix == ".png"
+
+
+def test_compute_input_stability_frame_accepts_worker_budget(tmp_path: Path) -> None:
+    cache_dir, specs = _write_synthetic_cache(tmp_path)
+    cache = load_cache(cache_dir, specs)
+
+    features = compute_input_stability_frame(
+        cache,
+        specs=specs,
+        fs=100.0,
+        low_hz=0.05,
+        high_hz=0.7,
+        order=4,
+        workers=2,
+    )
+
+    assert features.dataset_row_id.tolist() == [101]
+    assert set(features.columns) == {
+        "dataset_row_id",
+        "spectral_peak_fraction",
+        "local_rr_valid_frac",
+        "local_rr_iqr_bpm",
+    }
 
 
 def test_resolve_workers_uses_48_cap(monkeypatch: pytest.MonkeyPatch) -> None:
