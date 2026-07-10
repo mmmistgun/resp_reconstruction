@@ -116,6 +116,174 @@ def run_analysis(spec: StratifiedAnalysisSpec) -> dict[str, Path]:
     return outputs
 
 
+def run_external_strata_analysis(
+    spec: StratifiedAnalysisSpec,
+    strata: pd.DataFrame,
+    *,
+    stratum_column: str = "stratum",
+) -> dict[str, pd.DataFrame]:
+    """按输入/目标预先定义的固定窗口标签汇总模型指标，禁止 outcome-defined 分层。"""
+
+    required = {"dataset_row_id", "samp_id", stratum_column, "harmonic_positive"}
+    missing = required - set(strata.columns)
+    if missing:
+        raise ValueError(f"外部分层标签缺少列: {sorted(missing)}")
+    if strata["dataset_row_id"].duplicated().any():
+        raise ValueError("外部分层标签存在重复 dataset_row_id")
+    labels = _labels_for_spec(spec)
+    seeds = spec.seeds or _discover_common_seeds(spec.eval_root, labels, spec.file_pattern)
+    fixed = strata.copy().set_index("dataset_row_id", drop=False)
+    fixed_ids = set(fixed.index.astype(int).tolist())
+
+    metrics_by_run: dict[tuple[str, int], pd.DataFrame] = {}
+    for label in labels:
+        for seed in seeds:
+            metrics = _with_derived_metrics(
+                _read_metrics(spec.eval_root, spec.file_pattern, label, seed),
+                spec,
+            )
+            if metrics["dataset_row_id"].duplicated().any():
+                raise ValueError(f"label={label} seed={seed} metrics 存在重复 dataset_row_id")
+            actual_ids = set(metrics["dataset_row_id"].astype(int).tolist())
+            if actual_ids != fixed_ids:
+                missing_ids = sorted(fixed_ids - actual_ids)
+                extra_ids = sorted(actual_ids - fixed_ids)
+                raise ValueError(
+                    f"label={label} seed={seed} 与固定分层 row 不一致: "
+                    f"missing={missing_ids[:8]} extra={extra_ids[:8]}"
+                )
+            metrics_by_run[(label, seed)] = metrics
+
+    model_records: list[dict] = []
+    masks = _external_strata_masks(fixed, stratum_column=stratum_column)
+    for label in labels:
+        for seed in seeds:
+            metrics = metrics_by_run[(label, seed)].set_index("dataset_row_id").reindex(fixed.index)
+            for stratum_name, mask in masks.items():
+                model_records.append(
+                    _external_model_record(
+                        label=label,
+                        seed=seed,
+                        stratum=stratum_name,
+                        metrics=metrics,
+                        strata=fixed,
+                        mask=mask,
+                        metric_names=spec.metrics,
+                    )
+                )
+    model_seed = pd.DataFrame.from_records(model_records)
+    model_summary = _long_seed_summary(model_seed, keys=["label", "stratum"])
+
+    paired_records: list[dict] = []
+    for comparison in spec.comparisons:
+        for seed in seeds:
+            joined = _joined_metrics(metrics_by_run, comparison, seed).reindex(fixed.index)
+            for stratum_name, mask in masks.items():
+                record = _paired_record(
+                    comparison=comparison,
+                    seed=seed,
+                    group_name="stratum",
+                    group_value=stratum_name,
+                    joined=joined,
+                    mask=mask,
+                    metrics=spec.metrics,
+                )
+                record["n_subjects"] = int(fixed.loc[mask, "samp_id"].nunique())
+                paired_records.append(record)
+    paired_seed = pd.DataFrame.from_records(paired_records)
+    paired_summary = _aggregate_seed_rows(
+        paired_seed,
+        ["comparison", "target", "baseline", "stratum"],
+    )
+    return {
+        "model_seed": model_seed,
+        "model_summary": model_summary,
+        "paired_seed": paired_seed,
+        "paired_summary": paired_summary,
+    }
+
+
+def _external_strata_masks(
+    strata: pd.DataFrame,
+    *,
+    stratum_column: str,
+) -> dict[str, pd.Series]:
+    status = strata[stratum_column].astype(str)
+    excluded = status.isin({"tho_reference_unstable", "second_harmonic_out_of_band"})
+    masks: dict[str, pd.Series] = {
+        "all_windows": pd.Series(True, index=strata.index),
+        "eligible_total": ~excluded,
+        "harmonic_positive_union": strata["harmonic_positive"].astype(bool),
+    }
+    for value in sorted(status.unique().tolist()):
+        masks[value] = status.eq(value)
+    return masks
+
+
+def _external_model_record(
+    *,
+    label: str,
+    seed: int,
+    stratum: str,
+    metrics: pd.DataFrame,
+    strata: pd.DataFrame,
+    mask: pd.Series,
+    metric_names: list[str],
+) -> dict:
+    mask = mask.reindex(metrics.index).fillna(False)
+    record: dict[str, float | int | str] = {
+        "label": label,
+        "seed": int(seed),
+        "stratum": stratum,
+        "n_windows": int(mask.sum()),
+        "n_subjects": int(strata.loc[mask, "samp_id"].nunique()),
+    }
+    for metric in metric_names:
+        if metric not in metrics.columns:
+            continue
+        values = pd.to_numeric(metrics.loc[mask, metric], errors="coerce").dropna()
+        if values.empty:
+            continue
+        record[f"{metric}_mean"] = float(values.mean())
+        record[f"{metric}_median"] = float(values.median())
+        record[f"{metric}_p95"] = float(values.quantile(0.95))
+        if metric in {
+            "rr_peak_band_robust_abs_error",
+            COUNT_BPM_ERROR_METRIC,
+            "local_rr_mae",
+        }:
+            record[f"{metric}_frac_gt_1"] = float((values > 1.0).mean())
+            record[f"{metric}_frac_gt_2"] = float((values > 2.0).mean())
+    return record
+
+
+def _long_seed_summary(frame: pd.DataFrame, *, keys: list[str]) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    value_columns = [
+        column
+        for column in frame.columns
+        if column not in {*keys, "seed", "n_windows", "n_subjects"}
+        and pd.api.types.is_numeric_dtype(frame[column])
+    ]
+    melted = frame.melt(
+        id_vars=[*keys, "seed", "n_windows", "n_subjects"],
+        value_vars=value_columns,
+        var_name="metric_stat",
+        value_name="value",
+    )
+    return (
+        melted.groupby([*keys, "metric_stat"], dropna=False)
+        .agg(
+            value_mean=("value", "mean"),
+            value_std=("value", "std"),
+            n_windows_mean=("n_windows", "mean"),
+            n_subjects_mean=("n_subjects", "mean"),
+        )
+        .reset_index()
+    )
+
+
 def _labels_for_spec(spec: StratifiedAnalysisSpec) -> list[str]:
     if spec.labels:
         return list(dict.fromkeys(spec.labels))

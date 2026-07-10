@@ -20,6 +20,7 @@ from scripts.analyze_bcg_second_harmonic import (
     apply_frozen_thresholds,
     freeze_threshold_candidate,
     load_frozen_thresholds,
+    summarize_existing_metrics,
     summarize_coverage,
 )
 from scripts.plot_bcg_second_harmonic import plot_validation_review, select_review_cases
@@ -305,3 +306,56 @@ def test_apply_frozen_thresholds_and_coverage_keep_exclusions_separate() -> None
     assert np.isnan(by_status.loc["all_windows", "fraction_of_eligible"])
     assert np.isnan(by_status.loc["tho_reference_unstable", "fraction_of_eligible"])
     assert by_status.loc["harmonic_positive_union", "fraction_of_eligible"] == pytest.approx(0.75)
+
+
+def test_summarize_existing_metrics_writes_four_model_outputs(tmp_path: Path) -> None:
+    labels_path = tmp_path / "test_harmonic_labels.csv"
+    pd.DataFrame(
+        {
+            "dataset_row_id": [1, 2],
+            "samp_id": [220, 671],
+            "split": "test",
+            "status": "eligible",
+            "stratum": ["strong_harmonic", "harmonic_negative"],
+            "harmonic_positive": [True, False],
+        }
+    ).to_csv(labels_path, index=False)
+    eval_root = tmp_path / "eval"
+    eval_root.mkdir()
+    model_labels = ["time", "f0", "wide", "bandenergy"]
+    seeds = [101, 102, 103]
+    for label_index, label in enumerate(model_labels):
+        for seed in seeds:
+            pd.DataFrame(
+                {
+                    "dataset_row_id": [1, 2],
+                    "rr_peak_band_robust_abs_error": [1.0 - 0.1 * label_index, 0.2],
+                    "breath_count_zero_cross_abs_error": [3.0 - label_index * 0.5, 0.0],
+                    "best_lag_corr_4s": [0.7 + 0.02 * label_index, 0.9],
+                    "relative_envelope_corr_lag4s": [0.4 + 0.02 * label_index, 0.8],
+                    "relative_envelope_mae_lag4s": [0.4 - 0.02 * label_index, 0.1],
+                    "local_rr_mae": [1.2 - 0.05 * label_index, 0.2],
+                    "local_rr_corr": [0.3 + 0.02 * label_index, 0.8],
+                }
+            ).to_csv(eval_root / f"{label}_{seed}_test_metrics.csv", index=False)
+
+    outputs = summarize_existing_metrics(
+        labels_path=labels_path,
+        eval_root=eval_root,
+        output_dir=tmp_path / "summary",
+        model_labels=model_labels,
+        seeds=seeds,
+        comparisons=[("wide_vs_time", "wide", "time")],
+    )
+
+    assert {
+        "model_seed",
+        "model_summary",
+        "paired_seed",
+        "paired_summary",
+        "manifest",
+    } == set(outputs)
+    assert all(path.exists() for path in outputs.values())
+    paired = pd.read_csv(outputs["paired_seed"])
+    positive = paired[paired["stratum"] == "harmonic_positive_union"].iloc[0]
+    assert positive["delta_rr_peak_band_robust_abs_error_mean"] < 0

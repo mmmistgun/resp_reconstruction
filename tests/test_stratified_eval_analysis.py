@@ -4,7 +4,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from scripts.stratified_eval_analysis import Comparison, StratifiedAnalysisSpec, run_analysis
+from scripts.stratified_eval_analysis import (
+    Comparison,
+    StratifiedAnalysisSpec,
+    run_analysis,
+    run_external_strata_analysis,
+)
 
 
 def _metrics_rows(*, robust_shift: float = 0.0, count_shift: float = 0.0) -> list[dict]:
@@ -194,3 +199,81 @@ def test_run_analysis_writes_reusable_strata_tail_rr_and_subject_outputs(tmp_pat
         "target": "bandenergy",
         "baseline": "wide",
     }
+
+
+def test_external_strata_analysis_reuses_fixed_rows_for_models_and_paired_delta(tmp_path):
+    eval_root, _ = _prepare_eval_root(tmp_path)
+    strata = pd.DataFrame(
+        {
+            "dataset_row_id": [1, 2, 3, 4, 5],
+            "samp_id": [220, 220, 671, 671, 1006],
+            "stratum": [
+                "harmonic_negative",
+                "strong_harmonic",
+                "harmonic_prominent",
+                "peak_doubling",
+                "strong_harmonic",
+            ],
+            "harmonic_positive": [False, True, True, True, True],
+        }
+    )
+    spec = StratifiedAnalysisSpec(
+        eval_root=eval_root,
+        output_dir=tmp_path / "unused",
+        labels=["time", "wide", "bandenergy"],
+        seeds=[101, 102],
+        comparisons=[
+            Comparison(name="wide_vs_time", target="wide", baseline="time"),
+            Comparison(name="bandenergy_vs_time", target="bandenergy", baseline="time"),
+        ],
+    )
+
+    outputs = run_external_strata_analysis(spec, strata)
+
+    model_seed = outputs["model_seed"]
+    assert {"all_windows", "eligible_total", "harmonic_positive_union"} <= set(
+        model_seed["stratum"]
+    )
+    positive = model_seed[
+        (model_seed["label"] == "wide")
+        & (model_seed["seed"] == 101)
+        & (model_seed["stratum"] == "harmonic_positive_union")
+    ].iloc[0]
+    assert positive["n_windows"] == 4
+    assert positive["n_subjects"] == 3
+    assert "rr_peak_band_robust_abs_error_mean" in model_seed.columns
+    assert "breath_count_zero_cross_bpm_error_p95" in model_seed.columns
+
+    paired_seed = outputs["paired_seed"]
+    wide_positive = paired_seed[
+        (paired_seed["comparison"] == "wide_vs_time")
+        & (paired_seed["seed"] == 101)
+        & (paired_seed["stratum"] == "harmonic_positive_union")
+    ].iloc[0]
+    assert wide_positive["n_windows"] == 4
+    assert wide_positive["delta_rr_peak_band_robust_abs_error_mean"] < 0
+    assert {"value_mean", "value_std"} <= set(outputs["model_summary"].columns)
+
+
+def test_external_strata_analysis_rejects_metrics_missing_fixed_rows(tmp_path):
+    eval_root, _ = _prepare_eval_root(tmp_path)
+    path = eval_root / "wide_101_test_metrics.csv"
+    pd.read_csv(path).iloc[:-1].to_csv(path, index=False)
+    strata = pd.DataFrame(
+        {
+            "dataset_row_id": [1, 2, 3, 4, 5],
+            "samp_id": [220, 220, 671, 671, 1006],
+            "stratum": "harmonic_negative",
+            "harmonic_positive": False,
+        }
+    )
+    spec = StratifiedAnalysisSpec(
+        eval_root=eval_root,
+        output_dir=tmp_path / "unused",
+        labels=["time", "wide"],
+        seeds=[101, 102],
+        comparisons=[Comparison(name="wide_vs_time", target="wide", baseline="time")],
+    )
+
+    with pytest.raises(ValueError, match="固定分层 row"):
+        run_external_strata_analysis(spec, strata)

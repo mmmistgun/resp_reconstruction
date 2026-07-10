@@ -24,12 +24,29 @@ from resp_train.analysis.second_harmonic import (
 )
 from resp_train.config import load_config
 from resp_train.data.factory import build_window_data
+from scripts.stratified_eval_analysis import (
+    Comparison,
+    StratifiedAnalysisSpec,
+    run_external_strata_analysis,
+)
 
 
 PROPOSAL_AGREEMENT_BPM = (0.5, 1.0, 2.0)
 PROPOSAL_PEAK_TOLERANCES = (0.05, 0.10, 0.15)
 PROPOSAL_QUANTILES = (0.75, 0.85, 0.90)
 PROPOSAL_CORRECTION_DROPS = (0.10, 0.20, 0.30)
+G_SERIES_LABELS = (
+    "g0_time_only",
+    "g0_f0_native_stft_pre_mixer",
+    "g3_c_wide_8p0",
+    "g3_c_bandenergy",
+)
+G_SERIES_SEEDS = (20260700, 20260837, 20260901)
+G_SERIES_COMPARISONS = (
+    ("f0_vs_time", "g0_f0_native_stft_pre_mixer", "g0_time_only"),
+    ("wide_vs_time", "g3_c_wide_8p0", "g0_time_only"),
+    ("bandenergy_vs_time", "g3_c_bandenergy", "g0_time_only"),
+)
 
 
 def build_feature_frame(
@@ -347,6 +364,63 @@ def apply_to_split(
     return {"labels": labels_path, "coverage": coverage_path, "manifest": manifest_path}
 
 
+def summarize_existing_metrics(
+    *,
+    labels_path: Path,
+    eval_root: Path,
+    output_dir: Path,
+    model_labels: list[str] | tuple[str, ...] = G_SERIES_LABELS,
+    seeds: list[int] | tuple[int, ...] = G_SERIES_SEEDS,
+    comparisons: list[tuple[str, str, str]] | tuple[tuple[str, str, str], ...] = G_SERIES_COMPARISONS,
+    dataset_index: Path | None = None,
+) -> dict[str, Path]:
+    labels_path = Path(labels_path)
+    labels = pd.read_csv(labels_path)
+    comparison_specs = [
+        Comparison(name=name, target=target, baseline=baseline)
+        for name, target, baseline in comparisons
+    ]
+    spec = StratifiedAnalysisSpec(
+        eval_root=Path(eval_root),
+        output_dir=Path(output_dir),
+        labels=[str(value) for value in model_labels],
+        seeds=[int(value) for value in seeds],
+        comparisons=comparison_specs,
+        dataset_index=dataset_index,
+        window_seconds=180.0,
+    )
+    frames = run_external_strata_analysis(spec, labels)
+    output_dir = Path(output_dir)
+    outputs = {
+        "model_seed": output_dir / "model_stratified_metrics_seed.csv",
+        "model_summary": output_dir / "model_stratified_metrics_summary.csv",
+        "paired_seed": output_dir / "paired_delta_vs_time_seed.csv",
+        "paired_summary": output_dir / "paired_delta_vs_time_summary.csv",
+        "manifest": output_dir / "analysis_manifest.json",
+    }
+    for name in ("model_seed", "model_summary", "paired_seed", "paired_summary"):
+        _write_csv_exclusive(frames[name], outputs[name])
+    labels_sha256 = hashlib.sha256(labels_path.read_bytes()).hexdigest()
+    manifest = {
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "operation": "summarize-metrics",
+        "labels_path": str(labels_path),
+        "labels_sha256": labels_sha256,
+        "eval_root": str(eval_root),
+        "dataset_index": None if dataset_index is None else str(dataset_index),
+        "model_labels": [str(value) for value in model_labels],
+        "seeds": [int(value) for value in seeds],
+        "comparisons": [
+            {"name": item.name, "target": item.target, "baseline": item.baseline}
+            for item in comparison_specs
+        ],
+        "n_fixed_windows": int(len(labels)),
+        "outputs": {name: str(path) for name, path in outputs.items() if name != "manifest"},
+    }
+    _write_json_exclusive(manifest, outputs["manifest"])
+    return outputs
+
+
 def discover(
     *,
     config_path: Path,
@@ -501,6 +575,15 @@ def _parse_args() -> argparse.Namespace:
     apply_parser.add_argument("--split", choices=["test"], default="test")
     apply_parser.add_argument("--thresholds", type=Path, required=True)
     apply_parser.add_argument("--output-dir", type=Path, required=True)
+
+    summary_parser = subparsers.add_parser(
+        "summarize-metrics",
+        help="按冻结测试标签汇总现有四模型逐窗口 metrics",
+    )
+    summary_parser.add_argument("--labels", type=Path, required=True)
+    summary_parser.add_argument("--eval-root", type=Path, required=True)
+    summary_parser.add_argument("--dataset-index", type=Path, default=None)
+    summary_parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
 
 
@@ -527,6 +610,16 @@ def main() -> None:
             split=args.split,
             thresholds_path=args.thresholds,
             output_dir=args.output_dir,
+        )
+        for name, path in outputs.items():
+            print(f"{name}: {path}")
+        return
+    if args.command == "summarize-metrics":
+        outputs = summarize_existing_metrics(
+            labels_path=args.labels,
+            eval_root=args.eval_root,
+            output_dir=args.output_dir,
+            dataset_index=args.dataset_index,
         )
         for name, path in outputs.items():
             print(f"{name}: {path}")
