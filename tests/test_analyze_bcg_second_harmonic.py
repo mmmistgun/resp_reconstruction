@@ -9,13 +9,18 @@ import pytest
 import torch
 from omegaconf import OmegaConf
 
-from resp_train.analysis.second_harmonic import HarmonicFeatureConfig
+from resp_train.analysis.second_harmonic import (
+    HarmonicFeatureConfig,
+    HarmonicThresholds,
+)
 import scripts.analyze_bcg_second_harmonic as analysis_script
 from scripts.analyze_bcg_second_harmonic import (
     build_feature_frame,
     build_threshold_proposal,
+    apply_frozen_thresholds,
     freeze_threshold_candidate,
     load_frozen_thresholds,
+    summarize_coverage,
 )
 from scripts.plot_bcg_second_harmonic import plot_validation_review, select_review_cases
 
@@ -248,3 +253,55 @@ def test_validation_review_selects_high_boundary_low_and_writes_plots(tmp_path: 
     assert set(manifest["review_group"]) == set(selected["review_group"])
     assert all(Path(path).exists() for path in manifest["figure_path"])
     assert (tmp_path / "figures" / "review_case_manifest.csv").exists()
+
+
+def test_apply_frozen_thresholds_and_coverage_keep_exclusions_separate() -> None:
+    features = pd.DataFrame(
+        {
+            "dataset_row_id": [1, 2, 3, 4, 5, 6],
+            "samp_id": [220, 220, 671, 671, 1006, 1006],
+            "split": "test",
+            "status": [
+                "eligible",
+                "eligible",
+                "eligible",
+                "eligible",
+                "tho_reference_unstable",
+                "second_harmonic_out_of_band",
+            ],
+            "peak_second_harmonic_relative_error": [0.05, 0.05, 0.50, 0.50, np.nan, np.nan],
+            "harmonic_to_fundamental_ratio": [2.0, 0.2, 2.0, 0.2, 0.0, 0.0],
+            "harmonic_band_fraction": [0.5, 0.05, 0.5, 0.05, 0.0, 0.0],
+        }
+    )
+    thresholds = HarmonicThresholds(
+        version="test-frozen",
+        tho_rr_agreement_bpm=1.0,
+        peak_relative_tolerance=0.1,
+        harmonic_to_fundamental_min=1.0,
+        harmonic_band_fraction_min=0.2,
+        correction_ratio_drop_min=0.2,
+    )
+
+    labels = apply_frozen_thresholds(features, thresholds)
+    coverage = summarize_coverage(labels)
+
+    assert labels["stratum"].tolist() == [
+        "strong_harmonic",
+        "peak_doubling",
+        "harmonic_prominent",
+        "harmonic_negative",
+        "tho_reference_unstable",
+        "second_harmonic_out_of_band",
+    ]
+    assert labels["harmonic_positive"].tolist() == [True, True, True, False, False, False]
+    by_status = coverage.set_index("status")
+    assert by_status.loc["all_windows", "n_windows"] == 6
+    assert by_status.loc["eligible_total", "n_windows"] == 4
+    assert by_status.loc["harmonic_positive_union", "n_windows"] == 3
+    assert by_status.loc["tho_reference_unstable", "n_subjects"] == 1
+    assert by_status.loc["second_harmonic_out_of_band", "n_subjects"] == 1
+    assert by_status.loc["all_windows", "fraction_of_all"] == pytest.approx(1.0)
+    assert np.isnan(by_status.loc["all_windows", "fraction_of_eligible"])
+    assert np.isnan(by_status.loc["tho_reference_unstable", "fraction_of_eligible"])
+    assert by_status.loc["harmonic_positive_union", "fraction_of_eligible"] == pytest.approx(0.75)

@@ -200,6 +200,153 @@ def load_frozen_thresholds(path: Path) -> HarmonicThresholds:
     return HarmonicThresholds(version=str(payload.get("version", "")), **values)
 
 
+def apply_frozen_thresholds(
+    features: pd.DataFrame,
+    thresholds: HarmonicThresholds,
+) -> pd.DataFrame:
+    required = {
+        "dataset_row_id",
+        "samp_id",
+        "split",
+        "status",
+        "peak_second_harmonic_relative_error",
+        "harmonic_to_fundamental_ratio",
+        "harmonic_band_fraction",
+    }
+    missing = required - set(features.columns)
+    if missing:
+        raise ValueError(f"测试特征缺少标签列: {sorted(missing)}")
+    if features["dataset_row_id"].duplicated().any():
+        raise ValueError("测试特征存在重复 dataset_row_id")
+
+    result = features.copy()
+    status = result["status"].astype(str)
+    eligible = status.eq("eligible")
+    peak_error = pd.to_numeric(result["peak_second_harmonic_relative_error"], errors="coerce")
+    ratio = pd.to_numeric(result["harmonic_to_fundamental_ratio"], errors="coerce")
+    fraction = pd.to_numeric(result["harmonic_band_fraction"], errors="coerce")
+    peak = eligible & peak_error.notna() & (peak_error <= thresholds.peak_relative_tolerance)
+    prominent = (
+        eligible
+        & ratio.notna()
+        & fraction.notna()
+        & (ratio >= thresholds.harmonic_to_fundamental_min)
+        & (fraction >= thresholds.harmonic_band_fraction_min)
+    )
+    result["stratum"] = status
+    result.loc[eligible, "stratum"] = "harmonic_negative"
+    result.loc[peak & ~prominent, "stratum"] = "peak_doubling"
+    result.loc[prominent & ~peak, "stratum"] = "harmonic_prominent"
+    result.loc[peak & prominent, "stratum"] = "strong_harmonic"
+    positive = {"strong_harmonic", "peak_doubling", "harmonic_prominent"}
+    result["harmonic_positive"] = result["stratum"].isin(positive)
+    result["threshold_version"] = thresholds.version
+    return result
+
+
+def summarize_coverage(labels: pd.DataFrame) -> pd.DataFrame:
+    required = {"dataset_row_id", "samp_id", "status", "stratum", "harmonic_positive"}
+    missing = required - set(labels.columns)
+    if missing:
+        raise ValueError(f"测试标签缺少 coverage 列: {sorted(missing)}")
+    if labels["dataset_row_id"].duplicated().any():
+        raise ValueError("coverage 输入存在重复 dataset_row_id")
+    n_all = int(len(labels))
+    if n_all == 0:
+        raise ValueError("coverage 输入不能为空")
+    eligible_mask = labels["status"].eq("eligible")
+    n_eligible = int(eligible_mask.sum())
+    masks: list[tuple[str, pd.Series]] = [
+        ("all_windows", pd.Series(True, index=labels.index)),
+        ("tho_reference_unstable", labels["status"].eq("tho_reference_unstable")),
+        (
+            "second_harmonic_out_of_band",
+            labels["status"].eq("second_harmonic_out_of_band"),
+        ),
+        ("eligible_total", eligible_mask),
+        ("strong_harmonic", labels["stratum"].eq("strong_harmonic")),
+        ("peak_doubling", labels["stratum"].eq("peak_doubling")),
+        ("harmonic_prominent", labels["stratum"].eq("harmonic_prominent")),
+        ("harmonic_negative", labels["stratum"].eq("harmonic_negative")),
+        ("harmonic_positive_union", labels["harmonic_positive"].astype(bool)),
+    ]
+    records = []
+    eligible_fraction_rows = {
+        "eligible_total",
+        "strong_harmonic",
+        "peak_doubling",
+        "harmonic_prominent",
+        "harmonic_negative",
+        "harmonic_positive_union",
+    }
+    for name, mask in masks:
+        count = int(mask.sum())
+        records.append(
+            {
+                "status": name,
+                "n_windows": count,
+                "fraction_of_all": count / n_all,
+                "fraction_of_eligible": (
+                    count / n_eligible
+                    if n_eligible > 0 and name in eligible_fraction_rows
+                    else float("nan")
+                ),
+                "n_subjects": int(labels.loc[mask, "samp_id"].nunique()),
+            }
+        )
+    return pd.DataFrame.from_records(records)
+
+
+def apply_to_split(
+    *,
+    config_path: Path,
+    split: str,
+    thresholds_path: Path,
+    output_dir: Path,
+) -> dict[str, Path]:
+    if str(split) != "test":
+        raise ValueError("冻结阈值 apply 当前只允许 held-out test split")
+    thresholds_path = Path(thresholds_path)
+    threshold_bytes_before = thresholds_path.read_bytes()
+    thresholds_sha256 = hashlib.sha256(threshold_bytes_before).hexdigest()
+    thresholds = load_frozen_thresholds(thresholds_path)
+    cfg = load_config(config_path)
+    test_split = str(cfg.data.get("test_split", "test"))
+    data = _build_split_data(cfg, split=test_split)
+    feature_cfg = _feature_config_from_cfg(
+        cfg,
+        tho_rr_agreement_bpm=thresholds.tho_rr_agreement_bpm,
+    )
+    features = build_feature_frame(data.dataset, split=test_split, feature_cfg=feature_cfg)
+    labels = apply_frozen_thresholds(features, thresholds)
+    coverage = summarize_coverage(labels)
+    output_dir = Path(output_dir)
+    labels_path = output_dir / "test_harmonic_labels.csv"
+    coverage_path = output_dir / "coverage_summary.csv"
+    manifest_path = output_dir / "analysis_manifest.json"
+    _write_csv_exclusive(labels, labels_path)
+    _write_csv_exclusive(coverage, coverage_path)
+    manifest = {
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "operation": "apply",
+        "config": str(config_path),
+        "dataset_root": str(cfg.data.dataset_root),
+        "index_csv": str(cfg.data.index_csv),
+        "split": test_split,
+        "n_windows": int(len(labels)),
+        "n_subjects": int(labels["samp_id"].nunique()),
+        "feature_config": asdict(feature_cfg),
+        "thresholds_path": str(thresholds_path),
+        "thresholds_sha256": thresholds_sha256,
+        "threshold_version": thresholds.version,
+        "outputs": {"labels": str(labels_path), "coverage": str(coverage_path)},
+    }
+    _write_json_exclusive(manifest, manifest_path)
+    if thresholds_path.read_bytes() != threshold_bytes_before:
+        raise RuntimeError("apply 期间冻结阈值文件发生变化")
+    return {"labels": labels_path, "coverage": coverage_path, "manifest": manifest_path}
+
+
 def discover(
     *,
     config_path: Path,
@@ -348,6 +495,12 @@ def _parse_args() -> argparse.Namespace:
     freeze_parser.add_argument("--output", type=Path, required=True)
     freeze_parser.add_argument("--review-note", required=True)
     freeze_parser.add_argument("--allow-identical-existing", action="store_true")
+
+    apply_parser = subparsers.add_parser("apply", help="把冻结阈值应用到 held-out test")
+    apply_parser.add_argument("--config", type=Path, required=True)
+    apply_parser.add_argument("--split", choices=["test"], default="test")
+    apply_parser.add_argument("--thresholds", type=Path, required=True)
+    apply_parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
 
 
@@ -367,6 +520,16 @@ def main() -> None:
             allow_identical_existing=bool(args.allow_identical_existing),
         )
         print(f"frozen thresholds: {output}")
+        return
+    if args.command == "apply":
+        outputs = apply_to_split(
+            config_path=args.config,
+            split=args.split,
+            thresholds_path=args.thresholds,
+            output_dir=args.output_dir,
+        )
+        for name, path in outputs.items():
+            print(f"{name}: {path}")
         return
     raise RuntimeError(f"未知命令: {args.command}")
 
