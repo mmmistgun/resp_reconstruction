@@ -663,6 +663,55 @@ checkpoint 清单保存为 `configs/eval_specs/g_series_test_eval_20260705.csv`�
 - `--dry-run` 只写调度 manifest 并打印计划。
 - 默认跳过已经存在完整 `metrics/summary/manifest` 输出的任务；需要覆盖时加 `--force`。
 
+### G 系列四模型完整测试集可视化
+
+`export_g_series_comparison_cache.py` 与 `plot_g_series_comparison.py` 将 G 系列的 4 个验证集冻结 checkpoint
+用于逐窗口波形复核。冻结清单是
+`configs/eval_specs/g_series_four_model_visualization.csv`：`g0_time_only` 使用 seed `20260837` 的
+`checkpoint_top1`，其余 3 个模型使用 seed `20260700` 的既定 topK checkpoint。它们来自 legacy validation
+top-k 选择，不使用 test 指标重选。
+
+先由用户执行 GPU 缓存导出。建议先加 `--dry-run` 复核 checkpoint、设备和输出路径；去掉该参数后才会创建完整
+测试集缓存。
+
+```bash
+./.venv/bin/python scripts/export_g_series_comparison_cache.py \
+  --spec configs/eval_specs/g_series_four_model_visualization.csv \
+  --output-dir runs/g_series_four_model_cache \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2 \
+  --dry-run
+
+./.venv/bin/python scripts/export_g_series_comparison_cache.py \
+  --spec configs/eval_specs/g_series_four_model_visualization.csv \
+  --output-dir runs/g_series_four_model_cache \
+  --device cuda:0 \
+  --device cuda:1 \
+  --max-parallel 2
+```
+
+缓存只有在 4 个模型预测、共享 BCG/THO 数组和 manifest 全部完成校验后才标为 `complete`。完成后再运行纯 CPU
+绘图；它不重做 GPU 推理。`--workers auto` 在 102 核机器上使用 48 个进程，每个 worker 内限制
+OMP/MKL/OpenBLAS/NUMEXPR 为单线程。
+
+```bash
+./.venv/bin/python scripts/plot_g_series_comparison.py \
+  --cache-dir runs/g_series_four_model_cache \
+  --metrics-dir runs/test_eval_g_series_20260709_local_rr_canonical \
+  --output-dir runs/g_series_four_model_plots \
+  --filter exclude-input-stable \
+  --stable-fraction 0.20 \
+  --workers auto
+```
+
+每张 PNG 包含 BCG soft-z 输入与 `0.05–0.7 Hz` 呼吸带分量、THO 与 4 个输出叠加、归一化 Welch 频谱和逐窗口
+canonical 指标表。输入与输出波形面板各自共用 y 轴尺度；频谱仅用于比较频率结构，不比较绝对能量。
+默认过滤只从 BCG 输入计算稳定度，排除稳定度最高的 20%，不读取 THO、任何模型输出或 test metrics；它不是目标侧或
+模型侧的后验挑样。输出目录不可覆盖，完整成功时包含 `window_index.csv`、`filter_summary.csv`、`figures/` 和
+`plot_manifest.json`。任一窗口失败时只写 `plot_failure_manifest.json`，不发布 `plot_manifest.json`。小规模 CPU
+smoke 可额外传入 `--workers 2 --max-plots 2`。
+
 ### `eval_topk_checkpoints.py`
 
 重评一个 runs 根目录下每个 run 的 `checkpoint_top1/2/3.pt`，生成 `metrics_topN.csv`，并按任务主指标为每个 run

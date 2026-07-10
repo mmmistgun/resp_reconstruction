@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import numpy as np
 import pandas as pd
 import pytest
@@ -16,6 +17,7 @@ from scripts.plot_g_series_comparison import (
     initialize_render_worker,
     load_cache,
     load_canonical_metrics,
+    parse_args,
     RenderTask,
     render_one_window,
     resolve_workers,
@@ -250,3 +252,25 @@ def test_window_index_sorts_results_and_keeps_failure_record(tmp_path: Path) -> 
     assert index.dataset_row_id.tolist() == [10, 20, 30]
     assert index.render_status.tolist() == ["failed", "written", "input_stable_excluded"]
     assert index.loc[index.dataset_row_id == 10, "error"].item() == "synthetic render failure"
+
+
+def test_plot_cli_defaults_to_input_stable_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "plot_g_series_comparison.py",
+            "--cache-dir",
+            "cache",
+            "--metrics-dir",
+            "metrics",
+            "--output-dir",
+            "plots",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.filter == "exclude-input-stable"
+    assert args.stable_fraction == pytest.approx(0.20)
+    assert args.workers == "auto"
