@@ -73,9 +73,9 @@
 ### CPU 并行绘图
 
 阶段 B 使用多进程而非串行绘图。`--workers auto` 在本机解析为
-`min(96, os.cpu_count() - 2, 待绘制窗口数)`；在 102 核机器上默认启动 96 个绘图进程，保留 6 个核心给系统、文件系统和主进程。用户可显式传入 `--workers` 覆盖该值。
+`min(48, os.cpu_count() - 2, 待绘制窗口数)`；在 102 核机器上默认启动 48 个绘图进程，保留其余核心给系统、文件系统和主进程。用户可显式传入 `--workers` 覆盖该值。
 
-每个 worker 在初始化时以只读内存映射方式打开 `.npy` 缓存，并使用 Matplotlib `Agg` 后端独立生成 PNG；任务只传递 row id 和轻量指标字典，不能把完整波形数组经进程间序列化传输。worker 内固定 `OMP_NUM_THREADS=1`、`MKL_NUM_THREADS=1`、`OPENBLAS_NUM_THREADS=1` 和 `NUMEXPR_NUM_THREADS=1`，避免 96 个进程各自再创建多线程而造成 CPU 过度订阅。
+每个 worker 在初始化时以只读内存映射方式打开 `.npy` 缓存，并使用 Matplotlib `Agg` 后端独立生成 PNG；任务只传递 row id 和轻量指标字典，不能把完整波形数组经进程间序列化传输。worker 内固定 `OMP_NUM_THREADS=1`、`MKL_NUM_THREADS=1`、`OPENBLAS_NUM_THREADS=1` 和 `NUMEXPR_NUM_THREADS=1`，避免多进程各自再创建多线程而造成 CPU 过度订阅。
 
 worker 只写入互不重名的 PNG 临时文件并原子重命名。主进程收集结果、按 `dataset_row_id` 排序后一次性写入 `window_index.csv`、`filter_summary.csv` 和 `plot_manifest.json`，不允许多个 worker 并发追加同一个 CSV。若单个窗口失败，主进程记录该 row id 和异常；默认在全部任务结束后返回失败状态，不产生“全成功”的 manifest。
 
