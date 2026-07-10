@@ -9,9 +9,14 @@ import math
 import multiprocessing as mp
 import os
 from pathlib import Path
+import sys
 import traceback
 from typing import Iterable
 import uuid
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 for _thread_env_name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ.setdefault(_thread_env_name, "1")

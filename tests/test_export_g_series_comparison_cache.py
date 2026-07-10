@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import runpy
 import sys
 import json
 
@@ -188,6 +189,20 @@ def test_parse_args_accepts_dry_run_without_creating_cache(monkeypatch: pytest.M
     assert args.output_dir == Path("cache")
     assert args.devices == ["cuda:0"]
     assert args.dry_run is True
+
+
+def test_export_script_bootstraps_repo_root_when_executed_as_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = repo_root / "scripts" / "export_g_series_comparison_cache.py"
+    isolated_path = [
+        str(script_path.parent),
+        *[entry for entry in sys.path if Path(entry or ".").resolve() != repo_root],
+    ]
+    monkeypatch.setattr(sys, "path", isolated_path)
+
+    runpy.run_path(str(script_path), run_name="g_series_export_bootstrap_test")
+
+    assert str(repo_root) in sys.path
 
 
 def test_build_export_plan_resume_requires_matching_complete_manifest(tmp_path: Path) -> None:

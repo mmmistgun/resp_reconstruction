@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import runpy
 import sys
 import numpy as np
 import pandas as pd
@@ -274,3 +275,17 @@ def test_plot_cli_defaults_to_input_stable_filter(monkeypatch: pytest.MonkeyPatc
     assert args.filter == "exclude-input-stable"
     assert args.stable_fraction == pytest.approx(0.20)
     assert args.workers == "auto"
+
+
+def test_plot_script_bootstraps_repo_root_when_executed_as_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = repo_root / "scripts" / "plot_g_series_comparison.py"
+    isolated_path = [
+        str(script_path.parent),
+        *[entry for entry in sys.path if Path(entry or ".").resolve() != repo_root],
+    ]
+    monkeypatch.setattr(sys, "path", isolated_path)
+
+    runpy.run_path(str(script_path), run_name="g_series_plot_bootstrap_test")
+
+    assert str(repo_root) in sys.path
