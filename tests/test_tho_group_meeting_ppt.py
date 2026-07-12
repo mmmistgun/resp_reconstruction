@@ -70,6 +70,27 @@ def test_signal_assets_stft_matches_model_centered_shapes():
     assert wide.frequency_resolution_hz == pytest.approx(0.05)
 
 
+def test_signal_assets_rejects_signal_metadata_stft_mismatch(tmp_path: Path):
+    from types import SimpleNamespace
+
+    from scripts.tho_group_meeting_ppt.signal_figures import validate_signal_metadata_stft
+
+    metadata_path = tmp_path / "f0_visual_sample_metadata.json"
+    metadata = {
+        "stft_win_samples": 2999,
+        "stft_hop_samples": 500,
+        "stft_low_hz": 0.05,
+        "stft_high_hz": 8.0,
+    }
+    config = SimpleNamespace(stft_win=3000, stft_hop=500, stft_low_hz=0.05, stft_high_hz=8.0)
+
+    with pytest.raises(
+        ValueError,
+        match=r"stft_win_samples.*2999.*3000.*f0_visual_sample_metadata\.json",
+    ):
+        validate_signal_metadata_stft(metadata, config, metadata_path)
+
+
 def test_signal_assets_bandenergy_uses_repository_overlapping_inclusive_bands():
     import numpy as np
 
@@ -104,7 +125,7 @@ def test_signal_assets_footer_layout_stays_inside_and_clear_of_xlabels():
 
     from scripts.tho_group_meeting_ppt.signal_figures import (
         create_figure_with_footer,
-        validate_figure_text_layout,
+        inspect_selected_text_bboxes,
     )
 
     fig, axes, footer = create_figure_with_footer(
@@ -120,14 +141,50 @@ def test_signal_assets_footer_layout_stays_inside_and_clear_of_xlabels():
         axis.set_ylabel("Amplitude")
 
     status = axes.flat[0].text(3.0, 0.5, "Critical status", transform=axes.flat[0].transAxes)
-    outside_report = validate_figure_text_layout(fig, footer, axes.flat)
+    outside_report = inspect_selected_text_bboxes(fig, footer, axes.flat)
     assert outside_report["all_key_text_inside"] is False
     status.set_position((0.5, 0.5))
 
-    report = validate_figure_text_layout(fig, footer, axes.flat)
+    report = inspect_selected_text_bboxes(fig, footer, axes.flat)
 
     assert report["all_key_text_inside"] is True
     assert report["footer_overlaps_xlabels"] == 0
+    plt.close(fig)
+
+
+def test_signal_assets_bandenergy_labels_do_not_overlap_each_other_or_colorbar():
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import warnings
+
+    from scripts.tho_group_meeting_ppt.signal_figures import (
+        StftLogMagnitude,
+        build_bandenergy_figure,
+        inspect_selected_text_bboxes,
+    )
+
+    wide = StftLogMagnitude(
+        log_magnitude=np.ones((160, 73), dtype=np.float32),
+        frequencies_hz=np.arange(0.05, 8.0001, 0.05, dtype=np.float32),
+        times_sec=np.arange(73, dtype=np.float32) * 2.5,
+        frequency_resolution_hz=0.05,
+        center=True,
+        win_samples=2000,
+        hop_samples=250,
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        fig = build_bandenergy_figure(wide)
+        report = inspect_selected_text_bboxes(
+            fig,
+            getattr(fig, "_signal_footer_artist"),
+            getattr(fig, "_signal_panel_axes"),
+        )
+
+    assert report["tagged_text_pair_overlaps"] == 0
+    assert report["tagged_text_colorbar_overlaps"] == 0
+    assert report["tagged_text_count"] == 5
+    assert not [warning for warning in caught if "Glyph" in str(warning.message)]
     plt.close(fig)
 
 
@@ -194,6 +251,8 @@ def test_signal_assets_preprocessing_gap_records_missing_fields_without_fake_cur
 
 
 def test_signal_assets_builds_five_readable_real_evidence_figures(tmp_path: Path):
+    import hashlib
+
     from PIL import Image, ImageStat
 
     from scripts.tho_group_meeting_ppt.signal_figures import build_signal_assets
@@ -214,8 +273,18 @@ def test_signal_assets_builds_five_readable_real_evidence_figures(tmp_path: Path
     assert metadata["wide_frequency_resolution_hz"] == pytest.approx(0.05)
     assert metadata["softz_changed_samples"] == 0
     assert metadata["softz_max_abs_before"] == pytest.approx(2.473841, abs=1e-6)
+    manifest_path = tmp_path / "signal_assets_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["dataset_row_id"] == 8025
+    assert manifest["resolved_configs"]["f0"]["stft_win"] == 3000
+    assert manifest["resolved_configs"]["wide"]["stft_hop"] == 250
+    assert manifest["resolved_configs"]["bandenergy"]["stft_encoder_type"] == "bandenergy"
+    assert manifest["evidence"]["dataset_index"]["path"]
+    assert Path(manifest["evidence"]["source_npz"]["path"]).is_absolute()
+    assert Path(manifest["evidence"]["target_npz"]["path"]).is_absolute()
     for path in assets.values():
         assert path.is_file() and path.stat().st_size > 20_000
+        assert manifest["assets"][path.stem]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
         with Image.open(path) as image:
             assert image.width >= 1600 and image.height >= 900
             assert ImageStat.Stat(image.convert("L")).stddev[0] > 10

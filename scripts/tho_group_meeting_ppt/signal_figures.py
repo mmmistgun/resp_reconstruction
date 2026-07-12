@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -111,6 +112,37 @@ def compute_stft_logmag(
         win_samples=int(win_samples),
         hop_samples=int(hop_samples),
     )
+
+
+def validate_signal_metadata_stft(
+    metadata: Mapping[str, Any],
+    formal_config: Any,
+    metadata_path: str | Path,
+) -> None:
+    """校验通用信号 metadata 实际声明的 STFT 字段与正式 F0 config 一致。"""
+    comparisons = {
+        "stft_win_samples": int(formal_config.stft_win),
+        "stft_hop_samples": int(formal_config.stft_hop),
+        "stft_low_hz": float(formal_config.stft_low_hz),
+        "stft_high_hz": float(formal_config.stft_high_hz),
+        # STFTEncoder.forward 的正式实现固定 center=True；仅在 metadata 实际声明时校验。
+        "stft_center": True,
+        "center": True,
+    }
+    for field, expected in comparisons.items():
+        if field not in metadata:
+            continue
+        actual = metadata[field]
+        matches = (
+            type(actual) is bool and actual is expected
+            if type(expected) is bool
+            else np.isclose(float(actual), float(expected), rtol=0.0, atol=1e-12)
+        )
+        if not matches:
+            raise ValueError(
+                f"F0 STFT 参数不一致: {field} metadata={actual!r}, "
+                f"formal_config={expected!r}; metadata path: {Path(metadata_path)}"
+            )
 
 
 def bandenergy_from_logmag(
@@ -290,8 +322,13 @@ def _save(fig: plt.Figure, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     footer = getattr(fig, "_signal_footer_artist", None)
     panel_axes = getattr(fig, "_signal_panel_axes", fig.axes)
-    report = validate_figure_text_layout(fig, footer, panel_axes)
-    if not report["all_key_text_inside"] or report["footer_overlaps_xlabels"]:
+    report = inspect_selected_text_bboxes(fig, footer, panel_axes)
+    if (
+        not report["all_key_text_inside"]
+        or report["footer_overlaps_xlabels"]
+        or report["tagged_text_pair_overlaps"]
+        or report["tagged_text_colorbar_overlaps"]
+    ):
         raise ValueError(f"图中文字布局越界或重叠: {path.name}: {report}")
     fig.savefig(path, dpi=120, facecolor="white")
     plt.close(fig)
@@ -333,12 +370,12 @@ def create_figure_with_footer(
     return fig, axes, footer
 
 
-def validate_figure_text_layout(
+def inspect_selected_text_bboxes(
     fig: plt.Figure,
     footer: Text | None,
     panel_axes: Sequence[Any],
 ) -> dict[str, Any]:
-    """用渲染后的 bbox 检查标题/轴标/图例/底注是否越界或互相覆盖。"""
+    """检查选定说明文字的 bbox；不声称覆盖轴刻度等所有 Matplotlib 文本。"""
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     figure_box = fig.bbox
@@ -371,10 +408,34 @@ def validate_figure_text_layout(
             label = axis.xaxis.label
             if label.get_visible() and label.get_text().strip():
                 overlaps += int(footer_box.overlaps(label.get_window_extent(renderer)))
+    tagged = [
+        artist
+        for axis in fig.axes
+        for artist in axis.texts
+        if artist.get_gid() == "signal_band_label"
+    ]
+    pair_overlaps = sum(
+        int(left.get_window_extent(renderer).overlaps(right.get_window_extent(renderer)))
+        for index, left in enumerate(tagged)
+        for right in tagged[index + 1 :]
+    )
+    colorbar_boxes = [
+        axis.get_window_extent(renderer)
+        for axis in fig.axes
+        if axis.get_gid() == "signal_colorbar"
+    ]
+    colorbar_overlaps = sum(
+        int(text.get_window_extent(renderer).overlaps(colorbar_box))
+        for text in tagged
+        for colorbar_box in colorbar_boxes
+    )
     return {
         "all_key_text_inside": not outside,
         "outside_text": outside,
         "footer_overlaps_xlabels": overlaps,
+        "tagged_text_count": len(tagged),
+        "tagged_text_pair_overlaps": pair_overlaps,
+        "tagged_text_colorbar_overlaps": colorbar_overlaps,
     }
 
 
@@ -561,27 +622,143 @@ def _plot_stft_comparison(f0: StftLogMagnitude, wide: StftLogMagnitude, path: Pa
     _save(fig, path)
 
 
-def _plot_bandenergy(wide: StftLogMagnitude, path: Path) -> None:
+def build_bandenergy_figure(wide: StftLogMagnitude) -> plt.Figure:
+    """构造 bandenergy 图；五个频带标签放在独立说明轴，不覆盖热图。"""
+    _plot_style()
     energies = bandenergy_from_logmag(wide.log_magnitude, wide.frequencies_hz)
-    fig, (heat_axis, track_axis), _ = create_figure_with_footer(
-        rows=2,
+    fig, (heat_axis, band_axis, track_axis), _ = create_figure_with_footer(
+        rows=3,
         columns=1,
-        panel_gridspec_kw={"height_ratios": [1.3, 1]},
+        panel_gridspec_kw={"height_ratios": [1.3, 0.16, 1]},
         footer_text="频带边界按 stft_branch.py 纳入端点；重叠意味着边界附近信息可进入相邻两带。",
     )
     mesh = heat_axis.pcolormesh(wide.times_sec, wide.frequencies_hz, wide.log_magnitude, shading="auto", cmap="magma")
     for index, (low, high) in enumerate(BANDENERGY_BANDS_HZ):
         heat_axis.axhspan(low, high, facecolor=_COLORS[index], edgecolor=_COLORS[index], alpha=0.10, linewidth=1.2)
-        heat_axis.text(181, (low + high) / 2, f"B{index+1}", color="black", va="center", fontsize=11)
+        label = band_axis.text(
+            (index + 0.5) / len(BANDENERGY_BANDS_HZ),
+            0.5,
+            f"B{index+1}  {low:g}–{high:g} Hz",
+            transform=band_axis.transAxes,
+            ha="center",
+            va="center",
+            color="black",
+            fontsize=11,
+            bbox={"boxstyle": "round,pad=0.25", "facecolor": _COLORS[index], "alpha": 0.12, "edgecolor": _COLORS[index]},
+        )
+        label.set_gid("signal_band_label")
+    band_axis.axis("off")
     heat_axis.set(xlabel="窗口内时间（s）", ylabel="频率（Hz）", title="wide log-magnitude 与 5 个重叠频带")
-    fig.colorbar(mesh, ax=heat_axis, pad=0.01, label="log1p(|STFT|)")
+    colorbar = fig.colorbar(mesh, ax=heat_axis, pad=0.01, label="log1p(|STFT|)")
+    colorbar.ax.set_gid("signal_colorbar")
     for index, ((low, high), values) in enumerate(zip(BANDENERGY_BANDS_HZ, energies)):
         track_axis.plot(wide.times_sec, values, color=_COLORS[index], linewidth=1.7, label=f"B{index+1}: {low:g}–{high:g} Hz")
     track_axis.set(xlabel="窗口内时间（s）", ylabel="带内 log-magnitude 均值", title="每个频带压缩为一条随时间变化的轨迹")
     track_axis.grid(alpha=0.2)
     track_axis.legend(ncol=3, frameon=False, loc="upper right")
     fig.suptitle("bandenergy：把 160 个频率 bin 压缩成 5 条重叠频带轨迹", fontsize=22)
+    return fig
+
+
+def _plot_bandenergy(wide: StftLogMagnitude, path: Path) -> None:
+    fig = build_bandenergy_figure(wide)
     _save(fig, path)
+
+
+def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fp:
+        for chunk in iter(lambda: fp.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _manifest_path(repo_root: Path, path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def _file_manifest_record(repo_root: Path, path: Path) -> dict[str, Any]:
+    resolved = path.resolve()
+    if not resolved.is_file():
+        raise FileNotFoundError(f"信号资产 manifest 证据文件不存在: {resolved}")
+    return {
+        "path": _manifest_path(repo_root, resolved),
+        "sha256": _sha256_file(resolved),
+        "size_bytes": resolved.stat().st_size,
+    }
+
+
+def _config_manifest_record(repo_root: Path, config: Any) -> dict[str, Any]:
+    record = _file_manifest_record(repo_root, Path(config.path))
+    record.update(
+        {
+            "stft_win": int(config.stft_win),
+            "stft_hop": int(config.stft_hop),
+            "stft_low_hz": float(config.stft_low_hz),
+            "stft_high_hz": float(config.stft_high_hz),
+            "stft_encoder_type": str(config.stft_encoder_type),
+            "stft_inject_position": str(config.stft_inject_position),
+        }
+    )
+    return record
+
+
+def _write_signal_assets_manifest(
+    *,
+    repo_root: Path,
+    output_dir: Path,
+    catalog: EvidenceCatalog,
+    signal_metadata: Mapping[str, Any],
+    signal_metadata_path: Path,
+    assets: Mapping[str, Path],
+    generated_metadata: Mapping[str, Any],
+) -> Path:
+    row = _catalog_row(catalog)
+    source_npz = (catalog.dataset_index.parent / row["source_npz"]).resolve()
+    target_npz = (catalog.dataset_index.parent / row["target_source_npz"]).resolve()
+    source_checkpoint = (repo_root / str(signal_metadata["source_checkpoint"])).resolve()
+    source_run_config = (repo_root / str(signal_metadata["source_run_config"])).resolve()
+    manifest = {
+        "schema_version": 1,
+        "dataset_row_id": int(catalog.general_sample_row_id),
+        "evidence": {
+            "signal_metadata_json": _file_manifest_record(repo_root, signal_metadata_path),
+            "signal_npz": _file_manifest_record(repo_root, catalog.general_signal_npz),
+            "source_checkpoint": _file_manifest_record(repo_root, source_checkpoint),
+            "source_run_config": _file_manifest_record(repo_root, source_run_config),
+            "dataset_index": _file_manifest_record(repo_root, catalog.dataset_index),
+            "source_npz": _file_manifest_record(repo_root, source_npz),
+            "target_npz": _file_manifest_record(repo_root, target_npz),
+        },
+        "resolved_configs": {
+            "f0": _config_manifest_record(repo_root, catalog.run_configs["g0_f0_native_stft_pre_mixer"]),
+            "wide": _config_manifest_record(repo_root, catalog.run_configs["g3_c_wide_8p0"]),
+            "bandenergy": _config_manifest_record(repo_root, catalog.run_configs["g3_c_bandenergy"]),
+        },
+        "generation": {
+            "sample_rate_hz": 100.0,
+            "stft_center": True,
+            "stft_input_semantics": "torch.stft + Hann window + log1p(abs(STFT))",
+            "bandenergy_bands_hz": [list(band) for band in BANDENERGY_BANDS_HZ],
+            "figure_size_pixels": [2160, 1200],
+            "metadata": dict(generated_metadata),
+        },
+        # 必须最后读取已保存 PNG 的字节，不能对绘图前状态或内存对象做摘要。
+        "assets": {
+            key: _file_manifest_record(repo_root, path)
+            for key, path in assets.items()
+        },
+    }
+    manifest_path = output_dir / "signal_assets_manifest.json"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return manifest_path
 
 
 def build_signal_assets(
@@ -595,6 +772,8 @@ def build_signal_assets(
     catalog = build_evidence_catalog(root)
     metadata_path = catalog.general_signal_npz.with_name("f0_visual_sample_metadata.json")
     signal_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    f0_config = catalog.run_configs["g0_f0_native_stft_pre_mixer"]
+    validate_signal_metadata_stft(signal_metadata, f0_config, metadata_path)
     with np.load(catalog.general_signal_npz, allow_pickle=False) as data:
         signal = {name: np.asarray(data[name]) for name in data.files}
     required = {"time_sec_full", "bcg_input_full", "target_respiration_full", "f0_prediction_full"}
@@ -605,7 +784,6 @@ def build_signal_assets(
     if signal_length != 18_000:
         raise ValueError(f"通用信号长度应为 18000，实际 {signal_length}")
 
-    f0_config = catalog.run_configs["g0_f0_native_stft_pre_mixer"]
     wide_config = catalog.run_configs["g3_c_wide_8p0"]
     f0 = compute_stft_logmag(
         signal["bcg_input_full"], sample_rate_hz=100.0,
@@ -651,6 +829,15 @@ def build_signal_assets(
         "softz_max_abs_before": softz_max_abs_before,
         "softz_max_abs_after": softz_max_abs_after,
     }
+    _write_signal_assets_manifest(
+        repo_root=root,
+        output_dir=output,
+        catalog=catalog,
+        signal_metadata=signal_metadata,
+        signal_metadata_path=metadata_path,
+        assets=assets,
+        generated_metadata=metadata,
+    )
     return assets, metadata
 
 
