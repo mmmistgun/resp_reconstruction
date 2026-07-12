@@ -85,3 +85,28 @@ def test_chart_data_matches_canonical_report_values():
     assert data.harmonic.loc["g3_c_bandenergy", "correction_rate"] == pytest.approx(0.9720, abs=5e-5)
     assert data.harmonic.loc["g3_c_wide_8p0", "lag4_corr"] == pytest.approx(0.847504)
     assert data.harmonic_coverage["positive_union_windows"] == 452
+
+
+def _shape_text(slide, name: str) -> str:
+    return next(shape.text for shape in slide.shapes if shape.name == name)
+
+
+def test_generated_main_deck_has_25_slides_black_body_and_editable_diagrams(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.build import build_presentation
+    from scripts.tho_group_meeting_ppt.theme import BODY_BLACK
+
+    output = tmp_path / "main.pptx"
+    build_presentation(template=TEMPLATE, output=output, include_backup=False)
+    prs = Presentation(output)
+
+    assert len(prs.slides) == 25
+    assert _shape_text(prs.slides[10], "页面标题") == "独立测试集结果支持宽频 STFT 作为当前基准"
+    assert sum(1 for shape in prs.slides[6].shapes if shape.name.startswith("流程节点")) >= 8
+    assert sum(1 for slide in prs.slides for shape in slide.shapes if shape.has_table) >= 3
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if not shape.name.startswith(("正文", "核心结论")) or not shape.has_text_frame:
+                continue
+            for paragraph in shape.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    assert run.font.color.rgb == BODY_BLACK

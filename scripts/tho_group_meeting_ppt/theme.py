@@ -49,7 +49,11 @@ def _set_shape_text(
 
 
 def new_content_slide(prs: Presentation, title: str, *, page_number: int):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    blank_layout = next(
+        (layout for layout in prs.slide_layouts if layout.name in {"空白", "Blank"}),
+        prs.slide_layouts[6],
+    )
+    slide = prs.slides.add_slide(blank_layout)
     title_box = slide.shapes.add_textbox(Inches(0.72), Inches(0.42), Inches(11.85), Inches(0.58))
     title_box.name = "页面标题"
     _set_shape_text(title_box, title, size=28, color=SCNU_BLUE, bold=True)
@@ -64,6 +68,105 @@ def new_content_slide(prs: Presentation, title: str, *, page_number: int):
     page_box.name = "页码"
     _set_shape_text(page_box, str(page_number), size=10, color=NOTE_GRAY, align=PP_ALIGN.RIGHT)
     return slide
+
+
+def add_text_box(
+    slide,
+    text: str,
+    *,
+    x,
+    y,
+    width,
+    height,
+    font_size: int = 20,
+    color: RGBColor = BODY_BLACK,
+    bold: bool = False,
+    name: str = "正文",
+    align: PP_ALIGN = PP_ALIGN.LEFT,
+):
+    shape = slide.shapes.add_textbox(x, y, width, height)
+    shape.name = name
+    shape.text_frame.word_wrap = True
+    shape.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+    _set_shape_text(shape, text, size=font_size, color=color, bold=bold, align=align)
+    return shape
+
+
+def add_takeaway(slide, text: str, *, y=Inches(1.23)):
+    bar = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.76), y, Inches(11.78), Inches(0.58))
+    bar.name = "核心结论"
+    bar.fill.solid()
+    bar.fill.fore_color.rgb = RGBColor(0xEC, 0xF3, 0xF8)
+    bar.line.color.rgb = SCNU_BLUE
+    bar.line.width = Pt(1)
+    _set_shape_text(bar, text, size=18, color=BODY_BLACK, bold=True, align=PP_ALIGN.CENTER)
+    return bar
+
+
+def add_source_note(slide, sources: Sequence[str]) -> None:
+    text = "来源：" + "；".join(sources)
+    add_text_box(
+        slide,
+        text,
+        x=Inches(0.76),
+        y=Inches(7.02),
+        width=Inches(11.2),
+        height=Inches(0.24),
+        font_size=9,
+        color=NOTE_GRAY,
+        name="来源注释",
+    )
+
+
+def add_placeholder(slide, text: str, *, x, y, width, height):
+    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, width, height)
+    shape.name = "可编辑占位符"
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = PLACEHOLDER_YELLOW
+    shape.fill.transparency = 25
+    shape.line.color.rgb = RGBColor(0xC9, 0x9A, 0x00)
+    shape.line.dash_style = 2
+    _set_shape_text(shape, text, size=16, color=BODY_BLACK, bold=False, align=PP_ALIGN.CENTER)
+    return shape
+
+
+def add_card(
+    slide,
+    title: str,
+    body: str,
+    *,
+    x,
+    y,
+    width,
+    height,
+    accent: RGBColor = SCNU_BLUE,
+    name: str = "信息卡片",
+):
+    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, width, height)
+    shape.name = name
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = WHITE
+    shape.line.color.rgb = accent
+    shape.line.width = Pt(1.4)
+    frame = shape.text_frame
+    frame.clear()
+    frame.word_wrap = True
+    frame.margin_left = Pt(10)
+    frame.margin_right = Pt(10)
+    frame.margin_top = Pt(8)
+    frame.margin_bottom = Pt(8)
+    title_paragraph = frame.paragraphs[0]
+    title_paragraph.alignment = PP_ALIGN.CENTER
+    title_run = title_paragraph.add_run()
+    title_run.text = title
+    _set_run_font(title_run, size=18, color=accent, bold=True)
+    body_paragraph = frame.add_paragraph()
+    body_paragraph.space_before = Pt(8)
+    body_paragraph.alignment = PP_ALIGN.LEFT
+    body_run = body_paragraph.add_run()
+    body_run.text = body
+    _set_run_font(body_run, size=14, color=BODY_BLACK)
+    return shape
 
 
 def add_body_text(
