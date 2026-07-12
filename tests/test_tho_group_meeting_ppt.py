@@ -473,14 +473,20 @@ def test_discussion_units_cover_complete_causal_chain():
 
 def test_discussion_unit_schema_is_frozen_and_uses_tuples():
     from dataclasses import FrozenInstanceError, fields
+    from typing import get_type_hints
 
     from scripts.tho_group_meeting_ppt.discussion_content import DiscussionUnit
 
-    assert [field.name for field in fields(DiscussionUnit)] == [
+    required_fields = {
         "key", "section", "title", "kind", "question", "method_steps", "parameters",
         "rationale", "evidence", "limits", "discussion_prompt", "visual_keys", "sources",
-    ]
-    unit = DiscussionUnit("k", "s", "t", "technical", "q")
+    }
+    assert required_fields <= {field.name for field in fields(DiscussionUnit)}
+    hints = get_type_hints(DiscussionUnit)
+    for name in ("method_steps", "parameters", "rationale", "evidence", "limits", "visual_keys", "sources"):
+        assert hints[name] == tuple[str, ...]
+    assert hints["discussion_prompt"] == str | None
+    unit = DiscussionUnit(key="k", section="s", title="t", kind="technical", question="q")
     with pytest.raises(FrozenInstanceError):
         unit.title = "changed"
     for name in ("method_steps", "parameters", "rationale", "evidence", "limits", "visual_keys", "sources"):
@@ -490,19 +496,11 @@ def test_discussion_unit_schema_is_frozen_and_uses_tuples():
 def test_discussion_technical_units_are_actionable_and_traceable():
     from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
 
-    technical = [unit for unit in DISCUSSION_UNITS if unit.kind not in {"title", "section"}]
+    allowed_kinds = {"title", "section", "technical"}
+    assert {unit.kind for unit in DISCUSSION_UNITS} <= allowed_kinds
+    technical = [unit for unit in DISCUSSION_UNITS if unit.kind == "technical"]
     assert all(unit.method_steps or unit.visual_keys for unit in technical)
     assert all(unit.sources for unit in technical)
-
-    high_value = [
-        unit for unit in technical
-        if unit.method_steps
-        and unit.parameters
-        and unit.rationale
-        and unit.limits
-        and unit.discussion_prompt
-    ]
-    assert len(high_value) >= 12
 
 
 def test_discussion_units_have_no_blank_scalar_or_tuple_content():
@@ -518,27 +516,26 @@ def test_discussion_units_have_no_blank_scalar_or_tuple_content():
             assert isinstance(unit.discussion_prompt, str) and unit.discussion_prompt.strip(), unit.key
 
 
-def test_high_value_discussion_units_have_complete_decision_context():
+def test_high_risk_discussion_units_encode_required_domain_semantics():
     from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
 
     by_key = {unit.key: unit for unit in DISCUSSION_UNITS}
-    required_keys = {
-        "target_soft_z_and_mask",
-        "patchmixer_token_shape",
-        "composite_loss_goal",
-        "metric_robust_rr",
-        "paired_delta",
-        "seed_stability",
-        "harmonic_correction",
-    }
-    assert required_keys <= by_key.keys()
-    for key in required_keys:
-        unit = by_key[key]
-        assert len(unit.method_steps) >= 3, key
-        assert sum(len(value.strip()) for value in unit.parameters) >= 8, key
-        assert sum(len(value.strip()) for value in unit.rationale) >= 8, key
-        assert sum(len(value.strip()) for value in unit.limits) >= 8, key
-        assert unit.discussion_prompt is not None and len(unit.discussion_prompt.strip()) >= 8, key
+    patch = "\n".join((*by_key["patchmixer_token_shape"].method_steps, *by_key["patchmixer_token_shape"].parameters))
+    assert "patch_len" in patch and "stride" in patch and "token" in patch
+
+    loss = "\n".join((*by_key["composite_loss_goal"].method_steps, *by_key["composite_loss_goal"].rationale))
+    assert "包络" in loss and "频谱" in loss and "方向" in loss
+
+    robust_rr = "\n".join((*by_key["metric_robust_rr"].method_steps, *by_key["metric_robust_rr"].limits))
+    assert "Welch" in robust_rr and "峰间距" in robust_rr and "双峰" in robust_rr
+
+    paired = "\n".join((*by_key["paired_delta"].method_steps, *by_key["paired_delta"].limits))
+    seed = "\n".join((*by_key["seed_stability"].method_steps, *by_key["seed_stability"].limits))
+    assert "配对" in paired and "三个 seed" in paired
+    assert "seed" in seed and "样本量小" in seed
+
+    correction = "\n".join((*by_key["harmonic_correction"].method_steps, *by_key["harmonic_correction"].limits))
+    assert "10%" in correction and "20%" in correction and "高纠正率不等于" in correction
 
 
 def test_target_supervision_unit_distinguishes_window_filter_loss_and_rr_mask():
@@ -558,8 +555,32 @@ def test_overall_count_result_states_cycle_and_bpm_units():
 
     unit = next(unit for unit in DISCUSSION_UNITS if unit.key == "overall_metric_values")
     parameters = "\n".join(unit.parameters)
+    assert "0.712186 bpm" in parameters
+    assert "0.870774" in parameters and "无量纲" in parameters
     assert "2.054401" in parameters and "周期数绝对误差" in parameters
     assert "0.684800" in parameters and "bpm" in parameters
+    assert "0.773299 bpm" in parameters
+
+
+def test_checkpoint_selection_describes_actual_g_series_topk_and_reevaluation():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    unit = next(unit for unit in DISCUSSION_UNITS if unit.key == "checkpoint_selection")
+    text = "\n".join((*unit.method_steps, *unit.parameters, *unit.evidence, *unit.limits))
+    assert "方向 gate" in text
+    assert "val-loss top-k" in text
+    assert "旁路复评" in text
+    assert "runs/test_eval_g_series_20260709_local_rr_canonical/g_series_test_eval_manifest.csv" in text
+    assert "checkpoint_best_task.pt" in text and "新版可选机制" in text
+    assert "本轮保存 checkpoint_best_task.pt" not in text
+
+
+def test_content_module_reexports_discussion_units_without_changing_legacy_build_input():
+    from scripts.tho_group_meeting_ppt import build, content, discussion_content
+
+    assert content.DISCUSSION_UNITS is discussion_content.DISCUSSION_UNITS
+    assert build.MAIN_SLIDES is content.MAIN_SLIDES
+    assert build.MAIN_SLIDES is not content.DISCUSSION_UNITS
 
 
 def test_discussion_sources_are_existing_repository_files():

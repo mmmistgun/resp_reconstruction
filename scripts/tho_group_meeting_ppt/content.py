@@ -24,7 +24,7 @@ class SlideSpec:
     placeholder: str | None = None
 
 
-# 兼容尚未迁移的旧 build/backup 入口；新版默认内容由 DISCUSSION_UNITS 表达。
+# 仅 re-export 新版语义底稿；现有 build/backup 仍消费兼容 MAIN_SLIDES，后续组装任务再迁移。
 MAIN_SLIDES = (
     SlideSpec(
         "title",

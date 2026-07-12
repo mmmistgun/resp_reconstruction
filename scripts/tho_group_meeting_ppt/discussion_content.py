@@ -264,12 +264,14 @@ DISCUSSION_UNITS = (
         visual_keys=("polarity_schedule",), sources=(CONFIG, "resp_train/losses/weak.py"),
     ),
     _u(
-        "checkpoint_selection", "训练与损失", "val loss、task checkpoint 与最终排序不是同一概念", "训练过程中保存哪个模型？",
-        method_steps=("记录逐 epoch val loss。", "另算任务指标并保存 task-metric checkpoint。", "必要时复评 top-k checkpoint。", "按当前指标链解释代表 checkpoint。"),
+        "checkpoint_selection", "训练与损失", "G 系列先保留 gate 后的 val-loss top-k，再按任务指标旁路复评", "本轮 G 系列的代表 checkpoint 实际怎样产生？",
+        method_steps=("每个 epoch 同时记录 val loss 并检查 auto_direction 方向 gate。", "只有通过方向 gate 的 epoch 才进入候选，按 val loss 排序保存 checkpoint_top1/2/3.pt 与 checkpoint_topk.csv。", "训练结束后对 top-k 做当前任务指标的旁路复评，再选择进入 held-out canonical test 的代表 checkpoint。", "canonical test manifest 逐 seed 记录实际采用的 top1、top2 或 top3 路径。"),
+        parameters=("本轮方向 gate 为 auto_direction、max=0.5。", "每次训练保留 val-loss top-k=3。"),
         rationale=("低 val loss 不保证峰值 RR、count 或 lag-aware 形态更好。",),
-        limits=("当前 selection 脚本与最新人工排序链仍有不一致。",),
+        evidence=("正式运行证据示例：runs/g_series_stft_input/g3_c_wide_8p0/dual/20260630_211450_861579/config.yaml 与同目录 checkpoint_topk.csv。", "最终选择证据：runs/test_eval_g_series_20260709_local_rr_canonical/g_series_test_eval_manifest.csv；其中不同 seed 实际采用不同 top-k rank。"),
+        limits=("checkpoint_best_task.pt 是新版可选机制，不是本轮 G 系列已经保存或用于 canonical test 的既成事实。", "当前 selection/summarizer 与最新人工任务排序链仍未完全统一。"),
         discussion_prompt="应把哪组任务指标固化为唯一 checkpoint 选择规则，如何处理多目标冲突？",
-        visual_keys=("checkpoint_semantics",), sources=(METRICS, f"{REPORT}#训练流程与损失设置"),
+        visual_keys=("checkpoint_semantics",), sources=("scripts/README.md", METRICS, "docs/experiments/g_series_stft_input_resolution_band_plan.md", "resp_train/experiments/base.py", "resp_train/experiments/tho.py", f"{REPORT}#训练流程与损失设置"),
     ),
 
     # 6. 指标计算与失效场景
@@ -359,7 +361,7 @@ DISCUSSION_UNITS = (
     _u(
         "overall_metric_values", "整体结果与稳定性", "整体测试值显示 wide 综合更均衡、bandenergy 局部指标略优", "四方案在统一口径下表现如何？",
         method_steps=("逐窗口计算五类核心指标。", "先汇总到单次训练。", "再对每方案三个 seed 取均值。", "按主护栏与诊断指标共同解释。"),
-        parameters=("wide robust RR mean 0.712186、lag4 corr 0.870774。", "bandenergy 周期数绝对误差 mean 2.054401，对应 180 秒窗口的周期计数 bpm 误差 0.684800；local RR MAE 0.773299。"),
+        parameters=("wide robust RR MAE 0.712186 bpm；lag4 corr 0.870774，无量纲。", "bandenergy 周期数绝对误差 mean 2.054401，对应 180 秒窗口的周期计数 bpm 误差 0.684800；local RR MAE 0.773299 bpm。"),
         evidence=("当前证据账本给出四方案三 seed 的 canonical test 汇总。",),
         rationale=("同时保留节律、计数、形态与局部 RR，避免单指标胜出被误称为全面更好。",),
         limits=("数值是重叠窗口级汇总，不能直接视作受试者级独立重复。",),
