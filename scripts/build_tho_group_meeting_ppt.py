@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from scripts.tho_group_meeting_ppt.build import build_presentation
-from scripts.tho_group_meeting_ppt.charts import build_all_charts
+from tho_group_meeting_ppt.build import build_presentation
+from tho_group_meeting_ppt.charts import build_all_charts
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -35,4 +35,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

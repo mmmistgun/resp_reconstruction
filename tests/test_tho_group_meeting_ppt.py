@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 
 from pptx import Presentation
 from pptx.util import Inches
@@ -132,3 +134,45 @@ def test_backup_contains_balanced_cases_formulas_subject_table_and_commands(tmp_
     assert "dataset_row_id=3584" in text
     assert "8 名测试受试者" in text
     assert "eval_topk_checkpoints.py" in text
+
+
+def test_final_deck_has_no_sample_text_gray_body_or_out_of_bounds_shapes():
+    from scripts.tho_group_meeting_ppt.theme import BODY_BLACK, is_three_line_table
+
+    assert FINAL_DECK.exists()
+    prs = Presentation(FINAL_DECK)
+    text = "\n".join(
+        shape.text
+        for slide in prs.slides
+        for shape in slide.shapes
+        if shape.has_text_frame
+    )
+    assert len(prs.slides) >= 35
+    assert "论文分享" not in text
+    assert "2021/12/21" not in text
+    assert "汇报人：xxx" not in text
+    assert "【待补：汇报人、汇报日期】" in text
+
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            assert shape.left >= 0
+            assert shape.top >= 0
+            assert shape.left + shape.width <= prs.slide_width
+            assert shape.top + shape.height <= prs.slide_height
+            if shape.has_table:
+                assert is_three_line_table(shape.table)
+            if shape.name.startswith(("正文", "核心结论")) and shape.has_text_frame:
+                for paragraph in shape.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        assert run.font.color.rgb == BODY_BLACK
+
+
+def test_cli_can_run_from_repository_root():
+    result = subprocess.run(
+        [sys.executable, "scripts/build_tho_group_meeting_ppt.py", "--charts-only"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
