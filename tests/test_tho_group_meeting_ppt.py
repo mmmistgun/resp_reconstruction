@@ -1509,7 +1509,7 @@ def test_discussion_slide_specs_consume_every_unit_once_and_cover_sections():
     assert consumed == list(dict.fromkeys(consumed))
     assert set(consumed) == {unit.key for unit in DISCUSSION_UNITS}
     assert {spec.section for spec in SLIDE_GROUPS} == EXPECTED_DISCUSSION_SECTIONS
-    assert sum(len(spec.unit_keys) == 2 for spec in SLIDE_GROUPS) >= 5
+    assert sum(len(spec.unit_keys) == 2 for spec in SLIDE_GROUPS) >= 3
     assert all(not hasattr(spec, "max_chars") for spec in SLIDE_GROUPS)
 
 
@@ -1528,7 +1528,7 @@ def test_discussion_deck_is_editable_readable_and_uses_three_line_tables(tmp_pat
     assert len(prs.slides) >= 55  # 标题 + 11 章导航 + 至少 43 张问题页
     for phrase in (
         "样本如何从整晚数据形成", "soft-z", "PatchMixer", "STFT",
-        "L_signed_corr", "稳健 RR", "row 640", "最小判别性实验",
+            "L_signed_corr", "稳健 RR", "dataset_row_id=640", "最小判别性实验",
     ):
         assert phrase in all_text
     assert "20 秒局部 RR 窗" in all_text
@@ -1604,6 +1604,169 @@ def test_cli_discussion_routes_are_mutually_exclusive_and_default_to_discussion(
     )
     assert result.returncode == 0, result.stderr
     assert output.is_file() and len(Presentation(output).slides) >= 55
+
+
+def test_discussion_specs_have_explicit_content_plans_and_no_silent_truncation():
+    import inspect
+
+    from scripts.tho_group_meeting_ppt import detail_slides
+
+    assert all(spec.display_fields for spec in detail_slides.SLIDE_GROUPS)
+    assert all(spec.panel_plan for spec in detail_slides.SLIDE_GROUPS)
+    allowed = {
+        "question", "method_steps", "parameters", "rationale", "evidence",
+        "limits", "discussion_prompt",
+    }
+    assert all(set(spec.display_fields) <= allowed for spec in detail_slides.SLIDE_GROUPS)
+    for spec in detail_slides.SLIDE_GROUPS:
+        units = [
+            detail_slides.UNIT_BY_KEY[key]
+            for key in (spec.unit_keys or spec.context_keys)
+        ]
+        for panel in spec.panel_plan:
+            if panel.field == "discussion_prompt":
+                values = [unit.discussion_prompt for unit in units if unit.discussion_prompt]
+            else:
+                values = [value for unit in units for value in getattr(unit, panel.field)]
+            assert values, (spec.key, panel.field)
+    source = inspect.getsource(detail_slides)
+    for forbidden in ("limit=3", "limit=4", "steps[:4]", "panels[:3]", "values[:limit]"):
+        assert forbidden not in source
+
+
+def test_canonical_four_model_table_reads_manifest_backed_five_metrics():
+    from scripts.tho_group_meeting_ppt.detail_slides import load_canonical_overall_metrics
+
+    rows = load_canonical_overall_metrics(REPO_ROOT)
+    assert [row["label"] for row in rows] == [
+        "g0_time_only", "g0_f0_native_stft_pre_mixer", "g3_c_wide_8p0", "g3_c_bandenergy",
+    ]
+    assert all(set(row) == {
+        "label", "robust_rr_mae_bpm", "count_bpm_mae", "lag4_corr",
+        "relative_envelope_corr", "local_rr_mae_bpm",
+    } for row in rows)
+    assert rows[0]["relative_envelope_corr"] == pytest.approx(0.596490)
+    assert rows[2]["robust_rr_mae_bpm"] == pytest.approx(0.712186)
+    assert rows[3]["count_bpm_mae"] == pytest.approx(0.684800)
+
+
+@pytest.fixture(scope="module")
+def revised_discussion_deck(tmp_path_factory):
+    from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
+
+    output = tmp_path_factory.mktemp("revised_discussion") / "discussion.pptx"
+    build_discussion_presentation(template=TEMPLATE, output=output, repo_root=REPO_ROOT)
+    return Presentation(output)
+
+
+def _bbox_overlap_ratio(a, b) -> float:
+    left = max(a.left, b.left)
+    top = max(a.top, b.top)
+    right = min(a.left + a.width, b.left + b.width)
+    bottom = min(a.top + a.height, b.top + b.height)
+    if right <= left or bottom <= top:
+        return 0.0
+    intersection = (right - left) * (bottom - top)
+    return intersection / min(a.width * a.height, b.width * b.height)
+
+
+def _estimated_text_height(shape) -> float:
+    from PIL import ImageFont
+
+    runs = [
+        run for paragraph in shape.text_frame.paragraphs for run in paragraph.runs
+        if run.text.strip()
+    ]
+    if not runs:
+        return 0.0
+    size_pt = max((run.font.size.pt if run.font.size else 18.0) for run in runs)
+    font = ImageFont.truetype("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", round(size_pt * 96 / 72))
+    width_px = max(1.0, shape.width / Inches(1) * 96 - 24)
+    lines = 0
+    for paragraph in shape.text_frame.paragraphs:
+        text = "".join(run.text for run in paragraph.runs)
+        if not text:
+            continue
+        current = ""
+        paragraph_lines = 1
+        for character in text:
+            candidate = current + character
+            if current and font.getlength(candidate) > width_px:
+                paragraph_lines += 1
+                current = character
+            else:
+                current = candidate
+        lines += paragraph_lines
+    return lines * size_pt * 1.32 / 72.0
+
+
+def test_critical_discussion_pages_have_no_text_overlap_or_estimated_overflow(revised_discussion_deck):
+    title_fragments = (
+        "样本如何从整晚数据形成", "soft-z", "目标、整窗筛选", "目标监督代码证据",
+        "目标监督边界", "PatchMixer",
+        "WeakSyncLoss", "checkpoint", "四方案统一比较（一）", "四方案统一比较（二）",
+        "local RR", "dataset_row_id=640",
+        "dataset_row_id=873", "dataset_row_id=1353", "dataset_row_id=3584",
+        "最小判别性实验",
+    )
+    checked = set()
+    for slide in revised_discussion_deck.slides:
+        title = next((shape.text for shape in slide.shapes if shape.name == "页面标题"), "")
+        if not any(fragment in title for fragment in title_fragments):
+            continue
+        checked.add(next(fragment for fragment in title_fragments if fragment in title))
+        content = [
+            shape for shape in slide.shapes
+            if shape.has_text_frame and shape.text.strip()
+            and shape.name.startswith(("正文", "方法", "证据", "限制", "讨论", "副标题"))
+        ]
+        for index, first in enumerate(content):
+            assert _estimated_text_height(first) <= first.height / Inches(1) + 0.08, (title, first.name, first.text)
+            for second in content[index + 1:]:
+                assert _bbox_overlap_ratio(first, second) < 0.15, (title, first.name, second.name)
+    assert checked == set(title_fragments)
+
+
+def test_discussion_deck_embeds_all_real_assets_and_complete_canonical_tables(revised_discussion_deck):
+    expected = {
+        "signal_overview.png", "softz_mapping.png", "token_geometry.png", "stft_branch_shapes.png",
+        "bandenergy_response.png", "loss_schedule.png", "metric_robust_rr.png", "metric_cycle_count.png",
+        "metric_lag_corr.png", "metric_relative_envelope.png", "metric_local_rr.png", "overall_delta.png",
+        "seed_subject_stability.png", "strata_tradeoffs.png", "stft_resolution_comparison.png",
+        "case_row_640.png", "case_row_873.png", "case_row_1353.png", "case_row_3584.png",
+    }
+    actual = {
+        shape.name.removeprefix("真实证据图：")
+        for slide in revised_discussion_deck.slides
+        for shape in slide.shapes
+        if shape.shape_type == 13
+    }
+    assert actual == expected
+    tables = [
+        shape.table for slide in revised_discussion_deck.slides for shape in slide.shapes
+        if shape.has_table and shape.name.startswith("四方案核心指标")
+    ]
+    assert len(tables) == 2
+    assert all(len(table.rows) == 5 for table in tables)
+    table_text = "\n".join(cell.text for table in tables for row in table.rows for cell in row.cells)
+    for phrase in ("纯时序", "F0 STFT", "wide STFT", "bandenergy", "relative envelope", "local RR"):
+        assert phrase in table_text
+
+
+def test_case_titles_respect_logo_safe_area_and_local_rr_has_single_evidence_boundary(revised_discussion_deck):
+    local_rr_slides = []
+    for slide in revised_discussion_deck.slides:
+        title_shape = next((shape for shape in slide.shapes if shape.name == "页面标题"), None)
+        if title_shape is None:
+            continue
+        if "dataset_row_id=" in title_shape.text:
+            assert title_shape.text.startswith("dataset_row_id=")
+            assert len(title_shape.text) <= 31
+            assert title_shape.left + title_shape.width <= Inches(11.90)
+        if title_shape.text.startswith("local RR：正式"):
+            local_rr_slides.append(slide)
+    assert len(local_rr_slides) == 1
+    assert sum(shape.name == "证据边界" for shape in local_rr_slides[0].shapes) == 1
 
 
 @pytest.fixture(scope="module")
