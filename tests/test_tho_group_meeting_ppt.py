@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 import subprocess
 import sys
@@ -34,13 +35,177 @@ def test_discussion_evidence_catalog_resolves_formal_configs_and_signal_sources(
     assert catalog.case_row_ids == (640, 873, 1353, 3584)
 
 
-def test_read_run_config_reports_missing_field_with_path(tmp_path: Path):
+def test_read_run_config_evidence_reports_missing_field_with_path(tmp_path: Path):
     from scripts.tho_group_meeting_ppt.evidence import read_run_config
 
     config = tmp_path / "config.yaml"
     config.write_text("model:\n  patch_len: 256\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match=r"stft_win.*config\.yaml"):
+        read_run_config(config)
+
+
+def _evidence_config_text(*, dataset_root: str = "data/dataset", field_override: tuple[str, str] | None = None) -> str:
+    model = {
+        "patch_len": "256",
+        "patch_stride": "128",
+        "mixer_layers": "2",
+        "base_channels": "16",
+        "stft_win": "2000",
+        "stft_hop": "250",
+        "stft_low_hz": "0.05",
+        "stft_high_hz": "8.0",
+        "stft_encoder_type": "conv2d",
+        "stft_inject_position": "pre_mixer",
+    }
+    if field_override is not None:
+        model[field_override[0]] = field_override[1]
+    model_yaml = "\n".join(f"  {key}: {value}" for key, value in model.items())
+    return (
+        "data:\n"
+        f"  dataset_root: {dataset_root}\n"
+        "  index_csv: training/dataset_index.csv\n"
+        "  format: research_v2\n"
+        "  input_set: research_v2_waveform\n"
+        "  train_split: train\n"
+        "  val_split: val\n"
+        "  target_task: waveform\n"
+        "  bcg_input_key: bcg_rawish_segment_soft_z_key\n"
+        "  target_key: target_waveform_segment_soft_z_key\n"
+        f"model:\n{model_yaml}\n"
+    )
+
+
+def _synthetic_evidence_repo(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    repo = tmp_path / "repo"
+    dataset = repo / "data" / "dataset"
+    (dataset / "training").mkdir(parents=True)
+    (dataset / "training" / "dataset_index.csv").write_text("row_id\n1\n", encoding="utf-8")
+
+    signal = repo / "assets" / "f0_visual_sample_signals.npz"
+    signal.parent.mkdir(parents=True)
+    signal.touch()
+
+    harmonic = repo / "harmonic"
+    required = (
+        harmonic / "figures" / "model_case_manifest.csv",
+        harmonic / "test_v2" / "test_harmonic_labels.csv",
+        harmonic / "test_v2" / "analysis_manifest.json",
+        harmonic / "model_metrics" / "model_stratified_metrics_summary.csv",
+        harmonic / "model_metrics" / "analysis_manifest.json",
+        harmonic / "corrections" / "model_harmonic_correction_summary.csv",
+        harmonic / "corrections" / "analysis_manifest.json",
+    )
+    for path in required:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("status\ncomplete\n", encoding="utf-8")
+
+    manifest = repo / "results" / "g_series_test_eval_manifest.csv"
+    manifest.parent.mkdir(parents=True)
+    rows = []
+    labels = ("g0_time_only", "g0_f0_native_stft_pre_mixer", "g3_c_wide_8p0", "g3_c_bandenergy")
+    for label in labels:
+        for seed in (20260700, 20260837, 20260901):
+            run_dir = repo / "runs" / label / str(seed)
+            run_dir.mkdir(parents=True)
+            (run_dir / "checkpoint_top1.pt").touch()
+            (run_dir / "config.yaml").write_text(_evidence_config_text(), encoding="utf-8")
+            output_stem = repo / "results" / f"{label}_{seed}"
+            for suffix in ("_metrics.csv", "_summary.csv", "_manifest.csv"):
+                Path(f"{output_stem}{suffix}").touch()
+            rows.append({
+                "label": label,
+                "seed": str(seed),
+                "checkpoint": str((run_dir / "checkpoint_top1.pt").relative_to(repo)),
+                "metrics_output": str(Path(f"{output_stem}_metrics.csv").relative_to(repo)),
+                "summary_output": str(Path(f"{output_stem}_summary.csv").relative_to(repo)),
+                "manifest_output": str(Path(f"{output_stem}_manifest.csv").relative_to(repo)),
+            })
+    with manifest.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(
+            fp,
+            fieldnames=("label", "seed", "checkpoint", "metrics_output", "summary_output", "manifest_output"),
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+    return repo, manifest, harmonic, signal
+
+
+def test_discussion_evidence_catalog_accepts_explicit_paths_relative_to_repo_root(tmp_path: Path, monkeypatch):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    catalog = build_evidence_catalog(
+        repo,
+        manifest_path=manifest.relative_to(repo),
+        harmonic_root=harmonic.relative_to(repo),
+        general_signal_npz=signal.relative_to(repo),
+    )
+
+    assert catalog.dataset_root == (repo / "data" / "dataset").resolve()
+    assert catalog.dataset_index == (repo / "data" / "dataset" / "training" / "dataset_index.csv").resolve()
+    assert catalog.result_root == manifest.parent.resolve()
+    assert catalog.harmonic_root == harmonic.resolve()
+    assert catalog.general_signal_npz == signal.resolve()
+
+
+def test_evidence_manifest_rejects_duplicate_label_seed(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    with manifest.open(newline="", encoding="utf-8") as fp:
+        rows = list(csv.DictReader(fp))
+    rows.append(rows[0].copy())
+    with manifest.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError, match=r"重复.*g0_time_only.*20260700.*g_series_test_eval_manifest\.csv"):
+        build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
+
+
+def test_evidence_manifest_checks_nonfirst_seed_data_provenance(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    mismatched = repo / "runs" / "g3_c_wide_8p0" / "20260837" / "config.yaml"
+    other_dataset = repo / "data" / "other"
+    (other_dataset / "training").mkdir(parents=True)
+    (other_dataset / "training" / "dataset_index.csv").touch()
+    mismatched.write_text(_evidence_config_text(dataset_root="data/other"), encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match=r"g3_c_wide_8p0.*20260837.*data\.dataset_root.*config\.yaml",
+    ):
+        build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
+
+
+@pytest.mark.parametrize(
+    ("field", "yaml_value"),
+    (
+        ("patch_len", "true"),
+        ("patch_len", "2.9"),
+        ("stft_low_hz", ".nan"),
+        ("stft_encoder_type", "[conv2d]"),
+    ),
+)
+def test_read_run_config_evidence_rejects_invalid_model_field_types(
+    tmp_path: Path,
+    field: str,
+    yaml_value: str,
+):
+    from scripts.tho_group_meeting_ppt.evidence import read_run_config
+
+    config = tmp_path / "config.yaml"
+    config.write_text(_evidence_config_text(field_override=(field, yaml_value)), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"model\.{field}.*config\.yaml"):
         read_run_config(config)
 
 
