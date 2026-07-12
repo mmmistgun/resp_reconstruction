@@ -17,6 +17,7 @@ FINAL_DECK = REPO_ROOT / "docs/stage_reports/20260708/THO_research_v2_阶段进�
 def test_body_text_is_black_and_table_has_only_three_horizontal_rules():
     from scripts.tho_group_meeting_ppt.theme import (
         BODY_BLACK,
+        WHITE,
         add_body_text,
         add_three_line_table,
         is_three_line_table,
@@ -45,7 +46,11 @@ def test_body_text_is_black_and_table_has_only_three_horizontal_rules():
 
     assert box.text_frame.paragraphs[0].runs[0].font.color.rgb == BODY_BLACK
     assert is_three_line_table(table)
-    assert all(cell.fill.type is None for row in table.rows for cell in row.cells)
+    assert all(cell.fill.fore_color.rgb == WHITE for row in table.rows for cell in row.cells)
+    assert not table.first_row
+    assert not table.first_col
+    assert not table.horz_banding
+    assert not table.vert_banding
 
 
 def test_main_deck_has_exactly_25_ordered_slides_and_numeric_sources():
@@ -103,6 +108,7 @@ def test_generated_main_deck_has_25_slides_black_body_and_editable_diagrams(tmp_
 
     assert len(prs.slides) == 25
     assert _shape_text(prs.slides[10], "页面标题") == "独立测试集结果支持宽频 STFT 作为当前基准"
+    assert all(slide.slide_layout.name != "空白" for slide in list(prs.slides)[1:])
     assert sum(1 for shape in prs.slides[6].shapes if shape.name.startswith("流程节点")) >= 8
     assert sum(1 for slide in prs.slides for shape in slide.shapes if shape.has_table) >= 3
     for slide in prs.slides:

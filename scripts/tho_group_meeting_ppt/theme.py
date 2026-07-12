@@ -49,11 +49,14 @@ def _set_shape_text(
 
 
 def new_content_slide(prs: Presentation, title: str, *, page_number: int):
-    blank_layout = next(
-        (layout for layout in prs.slide_layouts if layout.name in {"空白", "Blank"}),
-        prs.slide_layouts[6],
+    content_layout = next(
+        (layout for layout in prs.slide_layouts if layout.name in {"两栏内容", "Two Content"}),
+        prs.slide_layouts[4],
     )
-    slide = prs.slides.add_slide(blank_layout)
+    slide = prs.slides.add_slide(content_layout)
+    for placeholder in list(slide.placeholders):
+        element = placeholder._element
+        element.getparent().remove(element)
     title_box = slide.shapes.add_textbox(Inches(0.72), Inches(0.42), Inches(11.85), Inches(0.58))
     title_box.name = "页面标题"
     _set_shape_text(title_box, title, size=28, color=SCNU_BLUE, bold=True)
@@ -239,12 +242,20 @@ def add_three_line_table(
     font_size: int = 16,
 ):
     table = slide.shapes.add_table(1 + len(rows), len(headers), x, y, width, height).table
+    table.first_row = False
+    table.first_col = False
+    table.last_row = False
+    table.last_col = False
+    table.horz_banding = False
+    table.vert_banding = False
     bold_cells = set(bold_cells)
     values = [list(headers), *[list(row) for row in rows]]
     for row_index, row_values in enumerate(values):
         for column_index, value in enumerate(row_values):
             cell = table.cell(row_index, column_index)
             _remove_cell_borders(cell)
+            cell.fill.solid()
+            cell.fill.fore_color.rgb = WHITE
             cell.text = str(value)
             cell.margin_left = Pt(5)
             cell.margin_right = Pt(5)
