@@ -62,3 +62,44 @@
 - 修改时同步正文、PPT 骨架和备份页建议，避免后续转 PPT 时残留旧说法。
 - 每次修改后做轻量验证：扫描占位符、问题术语、行尾空白和关键段落是否存在。
 - 纯文档修改不需要跑代码测试，但最终说明中要明确没有改数据、split、指标、训练配置或实验结果。
+
+## 20260708 组会 PPT
+
+本次 THO research v2 阶段组会汇报使用以下输入：
+
+- 格式模板：`docs/stage_reports/20260708/组会汇报.pptx`。
+- 内容底稿：`docs/stage_reports/2026-07-08-tho-research-v2-group-meeting-stage-report.md`。
+- 最终文件：`docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx`。
+- 生成入口：`scripts/build_tho_group_meeting_ppt.py`。
+
+完整生成命令：
+
+```bash
+./.venv/bin/python scripts/build_tho_group_meeting_ppt.py
+```
+
+只重新生成数据图表：
+
+```bash
+./.venv/bin/python scripts/build_tho_group_meeting_ppt.py --charts-only
+```
+
+生成器从当前口径结果文件读取整体指标、长尾统计、分层结果和二次谐波结果，主要来源包括：
+
+- `runs/test_eval_g_series_20260709_local_rr_canonical/`。
+- `runs/bcg_second_harmonic_20260710/test_v2/`。
+- `runs/bcg_second_harmonic_20260710/model_metrics/`。
+- `runs/bcg_second_harmonic_20260710/corrections/`。
+- `runs/bcg_second_harmonic_20260710/figures/`。
+
+渲染检查命令：
+
+```bash
+mkdir -p /tmp/tho_group_meeting_render
+HOME=/tmp/lohome XDG_RUNTIME_DIR=/tmp/runtime-marques libreoffice --headless \
+  --convert-to pdf --outdir /tmp/tho_group_meeting_render \
+  docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx
+```
+
+PPT 生成过程只读取现有文档、CSV 和诊断图，不启动训练，不重新评价 checkpoint，不修改数据、
+split、标签、指标口径或历史实验产物。长时间训练和正式 checkpoint 复评仍由用户按实验计划执行。
