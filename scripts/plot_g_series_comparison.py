@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 for _thread_env_name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ.setdefault(_thread_env_name, "1")
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/resp_reconstruction_matplotlib")
 
 import numpy as np
 import pandas as pd
@@ -65,10 +66,16 @@ RENDER_METRIC_COLUMNS = (
 
 THREAD_ENV = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS")
 MODEL_COLORS = {
-    "g0_time_only": "#7f7f7f",
+    "g0_time_only": "#9467bd",
     "g0_f0_native_stft_pre_mixer": "#ff7f0e",
     "g3_c_wide_8p0": "#1f77b4",
     "g3_c_bandenergy": "#2ca02c",
+}
+TABLE_MODEL_LABELS = {
+    "g0_time_only": "G0 Time",
+    "g0_f0_native_stft_pre_mixer": "G0 F0",
+    "g3_c_wide_8p0": "G3 Wide",
+    "g3_c_bandenergy": "G3 Band",
 }
 
 
@@ -87,6 +94,7 @@ class RenderTask:
     dataset_row_id: int
     output_dir: Path
     metrics_by_label: dict[str, dict[str, float]]
+    overwrite: bool = False
 
 
 @dataclass(frozen=True)
@@ -174,6 +182,7 @@ def build_render_tasks(
     selected_rows: pd.DataFrame,
     *,
     output_dir: str | Path,
+    overwrite: bool = False,
 ) -> tuple[RenderTask, ...]:
     """将经过输入侧过滤的行严格映射为只读缓存的渲染任务。"""
     cache_ids = _validate_cache_ids(cache.dataset_row_id)
@@ -221,6 +230,7 @@ def build_render_tasks(
                 dataset_row_id=int(dataset_row_id),
                 output_dir=Path(output_dir),
                 metrics_by_label=metrics_by_label,
+                overwrite=bool(overwrite),
             )
         )
     return tuple(tasks)
@@ -328,16 +338,6 @@ def resolve_workers(value: str | int, *, n_tasks: int) -> int:
     return min(workers, n_tasks)
 
 
-def _panel_limits(*signals: np.ndarray) -> tuple[float, float]:
-    values = np.concatenate([np.asarray(signal, dtype=np.float64).reshape(-1) for signal in signals])
-    low, high = np.percentile(values, [0.5, 99.5])
-    if not np.isfinite(low) or not np.isfinite(high) or high <= low:
-        center = float(np.mean(values))
-        return center - 1.0, center + 1.0
-    margin = 0.05 * (high - low)
-    return float(low - margin), float(high + margin)
-
-
 def _normalized_band_psd(values: np.ndarray, *, fs: float, low_hz: float, high_hz: float) -> tuple[np.ndarray, np.ndarray]:
     freqs, power = scipy_signal.welch(np.asarray(values, dtype=np.float64), fs=fs, nperseg=min(4096, len(values)))
     mask = (freqs >= low_hz) & (freqs <= high_hz)
@@ -393,23 +393,34 @@ def build_comparison_figure(task: RenderTask):
     model_axes = [figure.add_subplot(grid[index, :], sharex=input_ax) for index in range(1, 5)]
     spectrum_ax = figure.add_subplot(grid[5, 0])
     table_ax = figure.add_subplot(grid[5, 1])
-    input_ax.plot(time, bcg, color="#7f7f7f", linewidth=0.55, label="BCG soft-z input")
-    input_ax.plot(time, bcg_band, color="#1f77b4", linewidth=0.9, label="BCG resp-band (0.05–0.7 Hz)")
-    input_ax.set_ylim(*_panel_limits(bcg, bcg_band))
+    input_ax.plot(time, bcg, color="#7f7f7f", linewidth=1.0, alpha=0.90, label="BCG soft-z input")
+    input_ax.plot(time, bcg_band, color="#d62728", linewidth=1.0, label="BCG resp-band (0.05–0.7 Hz)")
     input_ax.set_ylabel("soft-z")
     input_ax.legend(loc="upper right")
     input_ax.grid(alpha=0.2)
-    output_limits = _panel_limits(tho_band, *prediction_band.values())
     for axis, label in zip(model_axes, REQUIRED_MODELS, strict=True):
-        axis.plot(time, tho_band, color="#111111", linewidth=1.15, label="THO resp-band")
-        axis.plot(time, prediction_band[label], color=MODEL_COLORS[label], linewidth=0.9, alpha=0.90, label=f"{label} resp-band")
-        axis.set_ylim(*output_limits)
-        axis.set_ylabel("soft-z")
+        prediction_axis = axis.twinx()
+        tho_line = axis.plot(time, tho_band, color="#111111", linewidth=2.0, alpha=0.70, label="THO resp-band")[0]
+        prediction_line = prediction_axis.plot(
+            time,
+            prediction_band[label],
+            color=MODEL_COLORS[label],
+            linewidth=2.0,
+            alpha=0.95,
+            label=f"{label} resp-band",
+        )[0]
+        axis.set_ylabel("THO soft-z")
+        prediction_axis.set_ylabel("prediction soft-z", color=MODEL_COLORS[label])
+        prediction_axis.tick_params(axis="y", colors=MODEL_COLORS[label])
         axis.set_title(label, fontsize=10)
-        axis.legend(loc="upper right")
+        axis.legend(
+            [tho_line, prediction_line],
+            [tho_line.get_label(), prediction_line.get_label()],
+            loc="upper right",
+        )
         axis.grid(alpha=0.2)
     model_axes[-1].set_xlabel("time (s)")
-    for label, values, color in (("BCG resp-band", bcg_band, "#1f77b4"), ("THO target", tho, "#111111"), *((label, predictions[label], MODEL_COLORS[label]) for label in REQUIRED_MODELS)):
+    for label, values, color in (("BCG resp-band", bcg_band, "#d62728"), ("THO target", tho, "#111111"), *((label, predictions[label], MODEL_COLORS[label]) for label in REQUIRED_MODELS)):
         freqs, power = _normalized_band_psd(values, fs=fs, low_hz=low_hz, high_hz=high_hz)
         spectrum_ax.plot(freqs, power, color=color, linewidth=1.0, label=label)
     spectrum_ax.set_xlim(low_hz, high_hz)
@@ -435,10 +446,16 @@ def build_comparison_figure(task: RenderTask):
             else:
                 row.append(" / ".join(_format_metric(metrics.get(key)) for key in ("local_rr_mae", "local_rr_corr", "local_rr_valid_frac")))
         table_values.append(row)
-    table = table_ax.table(cellText=table_values, rowLabels=row_labels, colLabels=list(REQUIRED_MODELS), loc="center", cellLoc="center")
+    table = table_ax.table(
+        cellText=table_values,
+        rowLabels=row_labels,
+        colLabels=[TABLE_MODEL_LABELS[label] for label in REQUIRED_MODELS],
+        loc="center",
+        cellLoc="center",
+    )
     table.auto_set_font_size(False)
-    table.set_fontsize(7.5)
-    table.scale(1.0, 1.35)
+    table.set_fontsize(14.0)
+    table.scale(1.0, 1.95)
     figure.suptitle(f"G-series comparison | test row={int(task.dataset_row_id)}", fontsize=14)
     figure.tight_layout(rect=(0, 0, 1, 0.98))
     return figure
@@ -447,7 +464,7 @@ def build_comparison_figure(task: RenderTask):
 def render_one_window(task: RenderTask) -> RenderResult:
     task.output_dir.mkdir(parents=True, exist_ok=True)
     output_path = task.output_dir / f"row_{int(task.dataset_row_id)}.png"
-    if output_path.exists():
+    if output_path.exists() and not task.overwrite:
         raise FileExistsError(f"PNG 已存在，拒绝覆盖: {output_path}")
     figure = build_comparison_figure(task)
     from matplotlib import pyplot as plt
@@ -560,6 +577,15 @@ def _atomic_write_csv(path: str | Path, frame: pd.DataFrame) -> Path:
         if temporary_path.exists():
             temporary_path.unlink()
     return output_path
+
+
+def _unlink_generated_file(path: str | Path) -> None:
+    output_path = Path(path)
+    if not output_path.exists():
+        return
+    if not output_path.is_file():
+        raise IsADirectoryError(f"拒绝覆盖非文件产物: {output_path}")
+    output_path.unlink()
 
 
 def _run_render_tasks(
@@ -698,12 +724,15 @@ def run_plot_comparison(
     stable_fraction: float,
     workers: str | int,
     max_plots: int | None,
+    overwrite: bool = False,
 ) -> Path:
     """执行完整 CPU 绘图阶段；出现任一失败时保留失败清单但不发布 complete manifest。"""
     resolved_specs = tuple(specs)
     output_path = Path(output_dir)
-    if output_path.exists():
+    if output_path.exists() and not overwrite:
         raise FileExistsError(f"绘图输出目录已存在，拒绝覆盖: {output_path}")
+    if output_path.exists() and not output_path.is_dir():
+        raise NotADirectoryError(f"绘图输出路径已存在但不是目录: {output_path}")
     if max_plots is not None and max_plots < 1:
         raise ValueError("--max-plots 必须 >= 1")
     cache = load_cache(cache_dir, resolved_specs)
@@ -721,10 +750,16 @@ def run_plot_comparison(
         filter_mode=filter_mode,
         stable_fraction=stable_fraction,
     )
-    all_tasks = build_render_tasks(cache, aligned_metrics, selected_rows, output_dir=output_path / "figures")
+    all_tasks = build_render_tasks(
+        cache,
+        aligned_metrics,
+        selected_rows,
+        output_dir=output_path / "figures",
+        overwrite=overwrite,
+    )
     requested_tasks = all_tasks if max_plots is None else all_tasks[:max_plots]
     worker_count = resolve_workers(workers, n_tasks=len(requested_tasks)) if requested_tasks else 0
-    output_path.mkdir(parents=True, exist_ok=False)
+    output_path.mkdir(parents=True, exist_ok=overwrite)
     results, failures = _run_render_tasks(
         requested_tasks,
         cache_dir=cache.root,
@@ -765,12 +800,16 @@ def run_plot_comparison(
     if failures:
         payload["status"] = "failed"
         payload["failures"] = failures
+        if overwrite:
+            _unlink_generated_file(output_path / "plot_manifest.json")
         _atomic_write_text(
             output_path / "plot_failure_manifest.json",
             json.dumps(payload, ensure_ascii=False, indent=2),
         )
         raise RuntimeError(f"{len(failures)} 个绘图任务失败；详见 {output_path / 'plot_failure_manifest.json'}")
     payload["status"] = "complete"
+    if overwrite:
+        _unlink_generated_file(output_path / "plot_failure_manifest.json")
     _atomic_write_text(
         output_path / "plot_manifest.json",
         json.dumps(payload, ensure_ascii=False, indent=2),
@@ -880,6 +919,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stable-fraction", type=float, default=0.20)
     parser.add_argument("--workers", default="auto")
     parser.add_argument("--max-plots", type=int, default=None)
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="允许复用 output-dir 并覆盖同名绘图产物；不会清理目录中的其他文件",
+    )
     return parser.parse_args()
 
 
@@ -895,6 +939,7 @@ def main() -> None:
         stable_fraction=float(args.stable_fraction),
         workers=args.workers,
         max_plots=args.max_plots,
+        overwrite=bool(args.overwrite),
     )
     print(f"complete plot manifest: {output_path / 'plot_manifest.json'}", flush=True)
 

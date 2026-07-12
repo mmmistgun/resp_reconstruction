@@ -208,6 +208,37 @@ def test_load_cache_and_render_one_window_writes_png(tmp_path: Path) -> None:
     assert result.figure_path.suffix == ".png"
 
 
+def test_render_one_window_overwrites_existing_png_only_when_requested(tmp_path: Path) -> None:
+    cache_dir, specs = _write_synthetic_cache(tmp_path)
+    initialize_render_worker(cache_dir, specs, fs=100.0, low_hz=0.05, high_hz=0.7, order=4)
+    output_dir = tmp_path / "figures"
+    output_dir.mkdir()
+    output_path = output_dir / "row_101.png"
+    output_path.write_bytes(b"stale")
+    task = RenderTask(
+        row_index=0,
+        dataset_row_id=101,
+        output_dir=output_dir,
+        metrics_by_label=_render_metrics(),
+    )
+
+    with pytest.raises(FileExistsError, match="拒绝覆盖"):
+        render_one_window(task)
+
+    result = render_one_window(
+        RenderTask(
+            row_index=0,
+            dataset_row_id=101,
+            output_dir=output_dir,
+            metrics_by_label=_render_metrics(),
+            overwrite=True,
+        )
+    )
+
+    assert result.figure_path == output_path
+    assert output_path.read_bytes() != b"stale"
+
+
 def test_comparison_figure_uses_one_filtered_tho_model_panel_per_model(tmp_path: Path) -> None:
     from matplotlib import pyplot as plt
 
@@ -223,13 +254,49 @@ def test_comparison_figure_uses_one_filtered_tho_model_panel_per_model(tmp_path:
     figure = build_comparison_figure(task)
 
     try:
-        assert len(figure.axes) == 7
-        assert [len(axis.lines) for axis in figure.axes[1:5]] == [2, 2, 2, 2]
+        assert len(figure.axes) == 11
+        input_axis = figure.axes[0]
+        assert input_axis.lines[0].get_alpha() == pytest.approx(0.90)
+        assert input_axis.lines[0].get_linewidth() == pytest.approx(1.0)
+        assert input_axis.lines[1].get_linewidth() == pytest.approx(1.0)
+        assert input_axis.lines[1].get_color() == "#d62728"
+        assert [len(axis.lines) for axis in figure.axes[1:5]] == [1, 1, 1, 1]
         assert [axis.get_title() for axis in figure.axes[1:5]] == list(REQUIRED_MODELS)
-        spectrum_axis, table_axis = figure.axes[-2:]
+        for axis in figure.axes[1:5]:
+            assert axis.lines[0].get_alpha() == pytest.approx(0.70)
+            assert axis.lines[0].get_linewidth() == pytest.approx(2.0)
+        prediction_axes = figure.axes[7:11]
+        assert [len(axis.lines) for axis in prediction_axes] == [1, 1, 1, 1]
+        assert all(axis.lines[0].get_linewidth() == pytest.approx(2.0) for axis in prediction_axes)
+        assert prediction_axes[0].lines[0].get_color() == "#9467bd"
+        spectrum_axis, table_axis = figure.axes[5:7]
         assert spectrum_axis.get_position().y0 == pytest.approx(table_axis.get_position().y0)
         assert spectrum_axis.get_ylabel() == "normalized band power"
         assert table_axis.axison is False
+        table = next(iter(table_axis.tables))
+        assert table.get_celld()[(0, 0)].get_text().get_fontsize() >= 14.0
+        assert [table.get_celld()[(0, index)].get_text().get_text() for index in range(4)] == [
+            "G0 Time",
+            "G0 F0",
+            "G3 Wide",
+            "G3 Band",
+        ]
+    finally:
+        plt.close(figure)
+
+
+def test_waveform_axes_keep_matplotlib_default_y_autoscale(tmp_path: Path) -> None:
+    from matplotlib import pyplot as plt
+
+    cache_dir, specs = _write_synthetic_cache(tmp_path)
+    initialize_render_worker(cache_dir, specs, fs=100.0, low_hz=0.05, high_hz=0.7, order=4)
+    task = RenderTask(0, 101, tmp_path / "figures", _render_metrics())
+
+    figure = build_comparison_figure(task)
+
+    try:
+        waveform_axes = [*figure.axes[:5], *figure.axes[7:11]]
+        assert all(axis.get_autoscaley_on() for axis in waveform_axes)
     finally:
         plt.close(figure)
 
@@ -326,6 +393,28 @@ def test_plot_cli_defaults_to_input_stable_filter(monkeypatch: pytest.MonkeyPatc
     assert args.filter == "exclude-input-stable"
     assert args.stable_fraction == pytest.approx(0.20)
     assert args.workers == "auto"
+    assert args.overwrite is False
+
+
+def test_plot_cli_accepts_overwrite(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "plot_g_series_comparison.py",
+            "--cache-dir",
+            "cache",
+            "--metrics-dir",
+            "metrics",
+            "--output-dir",
+            "plots",
+            "--overwrite",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.overwrite is True
 
 
 def test_plot_script_bootstraps_repo_root_when_executed_as_file(monkeypatch: pytest.MonkeyPatch) -> None:

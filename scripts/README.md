@@ -706,11 +706,12 @@ OMP/MKL/OpenBLAS/NUMEXPR 为单线程。
 ```
 
 每张 PNG 顶部包含 BCG soft-z 输入与 `0.05–0.7 Hz` 呼吸带分量；中间依次为 4 个子图，每张叠加同一呼吸带滤波后的
-THO 与一个模型的滤波预测，并在 4 张模型图间共用 y 轴尺度。归一化 Welch 频谱与逐窗口 canonical 指标表位于同一底行；
+THO 与一个模型的滤波预测。THO 使用左 y 轴、模型预测使用右 y 轴，二者都使用 Matplotlib 默认 autoscale，避免某个信号的幅值范围压缩另一个信号。归一化 Welch 频谱与逐窗口 canonical 指标表位于同一底行；
 频谱仅用于比较频率结构，不比较绝对能量。
 默认过滤只从 BCG 输入计算稳定度，排除稳定度最高的 20%，不读取 THO、任何模型输出或 test metrics；它不是目标侧或
-模型侧的后验挑样。输出目录不可覆盖，完整成功时包含 `window_index.csv`、`filter_summary.csv`、`figures/` 和
-`plot_manifest.json`。任一窗口失败时只写 `plot_failure_manifest.json`，不发布 `plot_manifest.json`。小规模 CPU
+模型侧的后验挑样。输出目录默认不可覆盖，完整成功时包含 `window_index.csv`、`filter_summary.csv`、`figures/` 和
+`plot_manifest.json`。需要复用同一个输出目录重新绘图时显式添加 `--overwrite`，脚本会覆盖同名 PNG、CSV 和 manifest，
+但不会清理目录中的其他文件。任一窗口失败时只写 `plot_failure_manifest.json`，不发布 `plot_manifest.json`。小规模 CPU
 smoke 可额外传入 `--workers 2 --max-plots 2`。
 
 ### `eval_topk_checkpoints.py`
