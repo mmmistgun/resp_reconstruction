@@ -3,9 +3,9 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-from pathlib import Path
 import re
-from typing import Any, Iterable
+from pathlib import Path
+from typing import Any, Iterable, Mapping
 
 import matplotlib
 
@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 import numpy as np
 from omegaconf import OmegaConf
+import torch
 
 from .evidence import FORMAL_LABELS, build_evidence_catalog
 
@@ -197,6 +198,57 @@ def _required_sha256(payload: dict[str, Any], field: str, *, label: str, path: P
     return value.lower()
 
 
+def _repo_relative_path(path: Path, repo_root: Path) -> Path | None:
+    root = repo_root.resolve()
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(root)
+    except ValueError:
+        pass
+    # Worktree 的 runs/docs figure 可由本地符号链接挂载；记录逻辑仓库路径而非链接目标绝对路径。
+    for child in root.iterdir():
+        if not child.is_symlink():
+            continue
+        try:
+            suffix = resolved.relative_to(child.resolve())
+        except ValueError:
+            continue
+        return Path(child.name) / suffix
+    return None
+
+
+def manifest_file_record(path: str | Path, repo_root: str | Path) -> dict[str, Any]:
+    source = Path(path)
+    root = Path(repo_root).resolve()
+    relative = _repo_relative_path(source, root)
+    if relative is None:
+        recorded_path = str(source.resolve())
+        scope = "external"
+    else:
+        recorded_path = relative.as_posix()
+        scope = "repo"
+    return {
+        "path": recorded_path,
+        "scope": scope,
+        "sha256": _sha256(source),
+        "size_bytes": source.stat().st_size,
+    }
+
+
+def resolve_manifest_record(record: Mapping[str, Any], repo_root: str | Path) -> Path:
+    raw_path = Path(str(record["path"]))
+    scope = record.get("scope")
+    if scope == "repo":
+        if raw_path.is_absolute() or ".." in raw_path.parts:
+            raise ValueError(f"repo manifest path 必须为无上跳的相对路径: {raw_path}")
+        return (Path(repo_root).resolve() / raw_path).resolve()
+    if scope == "external":
+        if not raw_path.is_absolute():
+            raise ValueError(f"external manifest path 必须为绝对路径: {raw_path}")
+        return raw_path.resolve()
+    raise ValueError(f"未知 manifest scope={scope!r}: {raw_path}")
+
+
 def _canonical_manifest_rows(path: Path) -> dict[tuple[str, int], dict[str, str]]:
     rows = _read_csv(path)
     return {(row["label"], int(row["seed"])): row for row in rows}
@@ -207,7 +259,7 @@ def _validate_prediction_provenance(
     prediction_path: Path,
     canonical_row: dict[str, str],
     labels_path: Path,
-) -> Path:
+) -> tuple[Path, dict[str, Any]]:
     manifest_path = _manifest_for_prediction(prediction_path)
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     label = canonical_row["label"]
@@ -262,6 +314,31 @@ def _validate_prediction_provenance(
             f"模型 {label} config training.seed={config_seed!r}, expected={seed}; config yaml: {config_path}"
         )
 
+    checkpoint_payload = torch.load(expected_checkpoint, map_location="cpu", weights_only=True)
+    embedded_config = checkpoint_payload.get("config") if isinstance(checkpoint_payload, dict) else None
+    config_gap: str | None = None
+    if embedded_config is not None:
+        if not isinstance(embedded_config, Mapping):
+            raise ValueError(
+                f"模型 {label} checkpoint embedded config 类型无效: {type(embedded_config).__name__}; "
+                f"checkpoint: {expected_checkpoint}"
+            )
+        disk_config = OmegaConf.to_container(OmegaConf.load(config_path), resolve=True)
+        if dict(embedded_config) != disk_config:
+            raise ValueError(
+                f"模型 {label} checkpoint embedded config 与磁盘 config.yaml 不一致: {config_path}; "
+                f"checkpoint: {expected_checkpoint}"
+            )
+        config_status = "checkpoint_embedded_config_match"
+    elif config_hash is not None:
+        config_status = "prediction_manifest_config_hash_match"
+    else:
+        config_status = "path_and_seed_crosscheck_only"
+        config_gap = (
+            "配置由 checkpoint 同 run 路径 + seed 交叉核对；缺少生成时 config hash，"
+            "且 checkpoint 未内嵌 config，不能证明内容未漂移。"
+        )
+
     eval_manifest_path = (repo_root / canonical_row["manifest_output"]).resolve()
     eval_rows = _read_csv(eval_manifest_path)
     if len(eval_rows) != 1:
@@ -278,7 +355,14 @@ def _validate_prediction_provenance(
             raise ValueError(
                 f"模型 {label} canonical eval manifest field {field} 不一致: {eval_manifest_path}"
             )
-    return manifest_path
+    return manifest_path, {
+        "config": manifest_file_record(config_path, repo_root),
+        "checkpoint": manifest_file_record(expected_checkpoint, repo_root),
+        "prediction_manifest_config_sha256_present": config_hash is not None,
+        "checkpoint_embedded_config_present": embedded_config is not None,
+        "config_evidence_status": config_status,
+        "config_evidence_gap": config_gap,
+    }
 
 
 def _unique_rows(path: Path, key: str, requested: Iterable[int]) -> dict[int, dict[str, str]]:
@@ -491,6 +575,7 @@ def _case_figure(
     metrics: dict[str, dict[str, str]],
     corrections: dict[str, dict[str, str]],
     thresholds: dict[str, float],
+    config_evidence_note: str,
     bcg: np.ndarray | None,
     gap: dict[str, Any],
     output: Path,
@@ -623,7 +708,14 @@ def _case_figure(
     for axis in (overview, local, spectra):
         _style_axis(axis)
     _reserve_footer(fig)
-    fig.text(0.01, 0.005, "呼吸带只作为 THO reference 展示一次；BCG 输入来自 dataset row 对应 source NPZ，预测按 dataset_row_id 严格连接。", fontsize=8.5, color="black")
+    fig.text(
+        0.01,
+        0.005,
+        "呼吸带只作为 THO reference 展示一次；BCG 输入来自 dataset row 对应 source NPZ，"
+        f"预测按 dataset_row_id 严格连接。配置证据：{config_evidence_note}",
+        fontsize=8.2,
+        color="black",
+    )
     _save(fig, output)
 
 
@@ -651,14 +743,17 @@ def build_case_assets(
     prediction_configs: list[Path] = []
     prediction_checkpoints: list[Path] = []
     prediction_eval_manifests: list[Path] = []
+    prediction_config_provenance: dict[str, dict[str, Any]] = {}
     for label in FORMAL_LABELS:
         path = harmonic / "predictions" / f"{label}_{CASE_SEED}_harmonic_predictions.npz"
         if not path.is_file():
             raise FileNotFoundError(f"模型 {label} seed {CASE_SEED} prediction 不存在: {path}")
         prediction_paths.append(path)
-        prediction_manifests.append(
-            _validate_prediction_provenance(root, path, canonical_rows[(label, CASE_SEED)], labels_path)
+        prediction_manifest, config_evidence = _validate_prediction_provenance(
+            root, path, canonical_rows[(label, CASE_SEED)], labels_path
         )
+        prediction_manifests.append(prediction_manifest)
+        prediction_config_provenance[label] = config_evidence
         prediction_payload = json.loads(prediction_manifests[-1].read_text(encoding="utf-8"))
         prediction_configs.append((root / prediction_payload["config"]).resolve())
         prediction_checkpoints.append((root / prediction_payload["checkpoint"]).resolve())
@@ -668,6 +763,16 @@ def build_case_assets(
     predictions = load_case_predictions(prediction_paths, CASE_ROW_IDS)
     if set(predictions) != set(FORMAL_LABELS):
         raise ValueError(f"case prediction 模型集合不完整: {sorted(predictions)}")
+    config_evidence_gaps = {
+        label: evidence["config_evidence_gap"]
+        for label, evidence in prediction_config_provenance.items()
+        if evidence["config_evidence_gap"] is not None
+    }
+    config_evidence_note = (
+        "；".join(config_evidence_gaps.values())
+        if config_evidence_gaps
+        else "四模型 checkpoint 内嵌 config 与同 run config.yaml 严格一致"
+    )
 
     case_manifest_path = harmonic / "figures" / "model_case_manifest.csv"
     case_rows = _unique_rows(case_manifest_path, "dataset_row_id", CASE_ROW_IDS)
@@ -751,7 +856,11 @@ def build_case_assets(
         if bcg is None:
             gap_path = output / f"evidence_gap_case_row_{row_id}.json"
             gap_path.write_text(json.dumps({"dataset_row_id": row_id, **gap}, indent=2, ensure_ascii=False), encoding="utf-8")
-            gaps[str(row_id)] = {"path": str(gap_path), **gap}
+            gaps[str(row_id)] = {
+                "gap_record": manifest_file_record(gap_path, root),
+                "source": manifest_file_record(Path(gap["source_npz"]), root),
+                **{key: value for key, value in gap.items() if key != "source_npz"},
+            }
         _case_figure(
             row_id,
             category,
@@ -761,6 +870,7 @@ def build_case_assets(
             metric_rows,
             correction_by_model,
             thresholds,
+            config_evidence_note,
             bcg,
             gap,
             assets[f"case_row_{row_id}"],
@@ -831,10 +941,12 @@ def build_case_assets(
         },
         "stability": {
             "uncertainty_unit": "seed",
-            "subject_aggregation_source": str(subject_path),
+            "subject_aggregation_source": manifest_file_record(subject_path, root),
             "window_overlap_used_as_independent_ci": False,
         },
         "strata_interpretation": "target-informed retrospective diagnosis; not a validated deployable BCG-only gate",
+        "prediction_config_provenance": prediction_config_provenance,
+        "config_evidence_gaps": config_evidence_gaps,
         "correction_thresholds": thresholds,
         "case_threshold_evidence": case_threshold_evidence,
         "evidence_gaps": gaps,
@@ -886,12 +998,9 @@ def build_case_assets(
     manifest = {
         "generator": "scripts.tho_group_meeting_ppt.case_figures.build_case_assets",
         "metadata": metadata,
-        "sources": [
-            {"path": str(path), "sha256": _sha256(path), "size_bytes": path.stat().st_size}
-            for path in unique_sources
-        ],
+        "sources": [manifest_file_record(path, root) for path in unique_sources],
         "assets": {
-            key: {"path": str(path), "sha256": _sha256(path), "size_bytes": path.stat().st_size}
+            key: manifest_file_record(path, root)
             for key, path in assets.items()
         },
     }

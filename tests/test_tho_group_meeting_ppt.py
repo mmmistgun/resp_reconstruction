@@ -844,14 +844,16 @@ def test_case_assets_identity_rejects_subject_or_stratum_drift(source: str, fiel
 
 
 def _write_prediction_provenance_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+    import torch
     from omegaconf import OmegaConf
 
     run = tmp_path / "runs/model/run"
     run.mkdir(parents=True)
     checkpoint = run / "checkpoint_top1.pt"
-    checkpoint.write_bytes(b"checkpoint")
+    checkpoint_config = {"training": {"seed": 20260837}, "model": {"name": "fixture"}}
+    torch.save({"config": checkpoint_config, "epoch": 1}, checkpoint)
     config = run / "config.yaml"
-    OmegaConf.save(OmegaConf.create({"training": {"seed": 20260837}}), config)
+    OmegaConf.save(OmegaConf.create(checkpoint_config), config)
     labels = tmp_path / "labels.csv"
     labels.write_text("dataset_row_id,samp_id\n10,220\n", encoding="utf-8")
     prediction = tmp_path / "time_20260837_harmonic_predictions.npz"
@@ -884,7 +886,10 @@ def _write_prediction_provenance_fixture(tmp_path: Path) -> tuple[Path, Path, di
     return prediction, labels, canonical
 
 
-@pytest.mark.parametrize("tamper", ("missing_checkpoint_hash", "bad_labels_hash", "config_outside_run", "wrong_config_seed"))
+@pytest.mark.parametrize(
+    "tamper",
+    ("missing_checkpoint_hash", "bad_labels_hash", "bad_config_hash", "config_outside_run", "wrong_config_seed"),
+)
 def test_case_prediction_provenance_rejects_missing_hash_or_tampering(tmp_path: Path, tamper: str):
     from omegaconf import OmegaConf
 
@@ -897,6 +902,8 @@ def test_case_prediction_provenance_rejects_missing_hash_or_tampering(tmp_path: 
         payload.pop("checkpoint_sha256")
     elif tamper == "bad_labels_hash":
         payload["labels_sha256"] = "0" * 64
+    elif tamper == "bad_config_hash":
+        payload["config_sha256"] = "0" * 64
     elif tamper == "config_outside_run":
         outside = tmp_path / "other.yaml"
         outside.write_text("training:\n  seed: 20260837\n", encoding="utf-8")
@@ -908,6 +915,45 @@ def test_case_prediction_provenance_rejects_missing_hash_or_tampering(tmp_path: 
 
     with pytest.raises(ValueError, match=r"time.*(hash|config|seed).*(manifest|yaml|labels|checkpoint)"):
         _validate_prediction_provenance(tmp_path, prediction, canonical, labels)
+
+
+def test_case_prediction_provenance_rejects_disk_config_drift_against_checkpoint(tmp_path: Path):
+    from omegaconf import OmegaConf
+
+    from scripts.tho_group_meeting_ppt.case_figures import _validate_prediction_provenance
+
+    prediction, labels, canonical = _write_prediction_provenance_fixture(tmp_path)
+    manifest = json.loads(
+        prediction.with_name(f"{prediction.stem}_manifest.json").read_text(encoding="utf-8")
+    )
+    config = tmp_path / manifest["config"]
+    drift = OmegaConf.load(config)
+    OmegaConf.update(drift, "model.name", "drifted", merge=False)
+    OmegaConf.save(drift, config)
+
+    with pytest.raises(ValueError, match=r"time.*checkpoint.*embedded config.*config\.yaml"):
+        _validate_prediction_provenance(tmp_path, prediction, canonical, labels)
+
+
+def test_case_prediction_provenance_records_gap_when_no_config_hash_or_checkpoint_config(tmp_path: Path):
+    import torch
+
+    from scripts.tho_group_meeting_ppt.case_figures import _validate_prediction_provenance
+
+    prediction, labels, canonical = _write_prediction_provenance_fixture(tmp_path)
+    manifest_path = prediction.with_name(f"{prediction.stem}_manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    checkpoint = tmp_path / manifest["checkpoint"]
+    torch.save({"epoch": 1}, checkpoint)
+    manifest["checkpoint_sha256"] = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    manifest.pop("config_sha256", None)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    _, evidence = _validate_prediction_provenance(tmp_path, prediction, canonical, labels)
+
+    assert evidence["config_evidence_status"] == "path_and_seed_crosscheck_only"
+    assert "缺少生成时 config hash" in evidence["config_evidence_gap"]
+    assert "不能证明内容未漂移" in evidence["config_evidence_gap"]
 
 
 @pytest.mark.parametrize(
@@ -1011,6 +1057,28 @@ def test_case_assets_builds_real_delta_stability_strata_and_complete_cases(tmp_p
     assert any(name.endswith("config.yaml") for name in source_names)
     assert any(name.endswith("harmonic_predictions_manifest.json") for name in source_names)
     assert any(name.endswith("harmonic_predictions.npz") for name in source_names)
+    assert metadata["prediction_config_provenance"]
+    assert all(
+        item["config_evidence_status"] == "checkpoint_embedded_config_match"
+        for item in metadata["prediction_config_provenance"].values()
+    )
+    assert metadata["config_evidence_gaps"] == {}
+    assert metadata["stability"]["subject_aggregation_source"]["scope"] == "repo"
+    assert not Path(metadata["stability"]["subject_aggregation_source"]["path"]).is_absolute()
+    for item in metadata["prediction_config_provenance"].values():
+        assert item["prediction_manifest_config_sha256_present"] is False
+        assert item["checkpoint_embedded_config_present"] is True
+        assert item["config"]["scope"] == "repo"
+        assert item["checkpoint"]["scope"] == "repo"
+        assert not Path(item["config"]["path"]).is_absolute()
+        assert not Path(item["checkpoint"]["path"]).is_absolute()
+    for record in [*manifest["sources"], *manifest["assets"].values()]:
+        if record["scope"] == "repo":
+            assert not Path(record["path"]).is_absolute()
+            assert ".." not in Path(record["path"]).parts
+        else:
+            assert record["scope"] == "external"
+            assert Path(record["path"]).is_absolute()
     for key, path in assets.items():
         assert path.name == f"{key}.png"
         assert manifest["assets"][key]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
@@ -1018,6 +1086,31 @@ def test_case_assets_builds_real_delta_stability_strata_and_complete_cases(tmp_p
             assert image.width >= 1800 and image.height >= 1000
             assert image.convert("L").getbbox() is not None
     assert all(length == 18_000 for length in metadata["case_prediction_lengths"].values())
+
+
+def test_case_manifest_repo_records_resolve_after_checkout_root_moves(tmp_path: Path):
+    import shutil
+
+    from scripts.tho_group_meeting_ppt.case_figures import resolve_manifest_record
+
+    manifest_path = (
+        REPO_ROOT
+        / "docs/stage_reports/20260708/generated_assets/discussion/case_assets_manifest.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    records = [
+        next(record for record in manifest["sources"] if record["path"].endswith("case_figures.py")),
+        manifest["assets"]["case_row_3584"],
+    ]
+    moved_root = tmp_path / "moved-checkout"
+    for record in records:
+        source = resolve_manifest_record(record, REPO_ROOT)
+        moved = moved_root / record["path"]
+        moved.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, moved)
+        resolved = resolve_manifest_record(record, moved_root)
+        assert resolved == moved.resolve()
+        assert hashlib.sha256(resolved.read_bytes()).hexdigest() == record["sha256"]
 
 
 @pytest.mark.parametrize(
