@@ -99,6 +99,57 @@ def test_signal_assets_bandenergy_uses_repository_overlapping_inclusive_bands():
         assert energies[idx] == pytest.approx(expected)
 
 
+def test_signal_assets_footer_layout_stays_inside_and_clear_of_xlabels():
+    import matplotlib.pyplot as plt
+
+    from scripts.tho_group_meeting_ppt.signal_figures import (
+        create_figure_with_footer,
+        validate_figure_text_layout,
+    )
+
+    fig, axes, footer = create_figure_with_footer(
+        rows=2,
+        columns=2,
+        footer_text="Parameters come from provenance; this is a sufficiently long evidence note.",
+        sharex=True,
+    )
+    for index, axis in enumerate(axes.flat):
+        axis.plot([0, 1], [index, index + 1])
+        axis.set_title(f"Panel {index + 1}")
+        axis.set_xlabel("Time in window (s)")
+        axis.set_ylabel("Amplitude")
+
+    status = axes.flat[0].text(3.0, 0.5, "Critical status", transform=axes.flat[0].transAxes)
+    outside_report = validate_figure_text_layout(fig, footer, axes.flat)
+    assert outside_report["all_key_text_inside"] is False
+    status.set_position((0.5, 0.5))
+
+    report = validate_figure_text_layout(fig, footer, axes.flat)
+
+    assert report["all_key_text_inside"] is True
+    assert report["footer_overlaps_xlabels"] == 0
+    plt.close(fig)
+
+
+def test_signal_assets_softz_explanation_limits_single_point_operator_claims():
+    from scripts.tho_group_meeting_ppt.signal_figures import softz_explanation
+
+    title, note = softz_explanation(
+        knee=6.0,
+        scale=2.0,
+        ramp_s=5.0,
+        max_abs_before=2.473841,
+        changed_samples=0,
+    )
+
+    text = f"{title}\n{note}"
+    assert "保留排序" not in text
+    assert "full-weight" in text
+    assert "raw + w(t)" in text
+    assert "未触发压缩" in text
+    assert "0 samples changed" in text
+
+
 def test_signal_assets_preprocessing_gap_records_missing_fields_without_fake_curves(tmp_path: Path):
     from types import SimpleNamespace
 
@@ -161,6 +212,8 @@ def test_signal_assets_builds_five_readable_real_evidence_figures(tmp_path: Path
     assert metadata["f0_frames"] == 37
     assert metadata["wide_frames"] == 73
     assert metadata["wide_frequency_resolution_hz"] == pytest.approx(0.05)
+    assert metadata["softz_changed_samples"] == 0
+    assert metadata["softz_max_abs_before"] == pytest.approx(2.473841, abs=1e-6)
     for path in assets.values():
         assert path.is_file() and path.stat().st_size > 20_000
         with Image.open(path) as image:

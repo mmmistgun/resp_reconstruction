@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
+from matplotlib.text import Text
 import numpy as np
 from omegaconf import OmegaConf
 import torch
@@ -287,6 +288,11 @@ def _plot_style() -> None:
 
 def _save(fig: plt.Figure, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    footer = getattr(fig, "_signal_footer_artist", None)
+    panel_axes = getattr(fig, "_signal_panel_axes", fig.axes)
+    report = validate_figure_text_layout(fig, footer, panel_axes)
+    if not report["all_key_text_inside"] or report["footer_overlaps_xlabels"]:
+        raise ValueError(f"图中文字布局越界或重叠: {path.name}: {report}")
     fig.savefig(path, dpi=120, facecolor="white")
     plt.close(fig)
 
@@ -295,8 +301,90 @@ def _new_figure(*, rows: int = 1, columns: int = 1, **kwargs: Any):
     return plt.subplots(rows, columns, figsize=(18, 10), constrained_layout=True, **kwargs)
 
 
+def create_figure_with_footer(
+    *,
+    rows: int,
+    columns: int,
+    footer_text: str,
+    panel_gridspec_kw: Mapping[str, Any] | None = None,
+    **subplot_kwargs: Any,
+) -> tuple[plt.Figure, Any, Text]:
+    """用独立 GridSpec 行承载底注，避免底注与 x-label 争用画布空间。"""
+    fig = plt.figure(figsize=(18, 10), constrained_layout=True)
+    outer = fig.add_gridspec(2, 1, height_ratios=(1.0, 0.075), hspace=0.025)
+    panels = outer[0].subgridspec(rows, columns, **dict(panel_gridspec_kw or {}))
+    axes = panels.subplots(**subplot_kwargs)
+    footer_axis = fig.add_subplot(outer[1])
+    footer_axis.axis("off")
+    footer = footer_axis.text(
+        0.01,
+        0.5,
+        footer_text,
+        transform=footer_axis.transAxes,
+        ha="left",
+        va="center",
+        fontsize=11,
+        color="black",
+        wrap=True,
+    )
+    panel_axes = np.atleast_1d(axes).reshape(-1).tolist()
+    fig._signal_footer_artist = footer  # type: ignore[attr-defined]
+    fig._signal_panel_axes = panel_axes  # type: ignore[attr-defined]
+    return fig, axes, footer
+
+
+def validate_figure_text_layout(
+    fig: plt.Figure,
+    footer: Text | None,
+    panel_axes: Sequence[Any],
+) -> dict[str, Any]:
+    """用渲染后的 bbox 检查标题/轴标/图例/底注是否越界或互相覆盖。"""
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    figure_box = fig.bbox
+    key_text: list[Text] = []
+    if fig._suptitle is not None:
+        key_text.append(fig._suptitle)
+    if footer is not None:
+        key_text.append(footer)
+    for axis in fig.axes:
+        key_text.extend((axis.title, axis.xaxis.label, axis.yaxis.label))
+        key_text.extend(axis.texts)
+        legend = axis.get_legend()
+        if legend is not None:
+            key_text.extend(legend.get_texts())
+    key_text = [artist for artist in key_text if artist.get_visible() and artist.get_text().strip()]
+    outside: list[str] = []
+    for artist in key_text:
+        box = artist.get_window_extent(renderer)
+        if (
+            box.x0 < figure_box.x0 - 1
+            or box.y0 < figure_box.y0 - 1
+            or box.x1 > figure_box.x1 + 1
+            or box.y1 > figure_box.y1 + 1
+        ):
+            outside.append(artist.get_text())
+    overlaps = 0
+    if footer is not None:
+        footer_box = footer.get_window_extent(renderer)
+        for axis in panel_axes:
+            label = axis.xaxis.label
+            if label.get_visible() and label.get_text().strip():
+                overlaps += int(footer_box.overlaps(label.get_window_extent(renderer)))
+    return {
+        "all_key_text_inside": not outside,
+        "outside_text": outside,
+        "footer_overlaps_xlabels": overlaps,
+    }
+
+
 def _plot_signal_overview(signal: Mapping[str, np.ndarray], metadata: Mapping[str, Any], path: Path) -> None:
-    fig, axes = _new_figure(rows=3, sharex=True)
+    fig, axes, _ = create_figure_with_footer(
+        rows=3,
+        columns=1,
+        sharex=True,
+        footer_text="dataset_row_id=8025；黄色区域仅用于放大观察，不改变模型的 180 s 输入。",
+    )
     time = signal["time_sec_full"]
     series = (
         ("BCG 模型输入（soft-z）", signal["bcg_input_full"], _COLORS[0]),
@@ -313,7 +401,6 @@ def _plot_signal_overview(signal: Mapping[str, np.ndarray], metadata: Mapping[st
         axis.grid(alpha=0.2)
     axes[-1].set_xlabel("整窗内时间（s）")
     fig.suptitle("同一真实 180 s 验证窗：从 BCG 输入到 THO 参考与 F0 输出", fontsize=22)
-    fig.text(0.01, 0.005, "dataset_row_id=8025；黄色区域仅用于放大观察，不改变模型的 180 s 输入。", color="black")
     _save(fig, path)
 
 
@@ -334,7 +421,22 @@ def _gap_panel(path: Path, title: str) -> None:
 
 
 def _plot_preprocessing(window: PreprocessingWindow, path: Path) -> None:
-    fig, axes = _new_figure(rows=2, columns=2, sharex=True)
+    params = window.softz_params
+    bcg_stats = (
+        f"BCG 本窗 center 中位数={window.bcg_center_median:.3g}, scale 中位数={window.bcg_scale_median:.3g}"
+        if window.bcg_center_median is not None and window.bcg_scale_median is not None
+        else "BCG center/scale 数组未提供"
+    )
+    footer = (
+        f"{bcg_stats}；THO soft-z：{params['method']}, knee={params['knee_abs']}, "
+        f"scale={params['scale_abs']}, ramp={params['ramp_s']} s（参数来自 dataset provenance）。"
+    )
+    fig, axes, _ = create_figure_with_footer(
+        rows=2,
+        columns=2,
+        sharex=True,
+        footer_text=footer,
+    )
     time = np.arange(window.bcg_raw.size) / window.sample_rate_hz
     panels = (
         (axes[0, 0], window.bcg_raw, "BCG 原始对齐 rawish", "原幅值（a.u.）", _COLORS[0]),
@@ -349,20 +451,7 @@ def _plot_preprocessing(window: PreprocessingWindow, path: Path) -> None:
         axis.grid(alpha=0.2)
     axes[1, 0].set_xlabel("窗口内时间（s）")
     axes[1, 1].set_xlabel("窗口内时间（s）")
-    params = window.softz_params
-    bcg_stats = (
-        f"BCG 本窗 center 中位数={window.bcg_center_median:.3g}, scale 中位数={window.bcg_scale_median:.3g}"
-        if window.bcg_center_median is not None and window.bcg_scale_median is not None
-        else "BCG center/scale 数组未提供"
-    )
     fig.suptitle("真实 row 8025 预处理前后对照（切片 90–270 s）", fontsize=22)
-    fig.text(
-        0.01,
-        0.005,
-        f"{bcg_stats}；THO soft-z：{params['method']}, knee={params['knee_abs']}, "
-        f"scale={params['scale_abs']}, ramp={params['ramp_s']} s（参数来自 dataset provenance）。",
-        color="black",
-    )
     _save(fig, path)
 
 
@@ -375,44 +464,87 @@ def _soft_compression(values: np.ndarray, *, knee: float, scale: float) -> np.nd
     return (np.sign(values) * output).astype(np.float32)
 
 
+def softz_explanation(
+    *,
+    knee: float,
+    scale: float,
+    ramp_s: float,
+    max_abs_before: float,
+    changed_samples: int,
+) -> tuple[str, str]:
+    """生成不超出单点算子证据边界的 soft-z 标题和说明。"""
+    title = "soft-z：full-weight 单点压缩算子与本窗真实配对结果"
+    trigger = (
+        f"本窗 max|robust-z|={max_abs_before:.6f}<knee={knee:g}，未触发压缩 / "
+        f"{changed_samples} samples changed。"
+    )
+    note = (
+        f"左图仅示意 w=1 时的 full-weight 单点算子：|z|>{knee:g} 后按 log1p_tail(scale={scale:g}) 压缩。"
+        f"真实算法为 normalized = raw + w(t)·(compressed-raw)，w(t) 由 extreme-motion mask 与 {ramp_s:g} s ramp 决定；"
+        f"不能由单点映射推出全局排序。{trigger}"
+    )
+    return title, note
+
+
 def _plot_softz(window: PreprocessingWindow, path: Path) -> None:
     params = window.softz_params
     knee, scale = float(params["knee_abs"]), float(params["scale_abs"])
+    delta = window.tho_soft.astype(np.float64) - window.tho_robust.astype(np.float64)
+    changed_samples = int(np.count_nonzero(delta != 0.0))
+    max_abs_before = float(np.max(np.abs(window.tho_robust)))
+    title, note = softz_explanation(
+        knee=knee,
+        scale=scale,
+        ramp_s=float(params["ramp_s"]),
+        max_abs_before=max_abs_before,
+        changed_samples=changed_samples,
+    )
     max_abs = max(knee + 2, float(np.nanpercentile(np.abs(window.tho_robust), 99.9)))
     x = np.linspace(-max_abs, max_abs, 1200)
     y = _soft_compression(x, knee=knee, scale=scale)
-    fig, axes = _new_figure(rows=1, columns=2)
+    fig, axes, _ = create_figure_with_footer(
+        rows=1,
+        columns=2,
+        footer_text=note,
+    )
     axes[0].plot(x, x, linestyle="--", color="black", linewidth=1.2, label="不压缩 y=x")
     axes[0].plot(x, y, color=_COLORS[3], linewidth=2.5, label="log1p_tail 映射")
     axes[0].axvline(-knee, color=_COLORS[1], linestyle=":")
     axes[0].axvline(knee, color=_COLORS[1], linestyle=":", label=f"knee=±{knee:g}")
-    axes[0].set(xlabel="输入 robust-z", ylabel="压缩后 z", title="确定性尾部压缩算子")
+    axes[0].set(xlabel="输入 robust-z", ylabel="full-weight 压缩后 z", title="单点算子示意（w=1）")
     axes[0].grid(alpha=0.2)
     axes[0].legend(frameon=False)
-    bins = np.linspace(
-        min(float(window.tho_robust.min()), float(window.tho_soft.min())),
-        max(float(window.tho_robust.max()), float(window.tho_soft.max())),
-        100,
-    )
-    axes[1].hist(window.tho_robust, bins=bins, density=True, histtype="step", linewidth=2, color=_COLORS[1], label="实际 THO robust-z")
-    axes[1].hist(window.tho_soft, bins=bins, density=True, histtype="step", linewidth=2, color=_COLORS[3], label="实际 THO soft-z")
-    axes[1].set(xlabel="z 值", ylabel="密度", title="row 8025 分布前后（真实数组）")
-    axes[1].set_yscale("log")
-    axes[1].grid(alpha=0.2)
-    axes[1].legend(frameon=False)
-    fig.suptitle("soft-z 如何保留排序并收缩极端尾部", fontsize=22)
-    fig.text(
-        0.01,
-        0.005,
-        f"|z|≤{knee:g}: y=z；|z|>{knee:g}: |y|={knee:g}+{scale:g}·log(1+(|z|-{knee:g})/{scale:g})。"
-        f"Stage E 参数还包含 ramp={params['ramp_s']} s；右图直接读取最终资产，不反推 mask。",
+    time = np.arange(delta.size, dtype=np.float64) / window.sample_rate_hz
+    axes[1].plot(time, delta, color=_COLORS[3], linewidth=1.2)
+    if changed_samples == 0:
+        axes[1].set_ylim(-0.05, 0.05)
+    axes[1].text(
+        0.5,
+        0.88,
+        f"未触发压缩 / {changed_samples} samples changed\nmax|robust-z|={max_abs_before:.6f} < knee={knee:g}",
+        transform=axes[1].transAxes,
+        ha="center",
+        va="top",
         color="black",
+        fontsize=15,
     )
+    axes[1].set(
+        xlabel="窗口内时间（s）",
+        ylabel="soft-z − robust-z",
+        title="row 8025 真实逐样本配对差值",
+    )
+    axes[1].grid(alpha=0.2)
+    fig.suptitle(title, fontsize=22)
     _save(fig, path)
 
 
 def _plot_stft_comparison(f0: StftLogMagnitude, wide: StftLogMagnitude, path: Path) -> None:
-    fig, axes = _new_figure(rows=1, columns=2, sharey=True)
+    fig, axes, _ = create_figure_with_footer(
+        rows=1,
+        columns=2,
+        sharey=True,
+        footer_text="两图均为 torch.stft + Hann window + center=True；没有使用 specgram 默认参数。",
+    )
     for axis, result, name in ((axes[0], f0, "F0 正式 STFT"), (axes[1], wide, "G3-C wide STFT")):
         mesh = axis.pcolormesh(result.times_sec, result.frequencies_hz, result.log_magnitude, shading="auto", cmap="magma")
         axis.set_title(
@@ -426,13 +558,17 @@ def _plot_stft_comparison(f0: StftLogMagnitude, wide: StftLogMagnitude, path: Pa
         colorbar = fig.colorbar(mesh, ax=axis, pad=0.01)
         colorbar.set_label("log1p(|STFT|)", color="black")
     fig.suptitle("同一真实 BCG 输入：频率分辨率与时间帧密度的取舍", fontsize=22)
-    fig.text(0.01, 0.005, "两图均为 torch.stft + Hann window + center=True；没有使用 specgram 默认参数。", color="black")
     _save(fig, path)
 
 
 def _plot_bandenergy(wide: StftLogMagnitude, path: Path) -> None:
     energies = bandenergy_from_logmag(wide.log_magnitude, wide.frequencies_hz)
-    fig, (heat_axis, track_axis) = _new_figure(rows=2, gridspec_kw={"height_ratios": [1.3, 1]})
+    fig, (heat_axis, track_axis), _ = create_figure_with_footer(
+        rows=2,
+        columns=1,
+        panel_gridspec_kw={"height_ratios": [1.3, 1]},
+        footer_text="频带边界按 stft_branch.py 纳入端点；重叠意味着边界附近信息可进入相邻两带。",
+    )
     mesh = heat_axis.pcolormesh(wide.times_sec, wide.frequencies_hz, wide.log_magnitude, shading="auto", cmap="magma")
     for index, (low, high) in enumerate(BANDENERGY_BANDS_HZ):
         heat_axis.axhspan(low, high, facecolor=_COLORS[index], edgecolor=_COLORS[index], alpha=0.10, linewidth=1.2)
@@ -445,7 +581,6 @@ def _plot_bandenergy(wide: StftLogMagnitude, path: Path) -> None:
     track_axis.grid(alpha=0.2)
     track_axis.legend(ncol=3, frameon=False, loc="upper right")
     fig.suptitle("bandenergy：把 160 个频率 bin 压缩成 5 条重叠频带轨迹", fontsize=22)
-    fig.text(0.01, 0.005, "频带边界按 stft_branch.py 纳入端点；重叠意味着边界附近信息可进入相邻两带。", color="black")
     _save(fig, path)
 
 
@@ -494,6 +629,14 @@ def build_signal_assets(
         _plot_softz(preprocessing, assets["softz_mapping"])
     _plot_stft_comparison(f0, wide, assets["stft_resolution_comparison"])
     _plot_bandenergy(wide, assets["bandenergy_response"])
+    if preprocessing is None:
+        softz_changed_samples: int | None = None
+        softz_max_abs_before: float | None = None
+        softz_max_abs_after: float | None = None
+    else:
+        softz_changed_samples = int(np.count_nonzero(preprocessing.tho_soft != preprocessing.tho_robust))
+        softz_max_abs_before = float(np.max(np.abs(preprocessing.tho_robust)))
+        softz_max_abs_after = float(np.max(np.abs(preprocessing.tho_soft)))
     metadata = {
         "dataset_row_id": int(catalog.general_sample_row_id),
         "signal_length": signal_length,
@@ -504,6 +647,9 @@ def build_signal_assets(
         "wide_frequency_resolution_hz": float(wide.frequency_resolution_hz),
         "stft_center": True,
         "preprocessing_evidence_gap": preprocessing is None,
+        "softz_changed_samples": softz_changed_samples,
+        "softz_max_abs_before": softz_max_abs_before,
+        "softz_max_abs_after": softz_max_abs_after,
     }
     return assets, metadata
 
