@@ -65,41 +65,79 @@
 
 ## 20260708 组会 PPT
 
-本次 THO research v2 阶段组会汇报使用以下输入：
+本轮交付定位为面向首次接触项目听众的研究讨论型汇报：完整讲清任务、数据、预处理、模型、训练、指标、证据、限制与具体决策，不是按时间编排的进度流水账。正文按以下 11 章组织：
 
-- 格式模板：`docs/stage_reports/20260708/组会汇报.pptx`。
-- 内容底稿：`docs/stage_reports/2026-07-08-tho-research-v2-group-meeting-stage-report.md`。
-- 最终文件：`docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx`。
-- 生成入口：`scripts/build_tho_group_meeting_ppt.py`。
+1. 任务与信号直觉。
+2. 数据来源与样本形成。
+3. 输入与目标预处理。
+4. 模型输入与计算图。
+5. 训练与损失。
+6. 指标计算与失效场景。
+7. 对照实验设计。
+8. 整体结果与稳定性。
+9. 分层分析与完整案例。
+10. BCG 二次谐波问题。
+11. 研究议题与下一步。
 
-完整生成命令：
+正式模板是 `docs/stage_reports/20260708/组会汇报.pptx`，内容底稿是 `docs/stage_reports/2026-07-08-tho-research-v2-group-meeting-stage-report.md`，最终输出固定为 `docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx`。成品共 65 页；流程、公式、文字和表格等主体内容是 PowerPoint native editable 对象，并引用 19 张经 manifest 校验的证据图和 5 张三线表。
+
+### 证据目录与资产
+
+`scripts/tho_group_meeting_ppt/evidence.py` 负责解析并校验正式 run config、canonical test manifest、二次谐波证据和代表性信号。任务 3–6 的四个 builder 及其冻结清单是：
+
+- `signal_figures.py::build_signal_assets` → `signal_assets_manifest.json`。
+- `model_figures.py::build_model_assets` → `model_assets_manifest.json`。
+- `metric_figures.py::build_metric_assets` → `metric_assets_manifest.json`。
+- `case_figures.py::build_case_assets` → `case_assets_manifest.json`。
+
+四份 manifest 均位于 `docs/stage_reports/20260708/generated_assets/discussion/`；组装前会校验 19 张图的路径、SHA-256 和关键上游证据，不接受静默替换。
+
+### 生成命令与 CLI 边界
+
+默认 CLI 直接生成上述正式文件：
 
 ```bash
 ./.venv/bin/python scripts/build_tho_group_meeting_ppt.py
 ```
 
-只重新生成数据图表：
+若资产源已更新，先刷新四份资产清单及 19 张图，再组装正式 PPT：
 
 ```bash
-./.venv/bin/python scripts/build_tho_group_meeting_ppt.py --charts-only
+./.venv/bin/python scripts/build_tho_group_meeting_ppt.py --assets-only
+./.venv/bin/python scripts/build_tho_group_meeting_ppt.py
 ```
 
-生成器从当前口径结果文件读取整体指标、长尾统计、分层结果和二次谐波结果，主要来源包括：
+`--evidence-only`、`--assets-only`、`--discussion-deck`、`--legacy-summary` 和 `--charts-only` 是互斥模式。其中 `--evidence-only` 只审计并打印证据目录，`--assets-only` 只刷新任务 3–6 资产，`--discussion-deck` 是与默认正式生成等价的显式模式，`--legacy-summary` 只保留旧 25 页摘要入口，`--charts-only` 也只服务旧摘要图表。不应把后两者当作正式交付的默认流程。
 
-- `runs/test_eval_g_series_20260709_local_rr_canonical/`。
-- `runs/bcg_second_harmonic_20260710/test_v2/`。
-- `runs/bcg_second_harmonic_20260710/model_metrics/`。
-- `runs/bcg_second_harmonic_20260710/corrections/`。
-- `runs/bcg_second_harmonic_20260710/figures/`。
+### 渲染、测试与确定性
 
-渲染检查命令：
+可在独立 LibreOffice profile 中将成品转换为 PDF，避免复用桌面会话状态：
 
 ```bash
-mkdir -p /tmp/tho_group_meeting_render
-HOME=/tmp/lohome XDG_RUNTIME_DIR=/tmp/runtime-marques libreoffice --headless \
-  --convert-to pdf --outdir /tmp/tho_group_meeting_render \
+render_dir="$(mktemp -d /tmp/tho_group_meeting_render.XXXXXX)"
+lo_home="$(mktemp -d /tmp/tho_group_meeting_lohome.XXXXXX)"
+lo_profile="$(mktemp -d /tmp/tho_group_meeting_profile.XXXXXX)"
+runtime_dir="$(mktemp -d /tmp/tho_group_meeting_runtime.XXXXXX)"
+chmod 700 "$runtime_dir"
+HOME="$lo_home" XDG_RUNTIME_DIR="$runtime_dir" SAL_USE_VCLPLUGIN=svp \
+  libreoffice "-env:UserInstallation=file://$lo_profile" --headless --nologo \
+  --nodefault --nofirststartwizard --norestore --convert-to pdf \
+  --outdir "$render_dir" \
   docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx
+pdfinfo "$render_dir/THO_research_v2_阶段进展_组会汇报.pdf" | rg '^Pages:'
 ```
 
-PPT 生成过程只读取现有文档、CSV 和诊断图，不启动训练，不重新评价 checkpoint，不修改数据、
-split、标签、指标口径或历史实验产物。长时间训练和正式 checkpoint 复评仍由用户按实验计划执行。
+常规回归测试中 LibreOffice integration 默认 skip；需要真实 PDF/PNG 渲染检查时显式执行：
+
+```bash
+RUN_LIBREOFFICE_INTEGRATION=1 ./.venv/bin/python -m pytest \
+  tests/test_tho_group_meeting_ppt.py tests/test_rr_peak_band_metric_demo_ppt.py
+```
+
+最近一次显式 LibreOffice integration 验证为 `104 passed`（约 116 s）。生成器会固定 ZIP 成员排序、时间戳、平台属性和压缩方式，并清理模板残留的 `docProps/core.xml` / `docProps/app.xml` metadata；连续 build 必须产生相同 SHA-256，并与正式文件一致。
+
+### 科研边界与未解决证据缺口
+
+当前数据 provenance 仍缺少 `dirty=false` 的数据制作 commit 与据此重新导出的 manifest；该缺口尚未解决，不得将现有证据改写为已经具备完全干净的数据制作链。
+
+本轮没有启动训练，没有重评 checkpoint，没有修改数据、split、标签或核心指标口径。新增 lag trace 只是为了可视化指标搜索过程而抽取的中间量，保持既有 lag-aware 指标数值不变，不构成指标口径变更。
