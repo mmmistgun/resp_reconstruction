@@ -110,7 +110,7 @@ DISCUSSION_UNITS = (
     ),
     _u(
         "index_to_window", "数据来源与样本形成", "索引行把整晚记录变成固定窗口样本", "一个 dataset row 如何形成？",
-        method_steps=("从 index 读取 subject、split 与起止时间。", "定位受试者 NPZ。", "按字段键和时间范围切片。", "返回波形、mask 与 metadata。"),
+        method_steps=("从 index 读取 subject、split 与起止时间。", "定位受试者 NPZ。", "按字段键和时间范围切片。", "返回完整输入/目标波形、RR 评价 mask 与 metadata。"),
         parameters=("window_start_s/window_end_s 决定切片。", "每窗期望 18,000 点。"),
         rationale=("索引把样本选择与信号存储解耦，便于审计。",),
         limits=("同一受试者的相邻窗口高度重叠。",),
@@ -167,13 +167,14 @@ DISCUSSION_UNITS = (
         sources=(f"{REPORT}#归一化和软压缩",),
     ),
     _u(
-        "target_soft_z_and_mask", "输入与目标预处理", "目标 soft-z 与有效 mask 共同定义监督范围", "目标如何变成可学习信号？",
-        method_steps=("按 THO amplitude segment 估计稳健统计。", "对极端体动及过渡区做软压缩。", "读取有效 mask 并仅在允许位置形成监督。"),
-        parameters=("soft scale/knee/limit 为 2/6/10。", "体动过渡 5 秒。"),
-        rationale=("统一目标尺度并避免低质量区给出强监督。",),
-        limits=("目标侧处理在推理不可用；依赖目标的诊断不能直接变成在线 gate。",),
-        discussion_prompt="目标 mask 是否应区分无监督、低置信监督和可靠监督三个等级？",
-        visual_keys=("target_mask_pipeline",), sources=(f"{REPORT}#归一化和软压缩", "resp_train/data/research_v2.py"),
+        "target_soft_z_and_mask", "输入与目标预处理", "目标 soft-z、整窗筛选与 RR mask 是三条不同链路", "目标和质量标记实际如何进入训练与评价？",
+        method_steps=("按 THO amplitude segment 估计稳健统计并做 soft-z 压缩。", "用 allowed_losses、reason、hard-valid ratio 与 state-alignment-valid ratio 做整窗筛选。", "Dataset 返回完整 target 波形，训练引擎将其原样交给 WeakSyncLoss。", "rr_peak_valid_mask 随 metadata 进入预测产物，仅供 masked raw peak RR 评价及有效比例/连续有效段统计。"),
+        parameters=("soft scale/knee/limit 为 2/6/10。", "整窗 hard-valid 与 state-alignment-valid 门槛均为 0.80。"),
+        rationale=("区分样本准入、完整波形监督和评价 mask，避免把评价期坏段处理误解为 sample-level masked loss。",),
+        evidence=("ResearchV2WindowDataset 返回完整 target 与独立的 rr_peak_valid_mask metadata。", "train_one_epoch 将完整 target 传给 WeakSyncLoss；当前基础 loss 不接收逐点 valid mask。", "evaluate.py 仅在 masked raw peak RR 路径使用 rr_peak_valid_mask，并另外输出 valid ratio 与 segment count。"),
+        limits=("完整 target 波形中的局部低质量仍会进入当前基础训练损失；若未来引入逐点 mask，属于训练语义变更，必须重新验证。",),
+        discussion_prompt="是否需要另做显式逐点置信监督消融，而不是把现有 RR 评价 mask 直接复用到 loss？",
+        visual_keys=("target_mask_pipeline",), sources=("resp_train/data/research_v2.py", "resp_train/engine/train.py", "resp_train/losses/weak.py", "resp_train/metrics/evaluate.py"),
     ),
 
     # 4. 模型输入与计算图
@@ -237,6 +238,7 @@ DISCUSSION_UNITS = (
     _u(
         "composite_loss_goal", "训练与损失", "复合损失约束任务性质而非逐点复刻", "为什么没有把 MSE 作为唯一目标？",
         method_steps=("分别计算包络、频谱、平滑、高频、相对包络和方向项。", "按配置权重相加。", "按 epoch 更新方向项权重。"),
+        parameters=("基础项权重由 configs/tho_research_v2.yaml 冻结，方向项在 epoch 1–6 调度。",),
         rationale=("BCG 与 THO 允许局部相位和形态差异，但节律、强弱与方向仍应一致。",),
         limits=("多项损失可能梯度冲突；当前权重主要来自阶段性经验。",),
         discussion_prompt="是否需要记录各损失梯度夹角，判断复合目标是否互相抵消？",
@@ -357,7 +359,7 @@ DISCUSSION_UNITS = (
     _u(
         "overall_metric_values", "整体结果与稳定性", "整体测试值显示 wide 综合更均衡、bandenergy 局部指标略优", "四方案在统一口径下表现如何？",
         method_steps=("逐窗口计算五类核心指标。", "先汇总到单次训练。", "再对每方案三个 seed 取均值。", "按主护栏与诊断指标共同解释。"),
-        parameters=("wide robust RR mean 0.712186、lag4 corr 0.870774。", "bandenergy count mean 2.054401、local RR MAE 0.773299。"),
+        parameters=("wide robust RR mean 0.712186、lag4 corr 0.870774。", "bandenergy 周期数绝对误差 mean 2.054401，对应 180 秒窗口的周期计数 bpm 误差 0.684800；local RR MAE 0.773299。"),
         evidence=("当前证据账本给出四方案三 seed 的 canonical test 汇总。",),
         rationale=("同时保留节律、计数、形态与局部 RR，避免单指标胜出被误称为全面更好。",),
         limits=("数值是重叠窗口级汇总，不能直接视作受试者级独立重复。",),
@@ -367,6 +369,7 @@ DISCUSSION_UNITS = (
     _u(
         "paired_delta", "整体结果与稳定性", "paired delta 在相同 seed 上隔离方案差异", "均值改善是否来自可配对的训练变化？",
         method_steps=("按训练 seed 配对候选与 time-only。", "逐 seed 计算候选减 baseline。", "检查方向是否一致。", "再报告 delta 均值而非只比较两组均值。"),
+        parameters=("当前每个方案使用 3 个可配对训练 seed。",),
         rationale=("配对可减少初始化难度差异对模型对照的噪声。",),
         evidence=("账本记录 wide 相对 time-only 的 robust RR、count 与 local RR mean delta。",),
         limits=("只有三个 seed，无法可靠估计尾部分布或显著性。",),

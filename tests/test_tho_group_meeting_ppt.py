@@ -505,6 +505,63 @@ def test_discussion_technical_units_are_actionable_and_traceable():
     assert len(high_value) >= 12
 
 
+def test_discussion_units_have_no_blank_scalar_or_tuple_content():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    scalar_fields = ("key", "section", "title", "kind", "question")
+    tuple_fields = ("method_steps", "parameters", "rationale", "evidence", "limits", "visual_keys", "sources")
+    for unit in DISCUSSION_UNITS:
+        assert all(isinstance(getattr(unit, name), str) and getattr(unit, name).strip() for name in scalar_fields), unit.key
+        for name in tuple_fields:
+            assert all(isinstance(value, str) and value.strip() for value in getattr(unit, name)), (unit.key, name)
+        if unit.discussion_prompt is not None:
+            assert isinstance(unit.discussion_prompt, str) and unit.discussion_prompt.strip(), unit.key
+
+
+def test_high_value_discussion_units_have_complete_decision_context():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    by_key = {unit.key: unit for unit in DISCUSSION_UNITS}
+    required_keys = {
+        "target_soft_z_and_mask",
+        "patchmixer_token_shape",
+        "composite_loss_goal",
+        "metric_robust_rr",
+        "paired_delta",
+        "seed_stability",
+        "harmonic_correction",
+    }
+    assert required_keys <= by_key.keys()
+    for key in required_keys:
+        unit = by_key[key]
+        assert len(unit.method_steps) >= 3, key
+        assert sum(len(value.strip()) for value in unit.parameters) >= 8, key
+        assert sum(len(value.strip()) for value in unit.rationale) >= 8, key
+        assert sum(len(value.strip()) for value in unit.limits) >= 8, key
+        assert unit.discussion_prompt is not None and len(unit.discussion_prompt.strip()) >= 8, key
+
+
+def test_target_supervision_unit_distinguishes_window_filter_loss_and_rr_mask():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    unit = next(unit for unit in DISCUSSION_UNITS if unit.key == "target_soft_z_and_mask")
+    text = "\n".join((*unit.method_steps, *unit.parameters, *unit.rationale, *unit.evidence, *unit.limits))
+    assert "整窗筛选" in text
+    assert "完整 target 波形" in text
+    assert "rr_peak_valid_mask" in text
+    assert "RR" in text and "评价" in text
+    assert "仅在允许位置形成监督" not in text
+
+
+def test_overall_count_result_states_cycle_and_bpm_units():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    unit = next(unit for unit in DISCUSSION_UNITS if unit.key == "overall_metric_values")
+    parameters = "\n".join(unit.parameters)
+    assert "2.054401" in parameters and "周期数绝对误差" in parameters
+    assert "0.684800" in parameters and "bpm" in parameters
+
+
 def test_discussion_sources_are_existing_repository_files():
     from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
 
