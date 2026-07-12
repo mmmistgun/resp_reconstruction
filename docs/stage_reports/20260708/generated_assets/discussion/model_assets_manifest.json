@@ -45,8 +45,11 @@
       1,
       18000
     ],
+    "sample_rate_hz": 100.0,
     "patch_len": 256,
     "patch_stride": 128,
+    "patch_duration_sec": 2.56,
+    "stride_duration_sec": 1.28,
     "patch_count": 140,
     "padded_length": 18048,
     "mixer_layers": 2,
@@ -97,6 +100,21 @@
           140
         ],
         "inject_position": "pre_mixer",
+        "fusion_mode": "native_inject",
+        "projection_kernel_size": [
+          1
+        ],
+        "projection_zero_initialized": true,
+        "decoder_token_shape": [
+          "B",
+          140,
+          16
+        ],
+        "full_model_output_shape": [
+          "B",
+          1,
+          18000
+        ],
         "fusion_semantics": "1x1 projection, zero-initialized, additive token injection",
         "zero_and_real_probe_shapes_match": true,
         "config_path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g0_f0_native_stft_pre_mixer/dual/20260629_155803_880047/config.yaml"
@@ -137,6 +155,21 @@
           140
         ],
         "inject_position": "pre_mixer",
+        "fusion_mode": "native_inject",
+        "projection_kernel_size": [
+          1
+        ],
+        "projection_zero_initialized": true,
+        "decoder_token_shape": [
+          "B",
+          140,
+          16
+        ],
+        "full_model_output_shape": [
+          "B",
+          1,
+          18000
+        ],
         "fusion_semantics": "1x1 projection, zero-initialized, additive token injection",
         "zero_and_real_probe_shapes_match": true,
         "config_path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g3_c_wide_8p0/dual/20260630_211450_861579/config.yaml"
@@ -176,6 +209,21 @@
           140
         ],
         "inject_position": "pre_mixer",
+        "fusion_mode": "native_inject",
+        "projection_kernel_size": [
+          1
+        ],
+        "projection_zero_initialized": true,
+        "decoder_token_shape": [
+          "B",
+          140,
+          16
+        ],
+        "full_model_output_shape": [
+          "B",
+          1,
+          18000
+        ],
         "fusion_semantics": "1x1 projection, zero-initialized, additive token injection",
         "zero_and_real_probe_shapes_match": true,
         "config_path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g3_c_bandenergy/dual/20260630_211919_419308/config.yaml"
@@ -225,16 +273,44 @@
         "high_freq": 0.2,
         "relative_envelope": 0.03
       },
-      "disabled_terms": [
+      "scheduled_terms": {
+        "signed_corr": "signed_corr_schedule",
+        "signed_cosine": "signed_cosine_schedule"
+      },
+      "all_weighted_terms": [
+        "envelope",
+        "spectrum",
+        "smooth",
+        "high_freq",
+        "relative_envelope",
+        "signed_corr",
+        "signed_cosine",
         "phase_alignment",
         "band_waveform",
+        "curvature",
         "rhythm",
         "signed_rms_envelope",
         "signed_mean",
         "si_sdr",
         "stft_dist",
         "stft_band_energy",
-        "stft_peak_anchor"
+        "stft_peak_anchor",
+        "fb_aux",
+        "fb_consistency"
+      ],
+      "disabled_terms": [
+        "phase_alignment",
+        "band_waveform",
+        "curvature",
+        "rhythm",
+        "signed_rms_envelope",
+        "signed_mean",
+        "si_sdr",
+        "stft_dist",
+        "stft_band_energy",
+        "stft_peak_anchor",
+        "fb_aux",
+        "fb_consistency"
       ],
       "objects": {
         "envelope": "prediction/target RMS envelope",
@@ -250,7 +326,7 @@
       "token_geometry": {
         "all_key_text_inside": true,
         "text_overlap_count": 0,
-        "checked_text_count": 8
+        "checked_text_count": 10
       },
       "stft_branch_shapes": {
         "all_key_text_inside": true,
@@ -273,8 +349,8 @@
   "assets": {
     "token_geometry": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/token_geometry.png",
-      "sha256": "e9a2a3b158b9cc02cc67ef43a3c7f5b62205d085394900ad1bd1922461787d00",
-      "size_bytes": 148736
+      "sha256": "8d898e55971902f45a18a7f2f52acda50f558c0782b358b703c3488d1ac3acd9",
+      "size_bytes": 178189
     },
     "stft_branch_shapes": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/stft_branch_shapes.png",
@@ -283,8 +359,8 @@
     },
     "loss_schedule": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/loss_schedule.png",
-      "sha256": "3ef592a2112dac1512a09dc4305f4105432b63958821d6a37005d0825c997698",
-      "size_bytes": 251854
+      "sha256": "4722bdd5e238506577fc638ed8f433bb863ce542749dd909eaf7abb7305795ae",
+      "size_bytes": 262987
     }
   }
 }

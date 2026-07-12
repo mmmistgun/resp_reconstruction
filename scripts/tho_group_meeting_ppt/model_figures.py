@@ -16,6 +16,7 @@ from omegaconf import OmegaConf
 import torch
 
 from resp_train.losses.weak import WeakSyncLoss
+from resp_train.models.registry import build_model
 from resp_train.models.stft_branch import STFTEncoder, align_to_time
 from resp_train.models.timeseries import PatchMixer1D
 from scripts.tho_group_meeting_ppt.evidence import EvidenceCatalog, build_evidence_catalog
@@ -132,6 +133,41 @@ def _formal_config(catalog: EvidenceCatalog):
     return anchor
 
 
+def _flatten_config(value: Any, prefix: str = "loss") -> dict[str, Any]:
+    container = OmegaConf.to_container(value, resolve=True)
+    flattened: dict[str, Any] = {}
+
+    def visit(item: Any, path: str) -> None:
+        if isinstance(item, dict):
+            for key in sorted(item):
+                visit(item[key], f"{path}.{key}")
+        elif isinstance(item, list):
+            flattened[path] = tuple(item)
+        else:
+            flattened[path] = item
+
+    visit(container, prefix)
+    return flattened
+
+
+def validate_formal_loss_configs(catalog: EvidenceCatalog) -> Path:
+    """逐字段核对四份正式 G resolved config 的全部 loss 配置。"""
+    anchor_label = "g0_time_only"
+    anchor_path = catalog.run_configs[anchor_label].path
+    anchor = _flatten_config(OmegaConf.load(anchor_path).loss)
+    for label, config in catalog.run_configs.items():
+        current = _flatten_config(OmegaConf.load(config.path).loss)
+        for field in sorted(set(anchor) | set(current)):
+            expected = anchor.get(field, "<missing>")
+            actual = current.get(field, "<missing>")
+            if actual != expected:
+                raise ValueError(
+                    f"正式 G loss 配置漂移: label={label}; field={field}; "
+                    f"actual={actual!r}; expected={expected!r}; path={config.path}"
+                )
+    return anchor_path
+
+
 def _token_metadata(catalog: EvidenceCatalog) -> dict[str, Any]:
     config = _formal_config(catalog)
     model = PatchMixer1D(
@@ -149,8 +185,11 @@ def _token_metadata(catalog: EvidenceCatalog) -> dict[str, Any]:
         raise RuntimeError("PatchMixer1D 的 forward、token_count_for_length 与公式核对失败")
     return {
         "input_shape": ["B", 1, length],
+        "sample_rate_hz": 100.0,
         "patch_len": config.patch_len,
         "patch_stride": config.patch_stride,
+        "patch_duration_sec": config.patch_len / 100.0,
+        "stride_duration_sec": config.patch_stride / 100.0,
         "patch_count": token_count,
         "padded_length": padded_length,
         "mixer_layers": config.mixer_layers,
@@ -160,16 +199,25 @@ def _token_metadata(catalog: EvidenceCatalog) -> dict[str, Any]:
 
 
 def _stft_probe(config, token_count: int) -> dict[str, Any]:
-    encoder = STFTEncoder(
-        sample_rate=100.0,
-        stft_win=config.stft_win,
-        stft_hop=config.stft_hop,
-        low_hz=config.stft_low_hz,
-        high_hz=config.stft_high_hz,
-        out_channels=config.base_channels,
-        norm="n0",
-        encoder_type=config.stft_encoder_type,
+    cfg = OmegaConf.load(config.path)
+    model = build_model(cfg).cpu().eval()
+    encoder = model.stft_encoder
+    if not isinstance(encoder, STFTEncoder):
+        raise TypeError(f"正式 G STFT encoder 类型异常: {config.path}: {type(encoder).__name__}")
+    if model.fusion_mode != "native_inject" or model.stft_inject_position != "pre_mixer":
+        raise ValueError(
+            f"正式 G 融合语义异常: {config.path}: "
+            f"fusion_mode={model.fusion_mode}, inject={model.stft_inject_position}"
+        )
+    projection = model.stft_proj
+    if projection is None or projection.kernel_size != (1,):
+        raise ValueError(f"正式 G STFT projection 必须是 Conv1d kernel=1: {config.path}")
+    projection_zero = bool(
+        torch.count_nonzero(projection.weight).item() == 0
+        and torch.count_nonzero(projection.bias).item() == 0
     )
+    if not projection_zero:
+        raise ValueError(f"正式 G STFT projection 初始化并非全零: {config.path}")
     zero = torch.zeros(1, 1, 18_000)
     time = torch.arange(18_000, dtype=torch.float32) / 100.0
     real = (torch.sin(2 * torch.pi * 0.23 * time) + 0.2 * torch.sin(2 * torch.pi * 1.1 * time))[None, None]
@@ -182,10 +230,41 @@ def _stft_probe(config, token_count: int) -> dict[str, Any]:
         real[:, 0], n_fft=config.stft_win, hop_length=config.stft_hop,
         win_length=config.stft_win, window=window, center=True, return_complex=True,
     )
+    observed: dict[str, list[int]] = {}
+
+    def record_encoder(_module, _inputs, output) -> None:
+        observed["encoder"] = list(output.shape)
+
+    def record_projection(_module, inputs, output) -> None:
+        observed["aligned"] = list(inputs[0].shape)
+        observed["projection"] = list(output.shape)
+
+    def record_patch_head(_module, inputs) -> None:
+        observed["decoder_tokens"] = list(inputs[0].shape)
+
+    hooks = (
+        encoder.register_forward_hook(record_encoder),
+        projection.register_forward_hook(record_projection),
+        model.time_backbone.patch_head.register_forward_pre_hook(record_patch_head),
+    )
     with torch.no_grad():
         encoded_zero = encoder(zero)
         encoded_real = encoder(real)
         aligned = align_to_time(encoded_real, token_count)
+        full_output = model(real)
+    for hook in hooks:
+        hook.remove()
+    expected_observed = {
+        "encoder": [1, config.base_channels, raw_real.shape[-1]],
+        "aligned": [1, config.base_channels, token_count],
+        "projection": [1, config.base_channels, token_count],
+        "decoder_tokens": [1, token_count, config.base_channels],
+    }
+    if observed != expected_observed or list(full_output.shape) != [1, 1, 18_000]:
+        raise RuntimeError(
+            f"正式 G 完整模型 forward 张量链不一致: {config.path}: "
+            f"observed={observed}, output={list(full_output.shape)}"
+        )
     cropped_shape = ["B", encoder.band_bin_count(), raw_real.shape[-1]]
     encoder_input_channels = encoder.energy_band_count() if config.stft_encoder_type == "bandenergy" else 1
     encoder_input_shape = (
@@ -205,6 +284,11 @@ def _stft_probe(config, token_count: int) -> dict[str, Any]:
         "encoder_output_shape": ["B", encoded_real.shape[1], encoded_real.shape[2]],
         "aligned_token_shape": ["B", aligned.shape[1], aligned.shape[2]],
         "inject_position": config.stft_inject_position,
+        "fusion_mode": model.fusion_mode,
+        "projection_kernel_size": list(projection.kernel_size),
+        "projection_zero_initialized": projection_zero,
+        "decoder_token_shape": ["B", token_count, config.base_channels],
+        "full_model_output_shape": ["B", 1, 18_000],
         "fusion_semantics": "1x1 projection, zero-initialized, additive token injection",
         "zero_and_real_probe_shapes_match": tuple(raw_zero.shape) == tuple(raw_real.shape)
         and tuple(encoded_zero.shape) == tuple(encoded_real.shape),
@@ -233,6 +317,7 @@ def _loss_metadata(formal_config: Path) -> dict[str, Any]:
     optional_fields = {
         "phase_alignment": "phase_alignment_weight",
         "band_waveform": "band_waveform_weight",
+        "curvature": "curvature_weight",
         "rhythm": "rhythm_weight",
         "signed_rms_envelope": "signed_rms_envelope_weight",
         "signed_mean": "signed_mean_weight",
@@ -240,16 +325,22 @@ def _loss_metadata(formal_config: Path) -> dict[str, Any]:
         "stft_dist": "stft_dist_weight",
         "stft_band_energy": "stft_band_energy_weight",
         "stft_peak_anchor": "stft_peak_anchor_weight",
+        "fb_aux": "fb_aux_weight",
+        "fb_consistency": "fb_consistency_weight",
     }
     disabled = [
         name for name, field in optional_fields.items()
         if float(OmegaConf.select(cfg, f"loss.{field}", default=0.0)) == 0.0
     ]
+    scheduled = {"signed_corr": "signed_corr_schedule", "signed_cosine": "signed_cosine_schedule"}
+    all_terms = [*fixed, *scheduled, *disabled]
     return {
         "epochs": list(range(1, 11)),
         "signed_corr": signed_corr,
         "signed_cosine": signed_cosine,
         "fixed_weights": fixed,
+        "scheduled_terms": scheduled,
+        "all_weighted_terms": all_terms,
         "disabled_terms": disabled,
         "objects": {
             "envelope": "prediction/target RMS envelope",
@@ -281,14 +372,23 @@ def _plot_token_geometry(metadata: dict[str, Any], path: Path) -> dict[str, Any]
     for x in xs[:-1]:
         _arrow(ax, (x + 0.132, 0.63), (x + 0.195, 0.63))
 
-    ax.text(0.08, 0.38, "相邻 patch", fontsize=13, fontweight="bold", transform=ax.transAxes, color="black")
+    ax.text(0.08, 0.39, "全窗比例与局部放大", fontsize=13, fontweight="bold", transform=ax.transAxes, color="black")
     base_x, base_y, scale = 0.20, 0.29, 0.62
     ax.add_patch(Rectangle((base_x, base_y), scale, 0.045, facecolor="#E8E8E8", edgecolor="#555555", transform=ax.transAxes))
-    patch_width = scale * metadata["patch_len"] / metadata["padded_length"] * 18
-    stride_width = scale * metadata["patch_stride"] / metadata["padded_length"] * 18
+    patch_width = scale * metadata["patch_len"] / metadata["padded_length"]
+    stride_width = scale * metadata["patch_stride"] / metadata["padded_length"]
+    for idx, color in enumerate(("#5B9BD5", "#ED7D31")):
+        ax.add_patch(Rectangle((base_x + idx * stride_width, base_y), patch_width, 0.045, facecolor=color, alpha=0.82, edgecolor="#333333", transform=ax.transAxes))
+    full_scale_note = ax.text(0.51, 0.35, "180.48 s padded window；彩色 patch/stride 按真实全窗比例", ha="center", va="center", fontsize=9.5, transform=ax.transAxes, color="black")
+    full_scale_note.set_gid("layout-key")
+
+    inset_x, inset_y, local_patch, local_stride = 0.38, 0.225, 0.18, 0.09
+    ax.add_patch(Rectangle((inset_x - 0.03, inset_y - 0.025), 0.43, 0.10, facecolor="white", edgecolor="#777777", linestyle="--", transform=ax.transAxes))
     for idx, color in enumerate(("#5B9BD5", "#ED7D31", "#70AD47")):
-        ax.add_patch(Rectangle((base_x + idx * stride_width, base_y - 0.025 * idx), patch_width, 0.095, facecolor=color, alpha=0.58, edgecolor="#333333", transform=ax.transAxes))
-    note = ax.text(0.5, 0.17, f"padded length = {metadata['padded_length']:,}；N = ({metadata['padded_length']} − {metadata['patch_len']}) / {metadata['patch_stride']} + 1 = {metadata['patch_count']}", ha="center", va="center", fontsize=14, transform=ax.transAxes)
+        ax.add_patch(Rectangle((inset_x + idx * local_stride, inset_y), local_patch, 0.05, facecolor=color, alpha=0.62, edgecolor="#333333", transform=ax.transAxes))
+    local_note = ax.text(0.565, 0.205, f"局部放大（非按全窗比例）：patch={metadata['patch_duration_sec']:.2f} s，stride={metadata['stride_duration_sec']:.2f} s", ha="center", va="top", fontsize=9.5, transform=ax.transAxes)
+    local_note.set_gid("layout-key")
+    note = ax.text(0.5, 0.14, f"padded length = {metadata['padded_length']:,}；N = ({metadata['padded_length']} − {metadata['patch_len']}) / {metadata['patch_stride']} + 1 = {metadata['patch_count']}", ha="center", va="center", fontsize=14, transform=ax.transAxes)
     note.set_gid("layout-key")
     footer = ax.text(0.02, 0.045, "证据：正式 G 系列 resolved config + PatchMixer1D.token_count_for_length + 实际 tokenize_input forward；维度未按示意图猜测。", ha="left", va="bottom", fontsize=10, transform=ax.transAxes)
     footer.set_gid("layout-key")
@@ -346,7 +446,7 @@ def _plot_loss_schedule(schedule: dict[str, Any], path: Path) -> dict[str, Any]:
         for start in range(0, len(disabled_terms), 3)
     )
     _box(info, (0.03, 0.52), (0.94, 0.42), f"固定启用项\n{fixed_lines}", _GREEN)
-    _box(info, (0.03, 0.05), (0.94, 0.36), f"本轮 G 系列关闭（weight=0）\n{disabled}\n它们是代码中的可选机制，不是本轮已训练机制", _GRAY)
+    _box(info, (0.03, 0.02), (0.94, 0.39), f"本轮 G 系列关闭（weight=0；完整枚举）\n{disabled}\n它们是代码中的可选机制，不是本轮已训练机制", _GRAY)
 
     objects.set_axis_off()
     summary = (
@@ -400,6 +500,9 @@ def build_model_assets(repo_root: str | Path, output_dir: str | Path) -> tuple[d
     output.mkdir(parents=True, exist_ok=True)
     catalog = build_evidence_catalog(root)
     anchor = _formal_config(catalog)
+    validated_loss_path = validate_formal_loss_configs(catalog)
+    if validated_loss_path != anchor.path:
+        raise RuntimeError("正式 G loss 锚点与共享模型锚点不一致")
     token = _token_metadata(catalog)
     branches = {
         "f0": _stft_probe(catalog.run_configs["g0_f0_native_stft_pre_mixer"], token["patch_count"]),

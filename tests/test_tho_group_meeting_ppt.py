@@ -1215,3 +1215,115 @@ def test_loss_schedule_is_evaluated_by_weak_sync_loss_from_formal_config(model_a
     assert schedule["fixed_weights"]["spectrum"] == pytest.approx(0.2)
     assert "stft_dist" in schedule["disabled_terms"]
     assert Path(metadata["sources"]["loss_code"]).samefile(REPO_ROOT / "resp_train/losses/weak.py")
+
+
+def test_loss_schedule_classifies_every_weighted_weak_sync_term(model_asset_builds):
+    import ast
+    import inspect
+    import textwrap
+
+    from resp_train.losses.weak import WeakSyncLoss
+
+    (_, metadata), _ = model_asset_builds
+    schedule = metadata["loss_schedule"]
+    expected = {
+        "envelope", "spectrum", "smooth", "high_freq", "relative_envelope",
+        "phase_alignment", "band_waveform", "curvature", "rhythm",
+        "signed_cosine", "signed_corr", "signed_rms_envelope", "signed_mean",
+        "si_sdr", "stft_dist", "stft_band_energy", "stft_peak_anchor",
+        "fb_aux", "fb_consistency",
+    }
+
+    assert set(schedule["all_weighted_terms"]) == expected
+    terms_in_weighted_total = set()
+    for method in (
+        WeakSyncLoss._weighted_base_total,
+        WeakSyncLoss._weighted_stft_total,
+        WeakSyncLoss._weighted_fb_total,
+    ):
+        tree = ast.parse(textwrap.dedent(inspect.getsource(method)))
+        terms_in_weighted_total.update(
+            node.slice.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "components"
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, str)
+        )
+    assert terms_in_weighted_total == expected
+    assert set(schedule["fixed_weights"]) | set(schedule["scheduled_terms"]) | set(
+        schedule["disabled_terms"]
+    ) == expected
+    assert not (
+        set(schedule["fixed_weights"]) & set(schedule["scheduled_terms"])
+        or set(schedule["fixed_weights"]) & set(schedule["disabled_terms"])
+        or set(schedule["scheduled_terms"]) & set(schedule["disabled_terms"])
+    )
+    assert "curvature" in schedule["disabled_terms"]
+
+
+def test_loss_schedule_rejects_any_formal_g_config_drift(tmp_path: Path):
+    from dataclasses import replace
+
+    from omegaconf import OmegaConf
+
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+    from scripts.tho_group_meeting_ppt.model_figures import validate_formal_loss_configs
+
+    catalog = build_evidence_catalog(REPO_ROOT)
+    label = "g3_c_wide_8p0"
+    drift_path = tmp_path / "drift.yaml"
+    cfg = OmegaConf.load(catalog.run_configs[label].path)
+    OmegaConf.update(cfg, "loss.curvature_weight", 0.3, merge=False)
+    OmegaConf.save(cfg, drift_path)
+    drift_configs = dict(catalog.run_configs)
+    drift_configs[label] = replace(drift_configs[label], path=drift_path)
+    drift_catalog = replace(catalog, run_configs=drift_configs)
+
+    with pytest.raises(
+        ValueError,
+        match=r"g3_c_wide_8p0.*loss\.curvature_weight.*drift\.yaml",
+    ):
+        validate_formal_loss_configs(drift_catalog)
+
+
+def test_model_detail_full_registry_models_validate_native_injection_chain(model_asset_builds):
+    import torch
+    from omegaconf import OmegaConf
+
+    from resp_train.models.registry import build_model
+
+    (_, metadata), _ = model_asset_builds
+    for key in ("f0", "wide", "bandenergy"):
+        branch = metadata["stft_branches"][key]
+        cfg = OmegaConf.load(branch["config_path"])
+        model = build_model(cfg).cpu().eval()
+        observed = {}
+
+        def record_projection(_module, inputs, output):
+            observed["projection_input"] = list(inputs[0].shape)
+            observed["projection_output"] = list(output.shape)
+
+        encoder_hook = model.stft_encoder.register_forward_hook(
+            lambda _module, _inputs, output, store=observed: store.__setitem__("encoder", list(output.shape))
+        )
+        projection_hook = model.stft_proj.register_forward_hook(record_projection)
+        with torch.no_grad():
+            output = model(torch.zeros(1, 1, 18_000))
+        encoder_hook.remove()
+        projection_hook.remove()
+
+        assert model.fusion_mode == "native_inject"
+        assert model.stft_inject_position == "pre_mixer"
+        assert model.stft_proj.kernel_size == (1,)
+        assert torch.count_nonzero(model.stft_proj.weight) == 0
+        assert torch.count_nonzero(model.stft_proj.bias) == 0
+        assert observed["encoder"] == [1, 16, branch["raw_stft_shape"][-1]]
+        assert observed["projection_input"] == [1, 16, 140]
+        assert observed["projection_output"] == [1, 16, 140]
+        assert list(output.shape) == [1, 1, 18_000]
+        assert branch["full_model_output_shape"] == ["B", 1, 18_000]
+        assert branch["fusion_mode"] == "native_inject"
+        assert branch["projection_kernel_size"] == [1]
+        assert branch["projection_zero_initialized"] is True
