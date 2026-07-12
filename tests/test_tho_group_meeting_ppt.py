@@ -1122,3 +1122,96 @@ def test_cli_can_run_from_repository_root():
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.fixture(scope="module")
+def model_asset_builds(tmp_path_factory):
+    from scripts.tho_group_meeting_ppt.model_figures import build_model_assets
+
+    first_dir = tmp_path_factory.mktemp("model_assets_first")
+    second_dir = tmp_path_factory.mktemp("model_assets_second")
+    first = build_model_assets(REPO_ROOT, first_dir)
+    second = build_model_assets(REPO_ROOT, second_dir)
+    return first, second
+
+
+def test_token_geometry_comes_from_formal_model_and_actual_patch_mixer(model_asset_builds):
+    import torch
+
+    from resp_train.models.timeseries import PatchMixer1D
+
+    (assets, metadata), (_, repeated_metadata) = model_asset_builds
+    model = PatchMixer1D(
+        base_channels=metadata["token_shape"][1],
+        patch_len=metadata["patch_len"],
+        patch_stride=metadata["patch_stride"],
+        mixer_layers=metadata["mixer_layers"],
+    )
+    tokens, original_length = model.tokenize_input(torch.zeros(2, 1, 18_000))
+
+    assert set(assets) == {"token_geometry", "stft_branch_shapes", "loss_schedule"}
+    assert metadata["patch_len"] == 256
+    assert metadata["patch_stride"] == 128
+    assert metadata["patch_count"] == model.token_count_for_length(18_000) == 140
+    assert metadata["token_shape"] == ["B", 16, 140]
+    assert list(tokens.shape) == [2, 16, 140]
+    assert original_length == 18_000
+    assert metadata["token_shape"] == repeated_metadata["token_shape"]
+    assert "g_series_stft_input" in Path(metadata["sources"]["formal_config"]).parts
+
+
+def test_model_detail_stft_shapes_match_centered_forward_and_formal_g_configs(model_asset_builds):
+    from PIL import Image
+
+    (assets, metadata), (repeated_assets, repeated_metadata) = model_asset_builds
+    branches = metadata["stft_branches"]
+
+    assert set(branches) == {"f0", "wide", "bandenergy"}
+    assert branches["f0"]["raw_stft_shape"] == ["B", 1501, 37]
+    assert branches["f0"]["cropped_shape"] == ["B", 239, 37]
+    assert branches["wide"]["raw_stft_shape"] == ["B", 1001, 73]
+    assert branches["wide"]["cropped_shape"] == ["B", 160, 73]
+    assert branches["bandenergy"]["encoder_input_shape"] == ["B", 5, 73]
+    assert all(branch["encoder_output_shape"][1:] == [16, branch["raw_stft_shape"][-1]] for branch in branches.values())
+    assert all(branch["aligned_token_shape"] == ["B", 16, 140] for branch in branches.values())
+    assert all(branch["inject_position"] == "pre_mixer" for branch in branches.values())
+    assert branches["f0"]["encoder_type"] == branches["wide"]["encoder_type"] == "conv2d"
+    assert branches["bandenergy"]["encoder_type"] == "bandenergy"
+    assert all(branch["zero_and_real_probe_shapes_match"] for branch in branches.values())
+    assert metadata["stft_branches"] == repeated_metadata["stft_branches"]
+
+    for key, path in assets.items():
+        assert Image.open(path).size[0] >= 1600
+        assert Image.open(path).size[1] >= 900
+        assert metadata["layout"][key]["all_key_text_inside"] is True
+        assert metadata["layout"][key]["text_overlap_count"] == 0
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == hashlib.sha256(
+            repeated_assets[key].read_bytes()
+        ).hexdigest()
+
+
+def test_loss_schedule_is_evaluated_by_weak_sync_loss_from_formal_config(model_asset_builds):
+    from omegaconf import OmegaConf
+
+    from resp_train.losses.weak import WeakSyncLoss
+
+    (_, metadata), _ = model_asset_builds
+    formal_config = Path(metadata["sources"]["formal_config"])
+    cfg = OmegaConf.load(formal_config)
+    loss = WeakSyncLoss(cfg)
+    actual = {"signed_corr": [], "signed_cosine": []}
+    for epoch in range(1, 11):
+        loss.set_epoch(epoch)
+        weights = loss.current_weights()
+        actual["signed_corr"].append(weights["signed_corr"])
+        actual["signed_cosine"].append(weights["signed_cosine"])
+
+    schedule = metadata["loss_schedule"]
+    assert schedule["signed_corr"] == pytest.approx(actual["signed_corr"])
+    assert schedule["signed_cosine"] == pytest.approx(actual["signed_cosine"])
+    assert schedule["signed_corr"][:6] == pytest.approx([0.6, 0.52, 0.44, 0.36, 0.28, 0.2])
+    assert schedule["signed_cosine"][:6] == pytest.approx([0.1, 0.08, 0.06, 0.04, 0.02, 0.0])
+    assert schedule["fixed_weights"]["envelope"] == pytest.approx(1.0)
+    assert schedule["fixed_weights"]["spectrum"] == pytest.approx(0.2)
+    assert "stft_dist" in schedule["disabled_terms"]
+    assert Path(metadata["sources"]["loss_code"]).samefile(REPO_ROOT / "resp_train/losses/weak.py")
