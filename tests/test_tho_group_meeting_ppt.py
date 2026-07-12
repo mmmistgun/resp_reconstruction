@@ -737,6 +737,143 @@ def test_evidence_harmonic_provenance_rejects_tampered_thresholds_hash(tmp_path:
         build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
 
 
+def _write_case_prediction(
+    path: Path,
+    *,
+    label: str,
+    row_ids: list[int],
+    seed: int = 20260837,
+) -> None:
+    import numpy as np
+
+    values = np.stack(
+        [np.full(18_000, row_id, dtype=np.float32) for row_id in row_ids]
+    )
+    np.savez(
+        path,
+        dataset_row_id=np.asarray(row_ids, dtype=np.int64),
+        r_tho_hat=values,
+        tho_ref=values / 10.0,
+    )
+    path.with_name(f"{path.stem}_manifest.json").write_text(
+        json.dumps(
+            {
+                "label": label,
+                "seed": seed,
+                "n_windows": len(row_ids),
+                "array_schema": {
+                    "dataset_row_id": [len(row_ids)],
+                    "r_tho_hat": [len(row_ids), 18_000],
+                    "tho_ref": [len(row_ids), 18_000],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_case_assets_prediction_join_is_by_dataset_row_id_not_npz_order(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.case_figures import load_case_predictions
+
+    paths = []
+    labels = ("time", "f0", "wide", "bandenergy")
+    orders = ([30, 10, 20], [20, 30, 10], [10, 20, 30], [30, 20, 10])
+    for label, order in zip(labels, orders, strict=True):
+        path = tmp_path / f"{label}_20260837_harmonic_predictions.npz"
+        _write_case_prediction(path, label=label, row_ids=list(order))
+        paths.append(path)
+
+    joined = load_case_predictions(paths, (10, 20, 30))
+
+    assert set(joined) == set(labels)
+    for label in labels:
+        assert joined[label][20]["prediction"].shape == (18_000,)
+        assert joined[label][20]["prediction"][0] == pytest.approx(20.0)
+
+
+@pytest.mark.parametrize(
+    ("row_ids", "message"),
+    (([10, 10, 20], r"time.*row 10.*predictions\.npz"), ([10, 20], r"time.*row 30.*predictions\.npz")),
+)
+def test_case_assets_prediction_join_rejects_duplicate_or_missing_row(
+    tmp_path: Path,
+    row_ids: list[int],
+    message: str,
+):
+    from scripts.tho_group_meeting_ppt.case_figures import load_case_predictions
+
+    path = tmp_path / "time_20260837_harmonic_predictions.npz"
+    _write_case_prediction(path, label="time", row_ids=row_ids)
+
+    with pytest.raises(ValueError, match=message):
+        load_case_predictions([path], (10, 20, 30))
+
+
+def test_case_assets_builds_real_delta_stability_strata_and_complete_cases(tmp_path: Path):
+    from PIL import Image
+
+    from scripts.tho_group_meeting_ppt.case_figures import build_case_assets
+
+    assets, metadata = build_case_assets(REPO_ROOT, tmp_path)
+
+    assert set(assets) == {
+        "overall_delta",
+        "seed_subject_stability",
+        "strata_tradeoffs",
+        "case_row_640",
+        "case_row_873",
+        "case_row_1353",
+        "case_row_3584",
+    }
+    assert metadata["case_row_ids"] == [640, 873, 1353, 3584]
+    assert metadata["models_per_case"] == 4
+    assert metadata["signal_length"] == 18_000
+    assert metadata["stability"]["uncertainty_unit"] == "seed"
+    assert metadata["stability"]["window_overlap_used_as_independent_ci"] is False
+    label_summary = {
+        row["label"]: row
+        for row in csv.DictReader(
+            (REPO_ROOT / "runs/test_eval_g_series_20260709_local_rr_canonical/g_series_local_rr_canonical_label_summary.csv").open()
+        )
+    }
+    recomputed_wide_delta = float(label_summary["g3_c_wide_8p0"]["rr_peak_band_robust_abs_error_mean_mean"]) - float(
+        label_summary["g0_time_only"]["rr_peak_band_robust_abs_error_mean_mean"]
+    )
+    paired_rows = list(
+        csv.DictReader(
+            (REPO_ROOT / "runs/bcg_second_harmonic_20260710/model_metrics/paired_delta_vs_time_summary.csv").open()
+        )
+    )
+    recomputed_count_delta = float(
+        next(
+            row
+            for row in paired_rows
+            if row["comparison"] == "bandenergy_vs_time" and row["stratum"] == "all_windows"
+        )["delta_breath_count_zero_cross_bpm_error_mean"]
+    )
+    assert metadata["deltas"]["wide_vs_time"]["robust_rr_bpm"] == pytest.approx(recomputed_wide_delta)
+    assert metadata["deltas"]["bandenergy_vs_time"]["count_bpm"] == pytest.approx(recomputed_count_delta)
+    real_cases = {
+        row["dataset_row_id"]: row["case_category"]
+        for row in csv.DictReader(
+            (REPO_ROOT / "runs/bcg_second_harmonic_20260710/figures/model_case_manifest.csv").open()
+        )
+        if int(row["dataset_row_id"]) in {640, 873, 1353, 3584}
+    }
+    assert metadata["case_categories"] == real_cases
+    assert set(metadata["case_titles"]) == set(real_cases)
+    manifest = json.loads((tmp_path / "case_assets_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["generator"] == "scripts.tho_group_meeting_ppt.case_figures.build_case_assets"
+    assert len(manifest["sources"]) >= 20
+    for key, path in assets.items():
+        assert path.name == f"{key}.png"
+        assert manifest["assets"][key]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+        with Image.open(path) as image:
+            assert image.width >= 1800 and image.height >= 1000
+            assert image.convert("L").getbbox() is not None
+    assert all(length == 18_000 for length in metadata["case_prediction_lengths"].values())
+
+
 @pytest.mark.parametrize(
     ("field", "yaml_value"),
     (
