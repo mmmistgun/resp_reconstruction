@@ -15,6 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 import numpy as np
+from omegaconf import OmegaConf
 import pandas as pd
 
 from resp_train.metrics.signal import (
@@ -23,6 +24,7 @@ from resp_train.metrics.signal import (
     best_lag_correlation_from_filtered,
     estimate_robust_peak_rate_bpm,
     lag_aligned_overlap,
+    lag_correlation_trace_from_filtered,
     local_rr_metrics_from_rate_traces,
     local_rr_rate_trace,
     relative_envelope_metrics,
@@ -107,11 +109,15 @@ def _source_paths(repo_root: Path, catalog: EvidenceCatalog) -> dict[str, Path]:
     source_config = (repo_root / str(metadata["source_run_config"])).resolve()
     source_checkpoint = (repo_root / str(metadata["source_checkpoint"])).resolve()
     source_metrics = source_config.parent / "metrics.csv"
+    signal_assets_manifest = (
+        repo_root / "docs/stage_reports/20260708/generated_assets/discussion/signal_assets_manifest.json"
+    )
     for description, path in (
         ("通用信号 metadata", metadata_path),
         ("F0 源 config", source_config),
         ("F0 源 checkpoint", source_checkpoint),
         ("F0 源 metrics CSV", source_metrics),
+        ("任务3 signal assets manifest", signal_assets_manifest),
     ):
         if not path.is_file():
             raise FileNotFoundError(f"{description}不存在: {path}")
@@ -120,6 +126,7 @@ def _source_paths(repo_root: Path, catalog: EvidenceCatalog) -> dict[str, Path]:
         "source_run_config": source_config,
         "source_checkpoint": source_checkpoint,
         "source_metrics_csv": source_metrics,
+        "signal_assets_manifest": signal_assets_manifest,
     }
 
 
@@ -158,13 +165,143 @@ def validate_metric_asset_identity(
             "通用信号 metadata files.signal_arrays_npz "
             f"未指向 {signal_npz.name!r}"
         )
-    if source_config.parent != source_checkpoint.parent:
-        raise ValueError("source_run_config 与 source_checkpoint 不属于同一 run 目录")
     if int(source_metrics_row["dataset_row_id"]) != int(expected["dataset_row_id"]):
         raise ValueError("source metrics CSV dataset_row_id 与通用信号 metadata 不一致")
     if str(source_metrics_row["split"]) != str(expected["split"]):
         raise ValueError("source metrics CSV split 与通用信号 metadata 不一致")
     return dict(expected)
+
+
+def _resolved_evidence_path(repo_root: Path, value: str | Path) -> Path:
+    path = Path(value)
+    return path.resolve() if path.is_absolute() else (repo_root / path).resolve()
+
+
+def _require_frozen_record(
+    repo_root: Path,
+    manifest_path: Path,
+    records: Mapping[str, Any],
+    key: str,
+    actual_path: Path,
+) -> None:
+    record = records.get(key)
+    if not isinstance(record, Mapping):
+        raise ValueError(f"{key} record 缺失: {manifest_path}")
+    recorded_path = _resolved_evidence_path(repo_root, str(record.get("path", "")))
+    if recorded_path != actual_path.resolve():
+        raise ValueError(f"{key}.path 与实际来源不一致: {manifest_path}")
+    actual_sha = hashlib.sha256(actual_path.read_bytes()).hexdigest()
+    if record.get("sha256") != actual_sha:
+        raise ValueError(f"{key}.sha256 与实际文件不一致: {manifest_path}")
+
+
+def validate_metric_source_evidence(
+    *,
+    repo_root: str | Path,
+    signal_npz: str | Path,
+    signal_metadata_json: str | Path,
+    source_config: str | Path,
+    source_checkpoint: str | Path,
+    source_metrics_csv: str | Path,
+    signal_assets_manifest: str | Path,
+) -> dict[str, Any]:
+    """绑定任务3冻结文件并交叉校验 F0 资产的配置、metadata 与 CSV 身份。"""
+    root = Path(repo_root).resolve()
+    signal_path = Path(signal_npz).resolve()
+    metadata_path = Path(signal_metadata_json).resolve()
+    config_path = Path(source_config).resolve()
+    checkpoint_path = Path(source_checkpoint).resolve()
+    csv_path = Path(source_metrics_csv).resolve()
+    upstream_path = Path(signal_assets_manifest).resolve()
+    upstream = json.loads(upstream_path.read_text(encoding="utf-8"))
+    evidence = upstream.get("evidence", {})
+    for key, actual in (
+        ("signal_metadata_json", metadata_path),
+        ("signal_npz", signal_path),
+        ("source_checkpoint", checkpoint_path),
+        ("source_run_config", config_path),
+    ):
+        _require_frozen_record(root, upstream_path, evidence, key, actual)
+
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata_config = _resolved_evidence_path(root, str(metadata.get("source_run_config", "")))
+    metadata_checkpoint = _resolved_evidence_path(root, str(metadata.get("source_checkpoint", "")))
+    if metadata_config != config_path:
+        raise ValueError(f"source_run_config 与实际路径不一致: {metadata_path}")
+    if metadata_checkpoint != checkpoint_path:
+        raise ValueError(f"source_checkpoint 与实际路径不一致: {metadata_path}")
+
+    cfg = OmegaConf.load(config_path)
+    frame = pd.read_csv(csv_path)
+    matches = frame[frame["dataset_row_id"].astype(int) == int(metadata.get("dataset_row_id", -1))]
+    if len(matches) != 1:
+        raise ValueError(f"dataset_row_id 在 CSV 中匹配到 {len(matches)} 行: {csv_path}")
+    row = matches.iloc[0]
+    identity = validate_metric_asset_identity(
+        metadata,
+        signal_npz=signal_path,
+        source_config=config_path,
+        source_checkpoint=checkpoint_path,
+        source_metrics_row=row,
+    )
+
+    expected_scalars = {
+        "model.name": (OmegaConf.select(cfg, "model.name"), "time_stft_dual1d"),
+        "data.input_set": (OmegaConf.select(cfg, "data.input_set"), "research_v2_waveform"),
+        "window.target_fs": (OmegaConf.select(cfg, "window.target_fs"), metadata.get("sampling_rate_hz")),
+        "window.duration_sec": (OmegaConf.select(cfg, "window.duration_sec"), metadata.get("window_duration_sec")),
+        "model.stft_win": (OmegaConf.select(cfg, "model.stft_win"), metadata.get("stft_win_samples")),
+        "model.stft_hop": (OmegaConf.select(cfg, "model.stft_hop"), metadata.get("stft_hop_samples")),
+        "model.stft_low_hz": (OmegaConf.select(cfg, "model.stft_low_hz"), metadata.get("stft_low_hz")),
+        "model.stft_high_hz": (OmegaConf.select(cfg, "model.stft_high_hz"), metadata.get("stft_high_hz")),
+        "model.stft_inject_position": (OmegaConf.select(cfg, "model.stft_inject_position"), "pre_mixer"),
+        "model.stft_encoder_type": (OmegaConf.select(cfg, "model.stft_encoder_type"), "conv2d"),
+        "model.fusion_mode": (OmegaConf.select(cfg, "model.fusion_mode"), "native_inject"),
+    }
+    for field, (actual, expected) in expected_scalars.items():
+        equal = (
+            np.isclose(float(actual), float(expected), rtol=0.0, atol=1e-12)
+            if isinstance(expected, (int, float)) and not isinstance(expected, bool)
+            else actual == expected
+        )
+        if not equal:
+            raise ValueError(f"{field}={actual!r} 与冻结证据 {expected!r} 不一致: {config_path}")
+
+    f0_record = upstream.get("resolved_configs", {}).get("f0", {})
+    for config_field, manifest_field in (
+        ("model.stft_win", "stft_win"),
+        ("model.stft_hop", "stft_hop"),
+        ("model.stft_low_hz", "stft_low_hz"),
+        ("model.stft_high_hz", "stft_high_hz"),
+        ("model.stft_encoder_type", "stft_encoder_type"),
+        ("model.stft_inject_position", "stft_inject_position"),
+    ):
+        actual = OmegaConf.select(cfg, config_field)
+        expected = f0_record.get(manifest_field)
+        if actual != expected:
+            raise ValueError(f"{config_field} 与 signal manifest {manifest_field} 不一致: {config_path}")
+
+    csv_expected = {
+        "method": OmegaConf.select(cfg, "model.name"),
+        "input_set": OmegaConf.select(cfg, "data.input_set"),
+        "split": metadata["split"],
+        "dataset_row_id": metadata["dataset_row_id"],
+    }
+    for field, expected in csv_expected.items():
+        actual = row[field]
+        if str(actual) != str(expected):
+            raise ValueError(f"{field}={actual!r} 与 config/metadata {expected!r} 不一致: {csv_path}")
+
+    with np.load(signal_path, allow_pickle=False) as arrays:
+        required = ("f0_prediction_full", "target_respiration_full")
+        for field in required:
+            if field not in arrays.files:
+                raise ValueError(f"NPZ 缺少 {field}: {signal_path}")
+        expected_samples = int(round(float(metadata["sampling_rate_hz"]) * float(metadata["window_duration_sec"])))
+        for field in required:
+            if np.asarray(arrays[field]).size != expected_samples:
+                raise ValueError(f"{field}.size 与 metadata fs/window 不一致: {signal_path}")
+    return identity
 
 
 def _major_text(artist):
@@ -350,27 +487,18 @@ def _cycle_count_figure(pred_filtered, target_filtered, pred_counts, target_coun
     return _save_metric_figure(fig, path)
 
 
-def _corr_or_nan(a: np.ndarray, b: np.ndarray) -> float:
-    if a.size < 2 or float(np.std(a)) <= 0 or float(np.std(b)) <= 0:
-        return float("nan")
-    return float(np.corrcoef(a, b)[0, 1])
-
-
-def _lag_curve(pred_filtered: np.ndarray, target_filtered: np.ndarray, best_lag_samples: int) -> tuple[np.ndarray, np.ndarray]:
-    candidates = set(range(-400, 401, 2))
-    candidates.add(int(best_lag_samples))
-    lags = np.asarray(sorted(candidates), dtype=int)
-    values = []
-    for lag in lags:
-        pred_overlap, target_overlap = lag_aligned_overlap(pred_filtered, target_filtered, lag_samples=int(lag))
-        values.append(_corr_or_nan(pred_overlap, target_overlap))
-    return lags / _FS, np.asarray(values, dtype=np.float64)
-
-
 def _lag_figure(pred_filtered, target_filtered, lag_metrics, path: Path) -> dict[str, Any]:
     best_lag = float(lag_metrics["best_lag_sec"])
     best_corr = float(lag_metrics["best_lag_corr"])
-    lag_sec, corr = _lag_curve(pred_filtered, target_filtered, int(round(best_lag * _FS)))
+    trace = lag_correlation_trace_from_filtered(
+        pred_filtered,
+        target_filtered,
+        fs=_FS,
+        max_lag_sec=_MAX_LAG_SEC,
+        low_hz=_LOW_HZ,
+    )
+    lag_sec = trace["lag_sec"]
+    corr = trace["correlation"]
     fig, axis, steps, failure = _new_metric_figure(
         "4 秒时延校正相关：在允许范围内搜索低频形态对齐",
         "row 8025｜相关系数无量纲；正 lag 表示预测相对 THO 滞后｜数值高表示对齐后形态更相似",
@@ -387,7 +515,7 @@ def _lag_figure(pred_filtered, target_filtered, lag_metrics, path: Path) -> dict
             "输入：预测与 THO 先做同一呼吸带滤波。",
             "中间量：对每个采样点级 lag，只取两侧重叠片段。",
             "公式：ρ(k)=corr(pred_shifted(k), target)，搜索 |k|≤4·fs。",
-            "聚合：选择最大相关；近似并列时优先更接近 0 的 lag。",
+            "聚合：逐一检查 −400…400 的 801 个整数 lag；相关近似并列时先选 |lag| 更小者，再选负 lag。",
         ],
         f"best lag = {best_lag:+.2f} s\nbest-lag corr = {best_corr:.6f}\n相关系数：无量纲",
     )
@@ -521,13 +649,14 @@ def build_metric_assets(
         raise ValueError(f"通用信号资产 row_id 应为 8025，实际 {catalog.general_sample_row_id}")
     source_paths = _source_paths(root, catalog)
     source_row = _read_source_metrics_row(source_paths["source_metrics_csv"])
-    signal_metadata = json.loads(source_paths["signal_metadata_json"].read_text(encoding="utf-8"))
-    identity = validate_metric_asset_identity(
-        signal_metadata,
+    identity = validate_metric_source_evidence(
+        repo_root=root,
         signal_npz=catalog.general_signal_npz,
+        signal_metadata_json=source_paths["signal_metadata_json"],
         source_config=source_paths["source_run_config"],
         source_checkpoint=source_paths["source_checkpoint"],
-        source_metrics_row=source_row,
+        source_metrics_csv=source_paths["source_metrics_csv"],
+        signal_assets_manifest=source_paths["signal_assets_manifest"],
     )
     with np.load(catalog.general_signal_npz, allow_pickle=False) as data:
         pred = np.asarray(data["f0_prediction_full"], dtype=np.float64).reshape(-1)
@@ -621,6 +750,8 @@ def build_metric_assets(
             "band_hz": [_LOW_HZ, _HIGH_HZ],
             "bandpass_order": _ORDER,
             "max_lag_sec": _MAX_LAG_SEC,
+            "lag_trace_points": 801,
+            "lag_trace_integer_samples": [-400, 400],
             "envelope_window_sec": _ENVELOPE_WINDOW_SEC,
             "relative_envelope_trend_parameter_sec": 20.0,
             "relative_envelope_effective_smoothing_sec": 40.0,

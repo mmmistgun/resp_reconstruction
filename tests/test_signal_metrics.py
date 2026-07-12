@@ -6,11 +6,13 @@ from resp_train.metrics.signal import (
     band_limited_corr,
     bandpass_filter,
     best_lag_correlation,
+    best_lag_correlation_from_filtered,
     estimate_bandpassed_peak_rate_bpm,
     estimate_peak_rate_bpm,
     estimate_robust_peak_rate_bpm,
     estimate_spectral_rate_bpm,
     lag_aligned_overlap,
+    lag_correlation_trace_from_filtered,
     local_rr_metrics,
     local_rr_rate_trace,
     relative_envelope_metrics,
@@ -347,3 +349,43 @@ def test_best_lag_correlation_limits_overlap_for_periodic_signal_with_large_max_
 
     assert metrics["best_lag_corr"] > 0.99
     assert abs(metrics["best_lag_sec"]) < 1e-6
+
+
+def test_lag_correlation_trace_preserves_existing_best_result_and_all_integer_lags():
+    rng = np.random.default_rng(20260712)
+    target = rng.normal(size=3000)
+    pred = np.zeros_like(target)
+    pred[37:] = target[:-37]
+    pred += rng.normal(scale=0.01, size=target.size)
+
+    trace = lag_correlation_trace_from_filtered(
+        pred, target, fs=100.0, max_lag_sec=4.0, low_hz=0.05
+    )
+    best = best_lag_correlation_from_filtered(
+        pred, target, fs=100.0, max_lag_sec=4.0, low_hz=0.05
+    )
+
+    np.testing.assert_array_equal(trace["lag_samples"], np.arange(-400, 401))
+    np.testing.assert_allclose(trace["lag_sec"], np.arange(-400, 401) / 100.0, rtol=0.0, atol=0.0)
+    assert trace["correlation"].shape == (801,)
+    assert best["best_lag_corr"] == 0.9999497987100654
+    assert best["best_lag_sec"] == 0.37
+    assert trace["correlation"][437] == best["best_lag_corr"]
+
+
+def test_lag_correlation_trace_argmax_uses_same_near_tie_rule_as_best_lag():
+    target = np.tile(np.asarray([1.0, -1.0]), 1500)
+    trace = lag_correlation_trace_from_filtered(
+        target.copy(), target, fs=100.0, max_lag_sec=4.0, low_hz=0.05
+    )
+    best = best_lag_correlation_from_filtered(
+        target.copy(), target, fs=100.0, max_lag_sec=4.0, low_hz=0.05
+    )
+    finite = np.isfinite(trace["correlation"])
+    maximum = np.max(trace["correlation"][finite])
+    tied = trace["lag_samples"][finite & np.isclose(trace["correlation"], maximum, rtol=1e-10, atol=1e-12)]
+    expected = min(tied.tolist(), key=lambda lag: (abs(lag), lag))
+
+    assert expected == 0
+    assert best["best_lag_sec"] == expected / 100.0
+    assert best["best_lag_corr"] == trace["correlation"][400]

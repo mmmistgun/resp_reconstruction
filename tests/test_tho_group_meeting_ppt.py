@@ -1362,6 +1362,8 @@ def test_metric_assets_use_row_8025_and_current_repository_algorithms(metric_ass
     assert 0.0 <= values["local_rr_valid_frac"] <= 1.0
     assert values["parameters"]["local_rr_window_sec"] == 40.0
     assert values["parameters"]["local_rr_step_sec"] == 10.0
+    assert values["parameters"]["lag_trace_points"] == 801
+    assert values["parameters"]["lag_trace_integer_samples"] == [-400, 400]
     assert values["canonical_csv_alignment"] is False
     assert "计算示例" in values["evidence_scope"]
     assert "更优" not in json.dumps(values, ensure_ascii=False)
@@ -1381,6 +1383,9 @@ def test_metric_assets_are_large_uncropped_and_manifested(metric_asset_build):
     assert manifest["sources"]["metric_code"]["path"] == "resp_train/metrics/signal.py"
     assert manifest["sources"]["robust_rr_demo_code"]["path"].endswith(
         "plot_rr_peak_band_metric_demo.py"
+    )
+    assert manifest["sources"]["signal_assets_manifest"]["path"].endswith(
+        "signal_assets_manifest.json"
     )
     assert all(not Path(record["path"]).is_absolute() for record in manifest["sources"].values())
     assert manifest["parameters"]["local_rr_window_sec"] == 40.0
@@ -1423,6 +1428,81 @@ def test_metric_asset_identity_rejects_tampered_general_signal_metadata(field, b
             source_config=source_config,
             source_checkpoint=source_checkpoint,
             source_metrics_row=source_row,
+        )
+
+
+@pytest.mark.parametrize(
+    ("tamper", "message"),
+    (
+        ("config", r"model\.stft_win.*config\.yaml"),
+        ("csv", r"input_set.*metrics\.csv"),
+        ("npz_hash", r"signal_npz\.sha256.*signal_assets_manifest\.json"),
+        ("metadata_source", r"source_checkpoint.*metadata\.json"),
+    ),
+)
+def test_metric_source_evidence_rejects_semantic_or_frozen_hash_drift(tmp_path: Path, tamper, message):
+    import pandas as pd
+    from omegaconf import OmegaConf
+
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+    from scripts.tho_group_meeting_ppt.metric_figures import validate_metric_source_evidence
+
+    catalog = build_evidence_catalog(REPO_ROOT)
+    actual_metadata = catalog.general_signal_npz.with_name("f0_visual_sample_metadata.json")
+    metadata = json.loads(actual_metadata.read_text(encoding="utf-8"))
+    actual_config = (REPO_ROOT / metadata["source_run_config"]).resolve()
+    actual_checkpoint = (REPO_ROOT / metadata["source_checkpoint"]).resolve()
+    actual_csv = actual_config.parent / "metrics.csv"
+    upstream = json.loads(
+        (REPO_ROOT / "docs/stage_reports/20260708/generated_assets/discussion/signal_assets_manifest.json")
+        .read_text(encoding="utf-8")
+    )
+
+    metadata_path = tmp_path / "metadata.json"
+    config_path = tmp_path / "config.yaml"
+    csv_path = tmp_path / "metrics.csv"
+    upstream_path = tmp_path / "signal_assets_manifest.json"
+    OmegaConf.save(OmegaConf.load(actual_config), config_path)
+    metadata["source_run_config"] = str(config_path)
+    frame = pd.read_csv(actual_csv)
+    frame[frame["dataset_row_id"].astype(int) == 8025].to_csv(csv_path, index=False)
+
+    if tamper == "config":
+        cfg = OmegaConf.load(config_path)
+        OmegaConf.update(cfg, "model.stft_win", 2000, merge=False)
+        OmegaConf.save(cfg, config_path)
+    elif tamper == "csv":
+        changed = pd.read_csv(csv_path)
+        changed.loc[0, "input_set"] = "other_input"
+        changed.to_csv(csv_path, index=False)
+    elif tamper == "metadata_source":
+        metadata["source_checkpoint"] = "runs/other/checkpoint.pt"
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def record(path: Path) -> dict[str, object]:
+        payload = path.read_bytes()
+        return {
+            "path": str(path),
+            "status": "present",
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "size_bytes": len(payload),
+        }
+
+    upstream["evidence"]["signal_metadata_json"] = record(metadata_path)
+    upstream["evidence"]["source_run_config"] = record(config_path)
+    if tamper == "npz_hash":
+        upstream["evidence"]["signal_npz"]["sha256"] = "0" * 64
+    upstream_path.write_text(json.dumps(upstream, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        validate_metric_source_evidence(
+            repo_root=REPO_ROOT,
+            signal_npz=catalog.general_signal_npz,
+            signal_metadata_json=metadata_path,
+            source_config=config_path,
+            source_checkpoint=actual_checkpoint,
+            source_metrics_csv=csv_path,
+            signal_assets_manifest=upstream_path,
         )
 
 

@@ -25,6 +25,11 @@
       "sha256": "9d396ba86f8092197da795207cfc52797af275f6b1edc630f96e45bab8fad49c",
       "size_bytes": 1009167
     },
+    "signal_assets_manifest": {
+      "path": "docs/stage_reports/20260708/generated_assets/discussion/signal_assets_manifest.json",
+      "sha256": "aee69530032805e75c369c0f49b315fb1c92a1c093562d2c3fd804e3c0cf7c77",
+      "size_bytes": 6175
+    },
     "signal_npz": {
       "path": "docs/figure/F0_native_stft_pre_mixer/signals/f0_visual_sample_signals.npz",
       "sha256": "56cd40391988a06e2a272ca4b51136795511cd0c6883bba1c55e9071a7e4ecb4",
@@ -32,8 +37,8 @@
     },
     "metric_code": {
       "path": "resp_train/metrics/signal.py",
-      "sha256": "f357db36eb98564615084f361f42695eb36a10f64c5fc87ae8459c72c27d30b1",
-      "size_bytes": 28426
+      "sha256": "6d7770b92241457ad76ff198a3774b15b7e5b394366789b28603577918a3bbce",
+      "size_bytes": 29348
     },
     "metric_evaluate_code": {
       "path": "resp_train/metrics/evaluate.py",
@@ -60,6 +65,11 @@
     ],
     "bandpass_order": 4,
     "max_lag_sec": 4.0,
+    "lag_trace_points": 801,
+    "lag_trace_integer_samples": [
+      -400,
+      400
+    ],
     "envelope_window_sec": 2.0,
     "relative_envelope_trend_parameter_sec": 20.0,
     "relative_envelope_effective_smoothing_sec": 40.0,
@@ -132,8 +142,8 @@
     },
     "metric_lag_corr": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/metric_lag_corr.png",
-      "sha256": "b462967b9cb6276f78699e702d4df17c657dead456c8c8baec23fa4dc60069aa",
-      "size_bytes": 247131
+      "sha256": "6a245043e436c2db59ad653f2c7c0efe1867549bb7819cc6ae0f58ffef74b9db",
+      "size_bytes": 255476
     },
     "metric_relative_envelope": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/metric_relative_envelope.png",

@@ -271,6 +271,39 @@ def best_lag_correlation_from_filtered(
 ) -> dict[str, float]:
     """复用已带通的 pred/target 搜索最佳时延。"""
 
+    trace = lag_correlation_trace_from_filtered(
+        pred_filtered,
+        target_filtered,
+        fs=fs,
+        max_lag_sec=max_lag_sec,
+        low_hz=low_hz,
+    )
+    best_corr = float("-inf")
+    best_lag_samples: int | None = None
+    for lag_samples, corr in zip(trace["lag_samples"], trace["correlation"], strict=True):
+        lag = int(lag_samples)
+        value = float(corr)
+        if not np.isfinite(value):
+            continue
+        if best_lag_samples is None or _is_better_lag_candidate(value, lag, best_corr, best_lag_samples):
+            best_corr = value
+            best_lag_samples = lag
+
+    if best_lag_samples is None:
+        return {"best_lag_corr": float("nan"), "best_lag_sec": float("nan")}
+    return {"best_lag_corr": float(best_corr), "best_lag_sec": float(best_lag_samples / float(fs))}
+
+
+def lag_correlation_trace_from_filtered(
+    pred_filtered: np.ndarray,
+    target_filtered: np.ndarray,
+    *,
+    fs: float,
+    max_lag_sec: float = 1.0,
+    low_hz: float = 0.05,
+) -> dict[str, np.ndarray]:
+    """返回 best-lag 搜索实际使用的完整整数 lag 与相关轨迹。"""
+
     fs = float(fs)
     max_lag_sec = float(max_lag_sec)
     if fs <= 0:
@@ -291,27 +324,27 @@ def best_lag_correlation_from_filtered(
     pred_sq_prefix = _prefix_sums(pred_filtered * pred_filtered)
     target_sq_prefix = _prefix_sums(target_filtered * target_filtered)
     cross_corr = scipy_signal.correlate(pred_filtered, target_filtered, mode="full", method="auto")
-    best_corr = float("-inf")
-    best_lag_samples: int | None = None
-    for lag_samples in range(-max_lag_samples, max_lag_samples + 1):
-        corr = _lagged_corr_from_prefix(
-            lag_samples,
-            n_samples=n_samples,
-            pred_prefix=pred_prefix,
-            target_prefix=target_prefix,
-            pred_sq_prefix=pred_sq_prefix,
-            target_sq_prefix=target_sq_prefix,
-            cross_corr=cross_corr,
-        )
-        if not np.isfinite(corr):
-            continue
-        if best_lag_samples is None or _is_better_lag_candidate(corr, lag_samples, best_corr, best_lag_samples):
-            best_corr = corr
-            best_lag_samples = lag_samples
-
-    if best_lag_samples is None:
-        return {"best_lag_corr": float("nan"), "best_lag_sec": float("nan")}
-    return {"best_lag_corr": float(best_corr), "best_lag_sec": float(best_lag_samples / fs)}
+    lag_samples = np.arange(-max_lag_samples, max_lag_samples + 1, dtype=np.int64)
+    correlations = np.asarray(
+        [
+            _lagged_corr_from_prefix(
+                int(lag),
+                n_samples=n_samples,
+                pred_prefix=pred_prefix,
+                target_prefix=target_prefix,
+                pred_sq_prefix=pred_sq_prefix,
+                target_sq_prefix=target_sq_prefix,
+                cross_corr=cross_corr,
+            )
+            for lag in lag_samples
+        ],
+        dtype=np.float64,
+    )
+    return {
+        "lag_samples": lag_samples,
+        "lag_sec": lag_samples.astype(np.float64) / fs,
+        "correlation": correlations,
+    }
 
 
 def lag_aligned_overlap(pred: np.ndarray, target: np.ndarray, *, lag_samples: int) -> tuple[np.ndarray, np.ndarray]:
