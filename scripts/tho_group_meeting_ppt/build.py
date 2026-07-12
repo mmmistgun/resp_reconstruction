@@ -60,20 +60,36 @@ def _prepare_discussion_title(prs: Presentation) -> None:
     text_shapes = [shape for shape in slide.shapes if shape.has_text_frame]
     title = "THO research v2｜从整晚 BCG 到呼吸重建"
     subtitle = "全流程研究方法细节讨论｜证据、边界与下一轮决策"
-    for shape, text, size in zip(text_shapes[:2], (title, subtitle), (30, 20), strict=False):
+
+    if text_shapes:
+        main_shape = max(text_shapes, key=lambda shape: shape.width * shape.height)
+    else:
+        main_shape = slide.shapes.add_textbox(
+            Inches(0.67), Inches(4.26), Inches(12.00), Inches(0.91)
+        )
+    remaining = [shape for shape in text_shapes if shape is not main_shape]
+    if remaining:
+        subtitle_shape = max(remaining, key=lambda shape: shape.width * shape.height)
+    else:
+        subtitle_shape = slide.shapes.add_textbox(
+            Inches(2.00), Inches(5.45), Inches(9.33), Inches(0.70)
+        )
+
+    for shape, text, size, color, name in (
+        (main_shape, title, 30, WHITE, "标题页主标题"),
+        (subtitle_shape, subtitle, 20, BODY_BLACK, "标题页副标题"),
+    ):
+        shape.name = name
         shape.text_frame.clear()
         paragraph = shape.text_frame.paragraphs[0]
         paragraph.alignment = PP_ALIGN.CENTER
         run = paragraph.add_run(); run.text = text
         run.font.name = "Microsoft YaHei"; run.font.size = Pt(size)
-        run.font.bold = size == 30; run.font.color.rgb = BODY_BLACK
-    if len(text_shapes) >= 2:
-        text_shapes[1].left = Inches(2.00)
-        text_shapes[1].top = Inches(5.45)
-        text_shapes[1].width = Inches(9.33)
-        text_shapes[1].height = Inches(0.70)
-    if len(text_shapes) < 2:
-        add_text_box(slide, subtitle, x=Inches(2.0), y=Inches(4.8), width=Inches(9.3), height=Inches(0.8), font_size=20, name="标题页副标题", align=PP_ALIGN.CENTER)
+        run.font.bold = size == 30; run.font.color.rgb = color
+    subtitle_shape.left = Inches(2.00)
+    subtitle_shape.top = Inches(5.45)
+    subtitle_shape.width = Inches(9.33)
+    subtitle_shape.height = Inches(0.70)
 
 
 def _add_contained_picture(slide, path: Path, *, x, y, width, height, name: str = "结果图"):

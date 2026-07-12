@@ -1468,7 +1468,7 @@ def test_final_deck_is_complete_editable_and_powerpoint_compatible():
 
     from scripts.tho_group_meeting_ppt.detail_slides import SLIDE_GROUPS, UNIT_BY_KEY
     from scripts.tho_group_meeting_ppt.discussion_content import DISCUSSION_UNITS
-    from scripts.tho_group_meeting_ppt.theme import BODY_BLACK, is_three_line_table
+    from scripts.tho_group_meeting_ppt.theme import BODY_BLACK, WHITE, is_three_line_table
 
     expected_assets = {
         "signal_overview.png", "softz_mapping.png", "token_geometry.png",
@@ -1500,6 +1500,23 @@ def test_final_deck_is_complete_editable_and_powerpoint_compatible():
     assert "THO research v2｜从整晚 BCG 到呼吸重建" in all_text
     assert "全流程研究方法细节讨论｜证据、边界与下一轮决策" in all_text
     assert not any(phrase in all_text for phrase in forbidden)
+    cover = prs.slides[0]
+    main_title = next(shape for shape in cover.shapes if shape.name == "标题页主标题")
+    subtitle = next(shape for shape in cover.shapes if shape.name == "标题页副标题")
+    assert main_title.text == "THO research v2｜从整晚 BCG 到呼吸重建"
+    assert subtitle.text == "全流程研究方法细节讨论｜证据、边界与下一轮决策"
+    assert all(
+        run.font.color.rgb == WHITE
+        for paragraph in main_title.text_frame.paragraphs
+        for run in paragraph.runs
+        if run.text.strip()
+    )
+    assert all(
+        run.font.color.rgb == BODY_BLACK
+        for paragraph in subtitle.text_frame.paragraphs
+        for run in paragraph.runs
+        if run.text.strip()
+    )
     with ZipFile(FINAL_DECK) as archive:
         package_text = "\n".join(
             archive.read(name).decode("utf-8", errors="ignore")
@@ -1583,7 +1600,12 @@ def test_final_deck_is_complete_editable_and_powerpoint_compatible():
                             for run in paragraph.runs:
                                 if run.text.strip():
                                     assert run.font.size.pt >= 14
-            if shape.has_text_frame and shape.name not in body_exclusions and not shape.has_table:
+            if (
+                shape.has_text_frame
+                and shape.name not in body_exclusions
+                and not shape.has_table
+                and not (index == 0 and shape.name == "标题页主标题")
+            ):
                 for paragraph in shape.text_frame.paragraphs:
                     for run in paragraph.runs:
                         if run.text.strip():
