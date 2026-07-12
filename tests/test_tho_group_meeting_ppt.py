@@ -538,6 +538,31 @@ def test_high_risk_discussion_units_encode_required_domain_semantics():
     assert "10%" in correction and "20%" in correction and "高纠正率不等于" in correction
 
 
+def test_named_high_value_discussion_units_have_complete_decision_context():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    by_key = {unit.key: unit for unit in DISCUSSION_UNITS}
+
+    def assert_complete(key: str) -> None:
+        unit = by_key[key]
+        for field_name in ("method_steps", "parameters", "rationale", "limits"):
+            values = getattr(unit, field_name)
+            assert values, (key, field_name)
+            assert all(isinstance(value, str) and value.strip() for value in values), (key, field_name)
+        assert unit.discussion_prompt is not None, key
+        assert isinstance(unit.discussion_prompt, str) and unit.discussion_prompt.strip(), key
+
+    for key in (
+        "target_soft_z_and_mask",
+        "patchmixer_token_shape",
+        "composite_loss_goal",
+        "metric_robust_rr",
+        "paired_delta",
+        "harmonic_correction",
+    ):
+        assert_complete(key)
+
+
 def test_target_supervision_unit_distinguishes_window_filter_loss_and_rr_mask():
     from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
 
