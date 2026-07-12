@@ -789,6 +789,125 @@ def test_case_assets_prediction_join_is_by_dataset_row_id_not_npz_order(tmp_path
     for label in labels:
         assert joined[label][20]["prediction"].shape == (18_000,)
         assert joined[label][20]["prediction"][0] == pytest.approx(20.0)
+        assert joined[label][20]["prediction"].dtype.name == "float32"
+        assert joined[label][20]["prediction"].base is None
+        assert joined[label][20]["reference"].base is None
+
+
+def test_case_assets_prediction_join_rejects_same_row_with_different_reference(tmp_path: Path):
+    import numpy as np
+
+    from scripts.tho_group_meeting_ppt.case_figures import load_case_predictions
+
+    paths = []
+    for label in ("time", "wide"):
+        path = tmp_path / f"{label}_20260837_harmonic_predictions.npz"
+        _write_case_prediction(path, label=label, row_ids=[10, 20, 30])
+        paths.append(path)
+    with np.load(paths[1]) as archive:
+        prediction = np.asarray(archive["r_tho_hat"])
+        reference = np.asarray(archive["tho_ref"]).copy()
+        ids = np.asarray(archive["dataset_row_id"])
+    reference[1, 0] += 1.0
+    np.savez(paths[1], dataset_row_id=ids, r_tho_hat=prediction, tho_ref=reference)
+
+    with pytest.raises(ValueError, match=r"row 20.*reference.*wide.*time"):
+        load_case_predictions(paths, (10, 20, 30))
+
+
+@pytest.mark.parametrize(("source", "field"), (("case_manifest", "samp_id"), ("correction:wide", "stratum")))
+def test_case_assets_identity_rejects_subject_or_stratum_drift(source: str, field: str):
+    from scripts.tho_group_meeting_ppt.case_figures import validate_case_identity
+
+    records = {
+        "dataset_index": {"dataset_row_id": "640", "samp_id": "220", "split": "test"},
+        "harmonic_labels": {
+            "dataset_row_id": "640",
+            "samp_id": "220",
+            "split": "test",
+            "stratum": "harmonic_prominent",
+        },
+        "case_manifest": {"dataset_row_id": "640", "samp_id": "220", "seed": "20260837"},
+        "correction:wide": {
+            "dataset_row_id": "640",
+            "samp_id": "220",
+            "seed": "20260837",
+            "input_stratum": "harmonic_prominent",
+        },
+    }
+    records[source]["samp_id" if field == "samp_id" else "input_stratum"] = (
+        "999" if field == "samp_id" else "peak_doubling"
+    )
+
+    with pytest.raises(ValueError, match=rf"row 640.*{source}.*{field}"):
+        validate_case_identity(640, records, expected_seed=20260837)
+
+
+def _write_prediction_provenance_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+    from omegaconf import OmegaConf
+
+    run = tmp_path / "runs/model/run"
+    run.mkdir(parents=True)
+    checkpoint = run / "checkpoint_top1.pt"
+    checkpoint.write_bytes(b"checkpoint")
+    config = run / "config.yaml"
+    OmegaConf.save(OmegaConf.create({"training": {"seed": 20260837}}), config)
+    labels = tmp_path / "labels.csv"
+    labels.write_text("dataset_row_id,samp_id\n10,220\n", encoding="utf-8")
+    prediction = tmp_path / "time_20260837_harmonic_predictions.npz"
+    _write_case_prediction(prediction, label="time", row_ids=[10])
+    eval_manifest = tmp_path / "eval_manifest.csv"
+    eval_manifest.write_text(
+        "checkpoint,config,split,sample_seed\n"
+        f"{checkpoint.relative_to(tmp_path)},{config.relative_to(tmp_path)},test,20260837\n",
+        encoding="utf-8",
+    )
+    payload = json.loads(prediction.with_name(f"{prediction.stem}_manifest.json").read_text())
+    payload.update(
+        {
+            "split": "test",
+            "checkpoint": str(checkpoint.relative_to(tmp_path)),
+            "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+            "config": str(config.relative_to(tmp_path)),
+            "labels_path": str(labels.relative_to(tmp_path)),
+            "labels_sha256": hashlib.sha256(labels.read_bytes()).hexdigest(),
+            "output_path": str(prediction.relative_to(tmp_path)),
+        }
+    )
+    prediction.with_name(f"{prediction.stem}_manifest.json").write_text(json.dumps(payload), encoding="utf-8")
+    canonical = {
+        "label": "time",
+        "seed": "20260837",
+        "checkpoint": str(checkpoint.relative_to(tmp_path)),
+        "manifest_output": str(eval_manifest.relative_to(tmp_path)),
+    }
+    return prediction, labels, canonical
+
+
+@pytest.mark.parametrize("tamper", ("missing_checkpoint_hash", "bad_labels_hash", "config_outside_run", "wrong_config_seed"))
+def test_case_prediction_provenance_rejects_missing_hash_or_tampering(tmp_path: Path, tamper: str):
+    from omegaconf import OmegaConf
+
+    from scripts.tho_group_meeting_ppt.case_figures import _validate_prediction_provenance
+
+    prediction, labels, canonical = _write_prediction_provenance_fixture(tmp_path)
+    manifest = prediction.with_name(f"{prediction.stem}_manifest.json")
+    payload = json.loads(manifest.read_text())
+    if tamper == "missing_checkpoint_hash":
+        payload.pop("checkpoint_sha256")
+    elif tamper == "bad_labels_hash":
+        payload["labels_sha256"] = "0" * 64
+    elif tamper == "config_outside_run":
+        outside = tmp_path / "other.yaml"
+        outside.write_text("training:\n  seed: 20260837\n", encoding="utf-8")
+        payload["config"] = str(outside.relative_to(tmp_path))
+    else:
+        config = tmp_path / payload["config"]
+        OmegaConf.save(OmegaConf.create({"training": {"seed": 1}}), config)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"time.*(hash|config|seed).*(manifest|yaml|labels|checkpoint)"):
+        _validate_prediction_provenance(tmp_path, prediction, canonical, labels)
 
 
 @pytest.mark.parametrize(
@@ -865,6 +984,33 @@ def test_case_assets_builds_real_delta_stability_strata_and_complete_cases(tmp_p
     manifest = json.loads((tmp_path / "case_assets_manifest.json").read_text(encoding="utf-8"))
     assert manifest["generator"] == "scripts.tho_group_meeting_ppt.case_figures.build_case_assets"
     assert len(manifest["sources"]) >= 20
+    generator = REPO_ROOT / "scripts/tho_group_meeting_ppt/case_figures.py"
+    generator_record = next(
+        record for record in manifest["sources"] if record["path"].endswith("scripts/tho_group_meeting_ppt/case_figures.py")
+    )
+    assert generator_record["sha256"] == hashlib.sha256(generator.read_bytes()).hexdigest()
+    assert generator_record["size_bytes"] == generator.stat().st_size
+    assert metadata["correction_thresholds"]["correction_ratio_drop_min"] == pytest.approx(0.2)
+    assert metadata["case_threshold_evidence"]["3584"]["boundary_distance"] == pytest.approx(
+        abs(0.06433105468749982 / 0.1 - 1.0)
+        + abs(0.5015774167611345 / 0.5392740654828524 - 1.0)
+        + abs(0.17347360905723672 / 0.16474917204045256 - 1.0)
+    )
+    for row_id in ("640", "873", "1353", "3584"):
+        model_rows = metadata["case_threshold_evidence"][row_id]["models"]
+        assert set(model_rows) == {
+            "g0_time_only",
+            "g0_f0_native_stft_pre_mixer",
+            "g3_c_wide_8p0",
+            "g3_c_bandenergy",
+        }
+        assert all("harmonic_ratio_relative_drop" in row for row in model_rows.values())
+        assert all("correction_condition_met" in row for row in model_rows.values())
+    source_names = [record["path"] for record in manifest["sources"]]
+    assert any(name.endswith("checkpoint_top1.pt") for name in source_names)
+    assert any(name.endswith("config.yaml") for name in source_names)
+    assert any(name.endswith("harmonic_predictions_manifest.json") for name in source_names)
+    assert any(name.endswith("harmonic_predictions.npz") for name in source_names)
     for key, path in assets.items():
         assert path.name == f"{key}.png"
         assert manifest["assets"][key]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()

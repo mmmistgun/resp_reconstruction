@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any, Iterable
 
 import matplotlib
@@ -12,6 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 import numpy as np
+from omegaconf import OmegaConf
 
 from .evidence import FORMAL_LABELS, build_evidence_catalog
 
@@ -89,6 +91,7 @@ def load_case_predictions(
     """按 dataset_row_id 连接预测；绝不依赖各 NPZ 的物理行顺序。"""
     requested = tuple(int(row_id) for row_id in row_ids)
     joined: dict[str, dict[int, dict[str, np.ndarray]]] = {}
+    label_paths: dict[str, Path] = {}
     for raw_path in prediction_paths:
         path = Path(raw_path).resolve()
         manifest_path = _manifest_for_prediction(path)
@@ -100,12 +103,13 @@ def load_case_predictions(
             raise ValueError(f"prediction manifest label 为空: {manifest_path}")
         if label in joined:
             raise ValueError(f"模型 {label} 重复 prediction 文件: {path}")
+        label_paths[label] = path
         with np.load(path) as archive:
             required = {"dataset_row_id", "r_tho_hat", "tho_ref"}
             missing_arrays = required - set(archive.files)
             if missing_arrays:
                 raise ValueError(f"模型 {label} 缺数组 {sorted(missing_arrays)}: {path}")
-            ids = np.asarray(archive["dataset_row_id"]).reshape(-1)
+            ids = np.asarray(archive["dataset_row_id"]).reshape(-1).copy()
             prediction = np.asarray(archive["r_tho_hat"])
             reference = np.asarray(archive["tho_ref"])
         if prediction.shape != reference.shape or prediction.shape != (len(ids), SIGNAL_LENGTH):
@@ -124,11 +128,73 @@ def load_case_predictions(
                 raise ValueError(f"模型 {label} 缺 row {row_id}; path: {path}")
             index = positions[row_id]
             selected[row_id] = {
-                "prediction": prediction[index].astype(np.float32, copy=False),
-                "reference": reference[index].astype(np.float32, copy=False),
+                # 只保留 4 个案例的独立数组，避免切片继续持有完整 (452, 18000) 矩阵。
+                "prediction": np.array(prediction[index], dtype=np.float32, copy=True),
+                "reference": np.array(reference[index], dtype=np.float32, copy=True),
             }
         joined[label] = selected
+        del prediction, reference, ids
+    anchor_label = next(iter(joined), None)
+    if anchor_label is not None:
+        for label, selected in joined.items():
+            if label == anchor_label:
+                continue
+            for row_id in requested:
+                anchor = joined[anchor_label][row_id]["reference"]
+                current = selected[row_id]["reference"]
+                if anchor.shape != current.shape or not np.array_equal(anchor, current):
+                    raise ValueError(
+                        f"row {row_id} reference 不一致: source {label} ({label_paths[label]}) "
+                        f"vs {anchor_label} ({label_paths[anchor_label]})"
+                    )
     return joined
+
+
+def validate_case_identity(
+    row_id: int,
+    records: dict[str, dict[str, str]],
+    *,
+    expected_seed: int,
+) -> None:
+    """核对案例链条实际共有的 ID 字段；字段不存在时不臆造身份。"""
+    aliases = {
+        "dataset_row_id": ("dataset_row_id",),
+        "samp_id": ("samp_id", "subject", "subject_id"),
+        "split": ("split",),
+        "window_start_s": ("window_start_s",),
+        "source_npz": ("source_npz",),
+        "stratum": ("stratum", "input_stratum"),
+    }
+    anchors: dict[str, tuple[str, str]] = {}
+    for source, record in records.items():
+        actual_row = record.get("dataset_row_id")
+        if actual_row is not None and int(actual_row) != int(row_id):
+            raise ValueError(
+                f"row {row_id} source {source} field dataset_row_id={actual_row!r} 不一致"
+            )
+        if record.get("seed") not in (None, "") and int(record["seed"]) != int(expected_seed):
+            raise ValueError(
+                f"row {row_id} source {source} field seed={record['seed']!r}, expected={expected_seed}"
+            )
+        for canonical, candidates in aliases.items():
+            key = next((name for name in candidates if record.get(name) not in (None, "")), None)
+            if key is None:
+                continue
+            value = str(record[key]).strip()
+            if canonical in anchors and anchors[canonical][1] != value:
+                anchor_source, expected = anchors[canonical]
+                raise ValueError(
+                    f"row {row_id} source {source} field {canonical}={value!r}, "
+                    f"expected={expected!r} from {anchor_source}"
+                )
+            anchors.setdefault(canonical, (source, value))
+
+
+def _required_sha256(payload: dict[str, Any], field: str, *, label: str, path: Path) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-fA-F]{64}", value) is None:
+        raise ValueError(f"模型 {label} {field} hash 缺失或不是合法 64hex; path: {path}")
+    return value.lower()
 
 
 def _canonical_manifest_rows(path: Path) -> dict[tuple[str, int], dict[str, str]]:
@@ -157,16 +223,61 @@ def _validate_prediction_provenance(
         raise ValueError(
             f"模型 {label} checkpoint 不一致: {actual_checkpoint} != {expected_checkpoint}; path: {manifest_path}"
         )
-    if payload.get("checkpoint_sha256") and _sha256(expected_checkpoint) != payload["checkpoint_sha256"]:
-        raise ValueError(f"模型 {label} checkpoint hash 不一致: {expected_checkpoint}; path: {manifest_path}")
+    if not expected_checkpoint.is_file():
+        raise FileNotFoundError(f"模型 {label} checkpoint 不存在: {expected_checkpoint}")
+    expected_checkpoint_hash = _required_sha256(
+        payload, "checkpoint_sha256", label=label, path=manifest_path
+    )
+    if _sha256(expected_checkpoint) != expected_checkpoint_hash:
+        raise ValueError(
+            f"模型 {label} checkpoint_sha256 hash 不一致: checkpoint {expected_checkpoint}; path: {manifest_path}"
+        )
     actual_labels = (repo_root / str(payload.get("labels_path", ""))).resolve()
     if actual_labels != labels_path.resolve():
         raise ValueError(f"模型 {label} labels_path 不一致: {actual_labels}; path: {manifest_path}")
-    if payload.get("labels_sha256") and _sha256(labels_path) != payload["labels_sha256"]:
-        raise ValueError(f"模型 {label} labels hash 不一致: {labels_path}; path: {manifest_path}")
+    expected_labels_hash = _required_sha256(payload, "labels_sha256", label=label, path=manifest_path)
+    if _sha256(labels_path) != expected_labels_hash:
+        raise ValueError(
+            f"模型 {label} labels_sha256 hash 不一致: labels {labels_path}; path: {manifest_path}"
+        )
     actual_output = (repo_root / str(payload.get("output_path", ""))).resolve()
     if actual_output != prediction_path.resolve():
         raise ValueError(f"模型 {label} output_path 不一致: {actual_output}; path: {manifest_path}")
+    config_path = (repo_root / str(payload.get("config", ""))).resolve()
+    if not config_path.is_file():
+        raise FileNotFoundError(f"模型 {label} config 不存在: {config_path}; path: {manifest_path}")
+    if config_path.parent != expected_checkpoint.parent:
+        raise ValueError(
+            f"模型 {label} config 与 checkpoint 不在同一 run: config {config_path}; checkpoint {expected_checkpoint}; "
+            f"path: {manifest_path}"
+        )
+    config_hash = payload.get("config_sha256")
+    if config_hash is not None:
+        expected_config_hash = _required_sha256(payload, "config_sha256", label=label, path=manifest_path)
+        if _sha256(config_path) != expected_config_hash:
+            raise ValueError(f"模型 {label} config_sha256 hash 不一致: {config_path}; path: {manifest_path}")
+    config_seed = OmegaConf.select(OmegaConf.load(config_path), "training.seed")
+    if config_seed is None or int(config_seed) != seed:
+        raise ValueError(
+            f"模型 {label} config training.seed={config_seed!r}, expected={seed}; config yaml: {config_path}"
+        )
+
+    eval_manifest_path = (repo_root / canonical_row["manifest_output"]).resolve()
+    eval_rows = _read_csv(eval_manifest_path)
+    if len(eval_rows) != 1:
+        raise ValueError(f"模型 {label} canonical eval manifest 需要恰好一行: {eval_manifest_path}")
+    eval_row = eval_rows[0]
+    checks = {
+        "checkpoint": (repo_root / eval_row["checkpoint"]).resolve() == expected_checkpoint,
+        "config": (repo_root / eval_row["config"]).resolve() == config_path,
+        "split": eval_row.get("split") == "test",
+        "sample_seed": int(eval_row.get("sample_seed", -1)) == seed,
+    }
+    for field, valid in checks.items():
+        if not valid:
+            raise ValueError(
+                f"模型 {label} canonical eval manifest field {field} 不一致: {eval_manifest_path}"
+            )
     return manifest_path
 
 
@@ -209,6 +320,26 @@ def _load_bcg_window(
         return None, gap
     gap["status"] = "available"
     return signal, gap
+
+
+def _load_target_window(dataset_index: Path, row: dict[str, str]) -> tuple[np.ndarray, Path]:
+    source = (dataset_index.parent / row["target_source_npz"]).resolve()
+    key_field = "target_waveform_segment_soft_z_key"
+    key = row.get(key_field, "")
+    start = int(round(float(row["window_start_s"]) * SAMPLE_RATE_HZ))
+    with np.load(source) as archive:
+        if key not in archive.files:
+            raise ValueError(
+                f"row {row['dataset_row_id']} dataset target field {key_field}={key!r} 不存在; source: {source}"
+            )
+        target = np.array(
+            archive[key][start : start + SIGNAL_LENGTH], dtype=np.float32, copy=True
+        )
+    if target.shape != (SIGNAL_LENGTH,) or not np.isfinite(target).all():
+        raise ValueError(
+            f"row {row['dataset_row_id']} dataset target shape/finite 无效 {target.shape}; source: {source}"
+        )
+    return target, source
 
 
 def _style_axis(axis: plt.Axes) -> None:
@@ -359,6 +490,7 @@ def _case_figure(
     predictions: dict[str, dict[int, dict[str, np.ndarray]]],
     metrics: dict[str, dict[str, str]],
     corrections: dict[str, dict[str, str]],
+    thresholds: dict[str, float],
     bcg: np.ndarray | None,
     gap: dict[str, Any],
     output: Path,
@@ -402,6 +534,16 @@ def _case_figure(
         spectra.plot(freq, amp, color="#9C755F", linewidth=1.1, label="BCG input")
     freq, amp = _spectrum(reference)
     spectra.plot(freq, amp, color="black", linewidth=1.3, label="THO reference")
+    for label in FORMAL_LABELS:
+        freq, amp = _spectrum(predictions[label][row_id]["prediction"])
+        spectra.plot(
+            freq,
+            amp,
+            color=MODEL_COLORS[label],
+            linewidth=0.8,
+            alpha=0.8,
+            label=DISPLAY_LABELS[label],
+        )
     f0 = float(harmonic_row["tho_reference_hz"])
     spectra.axvline(f0, color="black", linestyle="--", linewidth=1, label=f"THO f0={f0:.3f} Hz")
     spectra.axvline(2 * f0, color="#E45756", linestyle=":", linewidth=1.4, label="2×f0")
@@ -412,37 +554,67 @@ def _case_figure(
     spectra.legend(fontsize=7, frameon=False)
 
     table_axis.axis("off")
-    columns = ["Model", "RR robust\nerr bpm", "Count\nerr bpm", "Lag corr", "Local RR\nMAE", "Correction"]
+    columns = [
+        "Model",
+        "RR err\nbpm",
+        "Lag corr",
+        "H ratio\nin→out",
+        "Rel. drop",
+        "Peak out\n|−1|≤tol",
+        "Correction",
+    ]
     cells = []
     for label in FORMAL_LABELS:
         row = metrics[label]
-        correction = corrections[label]["correction_status"]
+        correction_row = corrections[label]
+        correction = correction_row["correction_status"]
+        input_ratio = float(correction_row["input_harmonic_to_fundamental_ratio"])
+        output_ratio = float(correction_row["output_harmonic_to_fundamental_ratio"])
+        relative_drop = float(correction_row["harmonic_ratio_relative_drop"])
+        output_peak = float(correction_row["output_peak_to_tho_ratio"])
+        drop_hit = relative_drop >= thresholds["correction_ratio_drop_min"]
+        peak_hit = abs(output_peak - 1.0) <= thresholds["peak_relative_tolerance"]
         cells.append(
             [
                 DISPLAY_LABELS[label],
                 f"{float(row['rr_peak_band_robust_abs_error']):.2f}",
-                f"{float(row['breath_count_zero_cross_abs_error']) / 3.0:.2f}",
                 f"{float(row['best_lag_corr_4s']):.2f}",
-                f"{float(row['local_rr_mae']):.2f}",
+                f"{input_ratio:.3f}→{output_ratio:.3f}",
+                f"{relative_drop:+.3f} {'达标' if drop_hit else '未达'}",
+                f"{output_peak:.3f} {'达标' if peak_hit else '未达'}",
                 correction,
             ]
         )
     table = table_axis.table(cellText=cells, colLabels=columns, loc="center", cellLoc="center")
     table.auto_set_font_size(False)
-    table.set_fontsize(8)
+    table.set_fontsize(7.2)
     table.scale(1, 2.0)
     for cell in table.get_celld().values():
         cell.get_text().set_color("black")
         cell.set_edgecolor("#BBBBBB")
-    table_axis.set_title("逐模型当前口径指标（seed 20260837）", fontsize=11, color="black")
+    table_axis.set_title(
+        "逐模型指标与纠偏判据（seed 20260837）\n"
+        f"drop≥{thresholds['correction_ratio_drop_min']:.2f} 且 |output peak/THO−1|≤{thresholds['peak_relative_tolerance']:.2f} → corrected",
+        fontsize=10,
+        color="black",
+    )
 
     note_axis.axis("off")
     ratio = float(harmonic_row["harmonic_to_fundamental_ratio"])
+    boundary_distance = (
+        abs(float(harmonic_row["peak_second_harmonic_relative_error"]) / thresholds["peak_relative_tolerance"] - 1.0)
+        + abs(ratio / thresholds["harmonic_to_fundamental_min"] - 1.0)
+        + abs(float(harmonic_row["harmonic_band_fraction"]) / thresholds["harmonic_band_fraction_min"] - 1.0)
+    )
     note = (
         f"Category: {category}\n"
         f"Input stratum: {harmonic_row['stratum']}\n"
         f"Threshold version: {harmonic_row['threshold_version']}\n"
         f"Harmonic/fundamental energy: {ratio:.3f}\n"
+        f"Boundary distance (3 normalized terms): {boundary_distance:.3f}\n"
+        f"Distance to H-ratio threshold: {ratio - thresholds['harmonic_to_fundamental_min']:+.3f}\n"
+        f"Distance to band-fraction threshold: {float(harmonic_row['harmonic_band_fraction']) - thresholds['harmonic_band_fraction_min']:+.3f}\n"
+        f"Distance to peak-error tolerance: {float(harmonic_row['peak_second_harmonic_relative_error']) - thresholds['peak_relative_tolerance']:+.3f}\n"
         f"Case seed: {case_row['seed']}\n\n"
         f"这例说明什么：{title}，可用于形成可复核讨论。\n"
         f"不能说明什么：{boundary}"
@@ -468,9 +640,17 @@ def build_case_assets(
     canonical_manifest = catalog.result_root / "g_series_test_eval_manifest.csv"
     canonical_rows = _canonical_manifest_rows(canonical_manifest)
     labels_path = harmonic / "test_v2" / "test_harmonic_labels.csv"
+    threshold_path = harmonic / "harmonic_thresholds.json"
+    threshold_payload = json.loads(threshold_path.read_text(encoding="utf-8"))
+    thresholds = {
+        key: float(value) for key, value in threshold_payload["thresholds"].items()
+    }
 
     prediction_paths: list[Path] = []
     prediction_manifests: list[Path] = []
+    prediction_configs: list[Path] = []
+    prediction_checkpoints: list[Path] = []
+    prediction_eval_manifests: list[Path] = []
     for label in FORMAL_LABELS:
         path = harmonic / "predictions" / f"{label}_{CASE_SEED}_harmonic_predictions.npz"
         if not path.is_file():
@@ -478,6 +658,12 @@ def build_case_assets(
         prediction_paths.append(path)
         prediction_manifests.append(
             _validate_prediction_provenance(root, path, canonical_rows[(label, CASE_SEED)], labels_path)
+        )
+        prediction_payload = json.loads(prediction_manifests[-1].read_text(encoding="utf-8"))
+        prediction_configs.append((root / prediction_payload["config"]).resolve())
+        prediction_checkpoints.append((root / prediction_payload["checkpoint"]).resolve())
+        prediction_eval_manifests.append(
+            (root / canonical_rows[(label, CASE_SEED)]["manifest_output"]).resolve()
         )
     predictions = load_case_predictions(prediction_paths, CASE_ROW_IDS)
     if set(predictions) != set(FORMAL_LABELS):
@@ -524,6 +710,7 @@ def build_case_assets(
     gaps: dict[str, Any] = {}
     categories: dict[str, str] = {}
     prediction_lengths: dict[str, int] = {}
+    case_threshold_evidence: dict[str, Any] = {}
     for row_id in CASE_ROW_IDS:
         category = case_rows[row_id]["case_category"]
         categories[str(row_id)] = category
@@ -542,6 +729,22 @@ def build_case_assets(
                 raise ValueError(f"模型 {label} row {row_id} correction 需要恰好一行; path: {correction_path}")
             correction_by_model[label] = matches[0]
             prediction_lengths[f"{label}:{row_id}"] = len(predictions[label][row_id]["prediction"])
+        identity_records = {
+            "dataset_index": index_rows[row_id],
+            "harmonic_labels": harmonic_rows[row_id],
+            "case_manifest": case_rows[row_id],
+            **{f"correction:{label}": row for label, row in correction_by_model.items()},
+            **{f"metrics:{label}": row for label, row in metric_rows.items()},
+        }
+        validate_case_identity(row_id, identity_records, expected_seed=CASE_SEED)
+        dataset_target, target_source = _load_target_window(catalog.dataset_index, index_rows[row_id])
+        dataset_sources.append(target_source)
+        for label in FORMAL_LABELS:
+            reference = predictions[label][row_id]["reference"]
+            if reference.shape != dataset_target.shape or not np.array_equal(reference, dataset_target):
+                raise ValueError(
+                    f"row {row_id} reference 与 dataset target 不一致: source {label}; target source: {target_source}"
+                )
         bcg, gap = _load_bcg_window(catalog.dataset_index, index_rows[row_id])
         source = (catalog.dataset_index.parent / index_rows[row_id]["source_npz"]).resolve()
         dataset_sources.append(source)
@@ -557,10 +760,58 @@ def build_case_assets(
             predictions,
             metric_rows,
             correction_by_model,
+            thresholds,
             bcg,
             gap,
             assets[f"case_row_{row_id}"],
         )
+        harmonic_ratio = float(harmonic_rows[row_id]["harmonic_to_fundamental_ratio"])
+        boundary_distance = (
+            abs(
+                float(harmonic_rows[row_id]["peak_second_harmonic_relative_error"])
+                / thresholds["peak_relative_tolerance"]
+                - 1.0
+            )
+            + abs(harmonic_ratio / thresholds["harmonic_to_fundamental_min"] - 1.0)
+            + abs(
+                float(harmonic_rows[row_id]["harmonic_band_fraction"])
+                / thresholds["harmonic_band_fraction_min"]
+                - 1.0
+            )
+        )
+        case_threshold_evidence[str(row_id)] = {
+            "boundary_distance": boundary_distance,
+            "distance_to_thresholds": {
+                "harmonic_to_fundamental": harmonic_ratio
+                - thresholds["harmonic_to_fundamental_min"],
+                "harmonic_band_fraction": float(harmonic_rows[row_id]["harmonic_band_fraction"])
+                - thresholds["harmonic_band_fraction_min"],
+                "peak_second_harmonic_relative_error": float(
+                    harmonic_rows[row_id]["peak_second_harmonic_relative_error"]
+                )
+                - thresholds["peak_relative_tolerance"],
+            },
+            "models": {
+                label: {
+                    "input_harmonic_to_fundamental_ratio": float(
+                        correction_by_model[label]["input_harmonic_to_fundamental_ratio"]
+                    ),
+                    "output_harmonic_to_fundamental_ratio": float(
+                        correction_by_model[label]["output_harmonic_to_fundamental_ratio"]
+                    ),
+                    "harmonic_ratio_relative_drop": float(
+                        correction_by_model[label]["harmonic_ratio_relative_drop"]
+                    ),
+                    "output_peak_to_tho_ratio": float(
+                        correction_by_model[label]["output_peak_to_tho_ratio"]
+                    ),
+                    "correction_condition_met": correction_by_model[label]["correction_status"]
+                    == "corrected",
+                    "correction_status": correction_by_model[label]["correction_status"],
+                }
+                for label in FORMAL_LABELS
+            },
+        }
 
     metadata: dict[str, Any] = {
         "case_row_ids": list(CASE_ROW_IDS),
@@ -584,6 +835,8 @@ def build_case_assets(
             "window_overlap_used_as_independent_ci": False,
         },
         "strata_interpretation": "target-informed retrospective diagnosis; not a validated deployable BCG-only gate",
+        "correction_thresholds": thresholds,
+        "case_threshold_evidence": case_threshold_evidence,
         "evidence_gaps": gaps,
     }
     source_paths = [
@@ -592,6 +845,7 @@ def build_case_assets(
         catalog.dataset_index,
         case_manifest_path,
         labels_path,
+        threshold_path,
         paired_path,
         subject_path,
         harmonic / "model_metrics" / "model_stratified_metrics_summary.csv",
@@ -603,8 +857,12 @@ def build_case_assets(
         harmonic / "corrections" / "analysis_manifest.json",
         *prediction_paths,
         *prediction_manifests,
+        *prediction_configs,
+        *prediction_checkpoints,
+        *prediction_eval_manifests,
         *metric_paths,
         *dataset_sources,
+        Path(__file__).resolve(),
     ]
     for row in canonical_rows.values():
         source_paths.extend(

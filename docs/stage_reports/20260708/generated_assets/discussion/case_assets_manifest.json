@@ -53,6 +53,183 @@
       "window_overlap_used_as_independent_ci": false
     },
     "strata_interpretation": "target-informed retrospective diagnosis; not a validated deployable BCG-only gate",
+    "correction_thresholds": {
+      "tho_rr_agreement_bpm": 1.0,
+      "peak_relative_tolerance": 0.1,
+      "harmonic_to_fundamental_min": 0.5392740654828524,
+      "harmonic_band_fraction_min": 0.16474917204045256,
+      "correction_ratio_drop_min": 0.2
+    },
+    "case_threshold_evidence": {
+      "640": {
+        "boundary_distance": 4.421730871684959,
+        "distance_to_thresholds": {
+          "harmonic_to_fundamental": 0.1639545001207664,
+          "harmonic_band_fraction": 0.07942270883127442,
+          "peak_second_harmonic_relative_error": 0.36356201171875
+        },
+        "models": {
+          "g0_time_only": {
+            "input_harmonic_to_fundamental_ratio": 0.7032285656036188,
+            "output_harmonic_to_fundamental_ratio": 0.011655807869160395,
+            "harmonic_ratio_relative_drop": 0.9834252923739586,
+            "output_peak_to_tho_ratio": 1.0728759765625,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          },
+          "g0_f0_native_stft_pre_mixer": {
+            "input_harmonic_to_fundamental_ratio": 0.7032285656036188,
+            "output_harmonic_to_fundamental_ratio": 0.01297684961282976,
+            "harmonic_ratio_relative_drop": 0.9815467541457292,
+            "output_peak_to_tho_ratio": 1.0728759765625,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          },
+          "g3_c_wide_8p0": {
+            "input_harmonic_to_fundamental_ratio": 0.7032285656036188,
+            "output_harmonic_to_fundamental_ratio": 0.008344052802031026,
+            "harmonic_ratio_relative_drop": 0.9881346503680936,
+            "output_peak_to_tho_ratio": 0.975341796875,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          },
+          "g3_c_bandenergy": {
+            "input_harmonic_to_fundamental_ratio": 0.7032285656036188,
+            "output_harmonic_to_fundamental_ratio": 0.016200649315460967,
+            "harmonic_ratio_relative_drop": 0.9769624698030361,
+            "output_peak_to_tho_ratio": 1.0728759765625,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          }
+        }
+      },
+      "873": {
+        "boundary_distance": 3.8770150065033055,
+        "distance_to_thresholds": {
+          "harmonic_to_fundamental": 1.4801539162762816,
+          "harmonic_band_fraction": 0.1379170403452515,
+          "peak_second_harmonic_relative_error": 0.029516601562499967
+        },
+        "models": {
+          "g0_time_only": {
+            "input_harmonic_to_fundamental_ratio": 2.019427981759134,
+            "output_harmonic_to_fundamental_ratio": 2.157890314363458,
+            "harmonic_ratio_relative_drop": -0.06856512530033823,
+            "output_peak_to_tho_ratio": 1.740966796875,
+            "correction_condition_met": false,
+            "correction_status": "not_corrected"
+          },
+          "g0_f0_native_stft_pre_mixer": {
+            "input_harmonic_to_fundamental_ratio": 2.019427981759134,
+            "output_harmonic_to_fundamental_ratio": 2.4312846228487124,
+            "harmonic_ratio_relative_drop": -0.20394717950318195,
+            "output_peak_to_tho_ratio": 1.740966796875,
+            "correction_condition_met": false,
+            "correction_status": "not_corrected"
+          },
+          "g3_c_wide_8p0": {
+            "input_harmonic_to_fundamental_ratio": 2.019427981759134,
+            "output_harmonic_to_fundamental_ratio": 2.6159960346570625,
+            "harmonic_ratio_relative_drop": -0.2954143739150605,
+            "output_peak_to_tho_ratio": 1.740966796875,
+            "correction_condition_met": false,
+            "correction_status": "not_corrected"
+          },
+          "g3_c_bandenergy": {
+            "input_harmonic_to_fundamental_ratio": 2.019427981759134,
+            "output_harmonic_to_fundamental_ratio": 2.2935484875303005,
+            "harmonic_ratio_relative_drop": -0.13574165964184515,
+            "output_peak_to_tho_ratio": 1.740966796875,
+            "correction_condition_met": false,
+            "correction_status": "not_corrected"
+          }
+        }
+      },
+      "1353": {
+        "boundary_distance": 3.366390593268334,
+        "distance_to_thresholds": {
+          "harmonic_to_fundamental": 0.062038878546402554,
+          "harmonic_band_fraction": 0.04760374350802965,
+          "peak_second_harmonic_relative_error": 0.296240234375
+        },
+        "models": {
+          "g0_time_only": {
+            "input_harmonic_to_fundamental_ratio": 0.601312944029255,
+            "output_harmonic_to_fundamental_ratio": 0.704064473775073,
+            "harmonic_ratio_relative_drop": -0.1708786261232038,
+            "output_peak_to_tho_ratio": 1.5093994140625,
+            "correction_condition_met": false,
+            "correction_status": "not_corrected"
+          },
+          "g0_f0_native_stft_pre_mixer": {
+            "input_harmonic_to_fundamental_ratio": 0.601312944029255,
+            "output_harmonic_to_fundamental_ratio": 0.4794294887958393,
+            "harmonic_ratio_relative_drop": 0.20269554554522579,
+            "output_peak_to_tho_ratio": 0.9056396484375,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          },
+          "g3_c_wide_8p0": {
+            "input_harmonic_to_fundamental_ratio": 0.601312944029255,
+            "output_harmonic_to_fundamental_ratio": 0.5359796263580707,
+            "harmonic_ratio_relative_drop": 0.10865110807926602,
+            "output_peak_to_tho_ratio": 0.9056396484375,
+            "correction_condition_met": false,
+            "correction_status": "not_corrected"
+          },
+          "g3_c_bandenergy": {
+            "input_harmonic_to_fundamental_ratio": 0.601312944029255,
+            "output_harmonic_to_fundamental_ratio": 0.5063206486936381,
+            "harmonic_ratio_relative_drop": 0.1579748054300911,
+            "output_peak_to_tho_ratio": 0.9056396484375,
+            "correction_condition_met": false,
+            "correction_status": "not_corrected"
+          }
+        }
+      },
+      "3584": {
+        "boundary_distance": 0.47954791129506746,
+        "distance_to_thresholds": {
+          "harmonic_to_fundamental": -0.03769664872171785,
+          "harmonic_band_fraction": 0.008724437016784159,
+          "peak_second_harmonic_relative_error": -0.035668945312500186
+        },
+        "models": {
+          "g0_time_only": {
+            "input_harmonic_to_fundamental_ratio": 0.5015774167611345,
+            "output_harmonic_to_fundamental_ratio": 0.06584210382997514,
+            "harmonic_ratio_relative_drop": 0.8687299275650382,
+            "output_peak_to_tho_ratio": 0.9980468750000002,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          },
+          "g0_f0_native_stft_pre_mixer": {
+            "input_harmonic_to_fundamental_ratio": 0.5015774167611345,
+            "output_harmonic_to_fundamental_ratio": 0.06712625769979735,
+            "harmonic_ratio_relative_drop": 0.866169696926836,
+            "output_peak_to_tho_ratio": 0.9980468750000002,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          },
+          "g3_c_wide_8p0": {
+            "input_harmonic_to_fundamental_ratio": 0.5015774167611345,
+            "output_harmonic_to_fundamental_ratio": 0.06378088153598407,
+            "harmonic_ratio_relative_drop": 0.8728394074281891,
+            "output_peak_to_tho_ratio": 0.9980468750000002,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          },
+          "g3_c_bandenergy": {
+            "input_harmonic_to_fundamental_ratio": 0.5015774167611345,
+            "output_harmonic_to_fundamental_ratio": 0.06567231994172101,
+            "harmonic_ratio_relative_drop": 0.8690684274308226,
+            "output_peak_to_tho_ratio": 0.9980468750000002,
+            "correction_condition_met": true,
+            "correction_status": "corrected"
+          }
+        }
+      }
+    },
     "evidence_gaps": {}
   },
   "sources": [
@@ -77,6 +254,26 @@
       "size_bytes": 103706279
     },
     {
+      "path": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/whole_night/signal_bank/220/research_v2_signal_bank.npz",
+      "sha256": "660e2107747b470901ccff498c52b5e5343733eb01279f991ca6079e8c228e87",
+      "size_bytes": 103859816
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/whole_night/signal_bank/229/research_v2_signal_bank.npz",
+      "sha256": "ff6abe0de71cf2addc6332c1545ac4b1f8ee4e73f9192f24f78145395ff7a9bb",
+      "size_bytes": 116426000
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/whole_night/signal_bank/671/research_v2_signal_bank.npz",
+      "sha256": "f57bafa0c3f9cb2181cf62fd58db4a35dea0a526b3fbe1c848f15ec499294fa4",
+      "size_bytes": 102776296
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/.worktrees/ppt-research-discussion/scripts/tho_group_meeting_ppt/case_figures.py",
+      "sha256": "bfcf1d6bb23f6d6b53829752992a00b1467970a4332303281879b7315f1284b0",
+      "size_bytes": 42072
+    },
+    {
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/bcg_second_harmonic_20260710/corrections/analysis_manifest.json",
       "sha256": "d7e3aa27677e4c76de2b85e24781d18a86a57dce370aafb59caff899cb98ce80",
       "size_bytes": 1873
@@ -95,6 +292,11 @@
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/bcg_second_harmonic_20260710/figures/model_case_manifest.csv",
       "sha256": "b1728d3605a940ab42df04adbb311a8fba273807e5a10d12233c6985196dc449",
       "size_bytes": 1046
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/bcg_second_harmonic_20260710/harmonic_thresholds.json",
+      "sha256": "a0f86a459b262cb5960e991ed3948ca178f2cd158d3144004c03442f1ad5a3ca",
+      "size_bytes": 794
     },
     {
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/bcg_second_harmonic_20260710/model_metrics/analysis_manifest.json",
@@ -165,6 +367,46 @@
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv",
       "sha256": "311bb2131c09e1731f89c14a8f1ad3440551c822608ca76b80d8adcfa759bbf8",
       "size_bytes": 817941
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g0_f0_native_stft_pre_mixer/dual/20260629_155934_144764/checkpoint_top2.pt",
+      "sha256": "a31ffac222c74141051f5ce69282a03dfdb8018e3ef73fba7cf2264b9fb3fb05",
+      "size_bytes": 224351
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g0_f0_native_stft_pre_mixer/dual/20260629_155934_144764/config.yaml",
+      "sha256": "9273ec7f5ac513dea3cfbb7a1c4154fb8c67dc03986c1fce975d70b1a0717653",
+      "size_bytes": 3342
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g0_time_only/time_only/20260629_155634_106514/checkpoint_top1.pt",
+      "sha256": "5e2dfcb87ef6ba0b4f4b19ddd08482a0231cb42ce0bd1c3f360fda28089fa223",
+      "size_bytes": 179667
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g0_time_only/time_only/20260629_155634_106514/config.yaml",
+      "sha256": "f47cbfa1f4341c112a9d94b1f30e8c1099ffc3ee60573918b311d1d55877ffae",
+      "size_bytes": 3338
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g3_c_bandenergy/dual/20260630_212034_543055/checkpoint_top2.pt",
+      "sha256": "f91a0e721b434d8bc50b71150a8a8ba3cf991d4aa488065dea9c4c2a0276e0d0",
+      "size_bytes": 206751
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g3_c_bandenergy/dual/20260630_212034_543055/config.yaml",
+      "sha256": "ddce104f7c4a5fe28523c0193623551d66875c0256a18420b409062c4a3c8fef",
+      "size_bytes": 3334
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g3_c_wide_8p0/dual/20260630_211619_267163/checkpoint_top3.pt",
+      "sha256": "54d647c8f2229cdae4cce55e2d2525d94175123aa20d7f2b90ee93d7698d921f",
+      "size_bytes": 224031
+    },
+    {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g3_c_wide_8p0/dual/20260630_211619_267163/config.yaml",
+      "sha256": "44aa6b880b2b1fcbb3e5989b49c9d7035926a580989e9eb37510742b5236613f",
+      "size_bytes": 3328
     },
     {
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/test_eval_g_series_20260709_local_rr_canonical/g0_f0_native_stft_pre_mixer_20260700_test_manifest.csv",
@@ -410,23 +652,23 @@
     },
     "case_row_640": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/.worktrees/ppt-research-discussion/docs/stage_reports/20260708/generated_assets/discussion/case_row_640.png",
-      "sha256": "19c2ced4ca9eb7e5185d8a92bcbd7d7e21c651b5ab96b328ff3166dabc080163",
-      "size_bytes": 533963
+      "sha256": "cd5fc353fea3d78044793620320980671d5d5f41fa7c12effe545330596c6eb9",
+      "size_bytes": 588918
     },
     "case_row_873": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/.worktrees/ppt-research-discussion/docs/stage_reports/20260708/generated_assets/discussion/case_row_873.png",
-      "sha256": "3114fa57a1fac96f2c92d48e5a091c000d45c24b801545dac927ab7f74cd9b45",
-      "size_bytes": 439576
+      "sha256": "33833f6d378ea446b6b40b9e32d95e9bb8f5dab273d295c5b26ab33e5072c524",
+      "size_bytes": 502478
     },
     "case_row_1353": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/.worktrees/ppt-research-discussion/docs/stage_reports/20260708/generated_assets/discussion/case_row_1353.png",
-      "sha256": "9720873ab391cd2c33c1222bbea2b38bb120427bde603984b4cfed7c250e481a",
-      "size_bytes": 427292
+      "sha256": "295ab391c75d270361b82ac5831cd8e1c5ad75b7fd5184b4df743fcebb2a6842",
+      "size_bytes": 504980
     },
     "case_row_3584": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/.worktrees/ppt-research-discussion/docs/stage_reports/20260708/generated_assets/discussion/case_row_3584.png",
-      "sha256": "6eaee316464d40e4a39db79ed57638595c61107f591819b703cec7735323870b",
-      "size_bytes": 515532
+      "sha256": "d7985240e2bb5d1d657830c349af954098a1268a131d31e0e1f1bf2940d22c96",
+      "size_bytes": 569835
     }
   }
 }
