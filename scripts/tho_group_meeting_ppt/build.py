@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from xml.etree import ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from PIL import Image
@@ -35,6 +36,8 @@ ASSET_DIR = REPORT_DIR / "generated_assets"
 CASE_DIR = Path("runs/bcg_second_harmonic_20260710/figures")
 FIXED_PACKAGE_DATETIME = (1980, 1, 1, 0, 0, 0)
 PROJECT_METADATA_DATETIME = datetime(2026, 7, 8, 0, 0, 0)
+APP_PROPERTIES_NS = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+APP_VT_NS = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"
 
 
 def remove_all_sample_slides(prs: Presentation) -> None:
@@ -536,11 +539,11 @@ def build_discussion_presentation(
         page += len(slides)
     output.parent.mkdir(parents=True, exist_ok=True)
     prs.save(output)
-    _sanitize_discussion_package(output)
+    _sanitize_discussion_package(output, slide_count=len(prs.slides))
     return output
 
 
-def _sanitize_discussion_package(path: Path) -> None:
+def _sanitize_discussion_package(path: Path, *, slide_count: int) -> None:
     """清理隐藏示例文案，并以固定 ZIP 元数据输出可复现 PPTX。"""
     replacements = {
         "论文分享": "研究讨论",
@@ -561,6 +564,8 @@ def _sanitize_discussion_package(path: Path) -> None:
                 for old, new in replacements.items():
                     text = text.replace(old, new)
                 data = text.encode("utf-8")
+            if filename == "docProps/app.xml":
+                data = _sanitize_app_properties(data, slide_count=slide_count)
             info = ZipInfo(filename=filename, date_time=FIXED_PACKAGE_DATETIME)
             info.compress_type = ZIP_DEFLATED
             info.create_system = 0
@@ -571,6 +576,33 @@ def _sanitize_discussion_package(path: Path) -> None:
             info.extract_version = 20
             target.writestr(info, data, compress_type=ZIP_DEFLATED, compresslevel=9)
     temporary.replace(path)
+
+
+def _sanitize_app_properties(data: bytes, *, slide_count: int) -> bytes:
+    """让扩展属性只保留可验证的实际页面统计，移除模板摘要。"""
+    ElementTree.register_namespace("", APP_PROPERTIES_NS)
+    ElementTree.register_namespace("vt", APP_VT_NS)
+    root = ElementTree.fromstring(data)
+
+    def child(name: str):
+        return root.find(f"{{{APP_PROPERTIES_NS}}}{name}")
+
+    slides = child("Slides")
+    if slides is None:
+        slides = ElementTree.SubElement(root, f"{{{APP_PROPERTIES_NS}}}Slides")
+    slides.text = str(slide_count)
+
+    for name in ("Notes", "HiddenSlides", "MMClips"):
+        element = child(name)
+        if element is None:
+            element = ElementTree.SubElement(root, f"{{{APP_PROPERTIES_NS}}}{name}")
+        element.text = "0"
+
+    for name in ("TotalTime", "Words", "Paragraphs", "HeadingPairs", "TitlesOfParts"):
+        element = child(name)
+        if element is not None:
+            root.remove(element)
+    return ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
 def _set_project_core_properties(prs: Presentation) -> None:

@@ -1810,6 +1810,28 @@ def test_discussion_core_metadata_is_project_owned_and_reproducible(
             assert root.find(field, namespaces).text == value
 
 
+def test_discussion_app_metadata_matches_actual_deck_without_template_statistics(
+    deterministic_discussion_decks,
+):
+    from xml.etree import ElementTree
+    from zipfile import ZipFile
+
+    namespace = {"app": "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"}
+    forbidden_titles = ("实验结果", "实验结论", "思考", "工作安排")
+    for path in (*deterministic_discussion_decks, FINAL_DECK):
+        with ZipFile(path) as archive:
+            app_xml = archive.read("docProps/app.xml")
+        text = app_xml.decode("utf-8")
+        assert not any(title in text for title in forbidden_titles)
+        root = ElementTree.fromstring(app_xml)
+        assert root.find("app:Slides", namespace).text == "65"
+        assert root.find("app:Notes", namespace).text == "0"
+        assert root.find("app:HiddenSlides", namespace).text == "0"
+        assert root.find("app:MMClips", namespace).text == "0"
+        for stale_field in ("TotalTime", "Words", "Paragraphs", "HeadingPairs", "TitlesOfParts"):
+            assert root.find(f"app:{stale_field}", namespace) is None
+
+
 @pytest.mark.parametrize(
     ("first", "second"),
     [
