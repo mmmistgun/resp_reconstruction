@@ -14,6 +14,36 @@ TEMPLATE = REPO_ROOT / "docs/stage_reports/20260708/组会汇报.pptx"
 FINAL_DECK = REPO_ROOT / "docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx"
 
 
+def test_discussion_evidence_catalog_resolves_formal_configs_and_signal_sources():
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    catalog = build_evidence_catalog(REPO_ROOT)
+
+    assert catalog.dataset_root.exists()
+    assert catalog.dataset_index.exists()
+    assert catalog.general_signal_npz.name == "f0_visual_sample_signals.npz"
+    assert catalog.general_signal_npz.exists()
+    assert catalog.general_sample_row_id == 8025
+    assert (catalog.result_root / "g_series_test_eval_manifest.csv").exists()
+    assert (catalog.harmonic_root / "model_metrics" / "model_stratified_metrics_summary.csv").exists()
+    assert catalog.run_configs["g3_c_wide_8p0"].stft_win == 2000
+    assert catalog.run_configs["g3_c_wide_8p0"].stft_hop == 250
+    assert catalog.run_configs["g3_c_bandenergy"].stft_encoder_type == "bandenergy"
+    assert all(config.path.name == "config.yaml" for config in catalog.run_configs.values())
+    assert all("g_series_stft_input" in config.path.parts for config in catalog.run_configs.values())
+    assert catalog.case_row_ids == (640, 873, 1353, 3584)
+
+
+def test_read_run_config_reports_missing_field_with_path(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import read_run_config
+
+    config = tmp_path / "config.yaml"
+    config.write_text("model:\n  patch_len: 256\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"stft_win.*config\.yaml"):
+        read_run_config(config)
+
+
 def test_body_text_is_black_and_table_has_only_three_horizontal_rules():
     from scripts.tho_group_meeting_ppt.theme import (
         BODY_BLACK,
