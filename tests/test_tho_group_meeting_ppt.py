@@ -250,6 +250,117 @@ def test_signal_assets_preprocessing_gap_records_missing_fields_without_fake_cur
     assert "suggested_generation_entrypoint" in gap
 
 
+def test_signal_assets_build_keeps_missing_preprocessing_evidence_generatable(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from scripts.tho_group_meeting_ppt import signal_figures
+
+    repo = tmp_path / "repo"
+    signal_dir = repo / "evidence"
+    signal_dir.mkdir(parents=True)
+    signal_npz = signal_dir / "f0_visual_sample_signals.npz"
+    time = np.arange(18_000, dtype=np.float32) / 100.0
+    wave = np.sin(2 * np.pi * 0.25 * time).astype(np.float32)
+    np.savez(
+        signal_npz,
+        time_sec_full=time,
+        bcg_input_full=wave,
+        target_respiration_full=wave,
+        f0_prediction_full=wave,
+    )
+    source_checkpoint = signal_dir / "checkpoint.pt"
+    source_run_config = signal_dir / "source_config.yaml"
+    source_checkpoint.write_bytes(b"synthetic checkpoint evidence")
+    source_run_config.write_text("model: {}\n", encoding="utf-8")
+    signal_npz.with_name("f0_visual_sample_metadata.json").write_text(
+        json.dumps(
+            {
+                "dataset_row_id": 8025,
+                "crop_start_sec": 30.0,
+                "crop_duration_sec": 60.0,
+                "stft_win_samples": 3000,
+                "stft_hop_samples": 500,
+                "stft_low_hz": 0.05,
+                "stft_high_hz": 8.0,
+                "source_checkpoint": str(source_checkpoint.relative_to(repo)),
+                "source_run_config": str(source_run_config.relative_to(repo)),
+            }
+        ),
+        encoding="utf-8",
+    )
+    dataset = repo / "dataset"
+    index = dataset / "training" / "dataset_index.csv"
+    index.parent.mkdir(parents=True)
+    index.write_text(
+        "dataset_row_id,window_start_s,window_end_s,source_npz,target_source_npz,"
+        "bcg_rawish_observed_key,bcg_rawish_segment_robust_z_key,"
+        "target_waveform_observed_key,target_waveform_segment_robust_z_key,"
+        "target_waveform_segment_soft_z_key\n"
+        "8025,90,270,../whole_night/missing_source.npz,"
+        "../whole_night/missing_target.npz,bcg_raw,bcg_robust,tho_raw,tho_robust,tho_soft\n",
+        encoding="utf-8",
+    )
+
+    def config(label: str, *, win: int, hop: int, encoder: str):
+        path = signal_dir / f"{label}.yaml"
+        path.write_text("model: {}\n", encoding="utf-8")
+        return SimpleNamespace(
+            path=path,
+            stft_win=win,
+            stft_hop=hop,
+            stft_low_hz=0.05,
+            stft_high_hz=8.0,
+            stft_encoder_type=encoder,
+            stft_inject_position="pre_mixer",
+        )
+
+    catalog = SimpleNamespace(
+        dataset_root=dataset,
+        dataset_index=index,
+        general_signal_npz=signal_npz,
+        general_sample_row_id=8025,
+        run_configs={
+            "g0_f0_native_stft_pre_mixer": config("f0", win=3000, hop=500, encoder="conv2d"),
+            "g3_c_wide_8p0": config("wide", win=2000, hop=250, encoder="conv2d"),
+            "g3_c_bandenergy": config("bandenergy", win=2000, hop=250, encoder="bandenergy"),
+        },
+    )
+    monkeypatch.setattr(signal_figures, "build_evidence_catalog", lambda _: catalog)
+    gap_titles: list[str] = []
+    original_gap_panel = signal_figures._gap_panel
+
+    def recording_gap_panel(path: Path, title: str) -> None:
+        gap_titles.append(title)
+        original_gap_panel(path, title)
+
+    monkeypatch.setattr(signal_figures, "_gap_panel", recording_gap_panel)
+    output = tmp_path / "output"
+
+    assets, metadata = signal_figures.build_signal_assets(repo, output)
+    manifest = json.loads((output / "signal_assets_manifest.json").read_text(encoding="utf-8"))
+
+    assert set(assets) == {
+        "signal_overview",
+        "preprocessing_comparison",
+        "softz_mapping",
+        "stft_resolution_comparison",
+        "bandenergy_response",
+    }
+    assert all(path.is_file() for path in assets.values())
+    assert metadata["preprocessing_evidence_gap"] is True
+    assert set(gap_titles) == {"预处理前后对照", "soft-z 映射与真实分布"}
+    assert (output / "evidence_gap_preprocessing.json").is_file()
+    for key in ("source_npz", "target_npz"):
+        record = manifest["evidence"][key]
+        assert record["status"] == "missing"
+        assert "sha256" not in record and "size_bytes" not in record
+
+
 def test_signal_assets_builds_five_readable_real_evidence_figures(tmp_path: Path):
     import hashlib
 

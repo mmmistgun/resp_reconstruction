@@ -4,36 +4,43 @@
   "evidence": {
     "signal_metadata_json": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/docs/figure/F0_native_stft_pre_mixer/signals/f0_visual_sample_metadata.json",
+      "status": "present",
       "sha256": "340afb1527e1a567f8447e6509b3a4b687210e7319140a8f791c694e37474422",
       "size_bytes": 1271
     },
     "signal_npz": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/docs/figure/F0_native_stft_pre_mixer/signals/f0_visual_sample_signals.npz",
+      "status": "present",
       "sha256": "56cd40391988a06e2a272ca4b51136795511cd0c6883bba1c55e9071a7e4ecb4",
       "size_bytes": 348574
     },
     "source_checkpoint": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual/20260626_220215_782040/checkpoint.pt",
+      "status": "present",
       "sha256": "106e6b5b76806816d8e04024130769a6802385279e40062cad804fd4e50a17f7",
       "size_bytes": 222370
     },
     "source_run_config": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual/20260626_220215_782040/config.yaml",
+      "status": "present",
       "sha256": "292bbd6d9060b7a80ae06a61b18e7417aeb431ec5369f738b129863a4789ac14",
       "size_bytes": 3302
     },
     "dataset_index": {
       "path": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/training/dataset_index.csv",
+      "status": "present",
       "sha256": "f65ae6524632187c7c2795bd7b5e25434afb649b5a04fe39084b70cc59f9b04f",
       "size_bytes": 13109211
     },
     "source_npz": {
       "path": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/whole_night/alignment/952/research_v2_alignment.npz",
+      "status": "present",
       "sha256": "cbb534574c1ae4e855d5117988c3eeb2523e3caa563138deac3e37f8a8371821",
       "size_bytes": 114749896
     },
     "target_npz": {
       "path": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/whole_night/signal_bank/952/research_v2_signal_bank.npz",
+      "status": "present",
       "sha256": "4dde336a1e9211139ad2a0756913529620cfa019332911b4dbe415a0fe2e6e32",
       "size_bytes": 114063174
     }
@@ -41,6 +48,7 @@
   "resolved_configs": {
     "f0": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g0_f0_native_stft_pre_mixer/dual/20260629_155803_880047/config.yaml",
+      "status": "present",
       "sha256": "96a0598205ab5f95429e2206532c1186885ce08921e8d9a85c6ad86af594cdf3",
       "size_bytes": 3342,
       "stft_win": 3000,
@@ -52,6 +60,7 @@
     },
     "wide": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g3_c_wide_8p0/dual/20260630_211450_861579/config.yaml",
+      "status": "present",
       "sha256": "84d20795f41de9148dc54da89b8f546b7561243e95808336407e91a417063dc1",
       "size_bytes": 3328,
       "stft_win": 2000,
@@ -63,6 +72,7 @@
     },
     "bandenergy": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g3_c_bandenergy/dual/20260630_211919_419308/config.yaml",
+      "status": "present",
       "sha256": "aba3d64bfae79a0c7fb902015b6d74a792ac6ae9c3ccc14a39a213cc72070225",
       "size_bytes": 3334,
       "stft_win": 2000,
@@ -121,26 +131,31 @@
   "assets": {
     "signal_overview": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/signal_overview.png",
+      "status": "present",
       "sha256": "c4adc6466caf661a021aba2f8e269ab7ea63e82ef6c152ab302761df56453e2e",
       "size_bytes": 484515
     },
     "preprocessing_comparison": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/preprocessing_comparison.png",
+      "status": "present",
       "sha256": "75ab876b24814abfba8bf67988ca39e59a38ef3893423f5e16f68fc5e5a0c438",
       "size_bytes": 454039
     },
     "softz_mapping": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/softz_mapping.png",
+      "status": "present",
       "sha256": "5dfb12e6e5f3851461858caf9e817bc20a53f5ea5dbf49bee60d1bf3e941df82",
       "size_bytes": 187478
     },
     "stft_resolution_comparison": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/stft_resolution_comparison.png",
+      "status": "present",
       "sha256": "55ee3decd3228b89459510855be53787f82c00679627c9793d06f53ed215a45a",
       "size_bytes": 212162
     },
     "bandenergy_response": {
       "path": "docs/stage_reports/20260708/generated_assets/discussion/bandenergy_response.png",
+      "status": "present",
       "sha256": "9aa47e3e61c496dd3f7be6f8b37ada8346c9950bdedd6e21ae4a4da40ebc72b9",
       "size_bytes": 345335
     }

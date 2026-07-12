@@ -684,9 +684,14 @@ def _manifest_path(repo_root: Path, path: Path) -> str:
 def _file_manifest_record(repo_root: Path, path: Path) -> dict[str, Any]:
     resolved = path.resolve()
     if not resolved.is_file():
-        raise FileNotFoundError(f"信号资产 manifest 证据文件不存在: {resolved}")
+        return {
+            "path": _manifest_path(repo_root, resolved),
+            "status": "missing",
+            "reason": "evidence file does not exist at generation time",
+        }
     return {
         "path": _manifest_path(repo_root, resolved),
+        "status": "present",
         "sha256": _sha256_file(resolved),
         "size_bytes": resolved.stat().st_size,
     }
