@@ -433,8 +433,31 @@ def _render_asset(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...], pat
 
 
 def _render_provenance(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]):
-    _render_generic(slide, SlideSpec(spec.key, spec.section, spec.title, spec.unit_keys, spec.context_keys, spec.builder, spec.asset_key, (QUESTION, METHOD, RATIONALE, LIMITS), spec.panel_plan[:-1]), units)
-    add_evidence_gap(slide, missing_fields="dirty=false 的数据制作 commit 与重导出 manifest", suggested_entrypoint="在数据制作工作区重新导出并冻结 provenance", x=Inches(0.95), y=Inches(5.43), width=Inches(11.35), height=Inches(1.18))
+    content = [panel for panel in spec.panel_plan if panel.role != "discussion"]
+    gap = Inches(0.20)
+    width = int((Inches(11.82) - gap * (len(content) - 1)) / len(content))
+    for index, panel in enumerate(content):
+        _add_planned_panel(
+            slide,
+            panel,
+            _field_text(units, panel.field),
+            x=Inches(0.72) + index * (width + gap),
+            y=Inches(2.05),
+            width=width,
+            height=Inches(3.05),
+        )
+    add_evidence_gap(
+        slide,
+        missing_fields="dirty=false 的数据制作 commit 与重导出 manifest",
+        suggested_entrypoint=(
+            "在数据制作工作区重新导出并冻结 provenance；待决策："
+            + _field_text(units, PROMPT)
+        ),
+        x=Inches(0.95),
+        y=Inches(5.28),
+        width=Inches(11.35),
+        height=Inches(1.52),
+    )
 
 
 def _render_sample(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]):

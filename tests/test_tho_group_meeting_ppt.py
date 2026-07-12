@@ -1463,35 +1463,166 @@ def test_backup_contains_balanced_cases_formulas_subject_table_and_commands(tmp_
     assert "eval_topk_checkpoints.py" not in text
 
 
-def test_final_deck_has_no_sample_text_gray_body_or_out_of_bounds_shapes():
+def test_final_deck_is_complete_editable_and_powerpoint_compatible():
+    from zipfile import ZipFile
+
+    from scripts.tho_group_meeting_ppt.detail_slides import SLIDE_GROUPS, UNIT_BY_KEY
+    from scripts.tho_group_meeting_ppt.discussion_content import DISCUSSION_UNITS
     from scripts.tho_group_meeting_ppt.theme import BODY_BLACK, is_three_line_table
 
+    expected_assets = {
+        "signal_overview.png", "softz_mapping.png", "token_geometry.png",
+        "stft_branch_shapes.png", "bandenergy_response.png", "loss_schedule.png",
+        "metric_robust_rr.png", "metric_cycle_count.png", "metric_lag_corr.png",
+        "metric_relative_envelope.png", "metric_local_rr.png", "overall_delta.png",
+        "seed_subject_stability.png", "strata_tradeoffs.png",
+        "stft_resolution_comparison.png", "case_row_640.png", "case_row_873.png",
+        "case_row_1353.png", "case_row_3584.png",
+    }
+    forbidden = (
+        "论文分享", "2021/12/21", "汇报人：xxx", "工作进度", "实验编号汇总",
+        "复现实验命令", "现场问答", "更优",
+    )
+    body_exclusions = ("页面标题", "页码", "来源注释", "章节标签")
+
+    assert hashlib.sha256(TEMPLATE.read_bytes()).hexdigest() == (
+        "ce71b290bfd48cc74d7aef7f9586de05842c03349e933aa8f5a02572f2a72e10"
+    )
     assert FINAL_DECK.exists()
     prs = Presentation(FINAL_DECK)
-    text = "\n".join(
-        shape.text
-        for slide in prs.slides
-        for shape in slide.shapes
+    assert len(DISCUSSION_UNITS) == 48
+    assert len(prs.slides) == 1 + 11 + len(SLIDE_GROUPS) == 65
+
+    all_text = "\n".join(
+        shape.text for slide in prs.slides for shape in slide.shapes
         if shape.has_text_frame
     )
-    assert len(prs.slides) >= 36
-    assert "论文分享" not in text
-    assert "2021/12/21" not in text
-    assert "汇报人：xxx" not in text
-    assert "【待补：汇报人、汇报日期】" in text
+    assert "THO research v2｜从整晚 BCG 到呼吸重建" in all_text
+    assert "全流程研究方法细节讨论｜证据、边界与下一轮决策" in all_text
+    assert not any(phrase in all_text for phrase in forbidden)
+    with ZipFile(FINAL_DECK) as archive:
+        package_text = "\n".join(
+            archive.read(name).decode("utf-8", errors="ignore")
+            for name in archive.namelist()
+            if name.endswith((".xml", ".rels"))
+        )
+    assert not any(phrase in package_text for phrase in forbidden)
 
-    for slide in prs.slides:
+    sections = list(dict.fromkeys(spec.section for spec in SLIDE_GROUPS))
+    assert len(sections) == 11
+    section_pages: set[int] = set()
+    page_index = 1
+    current_section = None
+    consumed_units = []
+    for section_number, spec in enumerate(SLIDE_GROUPS, start=1):
+        if spec.section != current_section:
+            current_section = spec.section
+            expected_number = sections.index(current_section) + 1
+            section_pages.add(page_index)
+            section_title = next(
+                shape.text for shape in prs.slides[page_index].shapes
+                if shape.name == "页面标题"
+            )
+            assert section_title == f"{expected_number:02d}｜{current_section}"
+            page_index += 1
+        slide = prs.slides[page_index]
+        assert next(shape.text for shape in slide.shapes if shape.name == "页面标题") == spec.title
+        slide_text = "\n".join(
+            shape.text for shape in slide.shapes if shape.has_text_frame
+        )
+        keys = spec.unit_keys or spec.context_keys
+        for key in keys:
+            assert UNIT_BY_KEY[key].question in slide_text, (spec.key, key)
+        consumed_units.extend(spec.unit_keys)
+        page_index += 1
+    assert page_index == len(prs.slides)
+    assert consumed_units == list(dict.fromkeys(consumed_units))
+    assert set(consumed_units) == {unit.key for unit in DISCUSSION_UNITS}
+
+    actual_assets = set()
+    image_count = 0
+    native_formula_or_flow = 0
+    tables = []
+    case_pages = []
+    for index, slide in enumerate(prs.slides):
+        title = next(
+            (shape.text for shape in slide.shapes if shape.name == "页面标题"), ""
+        )
+        if "dataset_row_id=" in title:
+            case_pages.append(title)
+        if index > 0 and index not in section_pages:
+            assert title
+            substantive = [
+                shape for shape in slide.shapes
+                if shape.has_text_frame and shape.text.strip()
+                and shape.name not in body_exclusions
+            ]
+            assert len(substantive) >= 2, (index + 1, title)
         for shape in slide.shapes:
-            assert shape.left >= 0
-            assert shape.top >= 0
+            assert shape.left >= 0 and shape.top >= 0
             assert shape.left + shape.width <= prs.slide_width
             assert shape.top + shape.height <= prs.slide_height
+            if shape.shape_type == 13:
+                image_count += 1
+                actual_assets.add(shape.name.removeprefix("真实证据图："))
+                assert shape.width >= Inches(4.5) and shape.height >= Inches(2.4)
+                assert shape.width < prs.slide_width and shape.height < prs.slide_height
+            if shape.name.startswith(("公式", "流程", "方法", "架构", "证据边界", "讨论框")):
+                native_formula_or_flow += 1
             if shape.has_table:
+                tables.append(shape.table)
                 assert is_three_line_table(shape.table)
-            if shape.name.startswith(("正文", "核心结论")) and shape.has_text_frame:
+                for row in shape.table.rows:
+                    for cell in row.cells:
+                        tc_pr = cell._tc.get_or_add_tcPr()
+                        assert all(
+                            tc_pr.find(f"{{http://schemas.openxmlformats.org/drawingml/2006/main}}{edge}") is None
+                            for edge in ("lnL", "lnR", "lnTlToBr", "lnBlToTr")
+                        )
+                        for paragraph in cell.text_frame.paragraphs:
+                            for run in paragraph.runs:
+                                if run.text.strip():
+                                    assert run.font.size.pt >= 14
+            if shape.has_text_frame and shape.name not in body_exclusions and not shape.has_table:
                 for paragraph in shape.text_frame.paragraphs:
                     for run in paragraph.runs:
-                        assert run.font.color.rgb == BODY_BLACK
+                        if run.text.strip():
+                            assert run.font.color.rgb == BODY_BLACK, (index + 1, shape.name, run.text)
+                            assert run.font.size.pt >= 18, (index + 1, shape.name, run.text)
+
+    assert image_count == len(expected_assets) == 19
+    assert actual_assets == expected_assets
+    assert native_formula_or_flow >= 35
+    assert len(tables) == 5
+    assert case_pages == [
+        "dataset_row_id=640｜四模型均纠正",
+        "dataset_row_id=873｜四模型均失败",
+        "dataset_row_id=1353｜模型间分歧",
+        "dataset_row_id=3584｜阈值边界",
+    ]
+    canonical = [
+        table for table in tables
+        if table._graphic_frame.name.startswith("四方案核心指标")
+    ]
+    assert len(canonical) == 2 and all(len(table.rows) == 5 for table in canonical)
+    canonical_text = "\n".join(
+        cell.text for table in canonical for row in table.rows for cell in row.cells
+    )
+    for scheme in ("纯时序", "F0 STFT", "wide STFT", "bandenergy"):
+        assert canonical_text.count(scheme) == 2
+    for metric in (
+        "robust RR MAE bpm", "count bpm MAE", "lag4 corr（无量纲）",
+        "relative envelope corr", "local RR MAE bpm",
+    ):
+        assert metric in canonical_text
+
+    gaps = [
+        shape for slide in prs.slides for shape in slide.shapes
+        if shape.name.startswith("证据缺口")
+    ]
+    assert gaps
+    assert all("所需字段：" in gap.text and "建议入口：" in gap.text for gap in gaps)
+    assert all(_estimated_text_height(gap) <= gap.height / Inches(1) for gap in gaps)
 
 
 def test_cli_can_run_from_repository_root():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from zipfile import ZipFile
 
 from PIL import Image
 from pptx import Presentation
@@ -531,4 +532,25 @@ def build_discussion_presentation(
         page += len(slides)
     output.parent.mkdir(parents=True, exist_ok=True)
     prs.save(output)
+    _sanitize_discussion_package(output)
     return output
+
+
+def _sanitize_discussion_package(path: Path) -> None:
+    """移除模板残留的隐藏示例文案，避免其留在交付包属性中。"""
+    replacements = {
+        "论文分享": "研究讨论",
+        "汇报人：xxx": "THO research v2",
+        "2021/12/21": "",
+    }
+    temporary = path.with_suffix(".sanitized.pptx")
+    with ZipFile(path, "r") as source, ZipFile(temporary, "w") as target:
+        for info in source.infolist():
+            data = source.read(info.filename)
+            if info.filename.endswith((".xml", ".rels")):
+                text = data.decode("utf-8")
+                for old, new in replacements.items():
+                    text = text.replace(old, new)
+                data = text.encode("utf-8")
+            target.writestr(info, data)
+    temporary.replace(path)
