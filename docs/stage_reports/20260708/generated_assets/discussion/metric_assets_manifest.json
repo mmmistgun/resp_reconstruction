@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "dataset_row_id": 8025,
+  "evidence_scope": "同一通用 F0 validation 预测资产上的逐步计算示例，不是 canonical test 汇总行",
+  "canonical_csv_alignment": false,
+  "evidence_gap": "row 8025 不在 canonical G-series test CSV；同源旧 metrics.csv 仅含当时已有列，不含当前 robust RR、4s lag-aware relative envelope 与 canonical local RR。",
+  "sources": {
+    "signal_metadata_json": {
+      "path": "docs/figure/F0_native_stft_pre_mixer/signals/f0_visual_sample_metadata.json",
+      "sha256": "340afb1527e1a567f8447e6509b3a4b687210e7319140a8f791c694e37474422",
+      "size_bytes": 1271
+    },
+    "source_run_config": {
+      "path": "runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual/20260626_220215_782040/config.yaml",
+      "sha256": "292bbd6d9060b7a80ae06a61b18e7417aeb431ec5369f738b129863a4789ac14",
+      "size_bytes": 3302
+    },
+    "source_checkpoint": {
+      "path": "runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual/20260626_220215_782040/checkpoint.pt",
+      "sha256": "106e6b5b76806816d8e04024130769a6802385279e40062cad804fd4e50a17f7",
+      "size_bytes": 222370
+    },
+    "source_metrics_csv": {
+      "path": "runs/f_a_stft_loss/f0_native_stft_pre_mixer/dual/20260626_220215_782040/metrics.csv",
+      "sha256": "9d396ba86f8092197da795207cfc52797af275f6b1edc630f96e45bab8fad49c",
+      "size_bytes": 1009167
+    },
+    "signal_npz": {
+      "path": "docs/figure/F0_native_stft_pre_mixer/signals/f0_visual_sample_signals.npz",
+      "sha256": "56cd40391988a06e2a272ca4b51136795511cd0c6883bba1c55e9071a7e4ecb4",
+      "size_bytes": 348574
+    },
+    "metric_code": {
+      "path": "resp_train/metrics/signal.py",
+      "sha256": "f357db36eb98564615084f361f42695eb36a10f64c5fc87ae8459c72c27d30b1",
+      "size_bytes": 28426
+    },
+    "metric_evaluate_code": {
+      "path": "resp_train/metrics/evaluate.py",
+      "sha256": "21de68d175594eb8b31daee924616b122c6f3fe17513d37fabd4116eaf1d2229",
+      "size_bytes": 23776
+    },
+    "robust_rr_demo_code": {
+      "path": "docs/figure/rr_peak_band_metric/plot_rr_peak_band_metric_demo.py",
+      "sha256": "5fdd61a9868e4817456a04f6a7432bf0efc64ec390f94ce7e80f4dc5a7ccf89a",
+      "size_bytes": 38205
+    },
+    "metric_schema": {
+      "path": "docs/experiments/metric_schema.md",
+      "sha256": "9ca584ddfa46378e2ad4a4cef241fde4a6eb16695ffde2ccad90721fae70291b",
+      "size_bytes": 13071
+    }
+  },
+  "parameters": {
+    "sample_rate_hz": 100.0,
+    "window_sec": 180.0,
+    "band_hz": [
+      0.05,
+      0.7
+    ],
+    "bandpass_order": 4,
+    "max_lag_sec": 4.0,
+    "envelope_window_sec": 2.0,
+    "relative_envelope_trend_parameter_sec": 20.0,
+    "relative_envelope_effective_smoothing_sec": 40.0,
+    "local_rr_window_sec": 40.0,
+    "local_rr_step_sec": 10.0,
+    "figure_size_pixels": [
+      1920,
+      1080
+    ]
+  },
+  "values": {
+    "dataset_row_id": 8025,
+    "sample_split": "val",
+    "sample_model_label": "F0_native_stft_pre_mixer",
+    "evidence_scope": "同一通用 F0 validation 预测资产上的逐步计算示例，不是 canonical test 汇总行",
+    "canonical_csv_alignment": false,
+    "evidence_gap": "row 8025 不在 canonical G-series test CSV；同源旧 metrics.csv 仅含当时已有列，不含当前 robust RR、4s lag-aware relative envelope 与 canonical local RR。",
+    "pred_robust_rr_bpm": 17.26618705035971,
+    "target_robust_rr_bpm": 17.02127659574468,
+    "robust_rr_abs_error": 0.24491045461503091,
+    "pred_cycle_count": 51,
+    "target_cycle_count": 51,
+    "cycle_count_abs_error": 0,
+    "cycle_count_bpm_error": 0.0,
+    "best_lag_corr_4s": 0.894391325011571,
+    "best_lag_sec_4s": 0.31,
+    "relative_envelope_corr_lag4s": 0.4348623454658081,
+    "relative_envelope_mae_lag4s": 0.20874806138867738,
+    "local_rr_mae": 0.18947024783361666,
+    "local_rr_corr": 0.8853633661830652,
+    "local_rr_valid_frac": 1.0
+  },
+  "layout": {
+    "metric_robust_rr": {
+      "all_key_text_inside": true,
+      "text_overlap_count": 0,
+      "checked_text_count": 5
+    },
+    "metric_cycle_count": {
+      "all_key_text_inside": true,
+      "text_overlap_count": 0,
+      "checked_text_count": 5
+    },
+    "metric_lag_corr": {
+      "all_key_text_inside": true,
+      "text_overlap_count": 0,
+      "checked_text_count": 5
+    },
+    "metric_relative_envelope": {
+      "all_key_text_inside": true,
+      "text_overlap_count": 0,
+      "checked_text_count": 5
+    },
+    "metric_local_rr": {
+      "all_key_text_inside": true,
+      "text_overlap_count": 0,
+      "checked_text_count": 5
+    }
+  },
+  "assets": {
+    "metric_robust_rr": {
+      "path": "docs/stage_reports/20260708/generated_assets/discussion/metric_robust_rr.png",
+      "sha256": "1223002c2aa7275304f05689c96fa6a7ec8a7fe6439fe2d9594aa79f82979b5c",
+      "size_bytes": 417998
+    },
+    "metric_cycle_count": {
+      "path": "docs/stage_reports/20260708/generated_assets/discussion/metric_cycle_count.png",
+      "sha256": "8e1b38e491dd836b0b6e224a1d6270cd6b1c184d5dd484c11a22d2ad73ac7a7c",
+      "size_bytes": 405012
+    },
+    "metric_lag_corr": {
+      "path": "docs/stage_reports/20260708/generated_assets/discussion/metric_lag_corr.png",
+      "sha256": "b462967b9cb6276f78699e702d4df17c657dead456c8c8baec23fa4dc60069aa",
+      "size_bytes": 247131
+    },
+    "metric_relative_envelope": {
+      "path": "docs/stage_reports/20260708/generated_assets/discussion/metric_relative_envelope.png",
+      "sha256": "df3ea2531e13394c9682e797a8a6fd959589579a516c09b00b51abe7d11a6daa",
+      "size_bytes": 347770
+    },
+    "metric_local_rr": {
+      "path": "docs/stage_reports/20260708/generated_assets/discussion/metric_local_rr.png",
+      "sha256": "05f5994e051fb9fdbac226448ce22436f4201ffaabc585caef981d481aa7922e",
+      "size_bytes": 272029
+    }
+  }
+}

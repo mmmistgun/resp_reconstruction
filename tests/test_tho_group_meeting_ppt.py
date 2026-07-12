@@ -1288,6 +1288,144 @@ def test_loss_schedule_rejects_any_formal_g_config_drift(tmp_path: Path):
         validate_formal_loss_configs(drift_catalog)
 
 
+@pytest.fixture(scope="module")
+def metric_asset_build(tmp_path_factory):
+    from scripts.tho_group_meeting_ppt.metric_figures import build_metric_assets
+
+    output = tmp_path_factory.mktemp("metric_assets")
+    return build_metric_assets(REPO_ROOT, output)
+
+
+def test_metric_assets_use_row_8025_and_current_repository_algorithms(metric_asset_build):
+    import numpy as np
+
+    from resp_train.metrics.signal import (
+        bandpass_filter,
+        best_lag_correlation_from_filtered,
+        estimate_robust_peak_rate_bpm,
+        lag_aligned_overlap,
+        local_rr_metrics,
+        relative_envelope_metrics,
+        zero_crossing_counts,
+    )
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    assets, values = metric_asset_build
+    catalog = build_evidence_catalog(REPO_ROOT)
+    with np.load(catalog.general_signal_npz, allow_pickle=False) as data:
+        pred = np.asarray(data["f0_prediction_full"], dtype=np.float64)
+        target = np.asarray(data["target_respiration_full"], dtype=np.float64)
+    pred_filtered = bandpass_filter(pred, fs=100.0, low_hz=0.05, high_hz=0.7, order=4)
+    target_filtered = bandpass_filter(target, fs=100.0, low_hz=0.05, high_hz=0.7, order=4)
+    pred_rr = estimate_robust_peak_rate_bpm(pred_filtered, fs=100.0, low_hz=0.05, high_hz=0.7)
+    target_rr = estimate_robust_peak_rate_bpm(target_filtered, fs=100.0, low_hz=0.05, high_hz=0.7)
+    pred_count = zero_crossing_counts(pred_filtered)
+    target_count = zero_crossing_counts(target_filtered)
+    lag = best_lag_correlation_from_filtered(
+        pred_filtered, target_filtered, fs=100.0, max_lag_sec=4.0, low_hz=0.05
+    )
+    pred_overlap, target_overlap = lag_aligned_overlap(
+        pred, target, lag_samples=round(lag["best_lag_sec"] * 100.0)
+    )
+    rel_env = relative_envelope_metrics(
+        pred_overlap, target_overlap, fs=100.0, envelope_window_sec=2.0
+    )
+    local = local_rr_metrics(
+        pred_filtered,
+        target_filtered,
+        fs=100.0,
+        window_sec=40.0,
+        step_sec=10.0,
+        low_hz=0.05,
+        high_hz=0.7,
+    )
+
+    assert set(assets) == {
+        "metric_robust_rr",
+        "metric_cycle_count",
+        "metric_lag_corr",
+        "metric_relative_envelope",
+        "metric_local_rr",
+    }
+    assert values["dataset_row_id"] == 8025
+    assert values["sample_split"] == "val"
+    assert values["sample_model_label"] == "F0_native_stft_pre_mixer"
+    assert values["robust_rr_abs_error"] == pytest.approx(abs(pred_rr - target_rr), abs=1e-6)
+    assert values["cycle_count_abs_error"] == abs(pred_count["cycle"] - target_count["cycle"])
+    assert values["cycle_count_abs_error"] >= 0
+    assert values["best_lag_corr_4s"] == pytest.approx(lag["best_lag_corr"], abs=1e-9)
+    assert -1.0 <= values["best_lag_corr_4s"] <= 1.0
+    assert values["relative_envelope_mae_lag4s"] == pytest.approx(
+        rel_env["relative_envelope_mae"], abs=1e-9
+    )
+    assert values["local_rr_mae"] == pytest.approx(local["local_rr_mae"], abs=1e-9)
+    assert 0.0 <= values["local_rr_valid_frac"] <= 1.0
+    assert values["parameters"]["local_rr_window_sec"] == 40.0
+    assert values["parameters"]["local_rr_step_sec"] == 10.0
+    assert values["canonical_csv_alignment"] is False
+    assert "计算示例" in values["evidence_scope"]
+    assert "更优" not in json.dumps(values, ensure_ascii=False)
+
+
+def test_metric_assets_are_large_uncropped_and_manifested(metric_asset_build):
+    from PIL import Image, ImageStat
+
+    assets, values = metric_asset_build
+    output = next(iter(assets.values())).parent
+    manifest = json.loads((output / "metric_assets_manifest.json").read_text(encoding="utf-8"))
+
+    assert manifest["dataset_row_id"] == 8025
+    assert manifest["evidence_scope"] == values["evidence_scope"]
+    assert manifest["sources"]["signal_npz"]["path"].endswith("f0_visual_sample_signals.npz")
+    assert manifest["sources"]["source_metrics_csv"]["path"].endswith("metrics.csv")
+    assert manifest["sources"]["metric_code"]["path"] == "resp_train/metrics/signal.py"
+    assert manifest["sources"]["robust_rr_demo_code"]["path"].endswith(
+        "plot_rr_peak_band_metric_demo.py"
+    )
+    assert all(not Path(record["path"]).is_absolute() for record in manifest["sources"].values())
+    assert manifest["parameters"]["local_rr_window_sec"] == 40.0
+    assert manifest["parameters"]["local_rr_step_sec"] == 10.0
+    assert set(manifest["assets"]) == set(assets)
+    for key, path in assets.items():
+        assert path.is_file() and path.stat().st_size > 20_000
+        assert manifest["assets"][key]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+        assert values["layout"][key]["all_key_text_inside"] is True
+        assert values["layout"][key]["text_overlap_count"] == 0
+        with Image.open(path) as image:
+            assert image.width >= 1600 and image.height >= 900
+            assert ImageStat.Stat(image.convert("L")).stddev[0] > 10
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    (("model_label", "g3_c_wide_8p0"), ("split", "test"), ("dataset_row_id", 5058)),
+)
+def test_metric_asset_identity_rejects_tampered_general_signal_metadata(field, bad_value):
+    import pandas as pd
+
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+    from scripts.tho_group_meeting_ppt.metric_figures import validate_metric_asset_identity
+
+    catalog = build_evidence_catalog(REPO_ROOT)
+    metadata_path = catalog.general_signal_npz.with_name("f0_visual_sample_metadata.json")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata[field] = bad_value
+    source_config = (REPO_ROOT / metadata["source_run_config"]).resolve()
+    source_checkpoint = (REPO_ROOT / metadata["source_checkpoint"]).resolve()
+    source_metrics = source_config.parent / "metrics.csv"
+    frame = pd.read_csv(source_metrics)
+    source_row = frame[frame["dataset_row_id"].astype(int) == 8025].iloc[0]
+
+    with pytest.raises(ValueError, match=field):
+        validate_metric_asset_identity(
+            metadata,
+            signal_npz=catalog.general_signal_npz,
+            source_config=source_config,
+            source_checkpoint=source_checkpoint,
+            source_metrics_row=source_row,
+        )
+
+
 def test_model_detail_full_registry_models_validate_native_injection_chain(model_asset_builds):
     import torch
     from omegaconf import OmegaConf
