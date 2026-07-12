@@ -162,14 +162,84 @@ def add_card(
     title_paragraph.alignment = PP_ALIGN.CENTER
     title_run = title_paragraph.add_run()
     title_run.text = title
-    _set_run_font(title_run, size=18, color=accent, bold=True)
+    _set_run_font(title_run, size=18, color=BODY_BLACK, bold=True)
     body_paragraph = frame.add_paragraph()
     body_paragraph.space_before = Pt(8)
     body_paragraph.alignment = PP_ALIGN.LEFT
     body_run = body_paragraph.add_run()
     body_run.text = body
-    _set_run_font(body_run, size=14, color=BODY_BLACK)
+    _set_run_font(body_run, size=18, color=BODY_BLACK)
     return shape
+
+
+def add_method_panel(slide, title: str, body: str, *, x, y, width, height):
+    """可编辑的方法步骤面板；正文统一使用 18pt 黑色。"""
+    return add_card(
+        slide, title, body, x=x, y=y, width=width, height=height,
+        accent=SCNU_BLUE, name="方法面板",
+    )
+
+
+def add_evidence_boundary(slide, body: str, *, x, y, width, height):
+    return add_card(
+        slide, "证据边界", body, x=x, y=y, width=width, height=height,
+        accent=SECONDARY_ORANGE, name="证据边界",
+    )
+
+
+def add_discussion_box(slide, prompt: str, *, x, y, width, height):
+    return add_card(
+        slide, "需要建议 / 待决策", prompt, x=x, y=y, width=width, height=height,
+        accent=SECONDARY_ORANGE, name="讨论框",
+    )
+
+
+def add_evidence_gap(
+    slide,
+    *,
+    missing_fields: str,
+    suggested_entrypoint: str,
+    x,
+    y,
+    width,
+    height,
+):
+    shape = add_card(
+        slide,
+        "证据缺口",
+        f"所需字段：{missing_fields}\n建议入口：{suggested_entrypoint}",
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+        accent=SECONDARY_ORANGE,
+        name="证据缺口",
+    )
+    shape.fill.fore_color.rgb = PLACEHOLDER_YELLOW
+    shape.fill.transparency = 35
+    return shape
+
+
+def add_multi_panel(slide, panels: Sequence[tuple[str, str]], *, x, y, width, height):
+    """在给定区域内均匀排布 2–4 个原生卡片。"""
+    if not 2 <= len(panels) <= 4:
+        raise ValueError("multi-panel 仅支持 2–4 个面板")
+    gap = Inches(0.18)
+    panel_width = int((width - gap * (len(panels) - 1)) / len(panels))
+    shapes = []
+    for index, (title, body) in enumerate(panels):
+        shapes.append(
+            add_method_panel(
+                slide,
+                title,
+                body,
+                x=x + index * (panel_width + gap),
+                y=y,
+                width=panel_width,
+                height=height,
+            )
+        )
+    return tuple(shapes)
 
 
 def add_body_text(

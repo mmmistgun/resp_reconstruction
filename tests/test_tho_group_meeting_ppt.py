@@ -1500,6 +1500,112 @@ def test_cli_can_run_from_repository_root():
     assert result.returncode == 0, result.stderr
 
 
+def test_discussion_slide_specs_consume_every_unit_once_and_cover_sections():
+    from scripts.tho_group_meeting_ppt.detail_slides import SLIDE_GROUPS
+    from scripts.tho_group_meeting_ppt.discussion_content import DISCUSSION_UNITS
+
+    consumed = [key for spec in SLIDE_GROUPS for key in spec.unit_keys]
+    assert len(SLIDE_GROUPS) >= 43
+    assert consumed == list(dict.fromkeys(consumed))
+    assert set(consumed) == {unit.key for unit in DISCUSSION_UNITS}
+    assert {spec.section for spec in SLIDE_GROUPS} == EXPECTED_DISCUSSION_SECTIONS
+    assert sum(len(spec.unit_keys) == 2 for spec in SLIDE_GROUPS) >= 5
+    assert all(not hasattr(spec, "max_chars") for spec in SLIDE_GROUPS)
+
+
+def test_discussion_deck_is_editable_readable_and_uses_three_line_tables(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
+    from scripts.tho_group_meeting_ppt.theme import BODY_BLACK, is_three_line_table
+
+    output = tmp_path / "discussion.pptx"
+    template_hash = hashlib.sha256(TEMPLATE.read_bytes()).hexdigest()
+    build_discussion_presentation(template=TEMPLATE, output=output, repo_root=REPO_ROOT)
+    prs = Presentation(output)
+    all_text = "\n".join(
+        shape.text for slide in prs.slides for shape in slide.shapes if shape.has_text_frame
+    )
+
+    assert len(prs.slides) >= 55  # 标题 + 11 章导航 + 至少 43 张问题页
+    for phrase in (
+        "样本如何从整晚数据形成", "soft-z", "PatchMixer", "STFT",
+        "L_signed_corr", "稳健 RR", "row 640", "最小判别性实验",
+    ):
+        assert phrase in all_text
+    assert "20 秒局部 RR 窗" in all_text
+    assert "40 秒窗 / 10 秒步长" in all_text
+    assert "256 / 128 / 140" in all_text
+    assert "本窗未触发压缩" in all_text
+    for phrase in ("复现实验命令", "现场问答", "工作进度", "实验编号汇总", "泛化 Q&A", "更优"):
+        assert phrase not in all_text
+
+    picture_sizes = []
+    native_formula_or_flow = 0
+    tables = 0
+    for index, slide in enumerate(prs.slides):
+        for shape in slide.shapes:
+            assert shape.left >= 0 and shape.top >= 0
+            assert shape.left + shape.width <= prs.slide_width
+            assert shape.top + shape.height <= prs.slide_height
+            if shape.shape_type == 13:
+                picture_sizes.append((shape.width / Inches(1), shape.height / Inches(1)))
+            if shape.name.startswith(("公式", "流程", "方法", "架构", "证据边界", "讨论框")):
+                native_formula_or_flow += 1
+            if shape.has_table:
+                tables += 1
+                assert is_three_line_table(shape.table)
+                for row in shape.table.rows:
+                    for cell in row.cells:
+                        for paragraph in cell.text_frame.paragraphs:
+                            for run in paragraph.runs:
+                                assert run.font.size.pt >= 14
+            if shape.has_text_frame and shape.name.startswith(("正文", "方法", "证据", "限制", "讨论")):
+                for paragraph in shape.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        if run.text.strip():
+                            assert run.font.color.rgb == BODY_BLACK
+                            assert run.font.size.pt >= 18
+        if index >= 12:  # 非标题、非章节页
+            assert any(shape.name == "页面标题" and shape.text.strip() for shape in slide.shapes)
+            assert sum(bool(shape.has_text_frame and shape.text.strip()) for shape in slide.shapes) >= 2
+            assert not (len(slide.shapes) == 1 and slide.shapes[0].shape_type == 13)
+    assert tables >= 3
+    assert native_formula_or_flow >= 35
+    assert picture_sizes and all(w >= 4.5 and h >= 2.4 for w, h in picture_sizes)
+    assert hashlib.sha256(TEMPLATE.read_bytes()).hexdigest() == template_hash
+
+
+def test_discussion_evidence_gap_is_native_and_actionable(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
+
+    output = tmp_path / "discussion_gap.pptx"
+    build_discussion_presentation(template=TEMPLATE, output=output, repo_root=REPO_ROOT)
+    prs = Presentation(output)
+    gaps = [
+        shape.text
+        for slide in prs.slides
+        for shape in slide.shapes
+        if shape.name.startswith("证据缺口")
+    ]
+    assert gaps
+    assert all("所需字段：" in text and "建议入口：" in text for text in gaps)
+
+
+def test_cli_discussion_routes_are_mutually_exclusive_and_default_to_discussion(tmp_path: Path):
+    script = REPO_ROOT / "scripts/build_tho_group_meeting_ppt.py"
+    result = subprocess.run(
+        [sys.executable, str(script), "--evidence-only", "--assets-only"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    output = tmp_path / "default_discussion.pptx"
+    result = subprocess.run(
+        [sys.executable, str(script), "--output", str(output)],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.is_file() and len(Presentation(output).slides) >= 55
+
+
 @pytest.fixture(scope="module")
 def model_asset_builds(tmp_path_factory):
     from scripts.tho_group_meeting_ppt.model_figures import build_model_assets

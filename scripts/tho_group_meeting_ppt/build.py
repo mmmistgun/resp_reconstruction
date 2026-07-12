@@ -40,6 +40,35 @@ def remove_all_sample_slides(prs: Presentation) -> None:
         slide_ids.remove(slide_id)
 
 
+def _keep_template_title_only(prs: Presentation) -> None:
+    """保留模板第一张及其母版关系，只移除示例正文。"""
+    slide_ids = prs.slides._sldIdLst
+    for slide_id in list(slide_ids)[1:]:
+        prs.part.drop_rel(slide_id.rId)
+        slide_ids.remove(slide_id)
+
+
+def _prepare_discussion_title(prs: Presentation) -> None:
+    slide = prs.slides[0]
+    text_shapes = [shape for shape in slide.shapes if shape.has_text_frame]
+    title = "THO research v2｜从整晚 BCG 到呼吸重建"
+    subtitle = "全流程研究方法细节讨论｜证据、边界与下一轮决策"
+    for shape, text, size in zip(text_shapes[:2], (title, subtitle), (30, 20), strict=False):
+        shape.text_frame.clear()
+        paragraph = shape.text_frame.paragraphs[0]
+        paragraph.alignment = PP_ALIGN.CENTER
+        run = paragraph.add_run(); run.text = text
+        run.font.name = "Microsoft YaHei"; run.font.size = Pt(size)
+        run.font.bold = size == 30; run.font.color.rgb = BODY_BLACK
+    if len(text_shapes) >= 2:
+        text_shapes[1].left = Inches(2.00)
+        text_shapes[1].top = Inches(5.45)
+        text_shapes[1].width = Inches(9.33)
+        text_shapes[1].height = Inches(0.70)
+    if len(text_shapes) < 2:
+        add_text_box(slide, subtitle, x=Inches(2.0), y=Inches(4.8), width=Inches(9.3), height=Inches(0.8), font_size=20, name="标题页副标题", align=PP_ALIGN.CENTER)
+
+
 def _add_contained_picture(slide, path: Path, *, x, y, width, height, name: str = "结果图"):
     with Image.open(path) as image:
         image_width, image_height = image.size
@@ -455,6 +484,51 @@ def build_presentation(
         from .backup import build_backup_slides
 
         build_backup_slides(prs, repo_root=repo_root, data=data, assets=assets, start_page=len(MAIN_SLIDES) + 1)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    prs.save(output)
+    return output
+
+
+def build_discussion_assets(repo_root: Path, output_dir: Path | None = None) -> dict[str, Path]:
+    """按任务 3–6 顺序刷新真实位图资产，并合并返回路径。"""
+    from .case_figures import build_case_assets
+    from .metric_figures import build_metric_assets
+    from .model_figures import build_model_assets
+    from .signal_figures import build_signal_assets
+
+    output_dir = output_dir or repo_root / REPORT_DIR / "generated_assets/discussion"
+    combined: dict[str, Path] = {}
+    for builder in (build_signal_assets, build_model_assets, build_metric_assets, build_case_assets):
+        assets, _ = builder(repo_root, output_dir)
+        combined.update(assets)
+    return combined
+
+
+def build_discussion_presentation(
+    *,
+    template: Path,
+    output: Path,
+    repo_root: Path | None = None,
+) -> Path:
+    """组装首次接触项目也可完整阅读的研究讨论型正文。"""
+    from .detail_slides import SLIDE_GROUPS, build_discussion_slide, build_section_slide, resolve_discussion_assets
+
+    root = (repo_root or Path(__file__).resolve().parents[2]).resolve()
+    prs = Presentation(template)
+    _keep_template_title_only(prs)
+    _prepare_discussion_title(prs)
+    assets = resolve_discussion_assets(root)
+    page = 2
+    current_section = None
+    section_number = 0
+    for spec in SLIDE_GROUPS:
+        if spec.section != current_section:
+            section_number += 1
+            build_section_slide(prs, spec.section, section_number, page)
+            page += 1
+            current_section = spec.section
+        slides = build_discussion_slide(prs, spec, page, repo_root=root, assets=assets)
+        page += len(slides)
     output.parent.mkdir(parents=True, exist_ok=True)
     prs.save(output)
     return output
