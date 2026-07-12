@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -1682,7 +1683,7 @@ def _estimated_text_height(shape) -> float:
     size_pt = max((run.font.size.pt if run.font.size else 18.0) for run in runs)
     font = ImageFont.truetype("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", round(size_pt * 96 / 72))
     width_px = max(1.0, shape.width / Inches(1) * 96 - 24)
-    lines = 0
+    height_inches = (shape.text_frame.margin_top + shape.text_frame.margin_bottom) / Inches(1)
     for paragraph in shape.text_frame.paragraphs:
         text = "".join(run.text for run in paragraph.runs)
         if not text:
@@ -1696,8 +1697,16 @@ def _estimated_text_height(shape) -> float:
                 current = character
             else:
                 current = candidate
-        lines += paragraph_lines
-    return lines * size_pt * 1.32 / 72.0
+        paragraph_size = max(
+            (run.font.size.pt if run.font.size else size_pt)
+            for run in paragraph.runs
+        )
+        height_inches += paragraph_lines * paragraph_size * 1.32 / 72.0
+        if paragraph.space_before:
+            height_inches += paragraph.space_before.pt / 72.0
+        if paragraph.space_after:
+            height_inches += paragraph.space_after.pt / 72.0
+    return height_inches
 
 
 def test_critical_discussion_pages_have_no_text_overlap_or_estimated_overflow(revised_discussion_deck):
@@ -1718,10 +1727,13 @@ def test_critical_discussion_pages_have_no_text_overlap_or_estimated_overflow(re
         content = [
             shape for shape in slide.shapes
             if shape.has_text_frame and shape.text.strip()
-            and shape.name.startswith(("正文", "方法", "证据", "限制", "讨论", "副标题"))
+            and shape.name.startswith((
+                "正文", "方法", "证据", "限制", "讨论", "副标题",
+                "流程节点文字", "完整复核",
+            ))
         ]
         for index, first in enumerate(content):
-            assert _estimated_text_height(first) <= first.height / Inches(1) + 0.08, (title, first.name, first.text)
+            assert _estimated_text_height(first) <= first.height / Inches(1), (title, first.name, first.text)
             for second in content[index + 1:]:
                 assert _bbox_overlap_ratio(first, second) < 0.15, (title, first.name, second.name)
     assert checked == set(title_fragments)
@@ -1767,6 +1779,61 @@ def test_case_titles_respect_logo_safe_area_and_local_rr_has_single_evidence_bou
             local_rr_slides.append(slide)
     assert len(local_rr_slides) == 1
     assert sum(shape.name == "证据边界" for shape in local_rr_slides[0].shapes) == 1
+
+
+def test_key_pages_survive_real_libreoffice_pdf_and_png_render(tmp_path: Path):
+    from PIL import Image, ImageStat
+
+    from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
+
+    deck = tmp_path / "discussion.pptx"
+    build_discussion_presentation(template=TEMPLATE, output=deck, repo_root=REPO_ROOT)
+    rendered = tmp_path / "rendered"
+    rendered.mkdir()
+    lo_home = tmp_path / "lohome"
+    runtime = tmp_path / "runtime"
+    profile = tmp_path / "lo_profile"
+    lo_home.mkdir()
+    runtime.mkdir(mode=0o700)
+    profile.mkdir()
+    lo_env = os.environ.copy()
+    lo_env.update({
+        "HOME": str(lo_home),
+        "XDG_RUNTIME_DIR": str(runtime),
+        "TMPDIR": str(tmp_path),
+        "SAL_USE_VCLPLUGIN": "svp",
+    })
+    conversion = subprocess.run(
+        [
+            "libreoffice", f"-env:UserInstallation={profile.as_uri()}", "--headless",
+            "--nologo", "--nodefault", "--nofirststartwizard", "--norestore",
+            "--convert-to", "pdf", "--outdir", str(rendered), str(deck),
+        ],
+        capture_output=True, text=True, check=False, env=lo_env,
+    )
+    assert conversion.returncode == 0, conversion.stderr
+    pdf = rendered / "discussion.pdf"
+    assert pdf.is_file()
+    extracted = subprocess.run(
+        ["pdftotext", "-f", "14", "-l", "56", "-layout", str(pdf), "-"],
+        capture_output=True, text=True, check=False,
+    )
+    assert extracted.returncode == 0, extracted.stderr
+    for phrase in (
+        "本窗 0 samples changed", "checkpoint_top1/2/3", "固定类别与 row",
+        "同一 seed 四模型", "还需哪些反例类别", "gate 风",
+    ):
+        assert phrase in extracted.stdout
+    for page in (14, 29, 53, 54, 55, 56):
+        prefix = rendered / f"page_{page}"
+        raster = subprocess.run(
+            ["pdftoppm", "-f", str(page), "-l", str(page), "-singlefile", "-png", "-r", "96", str(pdf), str(prefix)],
+            capture_output=True, text=True, check=False,
+        )
+        assert raster.returncode == 0, raster.stderr
+        image = Image.open(prefix.with_suffix(".png")).convert("RGB")
+        assert ImageStat.Stat(image).mean[0] > 200
+        assert ImageStat.Stat(image).stddev[0] > 15
 
 
 @pytest.fixture(scope="module")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Mapping
 
@@ -241,12 +242,19 @@ def _field_text(units: tuple[DiscussionUnit, ...], field: str) -> str:
 def _picture(slide, path: Path, *, x=Inches(0.65), y=Inches(2.00), width=Inches(6.20), height=Inches(3.50)):
     with Image.open(path) as image:
         ratio = image.width / image.height
+        source: str | BytesIO = str(path)
+        if path.name.startswith("case_row_") and image.mode == "RGBA":
+            # LibreOffice 对部分全不透明 RGBA 案例图会生成黑色透明组；嵌入前仅移除
+            # 无信息量 alpha 通道，像素 RGB 与源图保持一致。
+            source = BytesIO()
+            image.convert("RGB").save(source, format="PNG")
+            source.seek(0)
     target_ratio = width / height
     if ratio > target_ratio:
         draw_width, draw_height = width, int(width / ratio)
     else:
         draw_height, draw_width = height, int(height * ratio)
-    pic = slide.shapes.add_picture(str(path), int(x + (width - draw_width) / 2), int(y + (height - draw_height) / 2), draw_width, draw_height)
+    pic = slide.shapes.add_picture(source, int(x + (width - draw_width) / 2), int(y + (height - draw_height) / 2), draw_width, draw_height)
     pic.name = f"真实证据图：{path.name}"
     return pic
 
@@ -307,9 +315,13 @@ def _render_asset(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...], pat
         raise ValueError(f"SlideSpec {spec.key} 的资产布局必须为 2 个内容面板 + 1 个讨论框")
     _add_planned_panel(slide, content[0], _field_text(units, content[0].field), x=Inches(7.10), y=Inches(2.00), width=Inches(5.15), height=Inches(1.72))
     boundary = _field_text(units, content[1].field)
+    boundary_y = Inches(3.92)
+    boundary_height = Inches(1.35)
     if spec.builder == "softz":
-        boundary += "\n• 本窗未触发压缩：0 samples changed；不能据此推断其他窗口。"
-    _add_planned_panel(slide, content[1], boundary, x=Inches(7.10), y=Inches(3.92), width=Inches(5.15), height=Inches(1.32))
+        boundary = "• 压缩改变幅值物理意义，可能弱化真实大呼吸。\n• 本窗 0 samples changed；不外推其他窗口。"
+        boundary_y = Inches(3.74)
+        boundary_height = Inches(1.68)
+    _add_planned_panel(slide, content[1], boundary, x=Inches(7.10), y=boundary_y, width=Inches(5.15), height=boundary_height)
     _add_planned_panel(slide, discussion[0], _field_text(units, discussion[0].field), x=Inches(0.90), y=Inches(5.48), width=Inches(11.45), height=Inches(1.18))
 
 
@@ -321,15 +333,15 @@ def _render_provenance(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]
 def _render_sample(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]):
     _native_flow(slide, tuple(value for unit in units for value in unit.method_steps))
     plans = {panel.field: panel for panel in spec.panel_plan}
-    _add_planned_panel(slide, plans[PARAMETERS], _field_text(units, PARAMETERS), x=Inches(0.75), y=Inches(3.60), width=Inches(3.65), height=Inches(1.65))
-    _add_planned_panel(slide, plans[RATIONALE], _field_text(units, RATIONALE), x=Inches(4.58), y=Inches(3.60), width=Inches(3.65), height=Inches(1.65))
-    _add_planned_panel(slide, plans[LIMITS], _field_text(units, LIMITS), x=Inches(8.41), y=Inches(3.60), width=Inches(3.65), height=Inches(1.65))
+    _add_planned_panel(slide, plans[PARAMETERS], _field_text(units, PARAMETERS), x=Inches(0.75), y=Inches(3.55), width=Inches(3.65), height=Inches(1.75))
+    _add_planned_panel(slide, plans[RATIONALE], _field_text(units, RATIONALE), x=Inches(4.58), y=Inches(3.55), width=Inches(3.65), height=Inches(1.75))
+    _add_planned_panel(slide, plans[LIMITS], _field_text(units, LIMITS), x=Inches(8.41), y=Inches(3.55), width=Inches(3.65), height=Inches(1.75))
 
 
 def _render_target_pipeline(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]):
-    _native_flow(slide, tuple(value for unit in units for value in unit.method_steps), height=1.55)
-    add_method_panel(slide, "冻结参数", _field_text(units, PARAMETERS), x=Inches(1.10), y=Inches(4.15), width=Inches(11.10), height=Inches(1.55))
-    add_evidence_boundary(slide, "本页只定义三条链路；训练语义与代码证据在下一页展开。", x=Inches(2.10), y=Inches(5.92), width=Inches(9.10), height=Inches(0.70))
+    _native_flow(slide, tuple(value for unit in units for value in unit.method_steps), height=2.20)
+    add_method_panel(slide, "冻结参数", _field_text(units, PARAMETERS), x=Inches(1.10), y=Inches(4.45), width=Inches(11.10), height=Inches(1.32))
+    add_evidence_boundary(slide, "本页只定义三条链路；训练语义与代码证据在下一页展开。", x=Inches(2.10), y=Inches(5.85), width=Inches(9.10), height=Inches(1.00))
 
 
 FORMULAS = {
@@ -362,12 +374,12 @@ def _render_loss_weights(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ..
     plans = {panel.field: panel for panel in spec.panel_plan}
     _add_planned_panel(slide, plans[RATIONALE], _field_text(units, RATIONALE), x=Inches(8.10), y=Inches(2.02), width=Inches(4.20), height=Inches(1.55))
     _add_planned_panel(slide, plans[LIMITS], _field_text(units, LIMITS), x=Inches(8.10), y=Inches(3.82), width=Inches(4.20), height=Inches(1.55))
-    _add_planned_panel(slide, plans[PROMPT], _field_text(units, PROMPT), x=Inches(1.05), y=Inches(5.80), width=Inches(11.15), height=Inches(0.82))
+    _add_planned_panel(slide, plans[PROMPT], _field_text(units, PROMPT), x=Inches(1.05), y=Inches(5.72), width=Inches(11.15), height=Inches(1.05))
 
 
 def _render_checkpoint_flow(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]):
-    _native_flow(slide, tuple(value for unit in units for value in unit.method_steps), height=1.50)
-    add_method_panel(slide, "冻结参数", _field_text(units, PARAMETERS), x=Inches(1.10), y=Inches(4.12), width=Inches(11.10), height=Inches(1.72))
+    _native_flow(slide, tuple(value for unit in units for value in unit.method_steps), y=1.95, height=2.18)
+    add_method_panel(slide, "冻结参数", _field_text(units, PARAMETERS), x=Inches(1.10), y=Inches(4.42), width=Inches(11.10), height=Inches(1.62))
 
 
 def _render_evidence_page(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]):
@@ -378,8 +390,8 @@ def _render_evidence_page(slide, spec: SlideSpec, units: tuple[DiscussionUnit, .
 def _render_local_rr(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...], path: Path):
     _picture(slide, path, width=Inches(6.10), height=Inches(3.43))
     add_method_panel(slide, "完整步骤", _field_text(units, METHOD), x=Inches(7.00), y=Inches(1.98), width=Inches(5.30), height=Inches(2.32))
-    add_evidence_boundary(slide, "正式口径：40 秒窗 / 10 秒步长。20 秒局部 RR 窗属于旧/其他流程，不能混用。\n" + _field_text(units, LIMITS), x=Inches(7.00), y=Inches(4.32), width=Inches(5.30), height=Inches(1.72))
-    add_discussion_box(slide, _field_text(units, PROMPT), x=Inches(0.90), y=Inches(6.10), width=Inches(11.45), height=Inches(0.78))
+    add_evidence_boundary(slide, "正式：40 秒窗 / 10 秒步长；20 秒局部 RR 窗属于旧/其他流程，勿混用。\n• 非逐呼吸事件匹配；谱峰切换、谐波与低 valid fraction 会失真。", x=Inches(7.00), y=Inches(4.31), width=Inches(5.30), height=Inches(2.02))
+    add_text_box(slide, "待决策｜" + _field_text(units, PROMPT), x=Inches(0.90), y=Inches(6.40), width=Inches(11.45), height=Inches(0.42), font_size=18, bold=True, name="讨论框正文", align=PP_ALIGN.CENTER)
 
 
 def _render_formula(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]):
@@ -426,22 +438,38 @@ def _render_canonical(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...],
     table = add_three_line_table(slide, headers, values, x=Inches(0.62), y=Inches(2.05), width=Inches(12.05), height=Inches(3.35), font_size=16)
     table._graphic_frame.name = "四方案核心指标（二）" if secondary else "四方案核心指标（一）"
     if secondary:
-        add_discussion_box(slide, _field_text(units, PROMPT), x=Inches(1.05), y=Inches(5.82), width=Inches(11.15), height=Inches(0.78))
+        add_discussion_box(slide, _field_text(units, PROMPT), x=Inches(1.05), y=Inches(5.72), width=Inches(11.15), height=Inches(1.05))
     else:
-        add_evidence_boundary(slide, _field_text(units, EVIDENCE) + "\n" + _field_text(units, LIMITS), x=Inches(1.05), y=Inches(5.55), width=Inches(11.15), height=Inches(1.20))
+        add_evidence_boundary(slide, _field_text(units, EVIDENCE) + "\n" + _field_text(units, LIMITS), x=Inches(1.05), y=Inches(5.45), width=Inches(11.15), height=Inches(1.35))
 
 
 CASE_LABELS = {"case_row_640": "四模型均纠正", "case_row_873": "四模型均失败", "case_row_1353": "模型间分歧", "case_row_3584": "阈值边界"}
 
 
+def _case_panel(slide, *, title: str, body: str, x, y, width, height, accent, name: str):
+    background = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, width, height)
+    background.name = f"{name}背景"
+    background.fill.solid(); background.fill.fore_color.rgb = WHITE
+    background.line.color.rgb = accent
+    add_text_box(slide, title, x=x + Inches(0.12), y=y + Inches(0.07), width=width - Inches(0.24), height=Inches(0.36), font_size=18, bold=True, name=f"{name}标题", align=PP_ALIGN.CENTER)
+    add_text_box(slide, body, x=x + Inches(0.18), y=y + Inches(0.46), width=width - Inches(0.36), height=height - Inches(0.54), font_size=18, name=f"{name}正文", align=PP_ALIGN.LEFT)
+
+
 def _render_case(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...], path: Path):
+    background = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, Inches(13.333), Inches(7.50))
+    background.name = "案例页白色背景"
+    background.fill.solid(); background.fill.fore_color.rgb = WHITE
+    background.line.fill.background()
+    tree = slide.shapes._spTree
+    tree.remove(background._element)
+    tree.insert(2, background._element)
     title = next(shape for shape in slide.shapes if shape.name == "页面标题")
     title.width = Inches(11.18)
     add_text_box(slide, f"类别｜{CASE_LABELS[spec.asset_key or '']}；本页按输入、目标、预测、频谱与指标完整回读。", x=Inches(0.80), y=Inches(1.78), width=Inches(11.15), height=Inches(0.42), font_size=18, name="副标题", align=PP_ALIGN.CENTER)
     _picture(slide, path, x=Inches(0.62), y=Inches(2.28), width=Inches(7.05), height=Inches(3.78))
-    add_evidence_boundary(slide, _field_text(units, LIMITS), x=Inches(7.95), y=Inches(2.28), width=Inches(4.30), height=Inches(1.10))
-    add_method_panel(slide, "完整复核", _field_text(units, METHOD), x=Inches(7.95), y=Inches(3.58), width=Inches(4.30), height=Inches(2.15))
-    add_discussion_box(slide, _field_text(units, PROMPT), x=Inches(7.95), y=Inches(5.92), width=Inches(4.30), height=Inches(0.93))
+    _case_panel(slide, title="证据边界", body="单窗案例不能说明总体效应；类别与选择规则须先冻结。", x=Inches(7.95), y=Inches(2.28), width=Inches(4.30), height=Inches(1.22), accent=SECONDARY_ORANGE, name="证据边界")
+    _case_panel(slide, title="完整复核", body="• 固定类别与 row。\n• 同一 seed 四模型。\n• 回读 BCG/THO、频谱与指标。", x=Inches(7.95), y=Inches(3.68), width=Inches(4.30), height=Inches(1.82), accent=SCNU_BLUE, name="完整复核")
+    _case_panel(slide, title="需要建议 / 待决策", body="还需哪些反例类别来暴露 gate 风险？", x=Inches(7.95), y=Inches(5.55), width=Inches(4.30), height=Inches(1.30), accent=SECONDARY_ORANGE, name="讨论框")
 
 
 def _render_minimal_next(slide, spec: SlideSpec, units: tuple[DiscussionUnit, ...]):
