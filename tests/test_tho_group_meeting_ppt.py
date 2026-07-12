@@ -92,25 +92,68 @@ def _synthetic_evidence_repo(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     )
 
     harmonic = repo / "harmonic"
-    required = (
-        harmonic / "figures" / "model_case_manifest.csv",
+    artifact_files = (
         harmonic / "test_v2" / "test_harmonic_labels.csv",
-        harmonic / "test_v2" / "analysis_manifest.json",
         harmonic / "model_metrics" / "model_stratified_metrics_summary.csv",
-        harmonic / "model_metrics" / "analysis_manifest.json",
         harmonic / "corrections" / "model_harmonic_correction_summary.csv",
-        harmonic / "corrections" / "analysis_manifest.json",
     )
-    for path in required:
+    for path in artifact_files:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("status\ncomplete\n", encoding="utf-8")
+
+    labels = ("g0_time_only", "g0_f0_native_stft_pre_mixer", "g3_c_wide_8p0", "g3_c_bandenergy")
+    seeds = (20260700, 20260837, 20260901)
+    labels_path = harmonic / "test_v2" / "test_harmonic_labels.csv"
+    shared_labels_hash = "synthetic-labels-sha256"
+    (harmonic / "model_metrics" / "analysis_manifest.json").write_text(
+        json.dumps({
+            "operation": "summarize-metrics",
+            "labels_path": str(labels_path.relative_to(repo)),
+            "labels_sha256": shared_labels_hash,
+            "eval_root": "results",
+            "dataset_index": "data/dataset/training/dataset_index.csv",
+            "model_labels": list(labels),
+            "seeds": list(seeds),
+        }),
+        encoding="utf-8",
+    )
+    (harmonic / "test_v2" / "analysis_manifest.json").write_text(
+        json.dumps({
+            "operation": "apply",
+            "dataset_root": "data/dataset",
+            "index_csv": "training/dataset_index.csv",
+            "split": "test",
+            "threshold_version": "synthetic-v1",
+            "outputs": {"labels": str(labels_path.relative_to(repo))},
+        }),
+        encoding="utf-8",
+    )
+    (harmonic / "corrections" / "analysis_manifest.json").write_text(
+        json.dumps({
+            "operation": "summarize-corrections",
+            "labels_path": str(labels_path.relative_to(repo)),
+            "labels_sha256": shared_labels_hash,
+            "threshold_version": "synthetic-v1",
+            "runs": [{"label": label, "seed": seed} for label in labels for seed in seeds],
+        }),
+        encoding="utf-8",
+    )
+    case_manifest = harmonic / "figures" / "model_case_manifest.csv"
+    case_manifest.parent.mkdir(parents=True)
+    case_manifest.write_text(
+        "dataset_row_id,case_category\n"
+        "640,all_corrected\n"
+        "873,all_not_corrected\n"
+        "1353,model_disagreement\n"
+        "3584,threshold_boundary\n",
+        encoding="utf-8",
+    )
 
     manifest = repo / "results" / "g_series_test_eval_manifest.csv"
     manifest.parent.mkdir(parents=True)
     rows = []
-    labels = ("g0_time_only", "g0_f0_native_stft_pre_mixer", "g3_c_wide_8p0", "g3_c_bandenergy")
     for label in labels:
-        for seed in (20260700, 20260837, 20260901):
+        for seed in seeds:
             run_dir = repo / "runs" / label / str(seed)
             run_dir.mkdir(parents=True)
             (run_dir / "checkpoint_top1.pt").touch()
@@ -148,6 +191,23 @@ def _enable_default_evidence_discovery(
 
     discovered_harmonic = repo / "runs" / "synthetic_harmonic_analysis"
     harmonic.rename(discovered_harmonic)
+    relocated_labels = str(
+        (discovered_harmonic / "test_v2" / "test_harmonic_labels.csv").relative_to(repo)
+    )
+    for relative in (
+        Path("model_metrics/analysis_manifest.json"),
+        Path("corrections/analysis_manifest.json"),
+    ):
+        provenance = discovered_harmonic / relative
+        payload = json.loads(provenance.read_text(encoding="utf-8"))
+        payload["labels_path"] = relocated_labels
+        if relative == Path("model_metrics/analysis_manifest.json"):
+            payload["eval_root"] = str(discovered_manifest.parent.relative_to(repo))
+        provenance.write_text(json.dumps(payload), encoding="utf-8")
+    test_manifest = discovered_harmonic / "test_v2" / "analysis_manifest.json"
+    test_payload = json.loads(test_manifest.read_text(encoding="utf-8"))
+    test_payload["outputs"]["labels"] = relocated_labels
+    test_manifest.write_text(json.dumps(test_payload), encoding="utf-8")
 
     discovered_signal = repo / "docs" / "figure" / "synthetic" / signal.name
     discovered_signal.parent.mkdir(parents=True)
@@ -239,6 +299,39 @@ def test_evidence_manifest_checks_nonfirst_seed_data_provenance(tmp_path: Path):
     with pytest.raises(
         ValueError,
         match=r"g3_c_wide_8p0.*20260837.*data\.dataset_root.*config\.yaml",
+    ):
+        build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
+
+
+def test_evidence_harmonic_provenance_rejects_mismatched_eval_root(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    provenance = harmonic / "model_metrics" / "analysis_manifest.json"
+    payload = json.loads(provenance.read_text(encoding="utf-8"))
+    payload["eval_root"] = "results/wrong_eval"
+    provenance.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match=r"model_metrics/analysis_manifest\.json.*eval_root.*wrong_eval.*results",
+    ):
+        build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
+
+
+def test_evidence_harmonic_provenance_rejects_wrong_case_category(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    case_manifest = harmonic / "figures" / "model_case_manifest.csv"
+    case_manifest.write_text(
+        case_manifest.read_text(encoding="utf-8").replace("640,all_corrected", "640,wrong_category"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"model_case_manifest\.csv.*dataset_row_id=640.*case_category.*wrong_category.*all_corrected",
     ):
         build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
 

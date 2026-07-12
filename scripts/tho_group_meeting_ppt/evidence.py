@@ -92,6 +92,12 @@ _HARMONIC_FILES = (
     Path("corrections/model_harmonic_correction_summary.csv"),
     Path("corrections/analysis_manifest.json"),
 )
+_EXPECTED_CASES = {
+    640: "all_corrected",
+    873: "all_not_corrected",
+    1353: "model_disagreement",
+    3584: "threshold_boundary",
+}
 
 
 def _invalid_model_field(path: Path, field: str, value: Any) -> ValueError:
@@ -389,6 +395,185 @@ def _catalog_run_configs(records: list[_RunRecord]) -> dict[str, RunConfigEviden
     }
 
 
+def _load_json_manifest(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"{path}: 无法解析 JSON manifest") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path}: manifest 根节点必须是 object，实际 {type(payload).__name__}")
+    return payload
+
+
+def _provenance_error(path: Path, field: str, actual: Any, expected: Any) -> ValueError:
+    return ValueError(f"{path}: {field} 实际 {actual!r}，期望 {expected!r}")
+
+
+def _required_field(path: Path, payload: dict[str, Any], field: str) -> Any:
+    current: Any = payload
+    for part in field.split("."):
+        if not isinstance(current, dict) or part not in current:
+            raise _provenance_error(path, field, "<missing>", "必需字段")
+        current = current[part]
+    return current
+
+
+def _resolved_manifest_path(repo_root: Path, path: Path, field: str, value: Any) -> Path:
+    if type(value) is not str or not value.strip():
+        raise _provenance_error(path, field, value, "非空路径字符串")
+    return _resolve_path(repo_root, value)
+
+
+def _require_equal(path: Path, field: str, actual: Any, expected: Any) -> None:
+    if actual != expected:
+        raise _provenance_error(path, field, actual, expected)
+
+
+def _validate_harmonic_manifests(
+    repo_root: Path,
+    harmonic_root: Path,
+    result_root: Path,
+    dataset_root: Path,
+    dataset_index: Path,
+) -> None:
+    model_path = harmonic_root / "model_metrics" / "analysis_manifest.json"
+    test_path = harmonic_root / "test_v2" / "analysis_manifest.json"
+    corrections_path = harmonic_root / "corrections" / "analysis_manifest.json"
+    model = _load_json_manifest(model_path)
+    test = _load_json_manifest(test_path)
+    corrections = _load_json_manifest(corrections_path)
+
+    _require_equal(
+        model_path,
+        "eval_root",
+        _resolved_manifest_path(repo_root, model_path, "eval_root", _required_field(model_path, model, "eval_root")),
+        result_root.resolve(),
+    )
+    _require_equal(
+        model_path,
+        "dataset_index",
+        _resolved_manifest_path(
+            repo_root,
+            model_path,
+            "dataset_index",
+            _required_field(model_path, model, "dataset_index"),
+        ),
+        dataset_index.resolve(),
+    )
+    model_labels = _required_field(model_path, model, "model_labels")
+    expected_labels = set(FORMAL_LABELS)
+    if not isinstance(model_labels, list) or len(model_labels) != len(expected_labels) or set(model_labels) != expected_labels:
+        raise _provenance_error(model_path, "model_labels", model_labels, sorted(expected_labels))
+    model_seeds = _required_field(model_path, model, "seeds")
+    expected_seeds = set(FORMAL_SEEDS)
+    if not isinstance(model_seeds, list) or len(model_seeds) != len(expected_seeds) or set(model_seeds) != expected_seeds:
+        raise _provenance_error(model_path, "seeds", model_seeds, sorted(expected_seeds))
+
+    test_dataset_root = _resolved_manifest_path(
+        repo_root,
+        test_path,
+        "dataset_root",
+        _required_field(test_path, test, "dataset_root"),
+    )
+    _require_equal(test_path, "dataset_root", test_dataset_root, dataset_root.resolve())
+    raw_index = _required_field(test_path, test, "index_csv")
+    if type(raw_index) is not str or not raw_index.strip():
+        raise _provenance_error(test_path, "index_csv", raw_index, "非空路径字符串")
+    index_candidate = Path(raw_index)
+    test_dataset_index = (
+        index_candidate.resolve()
+        if index_candidate.is_absolute()
+        else (test_dataset_root / index_candidate).resolve()
+    )
+    _require_equal(test_path, "index_csv", test_dataset_index, dataset_index.resolve())
+    _require_equal(test_path, "split", _required_field(test_path, test, "split"), "test")
+
+    expected_labels_path = (harmonic_root / "test_v2" / "test_harmonic_labels.csv").resolve()
+    for path, payload, field in (
+        (model_path, model, "labels_path"),
+        (test_path, test, "outputs.labels"),
+        (corrections_path, corrections, "labels_path"),
+    ):
+        _require_equal(
+            path,
+            field,
+            _resolved_manifest_path(repo_root, path, field, _required_field(path, payload, field)),
+            expected_labels_path,
+        )
+
+    # model_metrics 与 corrections manifest 共享 labels_sha256，这是现有的标签文件 hash 链。
+    model_labels_hash = _required_field(model_path, model, "labels_sha256")
+    corrections_labels_hash = _required_field(corrections_path, corrections, "labels_sha256")
+    _require_equal(
+        corrections_path,
+        "labels_sha256",
+        corrections_labels_hash,
+        model_labels_hash,
+    )
+    test_threshold_version = _required_field(test_path, test, "threshold_version")
+    corrections_threshold_version = _required_field(
+        corrections_path,
+        corrections,
+        "threshold_version",
+    )
+    _require_equal(
+        corrections_path,
+        "threshold_version",
+        corrections_threshold_version,
+        test_threshold_version,
+    )
+
+    # corrections.runs 是实际 manifest 记录模型/seed 组合的位置。
+    runs = _required_field(corrections_path, corrections, "runs")
+    if not isinstance(runs, list) or any(not isinstance(run, dict) for run in runs):
+        raise _provenance_error(corrections_path, "runs", runs, "label/seed object 列表")
+    actual_pairs = [(run.get("label"), run.get("seed")) for run in runs]
+    expected_pairs = {(label, seed) for label in FORMAL_LABELS for seed in FORMAL_SEEDS}
+    if len(actual_pairs) != len(expected_pairs) or set(actual_pairs) != expected_pairs:
+        raise _provenance_error(corrections_path, "runs[label,seed]", actual_pairs, sorted(expected_pairs))
+
+
+def _validate_case_manifest(harmonic_root: Path) -> None:
+    path = harmonic_root / "figures" / "model_case_manifest.csv"
+    with path.open(newline="", encoding="utf-8") as fp:
+        reader = csv.DictReader(fp)
+        fields = set(reader.fieldnames or ())
+        missing = {"dataset_row_id", "case_category"} - fields
+        if missing:
+            raise _provenance_error(path, "columns", sorted(fields), sorted(missing))
+        rows = list(reader)
+
+    for row_id, expected_category in _EXPECTED_CASES.items():
+        matches = [row for row in rows if str(row.get("dataset_row_id", "")).strip() == str(row_id)]
+        if len(matches) != 1:
+            raise _provenance_error(path, f"dataset_row_id={row_id}", len(matches), "恰好 1 行")
+        actual_category = str(matches[0].get("case_category", "")).strip()
+        if actual_category != expected_category:
+            raise _provenance_error(
+                path,
+                f"dataset_row_id={row_id}.case_category",
+                actual_category,
+                expected_category,
+            )
+
+
+def _validate_harmonic_provenance(
+    repo_root: Path,
+    harmonic_root: Path,
+    result_root: Path,
+    dataset_root: Path,
+    dataset_index: Path,
+) -> None:
+    _validate_harmonic_manifests(
+        repo_root,
+        harmonic_root,
+        result_root,
+        dataset_root,
+        dataset_index,
+    )
+    _validate_case_manifest(harmonic_root)
+
+
 def build_evidence_catalog(
     repo_root: str | Path,
     *,
@@ -421,6 +606,13 @@ def build_evidence_catalog(
         raise FileNotFoundError(f"数据集根目录不存在: {dataset_root}")
     if not dataset_index.is_file():
         raise FileNotFoundError(f"数据集索引不存在: {dataset_index}")
+    _validate_harmonic_provenance(
+        root,
+        resolved_harmonic_root,
+        manifest.parent,
+        dataset_root,
+        dataset_index,
+    )
     return EvidenceCatalog(
         dataset_root=dataset_root,
         dataset_index=dataset_index,
@@ -429,5 +621,5 @@ def build_evidence_catalog(
         run_configs=_catalog_run_configs(records),
         result_root=manifest.parent,
         harmonic_root=resolved_harmonic_root,
-        case_row_ids=(640, 873, 1353, 3584),
+        case_row_ids=tuple(_EXPECTED_CASES),
     )
