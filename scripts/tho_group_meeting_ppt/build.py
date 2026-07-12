@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
-from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from PIL import Image
 from pptx import Presentation
@@ -32,6 +33,8 @@ from .theme import (
 REPORT_DIR = Path("docs/stage_reports/20260708")
 ASSET_DIR = REPORT_DIR / "generated_assets"
 CASE_DIR = Path("runs/bcg_second_harmonic_20260710/figures")
+FIXED_PACKAGE_DATETIME = (1980, 1, 1, 0, 0, 0)
+PROJECT_METADATA_DATETIME = datetime(2026, 7, 8, 0, 0, 0)
 
 
 def remove_all_sample_slides(prs: Presentation) -> None:
@@ -516,6 +519,7 @@ def build_discussion_presentation(
 
     root = (repo_root or Path(__file__).resolve().parents[2]).resolve()
     prs = Presentation(template)
+    _set_project_core_properties(prs)
     _keep_template_title_only(prs)
     _prepare_discussion_title(prs)
     assets = resolve_discussion_assets(root)
@@ -537,20 +541,44 @@ def build_discussion_presentation(
 
 
 def _sanitize_discussion_package(path: Path) -> None:
-    """移除模板残留的隐藏示例文案，避免其留在交付包属性中。"""
+    """清理隐藏示例文案，并以固定 ZIP 元数据输出可复现 PPTX。"""
     replacements = {
         "论文分享": "研究讨论",
         "汇报人：xxx": "THO research v2",
         "2021/12/21": "",
     }
     temporary = path.with_suffix(".sanitized.pptx")
-    with ZipFile(path, "r") as source, ZipFile(temporary, "w") as target:
-        for info in source.infolist():
-            data = source.read(info.filename)
-            if info.filename.endswith((".xml", ".rels")):
+    with ZipFile(path, "r") as source, ZipFile(
+        temporary,
+        "w",
+        compression=ZIP_DEFLATED,
+        compresslevel=9,
+    ) as target:
+        for filename in sorted(source.namelist()):
+            data = source.read(filename)
+            if filename.endswith((".xml", ".rels")):
                 text = data.decode("utf-8")
                 for old, new in replacements.items():
                     text = text.replace(old, new)
                 data = text.encode("utf-8")
-            target.writestr(info, data)
+            info = ZipInfo(filename=filename, date_time=FIXED_PACKAGE_DATETIME)
+            info.compress_type = ZIP_DEFLATED
+            info.create_system = 0
+            info.external_attr = 0x20
+            info.internal_attr = 0
+            info.flag_bits = 0
+            info.create_version = 20
+            info.extract_version = 20
+            target.writestr(info, data, compress_type=ZIP_DEFLATED, compresslevel=9)
     temporary.replace(path)
+
+
+def _set_project_core_properties(prs: Presentation) -> None:
+    """用项目身份和冻结日期替换模板作者与动态保存时间。"""
+    properties = prs.core_properties
+    properties.title = "THO research v2 阶段进展组会汇报"
+    properties.author = "THO research v2"
+    properties.last_modified_by = "THO research v2"
+    properties.created = PROJECT_METADATA_DATETIME
+    properties.modified = PROJECT_METADATA_DATETIME
+    properties.revision = 1

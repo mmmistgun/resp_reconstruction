@@ -1742,6 +1742,74 @@ def test_cli_discussion_routes_are_mutually_exclusive_and_default_to_discussion(
     assert output.is_file() and len(Presentation(output).slides) >= 55
 
 
+def test_cli_default_output_is_the_documented_formal_delivery(monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "scripts"))
+    cli = importlib.import_module("build_tho_group_meeting_ppt")
+    assert cli.build_parser().parse_args([]).output == FINAL_DECK
+
+    readme = (REPO_ROOT / "docs/stage_reports/README.md").read_text(encoding="utf-8")
+    assert "./.venv/bin/python scripts/build_tho_group_meeting_ppt.py" in readme
+    assert str(FINAL_DECK.relative_to(REPO_ROOT)) in readme
+
+
+@pytest.fixture(scope="module")
+def deterministic_discussion_decks(tmp_path_factory):
+    from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
+
+    root = tmp_path_factory.mktemp("deterministic_discussion")
+    outputs = (root / "first.pptx", root / "second.pptx")
+    for output in outputs:
+        build_discussion_presentation(template=TEMPLATE, output=output, repo_root=REPO_ROOT)
+    return outputs
+
+
+def test_discussion_pptx_is_byte_deterministic_and_matches_formal_file(
+    deterministic_discussion_decks,
+):
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    first, second = deterministic_discussion_decks
+    hashes = [hashlib.sha256(path.read_bytes()).hexdigest() for path in (first, second, FINAL_DECK)]
+    assert len(set(hashes)) == 1
+    for path in (first, second, FINAL_DECK):
+        with ZipFile(path) as archive:
+            infos = archive.infolist()
+            assert [info.filename for info in infos] == sorted(info.filename for info in infos)
+            assert all(info.date_time == (1980, 1, 1, 0, 0, 0) for info in infos)
+            assert all(info.create_system == 0 for info in infos)
+            assert all(info.external_attr == 0x20 for info in infos)
+            assert all(info.compress_type == ZIP_DEFLATED for info in infos)
+
+
+def test_discussion_core_metadata_is_project_owned_and_reproducible(
+    deterministic_discussion_decks,
+):
+    from xml.etree import ElementTree
+    from zipfile import ZipFile
+
+    namespaces = {
+        "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+        "dc": "http://purl.org/dc/elements/1.1/",
+        "dcterms": "http://purl.org/dc/terms/",
+    }
+    expected = {
+        "dc:creator": "THO research v2",
+        "cp:lastModifiedBy": "THO research v2",
+        "dcterms:created": "2026-07-08T00:00:00Z",
+        "dcterms:modified": "2026-07-08T00:00:00Z",
+    }
+    for path in (*deterministic_discussion_decks, FINAL_DECK):
+        with ZipFile(path) as archive:
+            core = archive.read("docProps/core.xml")
+        text = core.decode("utf-8")
+        assert not any(value in text for value in ("miao mengya", "MISTGUN", "2019", "2022"))
+        root = ElementTree.fromstring(core)
+        for field, value in expected.items():
+            assert root.find(field, namespaces).text == value
+
+
 @pytest.mark.parametrize(
     ("first", "second"),
     [
