@@ -448,6 +448,88 @@ def test_main_deck_has_exactly_25_ordered_slides_and_numeric_sources():
     assert MAIN_SLIDES[0].placeholder == "【待补：汇报人、汇报日期】"
 
 
+EXPECTED_DISCUSSION_SECTIONS = {
+    "任务与信号直觉",
+    "数据来源与样本形成",
+    "输入与目标预处理",
+    "模型输入与计算图",
+    "训练与损失",
+    "指标计算与失效场景",
+    "对照实验设计",
+    "整体结果与稳定性",
+    "分层分析与完整案例",
+    "BCG 二次谐波问题",
+    "研究议题与下一步",
+}
+
+
+def test_discussion_units_cover_complete_causal_chain():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    assert {unit.section for unit in DISCUSSION_UNITS} == EXPECTED_DISCUSSION_SECTIONS
+    assert len(DISCUSSION_UNITS) >= 42
+    assert len({unit.key for unit in DISCUSSION_UNITS}) == len(DISCUSSION_UNITS)
+
+
+def test_discussion_unit_schema_is_frozen_and_uses_tuples():
+    from dataclasses import FrozenInstanceError, fields
+
+    from scripts.tho_group_meeting_ppt.discussion_content import DiscussionUnit
+
+    assert [field.name for field in fields(DiscussionUnit)] == [
+        "key", "section", "title", "kind", "question", "method_steps", "parameters",
+        "rationale", "evidence", "limits", "discussion_prompt", "visual_keys", "sources",
+    ]
+    unit = DiscussionUnit("k", "s", "t", "technical", "q")
+    with pytest.raises(FrozenInstanceError):
+        unit.title = "changed"
+    for name in ("method_steps", "parameters", "rationale", "evidence", "limits", "visual_keys", "sources"):
+        assert isinstance(getattr(unit, name), tuple)
+
+
+def test_discussion_technical_units_are_actionable_and_traceable():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    technical = [unit for unit in DISCUSSION_UNITS if unit.kind not in {"title", "section"}]
+    assert all(unit.method_steps or unit.visual_keys for unit in technical)
+    assert all(unit.sources for unit in technical)
+
+    high_value = [
+        unit for unit in technical
+        if unit.method_steps
+        and unit.parameters
+        and unit.rationale
+        and unit.limits
+        and unit.discussion_prompt
+    ]
+    assert len(high_value) >= 12
+
+
+def test_discussion_sources_are_existing_repository_files():
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    for unit in DISCUSSION_UNITS:
+        for source in unit.sources:
+            base_path = source.split("#", 1)[0]
+            assert not Path(base_path).is_absolute(), (unit.key, source)
+            assert (REPO_ROOT / base_path).is_file(), (unit.key, source)
+
+
+def test_discussion_content_avoids_deck_and_status_artifacts():
+    from dataclasses import fields
+
+    from scripts.tho_group_meeting_ppt.content import DISCUSSION_UNITS
+
+    forbidden = ("工作进度", "实验编号汇总", "复现实验命令", "现场问答", "固定页数")
+    text = "\n".join(
+        str(value)
+        for unit in DISCUSSION_UNITS
+        for value in (getattr(unit, field.name) for field in fields(unit))
+    )
+    assert not any(phrase in text for phrase in forbidden)
+    assert all(not hasattr(unit, "slide_number") for unit in DISCUSSION_UNITS)
+
+
 def test_backup_deck_covers_required_materials():
     from scripts.tho_group_meeting_ppt.content import BACKUP_SLIDES
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .discussion_content import DISCUSSION_UNITS, DiscussionUnit
+
 
 REPORT = "docs/stage_reports/2026-07-08-tho-research-v2-group-meeting-stage-report.md"
 METRIC_SCHEMA = "docs/experiments/metric_schema.md"
@@ -22,6 +24,7 @@ class SlideSpec:
     placeholder: str | None = None
 
 
+# 兼容尚未迁移的旧 build/backup 入口；新版默认内容由 DISCUSSION_UNITS 表达。
 MAIN_SLIDES = (
     SlideSpec(
         "title",
