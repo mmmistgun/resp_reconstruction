@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,13 +17,6 @@ FORMAL_LABELS = (
     "g3_c_bandenergy",
 )
 FORMAL_SEEDS = (20260700, 20260837, 20260901)
-DEFAULT_MANIFEST = Path(
-    "runs/test_eval_g_series_20260709_local_rr_canonical/g_series_test_eval_manifest.csv"
-)
-DEFAULT_HARMONIC_ROOT = Path("runs/bcg_second_harmonic_20260710")
-DEFAULT_GENERAL_SIGNAL = Path(
-    "docs/figure/F0_native_stft_pre_mixer/signals/f0_visual_sample_signals.npz"
-)
 
 
 @dataclass(frozen=True)
@@ -173,6 +167,89 @@ def _require_harmonic_root(repo_root: Path, path: str | Path) -> Path:
     return root
 
 
+def _select_unique_candidate(
+    description: str,
+    candidates: list[Path],
+    explicit_parameter: str,
+) -> Path:
+    unique = sorted({candidate.resolve() for candidate in candidates})
+    if not unique:
+        raise FileNotFoundError(
+            f"未找到结构完整的 {description} 候选；"
+            f"请使用 {explicit_parameter} 显式指定"
+        )
+    if len(unique) > 1:
+        listed = ", ".join(str(candidate) for candidate in unique)
+        raise ValueError(
+            f"{description} 候选不唯一: {listed}；"
+            f"请使用 {explicit_parameter} 显式指定以消歧"
+        )
+    return unique[0]
+
+
+def _discover_manifest(repo_root: Path) -> Path:
+    candidates: list[Path] = []
+    pattern = "test_eval_g_series_*_canonical/g_series_test_eval_manifest.csv"
+    for path in (repo_root / "runs").glob(pattern):
+        if not path.is_file():
+            continue
+        try:
+            records = _read_manifest_records(repo_root, path)
+            _validate_records(records)
+            dataset_root = records[0].data_provenance["data.dataset_root"]
+            dataset_index = records[0].data_provenance["data.index_csv"]
+            if not dataset_root.is_dir() or not dataset_index.is_file():
+                continue
+        except (FileNotFoundError, KeyError, TypeError, ValueError):
+            continue
+        candidates.append(path)
+    return _select_unique_candidate("正式 G 系列 manifest", candidates, "manifest_path")
+
+
+def _discover_harmonic_root(repo_root: Path) -> Path:
+    candidates = [
+        path
+        for path in (repo_root / "runs").glob("*")
+        if path.is_dir() and all((path / relative).is_file() for relative in _HARMONIC_FILES)
+    ]
+    return _select_unique_candidate("harmonic 结果目录", candidates, "harmonic_root")
+
+
+def _signal_metadata(path: Path) -> dict[str, Any]:
+    metadata_path = path.with_name("f0_visual_sample_metadata.json")
+    if not metadata_path.is_file():
+        raise FileNotFoundError(f"通用信号 metadata 不存在: {metadata_path}")
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"无法读取通用信号 metadata: {metadata_path}") from exc
+    if not isinstance(metadata, dict) or metadata.get("dataset_row_id") != 8025:
+        raise ValueError(f"通用信号 metadata 必须标记 dataset_row_id=8025: {metadata_path}")
+    files = metadata.get("files")
+    if not isinstance(files, dict) or files.get("signal_arrays_npz") != path.name:
+        raise ValueError(f"通用信号 metadata 未正确指向 {path.name}: {metadata_path}")
+    return metadata
+
+
+def _require_general_signal(repo_root: Path, path: str | Path) -> Path:
+    signal = _require_file(repo_root, path, "通用信号 NPZ")
+    _signal_metadata(signal)
+    return signal
+
+
+def _discover_general_signal(repo_root: Path) -> Path:
+    candidates: list[Path] = []
+    for path in (repo_root / "docs" / "figure").glob("**/f0_visual_sample_signals.npz"):
+        if not path.is_file():
+            continue
+        try:
+            _signal_metadata(path)
+        except (FileNotFoundError, ValueError):
+            continue
+        candidates.append(path)
+    return _select_unique_candidate("通用信号 NPZ", candidates, "general_signal_npz")
+
+
 def _read_data_provenance(config_path: Path, repo_root: Path) -> dict[str, Any]:
     cfg = OmegaConf.load(config_path)
     required = ("dataset_root", "index_csv", *_DATA_FIELDS)
@@ -315,14 +392,26 @@ def _catalog_run_configs(records: list[_RunRecord]) -> dict[str, RunConfigEviden
 def build_evidence_catalog(
     repo_root: str | Path,
     *,
-    manifest_path: str | Path = DEFAULT_MANIFEST,
-    harmonic_root: str | Path = DEFAULT_HARMONIC_ROOT,
-    general_signal_npz: str | Path = DEFAULT_GENERAL_SIGNAL,
+    manifest_path: str | Path | None = None,
+    harmonic_root: str | Path | None = None,
+    general_signal_npz: str | Path | None = None,
 ) -> EvidenceCatalog:
     root = Path(repo_root).resolve()
-    manifest = _require_file(root, manifest_path, "正式 G 系列 manifest")
-    signal = _require_file(root, general_signal_npz, "通用信号 NPZ")
-    resolved_harmonic_root = _require_harmonic_root(root, harmonic_root)
+    manifest = (
+        _discover_manifest(root)
+        if manifest_path is None
+        else _require_file(root, manifest_path, "正式 G 系列 manifest")
+    )
+    signal = (
+        _discover_general_signal(root)
+        if general_signal_npz is None
+        else _require_general_signal(root, general_signal_npz)
+    )
+    resolved_harmonic_root = (
+        _discover_harmonic_root(root)
+        if harmonic_root is None
+        else _require_harmonic_root(root, harmonic_root)
+    )
     records = _read_manifest_records(root, manifest)
     _validate_records(records)
 

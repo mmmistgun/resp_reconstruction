@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -85,6 +86,10 @@ def _synthetic_evidence_repo(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     signal = repo / "assets" / "f0_visual_sample_signals.npz"
     signal.parent.mkdir(parents=True)
     signal.touch()
+    signal.with_name("f0_visual_sample_metadata.json").write_text(
+        json.dumps({"dataset_row_id": 8025, "files": {"signal_arrays_npz": signal.name}}),
+        encoding="utf-8",
+    )
 
     harmonic = repo / "harmonic"
     required = (
@@ -129,6 +134,58 @@ def _synthetic_evidence_repo(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         writer.writeheader()
         writer.writerows(rows)
     return repo, manifest, harmonic, signal
+
+
+def _enable_default_evidence_discovery(
+    repo: Path,
+    manifest: Path,
+    harmonic: Path,
+    signal: Path,
+) -> tuple[Path, Path, Path]:
+    discovered_manifest = repo / "runs" / "test_eval_g_series_synthetic_canonical" / manifest.name
+    discovered_manifest.parent.mkdir(parents=True)
+    manifest.rename(discovered_manifest)
+
+    discovered_harmonic = repo / "runs" / "synthetic_harmonic_analysis"
+    harmonic.rename(discovered_harmonic)
+
+    discovered_signal = repo / "docs" / "figure" / "synthetic" / signal.name
+    discovered_signal.parent.mkdir(parents=True)
+    signal.rename(discovered_signal)
+    signal.with_name("f0_visual_sample_metadata.json").rename(
+        discovered_signal.with_name("f0_visual_sample_metadata.json")
+    )
+    return discovered_manifest, discovered_harmonic, discovered_signal
+
+
+def test_discussion_evidence_catalog_discovers_unique_structured_candidates(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    discovered = _enable_default_evidence_discovery(repo, manifest, harmonic, signal)
+
+    catalog = build_evidence_catalog(repo)
+
+    assert catalog.result_root == discovered[0].parent.resolve()
+    assert catalog.harmonic_root == discovered[1].resolve()
+    assert catalog.general_signal_npz == discovered[2].resolve()
+    assert catalog.general_sample_row_id == 8025
+
+
+def test_discussion_evidence_catalog_requires_explicit_manifest_when_candidates_are_ambiguous(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    discovered_manifest, _, _ = _enable_default_evidence_discovery(repo, manifest, harmonic, signal)
+    second = repo / "runs" / "test_eval_g_series_second_canonical" / discovered_manifest.name
+    second.parent.mkdir(parents=True)
+    second.write_text(discovered_manifest.read_text(encoding="utf-8"), encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match=r"manifest.*候选.*(?:synthetic_canonical.*second_canonical|second_canonical.*synthetic_canonical).*显式",
+    ):
+        build_evidence_catalog(repo)
 
 
 def test_discussion_evidence_catalog_accepts_explicit_paths_relative_to_repo_root(tmp_path: Path, monkeypatch):
