@@ -44,3 +44,31 @@ def test_body_text_is_black_and_table_has_only_three_horizontal_rules():
     assert is_three_line_table(table)
     assert all(cell.fill.type is None for row in table.rows for cell in row.cells)
 
+
+def test_main_deck_has_exactly_25_ordered_slides_and_numeric_sources():
+    from scripts.tho_group_meeting_ppt.content import MAIN_SLIDES
+
+    assert len(MAIN_SLIDES) == 25
+    assert MAIN_SLIDES[0].key == "title"
+    assert MAIN_SLIDES[10].key == "overall_test_results"
+    assert MAIN_SLIDES[24].key == "next_stage_takeaways"
+    assert all(slide.sources for slide in MAIN_SLIDES if slide.contains_numeric_evidence)
+    assert MAIN_SLIDES[0].placeholder == "【待补：汇报人、汇报日期】"
+
+
+def test_backup_deck_covers_required_materials():
+    from scripts.tho_group_meeting_ppt.content import BACKUP_SLIDES
+
+    keys = {slide.key for slide in BACKUP_SLIDES}
+    assert {
+        "balanced_cases",
+        "model_details",
+        "training_details",
+        "metric_formulas",
+        "full_stratified_results",
+        "subject_results",
+        "harmonic_subgroups",
+        "data_provenance",
+        "reproduction_commands",
+        "qa_notes",
+    } <= keys
