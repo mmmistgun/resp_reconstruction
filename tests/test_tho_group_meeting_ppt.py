@@ -37,6 +37,137 @@ def test_discussion_evidence_catalog_resolves_formal_configs_and_signal_sources(
     assert catalog.case_row_ids == (640, 873, 1353, 3584)
 
 
+def test_signal_assets_stft_matches_model_centered_shapes():
+    import numpy as np
+
+    from scripts.tho_group_meeting_ppt.signal_figures import compute_stft_logmag
+
+    signal = np.linspace(-1.0, 1.0, 18_000, dtype=np.float32)
+    f0 = compute_stft_logmag(
+        signal,
+        sample_rate_hz=100.0,
+        win_samples=3000,
+        hop_samples=500,
+        low_hz=0.05,
+        high_hz=8.0,
+        center=True,
+    )
+    wide = compute_stft_logmag(
+        signal,
+        sample_rate_hz=100.0,
+        win_samples=2000,
+        hop_samples=250,
+        low_hz=0.05,
+        high_hz=8.0,
+        center=True,
+    )
+
+    assert f0.log_magnitude.shape == (239, 37)
+    assert wide.log_magnitude.shape == (160, 73)
+    assert f0.center is True and wide.center is True
+    assert f0.frequencies_hz[0] == pytest.approx(1 / 15)
+    assert wide.frequencies_hz[0] == pytest.approx(0.05)
+    assert wide.frequency_resolution_hz == pytest.approx(0.05)
+
+
+def test_signal_assets_bandenergy_uses_repository_overlapping_inclusive_bands():
+    import numpy as np
+
+    from scripts.tho_group_meeting_ppt.signal_figures import (
+        BANDENERGY_BANDS_HZ,
+        bandenergy_from_logmag,
+    )
+
+    frequencies = np.arange(0.05, 8.0001, 0.05, dtype=np.float32)
+    logmag = np.repeat(frequencies[:, None], 3, axis=1)
+    energies = bandenergy_from_logmag(logmag, frequencies)
+
+    assert BANDENERGY_BANDS_HZ == (
+        (0.05, 0.3),
+        (0.1, 0.7),
+        (0.3, 1.2),
+        (0.7, 3.0),
+        (3.0, 8.0),
+    )
+    assert energies.shape == (5, 3)
+    for idx, (low, high) in enumerate(BANDENERGY_BANDS_HZ):
+        # rFFT 的 float32 频点会把 0.7 表示为 0.70000005；仓库实现按 bin
+        # 索引纳入边界，因此断言也显式允许该表示误差。
+        expected = frequencies[
+            (frequencies >= low - 1e-6) & (frequencies <= high + 1e-6)
+        ].mean()
+        assert energies[idx] == pytest.approx(expected)
+
+
+def test_signal_assets_preprocessing_gap_records_missing_fields_without_fake_curves(tmp_path: Path):
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from scripts.tho_group_meeting_ppt.signal_figures import load_preprocessing_window
+
+    dataset = tmp_path / "dataset"
+    index = dataset / "training" / "dataset_index.csv"
+    index.parent.mkdir(parents=True)
+    source = dataset / "whole_night" / "source.npz"
+    target = dataset / "whole_night" / "target.npz"
+    source.parent.mkdir(parents=True)
+    np.savez(source, unrelated=np.arange(30_000, dtype=np.float32))
+    np.savez(target, unrelated=np.arange(30_000, dtype=np.float32))
+    index.write_text(
+        "dataset_row_id,window_start_s,window_end_s,source_npz,target_source_npz,"
+        "bcg_rawish_observed_key,bcg_rawish_segment_robust_z_key,"
+        "target_waveform_observed_key,target_waveform_segment_robust_z_key,"
+        "target_waveform_segment_soft_z_key\n"
+        "8025,90,270,../whole_night/source.npz,../whole_night/target.npz,"
+        "bcg_raw,bcg_robust,tho_raw,tho_robust,tho_soft\n",
+        encoding="utf-8",
+    )
+    catalog = SimpleNamespace(dataset_index=index)
+
+    loaded = load_preprocessing_window(catalog, tmp_path / "out")
+    gap = json.loads((tmp_path / "out" / "evidence_gap_preprocessing.json").read_text(encoding="utf-8"))
+
+    assert loaded is None
+    assert gap["row_id"] == 8025
+    assert {
+        "bcg_raw",
+        "bcg_robust",
+        "tho_raw",
+        "tho_robust",
+        "tho_soft",
+    } <= set(gap["missing_fields"])
+    assert any(field.startswith("soft-z parameters:") for field in gap["missing_fields"])
+    assert gap["checked_npz_and_keys"]
+    assert "suggested_generation_entrypoint" in gap
+
+
+def test_signal_assets_builds_five_readable_real_evidence_figures(tmp_path: Path):
+    from PIL import Image, ImageStat
+
+    from scripts.tho_group_meeting_ppt.signal_figures import build_signal_assets
+
+    assets, metadata = build_signal_assets(REPO_ROOT, tmp_path)
+
+    assert set(assets) == {
+        "signal_overview",
+        "preprocessing_comparison",
+        "softz_mapping",
+        "stft_resolution_comparison",
+        "bandenergy_response",
+    }
+    assert metadata["dataset_row_id"] == 8025
+    assert metadata["signal_length"] == 18_000
+    assert metadata["f0_frames"] == 37
+    assert metadata["wide_frames"] == 73
+    assert metadata["wide_frequency_resolution_hz"] == pytest.approx(0.05)
+    for path in assets.values():
+        assert path.is_file() and path.stat().st_size > 20_000
+        with Image.open(path) as image:
+            assert image.width >= 1600 and image.height >= 900
+            assert ImageStat.Stat(image.convert("L")).stddev[0] > 10
+
+
 def test_read_run_config_evidence_reports_missing_field_with_path(tmp_path: Path):
     from scripts.tho_group_meeting_ppt.evidence import read_run_config
 
