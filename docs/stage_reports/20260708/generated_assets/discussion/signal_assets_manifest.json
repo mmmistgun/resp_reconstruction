@@ -2,6 +2,12 @@
   "schema_version": 1,
   "dataset_row_id": 8025,
   "evidence": {
+    "signal_figure_code": {
+      "path": "scripts/tho_group_meeting_ppt/signal_figures.py",
+      "status": "present",
+      "sha256": "e50a7f6cbfe7a4fb0e2063cab13bc56d21521b30af1c6bf0e0202146cb4dcbc5",
+      "size_bytes": 35120
+    },
     "signal_metadata_json": {
       "path": "/mnt/disk_code/marques/resp_reconstruction/docs/figure/F0_native_stft_pre_mixer/signals/f0_visual_sample_metadata.json",
       "status": "present",

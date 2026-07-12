@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "sources": {
+    "model_figure_code": {
+      "path": "scripts/tho_group_meeting_ppt/model_figures.py",
+      "sha256": "f03e09c7d5988127ab325f64375ff8e7b4ec5b9fb912fe56ae253c134313b6f4",
+      "size_bytes": 26259
+    },
     "formal_configs": {
       "g0_time_only": {
         "path": "/mnt/disk_code/marques/resp_reconstruction/runs/g_series_stft_input/g0_time_only/time_only/20260629_155504_081276/config.yaml",

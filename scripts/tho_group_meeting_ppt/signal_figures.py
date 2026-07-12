@@ -731,6 +731,7 @@ def _write_signal_assets_manifest(
         "schema_version": 1,
         "dataset_row_id": int(catalog.general_sample_row_id),
         "evidence": {
+            "signal_figure_code": _file_manifest_record(repo_root, Path(__file__)),
             "signal_metadata_json": _file_manifest_record(repo_root, signal_metadata_path),
             "signal_npz": _file_manifest_record(repo_root, catalog.general_signal_npz),
             "source_checkpoint": _file_manifest_record(repo_root, source_checkpoint),

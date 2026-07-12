@@ -21,13 +21,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="生成 THO research v2 组会汇报 PPT")
     parser.add_argument("--template", type=Path, default=REPORT_DIR / "组会汇报.pptx")
     parser.add_argument("--output", type=Path, default=REPORT_DIR / "THO_research_v2_全流程研究讨论版.pptx")
-    parser.add_argument("--charts-only", action="store_true")
     parser.add_argument("--no-backup", action="store_true")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--evidence-only", action="store_true", help="只审计并打印证据目录，不生成 PPT")
     mode.add_argument("--assets-only", action="store_true", help="只生成任务 3–6 的真实图资产")
     mode.add_argument("--discussion-deck", action="store_true", help="显式组装研究讨论版（默认模式）")
     mode.add_argument("--legacy-summary", action="store_true", help="兼容旧 25 页摘要入口")
+    mode.add_argument("--charts-only", action="store_true", help="只生成旧摘要图表")
     args = parser.parse_args()
 
     if args.evidence_only:

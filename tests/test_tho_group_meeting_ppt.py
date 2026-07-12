@@ -392,6 +392,10 @@ def test_signal_assets_builds_five_readable_real_evidence_figures(tmp_path: Path
     assert manifest["resolved_configs"]["wide"]["stft_hop"] == 250
     assert manifest["resolved_configs"]["bandenergy"]["stft_encoder_type"] == "bandenergy"
     assert manifest["evidence"]["dataset_index"]["path"]
+    generator = manifest["evidence"]["signal_figure_code"]
+    generator_path = REPO_ROOT / generator["path"]
+    assert generator_path.name == "signal_figures.py"
+    assert generator["sha256"] == hashlib.sha256(generator_path.read_bytes()).hexdigest()
     assert Path(manifest["evidence"]["source_npz"]["path"]).is_absolute()
     assert Path(manifest["evidence"]["target_npz"]["path"]).is_absolute()
     for path in assets.values():
@@ -1607,6 +1611,29 @@ def test_cli_discussion_routes_are_mutually_exclusive_and_default_to_discussion(
     assert output.is_file() and len(Presentation(output).slides) >= 55
 
 
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        (first, second)
+        for index, first in enumerate((
+            "--evidence-only", "--assets-only", "--discussion-deck",
+            "--legacy-summary", "--charts-only",
+        ))
+        for second in (
+            "--evidence-only", "--assets-only", "--discussion-deck",
+            "--legacy-summary", "--charts-only",
+        )[index + 1:]
+    ],
+)
+def test_all_cli_modes_are_pairwise_mutually_exclusive(first: str, second: str):
+    script = REPO_ROOT / "scripts/build_tho_group_meeting_ppt.py"
+    result = subprocess.run(
+        [sys.executable, str(script), first, second],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+
+
 def test_discussion_specs_have_explicit_content_plans_and_no_silent_truncation():
     import inspect
 
@@ -1765,6 +1792,46 @@ def test_discussion_deck_embeds_all_real_assets_and_complete_canonical_tables(re
         assert phrase in table_text
 
 
+def _copy_discussion_assets(tmp_path: Path) -> Path:
+    import shutil
+
+    source = REPO_ROOT / "docs/stage_reports/20260708/generated_assets/discussion"
+    target = tmp_path / "discussion"
+    target.mkdir()
+    for path in source.iterdir():
+        if path.suffix in {".png", ".json"}:
+            shutil.copy2(path, target / path.name)
+    return target
+
+
+def test_discussion_asset_resolver_validates_all_19_manifested_assets(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.detail_slides import resolve_discussion_assets
+
+    assets = resolve_discussion_assets(REPO_ROOT, asset_dir=_copy_discussion_assets(tmp_path))
+    assert len(assets) == 19
+
+
+@pytest.mark.parametrize("tamper", ["asset", "generator", "source"])
+def test_discussion_asset_resolver_rejects_tampered_evidence(tmp_path: Path, tamper: str):
+    from scripts.tho_group_meeting_ppt.detail_slides import resolve_discussion_assets
+
+    asset_dir = _copy_discussion_assets(tmp_path)
+    manifest_path = asset_dir / "signal_assets_manifest.json"
+    if tamper == "asset":
+        (asset_dir / "signal_overview.png").write_bytes(b"tampered")
+    else:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        key = "signal_figure_code" if tamper == "generator" else "signal_metadata_json"
+        source = Path(manifest["evidence"][key]["path"])
+        source = source if source.is_absolute() else REPO_ROOT / source
+        tampered_source = tmp_path / source.name
+        tampered_source.write_bytes(source.read_bytes() + b"\ntampered")
+        manifest["evidence"][key]["path"] = str(tampered_source)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"signal_assets_manifest\.json.*--assets-only"):
+        resolve_discussion_assets(REPO_ROOT, asset_dir=asset_dir)
+
+
 def test_case_titles_respect_logo_safe_area_and_local_rr_has_single_evidence_boundary(revised_discussion_deck):
     local_rr_slides = []
     for slide in revised_discussion_deck.slides:
@@ -1781,6 +1848,10 @@ def test_case_titles_respect_logo_safe_area_and_local_rr_has_single_evidence_bou
     assert sum(shape.name == "证据边界" for shape in local_rr_slides[0].shapes) == 1
 
 
+@pytest.mark.skipif(
+    os.environ.get("RUN_LIBREOFFICE_INTEGRATION") != "1",
+    reason="设置 RUN_LIBREOFFICE_INTEGRATION=1 后显式运行 LibreOffice 集成测试",
+)
 def test_key_pages_survive_real_libreoffice_pdf_and_png_render(tmp_path: Path):
     from PIL import Image, ImageStat
 
@@ -1811,7 +1882,12 @@ def test_key_pages_survive_real_libreoffice_pdf_and_png_render(tmp_path: Path):
         ],
         capture_output=True, text=True, check=False, env=lo_env,
     )
-    assert conversion.returncode == 0, conversion.stderr
+    assert conversion.returncode == 0, (
+        f"LibreOffice 转换失败: returncode={conversion.returncode}\n"
+        f"stdout={conversion.stdout}\nstderr={conversion.stderr}\n"
+        f"HOME={lo_env['HOME']}\nXDG_RUNTIME_DIR={lo_env['XDG_RUNTIME_DIR']}\n"
+        f"profile={profile.as_uri()}"
+    )
     pdf = rendered / "discussion.pdf"
     assert pdf.is_file()
     extracted = subprocess.run(
@@ -1876,6 +1952,11 @@ def test_model_detail_stft_shapes_match_centered_forward_and_formal_g_configs(mo
     from PIL import Image
 
     (assets, metadata), (repeated_assets, repeated_metadata) = model_asset_builds
+    manifest = json.loads((next(iter(assets.values())).parent / "model_assets_manifest.json").read_text())
+    generator = manifest["sources"]["model_figure_code"]
+    generator_path = REPO_ROOT / generator["path"]
+    assert generator_path.name == "model_figures.py"
+    assert generator["sha256"] == hashlib.sha256(generator_path.read_bytes()).hexdigest()
     branches = metadata["stft_branches"]
 
     assert set(branches) == {"f0", "wide", "bandenergy"}

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -185,9 +187,114 @@ ASSET_FILES = {
 }
 
 
-def resolve_discussion_assets(repo_root: Path) -> dict[str, Path]:
-    root = repo_root / "docs/stage_reports/20260708/generated_assets/discussion"
-    return {key: root / filename for key, filename in ASSET_FILES.items() if (root / filename).is_file()}
+_MANIFEST_ASSETS = {
+    "signal_assets_manifest.json": {
+        "signal_overview", "softz_mapping", "stft_resolution_comparison", "bandenergy_response",
+    },
+    "model_assets_manifest.json": {"token_geometry", "stft_branch_shapes", "loss_schedule"},
+    "metric_assets_manifest.json": {
+        "metric_robust_rr", "metric_cycle_count", "metric_lag_corr",
+        "metric_relative_envelope", "metric_local_rr",
+    },
+    "case_assets_manifest.json": {
+        "overall_delta", "seed_subject_stability", "strata_tradeoffs",
+        "case_row_640", "case_row_873", "case_row_1353", "case_row_3584",
+    },
+}
+
+
+def _record_path(repo_root: Path, record: Mapping[str, object]) -> Path:
+    path = Path(str(record.get("path", "")))
+    return path if path.is_absolute() else repo_root / path
+
+
+def _validate_record(manifest_path: Path, label: str, record: object, actual_path: Path) -> None:
+    if not isinstance(record, Mapping):
+        raise ValueError(f"记录 {label} 缺失或格式错误")
+    if not actual_path.is_file():
+        raise ValueError(f"记录 {label} 指向的文件不存在: {actual_path}")
+    size = actual_path.stat().st_size
+    expected_size = record.get("size_bytes")
+    expected_sha = record.get("sha256")
+    if expected_size != size:
+        raise ValueError(f"记录 {label} 大小不匹配: manifest={expected_size}, actual={size}")
+    digest = hashlib.sha256()
+    with actual_path.open("rb") as fp:
+        for chunk in iter(lambda: fp.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if expected_sha != digest.hexdigest():
+        raise ValueError(f"记录 {label} SHA256 不匹配: {actual_path}")
+
+
+def _validate_manifest_sources(repo_root: Path, manifest_name: str, manifest: Mapping[str, object]) -> None:
+    if manifest_name == "signal_assets_manifest.json":
+        evidence = manifest.get("evidence", {})
+        configs = manifest.get("resolved_configs", {})
+        # checkpoint、原始数据文件不参与组装期哈希；这里只校验可快速复核的小型关键来源。
+        for key in ("signal_figure_code", "signal_metadata_json", "signal_npz", "source_run_config"):
+            record = evidence.get(key) if isinstance(evidence, Mapping) else None
+            _validate_record(Path(manifest_name), f"evidence.{key}", record, _record_path(repo_root, record or {}))
+        for key in ("f0", "wide", "bandenergy"):
+            record = configs.get(key) if isinstance(configs, Mapping) else None
+            _validate_record(Path(manifest_name), f"resolved_configs.{key}", record, _record_path(repo_root, record or {}))
+    elif manifest_name == "model_assets_manifest.json":
+        sources = manifest.get("sources", {})
+        for key in ("model_figure_code", "patch_mixer_code", "stft_branch_code", "loss_code"):
+            record = sources.get(key) if isinstance(sources, Mapping) else None
+            _validate_record(Path(manifest_name), f"sources.{key}", record, _record_path(repo_root, record or {}))
+        configs = sources.get("formal_configs", {}) if isinstance(sources, Mapping) else {}
+        for key, record in configs.items() if isinstance(configs, Mapping) else ():
+            _validate_record(Path(manifest_name), f"sources.formal_configs.{key}", record, _record_path(repo_root, record))
+    elif manifest_name == "metric_assets_manifest.json":
+        sources = manifest.get("sources", {})
+        for key in (
+            "signal_metadata_json", "source_run_config", "source_metrics_csv", "signal_npz",
+            "metric_code", "metric_evaluate_code", "metric_figure_code", "robust_rr_demo_code", "metric_schema",
+        ):
+            record = sources.get(key) if isinstance(sources, Mapping) else None
+            _validate_record(Path(manifest_name), f"sources.{key}", record, _record_path(repo_root, record or {}))
+    else:
+        if manifest.get("generator") != "scripts.tho_group_meeting_ppt.case_figures.build_case_assets":
+            raise ValueError("generator 标识错误")
+        sources = manifest.get("sources", ())
+        selected = []
+        for record in sources if isinstance(sources, list) else ():
+            path = Path(str(record.get("path", "")))
+            if path.is_absolute():
+                continue
+            name = path.name
+            if name == "case_figures.py" or name.endswith(("_manifest.json", "_manifest.csv", "_summary.csv", "_labels.csv")) or name == "harmonic_thresholds.json":
+                selected.append(record)
+        if not any(Path(str(record.get("path"))).name == "case_figures.py" for record in selected):
+            raise ValueError("缺少 case_figures.py 生成器源码记录")
+        for record in selected:
+            _validate_record(Path(manifest_name), f"sources.{record.get('path')}", record, _record_path(repo_root, record))
+
+
+def resolve_discussion_assets(repo_root: Path, asset_dir: Path | None = None) -> dict[str, Path]:
+    """读取四份 manifest，并在组装前验证 19 张图及关键生成证据。"""
+    root = asset_dir or repo_root / "docs/stage_reports/20260708/generated_assets/discussion"
+    validated: dict[str, Path] = {}
+    for manifest_name, expected_keys in _MANIFEST_ASSETS.items():
+        manifest_path = root / manifest_name
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            records = manifest.get("assets", {})
+            missing = expected_keys - set(records) if isinstance(records, Mapping) else expected_keys
+            if missing:
+                raise ValueError(f"缺少资产记录: {sorted(missing)}")
+            for key in expected_keys:
+                path = root / ASSET_FILES[key]
+                _validate_record(manifest_path, f"assets.{key}", records[key], path)
+                validated[key] = path
+            _validate_manifest_sources(repo_root, manifest_name, manifest)
+        except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
+            raise ValueError(
+                f"{manifest_name} 证据校验失败: {exc}；请先运行 --assets-only 重新生成讨论资产"
+            ) from exc
+    if set(validated) != set(ASSET_FILES):
+        raise ValueError("讨论资产集合不是预期的 19 项；请先运行 --assets-only 重新生成讨论资产")
+    return validated
 
 
 def load_canonical_overall_metrics(repo_root: Path) -> tuple[dict[str, float | str], ...]:

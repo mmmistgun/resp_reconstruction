@@ -477,6 +477,7 @@ def _write_manifest(repo_root: Path, output_dir: Path, catalog: EvidenceCatalog,
         for label, config in catalog.run_configs.items()
     }
     sources = {
+        "model_figure_code": _file_record(repo_root, Path(__file__)),
         "formal_configs": config_records,
         "patch_mixer_code": _file_record(repo_root, repo_root / "resp_train/models/timeseries.py"),
         "stft_branch_code": _file_record(repo_root, repo_root / "resp_train/models/stft_branch.py"),
