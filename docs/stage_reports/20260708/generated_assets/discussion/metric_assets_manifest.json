@@ -45,6 +45,12 @@
       "sha256": "21de68d175594eb8b31daee924616b122c6f3fe17513d37fabd4116eaf1d2229",
       "size_bytes": 23776
     },
+    "metric_figure_code": {
+      "path": "scripts/tho_group_meeting_ppt/metric_figures.py",
+      "sha256": "150c23fb83ba4a206883ae3e680b3a8148a89ee94bac921a10ac7f5477af7d6e",
+      "size_bytes": 35981,
+      "status": "present"
+    },
     "robust_rr_demo_code": {
       "path": "docs/figure/rr_peak_band_metric/plot_rr_peak_band_metric_demo.py",
       "sha256": "5fdd61a9868e4817456a04f6a7432bf0efc64ec390f94ce7e80f4dc5a7ccf89a",

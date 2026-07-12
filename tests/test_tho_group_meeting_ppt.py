@@ -1381,6 +1381,14 @@ def test_metric_assets_are_large_uncropped_and_manifested(metric_asset_build):
     assert manifest["sources"]["signal_npz"]["path"].endswith("f0_visual_sample_signals.npz")
     assert manifest["sources"]["source_metrics_csv"]["path"].endswith("metrics.csv")
     assert manifest["sources"]["metric_code"]["path"] == "resp_train/metrics/signal.py"
+    generator = REPO_ROOT / "scripts/tho_group_meeting_ppt/metric_figures.py"
+    assert manifest["sources"]["metric_figure_code"]["path"] == (
+        "scripts/tho_group_meeting_ppt/metric_figures.py"
+    )
+    assert manifest["sources"]["metric_figure_code"]["status"] == "present"
+    assert manifest["sources"]["metric_figure_code"]["sha256"] == hashlib.sha256(
+        generator.read_bytes()
+    ).hexdigest()
     assert manifest["sources"]["robust_rr_demo_code"]["path"].endswith(
         "plot_rr_peak_band_metric_demo.py"
     )

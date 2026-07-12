@@ -613,6 +613,10 @@ def _write_manifest(
             "signal_npz": _file_record(repo_root, catalog.general_signal_npz),
             "metric_code": _file_record(repo_root, repo_root / "resp_train/metrics/signal.py"),
             "metric_evaluate_code": _file_record(repo_root, repo_root / "resp_train/metrics/evaluate.py"),
+            "metric_figure_code": {
+                **_file_record(repo_root, Path(__file__)),
+                "status": "present",
+            },
             "robust_rr_demo_code": _file_record(
                 repo_root, repo_root / "docs/figure/rr_peak_band_metric/plot_rr_peak_band_metric_demo.py"
             ),
