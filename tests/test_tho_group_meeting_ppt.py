@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pptx import Presentation
 from pptx.util import Inches
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -72,3 +73,15 @@ def test_backup_deck_covers_required_materials():
         "reproduction_commands",
         "qa_notes",
     } <= keys
+
+
+def test_chart_data_matches_canonical_report_values():
+    from scripts.tho_group_meeting_ppt.charts import load_chart_data
+
+    data = load_chart_data(REPO_ROOT)
+
+    assert data.overall.loc["g3_c_wide_8p0", "robust_rr"] == pytest.approx(0.712186)
+    assert data.overall.loc["g3_c_bandenergy", "count_bpm"] == pytest.approx(0.684800)
+    assert data.harmonic.loc["g3_c_bandenergy", "correction_rate"] == pytest.approx(0.9720, abs=5e-5)
+    assert data.harmonic.loc["g3_c_wide_8p0", "lag4_corr"] == pytest.approx(0.847504)
+    assert data.harmonic_coverage["positive_union_windows"] == 452
