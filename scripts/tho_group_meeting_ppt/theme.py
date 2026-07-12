@@ -226,7 +226,14 @@ def _add_cell_border(cell, edge: str, *, width: int = 12700) -> None:
     dash = OxmlElement("a:prstDash")
     dash.set("val", "solid")
     line.append(dash)
-    tc_pr.append(line)
+    edge_order = {"lnL": 0, "lnR": 1, "lnT": 2, "lnB": 3, "lnTlToBr": 4, "lnBlToTr": 5}
+    insert_at = len(tc_pr)
+    for index, child in enumerate(tc_pr):
+        child_name = child.tag.rsplit("}", 1)[-1]
+        if child_name not in edge_order or edge_order[child_name] > edge_order[edge]:
+            insert_at = index
+            break
+    tc_pr.insert(insert_at, line)
 
 
 def add_three_line_table(

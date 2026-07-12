@@ -51,6 +51,8 @@ def test_body_text_is_black_and_table_has_only_three_horizontal_rules():
     assert not table.first_col
     assert not table.horz_banding
     assert not table.vert_banding
+    header_tags = [child.tag.rsplit("}", 1)[-1] for child in table.cell(0, 0)._tc.get_or_add_tcPr()]
+    assert header_tags[:3] == ["lnT", "lnB", "solidFill"]
 
 
 def test_main_deck_has_exactly_25_ordered_slides_and_numeric_sources():
@@ -76,10 +78,11 @@ def test_backup_deck_covers_required_materials():
         "full_stratified_results",
         "subject_results",
         "harmonic_subgroups",
+        "harmonic_metrics",
         "data_provenance",
-        "reproduction_commands",
-        "qa_notes",
     } <= keys
+    assert "reproduction_commands" not in keys
+    assert "qa_notes" not in keys
 
 
 def test_chart_data_matches_canonical_report_values():
@@ -111,6 +114,8 @@ def test_generated_main_deck_has_25_slides_black_body_and_editable_diagrams(tmp_
     assert all(slide.slide_layout.name != "空白" for slide in list(prs.slides)[1:])
     assert sum(1 for shape in prs.slides[6].shapes if shape.name.startswith("流程节点")) >= 8
     assert sum(1 for slide in prs.slides for shape in slide.shapes if shape.has_table) >= 3
+    assert sum(1 for shape in prs.slides[10].shapes if shape.shape_type == 13) == 0
+    assert sum(1 for shape in prs.slides[20].shapes if shape.has_table) == 0
     for slide in prs.slides:
         for shape in slide.shapes:
             if not shape.name.startswith(("正文", "核心结论")) or not shape.has_text_frame:
@@ -133,13 +138,17 @@ def test_backup_contains_balanced_cases_formulas_subject_table_and_commands(tmp_
         if shape.has_text_frame
     )
 
-    assert len(prs.slides) >= 35
+    assert len(prs.slides) >= 36
     assert "dataset_row_id=640" in text
     assert "dataset_row_id=873" in text
     assert "dataset_row_id=1353" in text
     assert "dataset_row_id=3584" in text
     assert "8 名测试受试者" in text
-    assert "eval_topk_checkpoints.py" in text
+    assert "8 名测试受试者（1/2）" in text
+    assert "8 名测试受试者（2/2）" in text
+    assert "复现实验命令与证据路径" not in text
+    assert "现场问答提示" not in text
+    assert "eval_topk_checkpoints.py" not in text
 
 
 def test_final_deck_has_no_sample_text_gray_body_or_out_of_bounds_shapes():
@@ -153,7 +162,7 @@ def test_final_deck_has_no_sample_text_gray_body_or_out_of_bounds_shapes():
         for shape in slide.shapes
         if shape.has_text_frame
     )
-    assert len(prs.slides) >= 35
+    assert len(prs.slides) >= 36
     assert "论文分享" not in text
     assert "2021/12/21" not in text
     assert "汇报人：xxx" not in text

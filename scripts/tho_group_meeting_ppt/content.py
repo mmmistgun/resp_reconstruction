@@ -248,8 +248,6 @@ BACKUP_SLIDES = (
     SlideSpec("full_stratified_results", "备份：完整分层结果", "备份", "分层结果仅用于回顾性解释收益来源", sources=(REPORT, f"{G_SERIES_ROOT}/stratified_analysis_20260709/"), contains_numeric_evidence=True),
     SlideSpec("subject_results", "备份：8 名测试受试者结果", "备份", "wide 的稳健 RR 收益并非由单一受试者拉动", sources=(REPORT,), contains_numeric_evidence=True),
     SlideSpec("harmonic_subgroups", "备份：二次谐波子层结果", "备份", "strong、peak-doubling 与 harmonic-prominent 需分开解释", sources=(REPORT, HARMONIC_ROOT), contains_numeric_evidence=True),
+    SlideSpec("harmonic_metrics", "备份：二次谐波完整任务指标", "备份", "纠正率之外仍需同时检查 RR、计数、形态和局部节律", sources=(REPORT, f"{HARMONIC_ROOT}/model_metrics/", f"{HARMONIC_ROOT}/corrections/"), contains_numeric_evidence=True),
     SlideSpec("data_provenance", "备份：数据 provenance", "备份", "以导出包保存的配置快照和 metadata 为准", sources=(REPORT,), contains_numeric_evidence=True),
-    SlideSpec("reproduction_commands", "备份：复现实验命令与证据路径", "备份", "命令与 manifest 用于追溯，不在汇报制作阶段重新运行", sources=(REPORT,)),
-    SlideSpec("qa_notes", "备份：现场问答提示", "备份", "主动说明独立性、soft-z、排序依据和泄漏边界", sources=(REPORT, METRIC_SCHEMA, EVIDENCE_LEDGER)),
 )
-

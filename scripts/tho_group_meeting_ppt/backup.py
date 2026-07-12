@@ -44,8 +44,8 @@ def _add_contained_picture(slide, path: Path, *, x, y, width, height, name: str)
     return picture
 
 
-def _base_slide(prs, spec: SlideSpec, page_number: int):
-    slide = new_content_slide(prs, spec.title, page_number=page_number)
+def _base_slide(prs, spec: SlideSpec, page_number: int, *, title: str | None = None):
+    slide = new_content_slide(prs, title or spec.title, page_number=page_number)
     add_takeaway(slide, spec.takeaway)
     add_source_note(slide, spec.sources)
     return slide
@@ -119,8 +119,8 @@ def _build_metric_formulas(slide) -> None:
         add_text_box(slide, formula, x=Inches(3.15), y=y, width=Inches(9.20), height=Inches(0.50), font_size=15, name="正文公式")
 
 
-def _build_full_strata(slide) -> None:
-    rows = [
+def _build_full_strata(slide, part: int) -> None:
+    all_rows = [
         ("overall", "纯时序", "0.773", "0.778", "0.865", "0.787"),
         ("overall", "wide", "0.712", "0.717", "0.871", "0.780"),
         ("overall", "bandenergy", "0.730", "0.685", "0.867", "0.773"),
@@ -131,11 +131,14 @@ def _build_full_strata(slide) -> None:
         ("low spectrum", "wide", "1.236", "1.037", "0.814", "1.255"),
         ("low spectrum", "bandenergy", "1.259", "0.987", "0.813", "1.246"),
     ]
-    add_three_line_table(slide, ("分层", "方案", "稳健 RR", "计数 bpm", "lag4 corr", "local RR MAE"), rows, x=Inches(0.48), y=Inches(1.97), width=Inches(12.35), height=Inches(4.65), font_size=11)
+    rows = all_rows[:5] if part == 1 else all_rows[5:]
+    add_three_line_table(slide, ("分层", "方案", "稳健 RR", "计数 bpm", "lag4 corr", "local RR MAE"), rows, x=Inches(0.58), y=Inches(2.18), width=Inches(12.15), height=Inches(3.55), font_size=15)
+    note = "整体结果与 baseline hard 前半" if part == 1 else "baseline hard 后半与 low-spectrum"
+    add_text_box(slide, note, x=Inches(1.0), y=Inches(5.95), width=Inches(11.3), height=Inches(0.42), font_size=15, color=NOTE_GRAY, name="来源注释", align=PP_ALIGN.CENTER)
 
 
-def _build_subject_results(slide) -> None:
-    rows = [
+def _build_subject_results(slide, part: int) -> None:
+    all_rows = [
         ("220", "283", "0.708 / 0.692", "0.276 / 0.275", "0.860 / 0.865", "0.586 / 0.575"),
         ("229", "298", "0.276 / 0.260", "0.186 / 0.181", "0.921 / 0.923", "0.268 / 0.263"),
         ("286", "302", "0.730 / 0.642", "0.572 / 0.553", "0.869 / 0.871", "0.592 / 0.571"),
@@ -145,8 +148,9 @@ def _build_subject_results(slide) -> None:
         ("726", "214", "0.384 / 0.377", "0.206 / 0.206", "0.898 / 0.899", "0.602 / 0.587"),
         ("1006", "55", "0.639 / 0.607", "0.394 / 0.400", "0.859 / 0.862", "0.857 / 0.829"),
     ]
+    rows = all_rows[:4] if part == 1 else all_rows[4:]
     add_text_box(slide, "每项按“纯时序 / wide”顺序列出，不表示 delta。", x=Inches(0.80), y=Inches(1.92), width=Inches(11.8), height=Inches(0.36), font_size=13, color=NOTE_GRAY, name="来源注释", align=PP_ALIGN.CENTER)
-    add_three_line_table(slide, ("受试者", "窗口数", "稳健 RR", "计数 bpm", "lag4 corr", "local RR MAE"), rows, x=Inches(0.50), y=Inches(2.32), width=Inches(12.3), height=Inches(4.18), font_size=11)
+    add_three_line_table(slide, ("受试者", "窗口数", "稳健 RR", "计数 bpm", "lag4 corr", "local RR MAE"), rows, x=Inches(0.55), y=Inches(2.42), width=Inches(12.2), height=Inches(3.35), font_size=14)
 
 
 def _build_harmonic_subgroups(slide) -> None:
@@ -161,6 +165,32 @@ def _build_harmonic_subgroups(slide) -> None:
     add_card(slide, "证据边界", "452 个阳性窗口中 285 个来自受试者 671；214 个 strong 窗口中 175 个来自该受试者。", x=Inches(2.10), y=Inches(5.55), width=Inches(9.15), height=Inches(0.85), accent=SECONDARY_ORANGE)
 
 
+def _build_harmonic_metrics(slide, data: ChartData) -> None:
+    rows = [
+        (
+            {"g0_time_only": "纯时序", "g0_f0_native_stft_pre_mixer": "上一版 STFT", "g3_c_wide_8p0": "宽频 STFT", "g3_c_bandenergy": "频带能量"}[model],
+            f"{data.harmonic.loc[model, 'robust_rr']:.3f}",
+            f"{data.harmonic.loc[model, 'count_bpm']:.3f}",
+            f"{data.harmonic.loc[model, 'lag4_corr']:.3f}",
+            f"{data.harmonic.loc[model, 'local_rr_mae']:.3f}",
+            f"{data.harmonic.loc[model, 'correction_rate']:.2%}",
+        )
+        for model in ("g0_time_only", "g0_f0_native_stft_pre_mixer", "g3_c_wide_8p0", "g3_c_bandenergy")
+    ]
+    add_three_line_table(
+        slide,
+        ("方案", "稳健 RR", "计数 bpm", "lag4 corr", "local RR MAE", "纠正率"),
+        rows,
+        x=Inches(0.58),
+        y=Inches(2.25),
+        width=Inches(12.15),
+        height=Inches(3.45),
+        bold_cells={(4, 1), (4, 2), (3, 3), (4, 4), (4, 5)},
+        font_size=15,
+    )
+    add_text_box(slide, "bandenergy 的节律误差更低；wide 的时延校正后形态更好。", x=Inches(1.0), y=Inches(5.95), width=Inches(11.3), height=Inches(0.42), font_size=16, bold=True, name="正文结果解读", align=PP_ALIGN.CENTER)
+
+
 def _build_provenance(slide) -> None:
     bullets = (
         "导出包：20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf。",
@@ -172,47 +202,31 @@ def _build_provenance(slide) -> None:
     add_body_text(slide, bullets, x=Inches(0.90), y=Inches(2.03), width=Inches(11.55), height=Inches(4.50), font_size=17, bullet=True)
 
 
-def _build_commands(slide) -> None:
-    commands = (
-        "# Top3 checkpoint 复评（正式长任务由用户执行）\n"
-        "./.venv/bin/python scripts/eval_topk_checkpoints.py --runs-root runs/<root> --top-k 3 "
-        "--device cuda:0 --device cuda:1 --max-parallel 4 --metric-workers 4 --metrics-chunk-size 128\n\n"
-        "# 当前 G 系列汇总\n"
-        "./.venv/bin/python scripts/summarize_tho_runs.py --runs-root runs/<root> --output /tmp/tho_runs_summary.csv\n\n"
-        "# 生成本 PPT\n"
-        "./.venv/bin/python scripts/build_tho_group_meeting_ppt.py"
-    )
-    add_text_box(slide, commands, x=Inches(0.72), y=Inches(2.00), width=Inches(11.90), height=Inches(4.55), font_size=13, name="正文命令")
-
-
-def _build_qa(slide) -> None:
-    items = (
-        ("受试者独立吗？", "train / val / test 受试者不重叠；窗口在受试者内重叠。"),
-        ("soft-z 是什么？", "分段 robust-z 后对极端尾部做连续软压缩。"),
-        ("为什么不用 val_loss 排序？", "阶段判断按独立测试集呼吸任务指标展开。"),
-        ("为什么不补非重点方案？", "它们不回答当前阶段问题，补评不会改变决策。"),
-        ("如何避免泄漏？", "现有目标侧分层仅用于回顾；下一阶段 gate 必须由 BCG-only 判据构造。"),
-    )
-    for index, (question, answer) in enumerate(items):
-        row, column = divmod(index, 2)
-        add_card(slide, question, answer, x=Inches(0.65 + column * 6.20), y=Inches(2.00 + row * 1.48), width=Inches(5.80), height=Inches(1.18), accent=(SECONDARY_ORANGE if index == 4 else SCNU_BLUE))
-
-
 def build_backup_slides(prs, *, repo_root: Path, data: ChartData, assets: dict[str, Path], start_page: int) -> None:
-    del data, assets
-    builders = {
+    del assets
+    simple_builders = {
         "balanced_cases": lambda slide: _build_balanced_cases(slide, repo_root),
         "model_details": _build_model_details,
         "training_details": _build_training_details,
         "metric_formulas": _build_metric_formulas,
-        "full_stratified_results": _build_full_strata,
-        "subject_results": _build_subject_results,
         "harmonic_subgroups": _build_harmonic_subgroups,
+        "harmonic_metrics": lambda slide: _build_harmonic_metrics(slide, data),
         "data_provenance": _build_provenance,
-        "reproduction_commands": _build_commands,
-        "qa_notes": _build_qa,
     }
-    for offset, spec in enumerate(BACKUP_SLIDES):
-        slide = _base_slide(prs, spec, start_page + offset)
-        builders[spec.key](slide)
-
+    page_number = start_page
+    for spec in BACKUP_SLIDES:
+        if spec.key == "full_stratified_results":
+            for part in (1, 2):
+                slide = _base_slide(prs, spec, page_number, title=f"{spec.title}（{part}/2）")
+                _build_full_strata(slide, part)
+                page_number += 1
+            continue
+        if spec.key == "subject_results":
+            for part in (1, 2):
+                slide = _base_slide(prs, spec, page_number, title=f"备份：8 名测试受试者（{part}/2）")
+                _build_subject_results(slide, part)
+                page_number += 1
+            continue
+        slide = _base_slide(prs, spec, page_number)
+        simple_builders[spec.key](slide)
+        page_number += 1

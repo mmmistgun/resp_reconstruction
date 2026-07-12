@@ -8,6 +8,10 @@
 
 **技术栈：** Python 3、python-pptx、pandas、matplotlib、Pillow、LibreOffice headless、pytest。
 
+**审查后调整（2026-07-12）：** 最终 PPT 删除“复现实验命令”和“现场问答提示”；完整分层结果与
+8 名测试受试者结果分别拆为 2 页，并新增二次谐波完整任务指标页，最终为 25 页正文 + 11 页备份。
+三线表边框按 PowerPoint OOXML 要求放在单元格填充节点之前，避免 PowerPoint 忽略横线。
+
 ---
 
 ## 文件结构

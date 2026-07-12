@@ -263,19 +263,31 @@ def _overall_rows(data: ChartData):
 
 
 def _build_overall(slide, data: ChartData, assets: dict[str, Path]) -> None:
+    del assets
     bold = {(3, 1), (4, 2), (3, 3), (4, 4), (4, 5)}
     add_three_line_table(
         slide,
         ("方案", "稳健 RR", "计数 bpm", "lag4 corr", "local RR MAE", "local RR corr"),
         _overall_rows(data),
         x=Inches(0.50),
-        y=Inches(2.02),
+        y=Inches(2.18),
         width=Inches(12.30),
-        height=Inches(2.10),
+        height=Inches(3.55),
         bold_cells=bold,
-        font_size=13,
+        font_size=16,
     )
-    _add_contained_picture(slide, assets["overall_metrics"], x=Inches(0.95), y=Inches(4.30), width=Inches(11.40), height=Inches(2.35))
+    add_text_box(
+        slide,
+        "wide：稳健 RR 与时延校正形态更优；bandenergy：周期计数与局部 RR 略优。",
+        x=Inches(1.10),
+        y=Inches(5.95),
+        width=Inches(11.05),
+        height=Inches(0.48),
+        font_size=17,
+        bold=True,
+        name="正文结果解读",
+        align=PP_ALIGN.CENTER,
+    )
 
 
 def _build_evidence_slide(slide, spec: SlideSpec, assets: dict[str, Path], kind: str) -> None:
@@ -327,24 +339,15 @@ def _build_harmonic_mechanism(slide, spec: SlideSpec) -> None:
 
 
 def _build_harmonic_coverage(slide, assets: dict[str, Path]) -> None:
-    _add_contained_picture(slide, assets["harmonic_coverage"], x=Inches(0.55), y=Inches(2.00), width=Inches(6.65), height=Inches(4.40))
-    rows = [
-        ("全部测试窗口", "2,310", "100.00%", "8"),
-        ("可判定窗口", "1,924", "83.29%", "8"),
-        ("strong", "214", "9.26%", "5"),
-        ("harmonic prominent", "233", "10.09%", "5"),
-        ("阳性并集", "452", "19.57%", "6"),
-    ]
-    add_three_line_table(slide, ("分层", "窗口数", "占全部", "受试者数"), rows, x=Inches(7.25), y=Inches(2.20), width=Inches(5.25), height=Inches(3.70), font_size=13)
+    _add_contained_picture(slide, assets["harmonic_coverage"], x=Inches(0.55), y=Inches(2.00), width=Inches(7.15), height=Inches(4.40))
+    add_card(slide, "可判定窗口", "1,924 / 2,310\n占全部测试窗口 83.29%", x=Inches(7.90), y=Inches(2.10), width=Inches(4.15), height=Inches(1.15))
+    add_card(slide, "阳性并集", "452 个窗口｜19.57%\n覆盖 6 名受试者", x=Inches(7.90), y=Inches(3.55), width=Inches(4.15), height=Inches(1.15), accent=SECONDARY_ORANGE)
+    add_card(slide, "证据集中性", "strong 214 个窗口；阳性与 strong 均集中在少数受试者。", x=Inches(7.90), y=Inches(5.00), width=Inches(4.15), height=Inches(1.25), accent=SECONDARY_ORANGE)
 
 
 def _build_harmonic_results(slide, data: ChartData, assets: dict[str, Path]) -> None:
-    _add_contained_picture(slide, assets["harmonic_model_results"], x=Inches(0.55), y=Inches(1.93), width=Inches(12.20), height=Inches(3.15))
-    rows = [
-        (MODEL_NAMES[model], f"{data.harmonic.loc[model, 'robust_rr']:.3f}", f"{data.harmonic.loc[model, 'count_bpm']:.3f}", f"{data.harmonic.loc[model, 'lag4_corr']:.3f}", f"{data.harmonic.loc[model, 'local_rr_mae']:.3f}", f"{data.harmonic.loc[model, 'correction_rate']:.2%}")
-        for model in MODEL_ORDER
-    ]
-    add_three_line_table(slide, ("方案", "稳健 RR", "计数 bpm", "lag4 corr", "local RR MAE", "纠正率"), rows, x=Inches(0.65), y=Inches(5.15), width=Inches(12.0), height=Inches(1.45), bold_cells={(4, 1), (4, 2), (3, 3), (4, 4), (4, 5)}, font_size=11)
+    del data
+    _add_contained_picture(slide, assets["harmonic_model_results"], x=Inches(0.60), y=Inches(2.00), width=Inches(12.10), height=Inches(4.35))
 
 
 def _build_balanced_cases(slide, repo_root: Path) -> None:
