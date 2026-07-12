@@ -110,3 +110,25 @@ def test_generated_main_deck_has_25_slides_black_body_and_editable_diagrams(tmp_
             for paragraph in shape.text_frame.paragraphs:
                 for run in paragraph.runs:
                     assert run.font.color.rgb == BODY_BLACK
+
+
+def test_backup_contains_balanced_cases_formulas_subject_table_and_commands(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.build import build_presentation
+
+    output = tmp_path / "full.pptx"
+    build_presentation(template=TEMPLATE, output=output, include_backup=True)
+    prs = Presentation(output)
+    text = "\n".join(
+        shape.text
+        for slide in prs.slides
+        for shape in slide.shapes
+        if shape.has_text_frame
+    )
+
+    assert len(prs.slides) >= 35
+    assert "dataset_row_id=640" in text
+    assert "dataset_row_id=873" in text
+    assert "dataset_row_id=1353" in text
+    assert "dataset_row_id=3584" in text
+    assert "8 名测试受试者" in text
+    assert "eval_topk_checkpoints.py" in text
