@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -429,6 +430,14 @@ def _require_equal(path: Path, field: str, actual: Any, expected: Any) -> None:
         raise _provenance_error(path, field, actual, expected)
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fp:
+        for chunk in iter(lambda: fp.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _validate_harmonic_manifests(
     repo_root: Path,
     harmonic_root: Path,
@@ -504,11 +513,52 @@ def _validate_harmonic_manifests(
     # model_metrics 与 corrections manifest 共享 labels_sha256，这是现有的标签文件 hash 链。
     model_labels_hash = _required_field(model_path, model, "labels_sha256")
     corrections_labels_hash = _required_field(corrections_path, corrections, "labels_sha256")
+    if type(model_labels_hash) is not str or not model_labels_hash.strip():
+        raise _provenance_error(model_path, "labels_sha256", model_labels_hash, "非空 SHA-256 字符串")
     _require_equal(
         corrections_path,
         "labels_sha256",
         corrections_labels_hash,
         model_labels_hash,
+    )
+    actual_labels_hash = _sha256_file(expected_labels_path)
+    _require_equal(
+        expected_labels_path,
+        "labels_sha256",
+        actual_labels_hash,
+        model_labels_hash,
+    )
+
+    thresholds_value = _required_field(test_path, test, "thresholds_path")
+    thresholds_path = _resolved_manifest_path(
+        repo_root,
+        test_path,
+        "thresholds_path",
+        thresholds_value,
+    )
+    if not thresholds_path.is_relative_to(harmonic_root.resolve()):
+        raise _provenance_error(
+            test_path,
+            "thresholds_path",
+            thresholds_path,
+            f"位于 {harmonic_root.resolve()} 内",
+        )
+    if not thresholds_path.is_file():
+        raise _provenance_error(test_path, "thresholds_path", thresholds_path, "存在的文件")
+    expected_thresholds_hash = _required_field(test_path, test, "thresholds_sha256")
+    if type(expected_thresholds_hash) is not str or not expected_thresholds_hash.strip():
+        raise _provenance_error(
+            test_path,
+            "thresholds_sha256",
+            expected_thresholds_hash,
+            "非空 SHA-256 字符串",
+        )
+    actual_thresholds_hash = _sha256_file(thresholds_path)
+    _require_equal(
+        thresholds_path,
+        "thresholds_sha256",
+        actual_thresholds_hash,
+        expected_thresholds_hash,
     )
     test_threshold_version = _required_field(test_path, test, "threshold_version")
     corrections_threshold_version = _required_field(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -104,7 +105,10 @@ def _synthetic_evidence_repo(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     labels = ("g0_time_only", "g0_f0_native_stft_pre_mixer", "g3_c_wide_8p0", "g3_c_bandenergy")
     seeds = (20260700, 20260837, 20260901)
     labels_path = harmonic / "test_v2" / "test_harmonic_labels.csv"
-    shared_labels_hash = "synthetic-labels-sha256"
+    shared_labels_hash = hashlib.sha256(labels_path.read_bytes()).hexdigest()
+    thresholds_path = harmonic / "harmonic_thresholds.json"
+    thresholds_path.write_text(json.dumps({"threshold_version": "synthetic-v1"}), encoding="utf-8")
+    thresholds_hash = hashlib.sha256(thresholds_path.read_bytes()).hexdigest()
     (harmonic / "model_metrics" / "analysis_manifest.json").write_text(
         json.dumps({
             "operation": "summarize-metrics",
@@ -123,6 +127,8 @@ def _synthetic_evidence_repo(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
             "dataset_root": "data/dataset",
             "index_csv": "training/dataset_index.csv",
             "split": "test",
+            "thresholds_path": str(thresholds_path.relative_to(repo)),
+            "thresholds_sha256": thresholds_hash,
             "threshold_version": "synthetic-v1",
             "outputs": {"labels": str(labels_path.relative_to(repo))},
         }),
@@ -207,6 +213,9 @@ def _enable_default_evidence_discovery(
     test_manifest = discovered_harmonic / "test_v2" / "analysis_manifest.json"
     test_payload = json.loads(test_manifest.read_text(encoding="utf-8"))
     test_payload["outputs"]["labels"] = relocated_labels
+    test_payload["thresholds_path"] = str(
+        (discovered_harmonic / "harmonic_thresholds.json").relative_to(repo)
+    )
     test_manifest.write_text(json.dumps(test_payload), encoding="utf-8")
 
     discovered_signal = repo / "docs" / "figure" / "synthetic" / signal.name
@@ -332,6 +341,34 @@ def test_evidence_harmonic_provenance_rejects_wrong_case_category(tmp_path: Path
     with pytest.raises(
         ValueError,
         match=r"model_case_manifest\.csv.*dataset_row_id=640.*case_category.*wrong_category.*all_corrected",
+    ):
+        build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
+
+
+def test_evidence_harmonic_provenance_rejects_tampered_labels_hash(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    labels = harmonic / "test_v2" / "test_harmonic_labels.csv"
+    labels.write_text(labels.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match=r"test_harmonic_labels\.csv.*labels_sha256.*实际.*期望",
+    ):
+        build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
+
+
+def test_evidence_harmonic_provenance_rejects_tampered_thresholds_hash(tmp_path: Path):
+    from scripts.tho_group_meeting_ppt.evidence import build_evidence_catalog
+
+    repo, manifest, harmonic, signal = _synthetic_evidence_repo(tmp_path)
+    thresholds = harmonic / "harmonic_thresholds.json"
+    thresholds.write_text('{"tampered": true}', encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match=r"harmonic_thresholds\.json.*thresholds_sha256.*实际.*期望",
     ):
         build_evidence_catalog(repo, manifest_path=manifest, harmonic_root=harmonic, general_signal_npz=signal)
 
