@@ -94,6 +94,21 @@
 
 ### 生成命令与 CLI 边界
 
+在执行以下命令前，必须先满足外部证据前置。Git 不包含已忽略的 `runs/` 和 `docs/figure/`，因此干净 checkout 或新 worktree 不能直接执行 `--evidence-only`、`--assets-only` 或默认重建。已跟踪的正式 PPT 和 `docs/stage_reports/20260708/generated_assets/discussion/` 中的生成资产可以在干净 checkout 中直接阅读，但这不等于重建所需的上游证据已被 Git 保存。
+
+最小必需证据路径类别与代表入口包括：
+
+- canonical G manifest：`runs/test_eval_g_series_20260709_local_rr_canonical/g_series_test_eval_manifest.csv`，以及该 manifest 引用的 metrics、summary 和单 run manifest。
+- 正式 G run 配置与 checkpoint：`runs/g_series_stft_input/` 下的对应 run 目录。
+- 二次谐波证据根：`runs/bcg_second_harmonic_20260710/`，包含 analysis manifests、predictions、corrections 和 cases/figures 证据。
+- 通用 F0 信号证据：`docs/figure/F0_native_stft_pre_mixer/signals/f0_visual_sample_metadata.json` 与同目录 `f0_visual_sample_signals.npz`，以及 metadata 引用的源 config、checkpoint 和 metrics CSV。
+- RR metric demo 资产：`docs/figure/rr_peak_band_metric/`，生成器至少需要其中的 `plot_rr_peak_band_metric_demo.py`；目录内的 demo 图、CSV 和可编辑单页 PPT 用于独立复核。
+- 数据证据：正式 run config 中 `data.dataset_root` 和 `data.index_csv` 指向的外部 dataset、index CSV 与被索引的 NPZ。
+
+上述证据需要在仓库预期相对路径上物化，同时保持 manifest 中记录的路径和 hash 关系。如果只需单独审计 catalog，可在 Python 中直接调用 `build_evidence_catalog(repo_root, manifest_path=..., harmonic_root=..., general_signal_npz=...)` 显式指定三类证据；当前 CLI 不暴露通用路径覆盖参数，不应将这个 Python API 误写为 CLI 能力。
+
+`--assets-only` 会重写 `generated_assets/discussion/` 中的 20 张 PNG 和 4 份 manifest，其中 19 张图实际嵌入正式 PPT。运行前必须保存 `git status`、确认所有上游 hash 与预期证据一致，运行后必须审查资产与 manifest diff；不得在证据缺失时运行并将不完整输出当作正式资产。默认 deck 组装也会校验 asset manifest 及其 source manifest，一旦证据缺失或路径/hash 漂移就会明确报错。
+
 默认 CLI 直接生成上述正式文件：
 
 ```bash
