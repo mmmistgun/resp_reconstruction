@@ -1,6 +1,10 @@
-import pandas as pd
+from types import SimpleNamespace
 
-from resp_train.data.independence import audit_split_independence
+import pandas as pd
+from omegaconf import OmegaConf
+
+from resp_train.data.independence import audit_all_split_independence, audit_split_independence
+from scripts.audit_split_independence import build_full_split_rows
 
 
 def test_audit_split_independence_detects_samp_and_segment_overlap():
@@ -111,3 +115,86 @@ def test_audit_split_independence_normalizes_mixed_numeric_id_types():
     assert int(summary.loc[0, "overlap_segment_count"]) == 1
     assert set(report["overlap_samp_id"]["samp_id"]) == {"88", "subject-a"}
     assert set(report["overlap_segment"]["segment_key"]) == {"88::10"}
+
+
+def test_audit_all_split_independence_checks_train_val_test_pairs():
+    train = pd.DataFrame(
+        [{"samp_id": 1, "segment_id": "train-a", "allowed_losses": "waveform", "valid_ratio": 0.9}]
+    )
+    val = pd.DataFrame(
+        [{"samp_id": 2, "segment_id": "shared", "allowed_losses": "rate", "valid_ratio": 0.8}]
+    )
+    test = pd.DataFrame(
+        [
+            {"samp_id": 2, "segment_id": "shared", "allowed_losses": "rate", "valid_ratio": 0.7},
+            {"samp_id": 3, "segment_id": "test-b", "allowed_losses": "waveform", "valid_ratio": 0.6},
+        ]
+    )
+
+    report = audit_all_split_independence(
+        {"train": train, "val": val, "test": test},
+        categorical_columns=("allowed_losses",),
+        numeric_columns=("valid_ratio",),
+    )
+
+    summary = report["summary"].set_index(["left_split", "right_split"])
+    assert list(summary.index) == [("train", "val"), ("train", "test"), ("val", "test")]
+    assert int(summary.loc[("train", "test"), "right_windows"]) == 2
+    assert int(summary.loc[("val", "test"), "overlap_samp_id_count"]) == 1
+    assert int(summary.loc[("val", "test"), "overlap_segment_count"]) == 1
+    assert report["overlap_samp_id"].to_dict("records") == [
+        {"left_split": "val", "right_split": "test", "samp_id": "2"}
+    ]
+    assert set(report["categorical_distribution"]["split"]) == {"train", "val", "test"}
+    assert set(report["numeric_distribution"]["split"]) == {"train", "val", "test"}
+    assert set(report["per_samp_id"]["split"]) == {"train", "val", "test"}
+
+
+def test_build_full_split_rows_disables_limits_and_adds_test(monkeypatch):
+    cfg = OmegaConf.create(
+        {
+            "data": {
+                "max_train_windows": 16,
+                "max_val_windows": 8,
+                "preload_windows": True,
+                "test_split": "held_out",
+                "test_sample_strategy": "stratified_random",
+                "test_sample_seed": 123,
+            }
+        }
+    )
+    train = pd.DataFrame([{"samp_id": 1, "segment_id": "a"}])
+    val = pd.DataFrame([{"samp_id": 2, "segment_id": "b"}])
+    test = pd.DataFrame([{"samp_id": 3, "segment_id": "c"}])
+    audited = pd.concat([train, val, test], ignore_index=True)
+    calls = {}
+
+    def fake_build_tho_data(cfg_arg):
+        calls["train_limit"] = cfg_arg.data.max_train_windows
+        calls["val_limit"] = cfg_arg.data.max_val_windows
+        calls["preload"] = cfg_arg.data.preload_windows
+        return SimpleNamespace(
+            train=SimpleNamespace(rows=train),
+            val=SimpleNamespace(rows=val),
+            audited=audited,
+        )
+
+    def fake_build_window_data(cfg_arg, **kwargs):
+        calls["test"] = kwargs
+        return SimpleNamespace(rows=test)
+
+    monkeypatch.setattr("scripts.audit_split_independence.build_tho_data", fake_build_tho_data)
+    monkeypatch.setattr("scripts.audit_split_independence.build_window_data", fake_build_window_data)
+
+    rows = build_full_split_rows(cfg)
+
+    assert calls["train_limit"] is None
+    assert calls["val_limit"] is None
+    assert calls["preload"] is False
+    assert calls["test"]["split"] == "held_out"
+    assert calls["test"]["max_windows"] is None
+    assert calls["test"]["audited"] is audited
+    assert list(rows) == ["train", "val", "test"]
+    assert rows["train"] is train
+    assert rows["val"] is val
+    assert rows["test"] is test

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from itertools import combinations
 from numbers import Integral, Real
 
 import pandas as pd
@@ -9,6 +10,22 @@ import pandas as pd
 DEFAULT_CATEGORICAL_COLUMNS = ("allowed_losses", "residual_quality_class", "input_set")
 DEFAULT_NUMERIC_COLUMNS = ("valid_ratio", "input_finite_ratio", "target_finite_ratio")
 CATEGORICAL_DISTRIBUTION_COLUMNS = ["column", "split", "value", "count", "ratio"]
+PAIRWISE_SUMMARY_COLUMNS = [
+    "left_split",
+    "right_split",
+    "left_windows",
+    "right_windows",
+    "left_samp_id_count",
+    "right_samp_id_count",
+    "overlap_samp_id_count",
+    "overlap_segment_count",
+    "has_samp_id_leakage",
+    "has_segment_leakage",
+    "max_left_windows_per_samp_id",
+    "max_right_windows_per_samp_id",
+]
+PAIRWISE_OVERLAP_SAMP_COLUMNS = ["left_split", "right_split", "samp_id"]
+PAIRWISE_OVERLAP_SEGMENT_COLUMNS = ["left_split", "right_split", "segment_key"]
 
 
 def audit_split_independence(
@@ -55,6 +72,84 @@ def audit_split_independence(
         "categorical_distribution": _categorical_distribution(train, val, categorical_columns),
         "numeric_distribution": _numeric_distribution(train, val, numeric_columns),
         "per_samp_id": _per_samp_summary(train, val),
+    }
+
+
+def audit_all_split_independence(
+    split_rows: Mapping[str, pd.DataFrame],
+    *,
+    categorical_columns: Iterable[str] = DEFAULT_CATEGORICAL_COLUMNS,
+    numeric_columns: Iterable[str] = DEFAULT_NUMERIC_COLUMNS,
+) -> dict[str, pd.DataFrame]:
+    """对任意多个 split 做两两个体/片段独立性审计，并统一输出分布表。"""
+
+    if len(split_rows) < 2:
+        raise ValueError("全 split 独立性审计至少需要两个 split")
+
+    frames = {str(name): frame.copy() for name, frame in split_rows.items()}
+    for frame in frames.values():
+        _require_columns(frame, ("samp_id", "segment_id"))
+
+    summary_records: list[dict[str, object]] = []
+    samp_overlap_records: list[dict[str, str]] = []
+    segment_overlap_records: list[dict[str, str]] = []
+    for left_name, right_name in combinations(frames, 2):
+        pair = audit_split_independence(
+            frames[left_name],
+            frames[right_name],
+            categorical_columns=categorical_columns,
+            numeric_columns=numeric_columns,
+        )
+        summary = pair["summary"].iloc[0]
+        summary_records.append(
+            {
+                "left_split": left_name,
+                "right_split": right_name,
+                "left_windows": int(summary["train_windows"]),
+                "right_windows": int(summary["val_windows"]),
+                "left_samp_id_count": int(summary["train_samp_id_count"]),
+                "right_samp_id_count": int(summary["val_samp_id_count"]),
+                "overlap_samp_id_count": int(summary["overlap_samp_id_count"]),
+                "overlap_segment_count": int(summary["overlap_segment_count"]),
+                "has_samp_id_leakage": bool(summary["has_samp_id_leakage"]),
+                "has_segment_leakage": bool(summary["has_segment_leakage"]),
+                "max_left_windows_per_samp_id": int(summary["max_train_windows_per_samp_id"]),
+                "max_right_windows_per_samp_id": int(summary["max_val_windows_per_samp_id"]),
+            }
+        )
+        samp_overlap_records.extend(
+            {
+                "left_split": left_name,
+                "right_split": right_name,
+                "samp_id": str(samp_id),
+            }
+            for samp_id in pair["overlap_samp_id"]["samp_id"]
+        )
+        segment_overlap_records.extend(
+            {
+                "left_split": left_name,
+                "right_split": right_name,
+                "segment_key": str(segment_key),
+            }
+            for segment_key in pair["overlap_segment"]["segment_key"]
+        )
+
+    return {
+        "summary": pd.DataFrame.from_records(summary_records, columns=PAIRWISE_SUMMARY_COLUMNS),
+        "overlap_samp_id": pd.DataFrame.from_records(
+            samp_overlap_records,
+            columns=PAIRWISE_OVERLAP_SAMP_COLUMNS,
+        ),
+        "overlap_segment": pd.DataFrame.from_records(
+            segment_overlap_records,
+            columns=PAIRWISE_OVERLAP_SEGMENT_COLUMNS,
+        ),
+        "categorical_distribution": _categorical_distribution_for_splits(
+            frames,
+            categorical_columns,
+        ),
+        "numeric_distribution": _numeric_distribution_for_splits(frames, numeric_columns),
+        "per_samp_id": _per_samp_summary_for_splits(frames),
     }
 
 
@@ -108,11 +203,18 @@ def _categorical_distribution(
     val: pd.DataFrame,
     columns: Iterable[str],
 ) -> pd.DataFrame:
+    return _categorical_distribution_for_splits({"train": train, "val": val}, columns)
+
+
+def _categorical_distribution_for_splits(
+    splits: Mapping[str, pd.DataFrame],
+    columns: Iterable[str],
+) -> pd.DataFrame:
     records: list[dict[str, object]] = []
     for column in columns:
-        if column not in train.columns or column not in val.columns:
+        if any(column not in frame.columns for frame in splits.values()):
             continue
-        for split_name, frame in (("train", train), ("val", val)):
+        for split_name, frame in splits.items():
             counts = frame[column].fillna("__MISSING__").astype(str).value_counts(dropna=False)
             total = max(int(counts.sum()), 1)
             for value, count in counts.items():
@@ -133,8 +235,15 @@ def _numeric_distribution(
     val: pd.DataFrame,
     columns: Iterable[str],
 ) -> pd.DataFrame:
+    return _numeric_distribution_for_splits({"train": train, "val": val}, columns)
+
+
+def _numeric_distribution_for_splits(
+    splits: Mapping[str, pd.DataFrame],
+    columns: Iterable[str],
+) -> pd.DataFrame:
     records: list[dict[str, object]] = []
-    for split_name, frame in (("train", train), ("val", val)):
+    for split_name, frame in splits.items():
         record: dict[str, object] = {"split": split_name}
         for column in columns:
             if column not in frame.columns:
@@ -154,8 +263,12 @@ def _stable_float(value: object) -> float:
 
 
 def _per_samp_summary(train: pd.DataFrame, val: pd.DataFrame) -> pd.DataFrame:
+    return _per_samp_summary_for_splits({"train": train, "val": val})
+
+
+def _per_samp_summary_for_splits(splits: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
     records = []
-    for split_name, frame in (("train", train), ("val", val)):
+    for split_name, frame in splits.items():
         grouped = frame.groupby("samp_id", dropna=False).size().reset_index(name="window_count")
         grouped["split"] = split_name
         records.append(grouped[["split", "samp_id", "window_count"]])
