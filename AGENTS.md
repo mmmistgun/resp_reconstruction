@@ -9,7 +9,7 @@
 - 本仓库属于深度学习科研代码；涉及数据探索、模型训练、消融、baseline、评价指标或结果表述时，先读取并遵循 `~/.codex/AGENTS.dl.md`。
 - 长实验背景、阶段结论和命令细节按需读取 `scripts/README.md` 与 `docs/experiments/*.md`。
 - 改指标、解释指标或横向比较当前 THO research v2 结果前，先读 `docs/experiments/metric_schema.md`。
-- 选择当前默认方案、停止路线或下一步实验前，先读 `docs/experiments/current_evidence_ledger.md`。
+- 选择当前实验基准、停止路线或下一步实验前，先读 `docs/experiments/current_evidence_ledger.md`。
 - 准备阶段汇报时读 `docs/stage_reports/`；汇报底稿不进入常驻规则。
 
 ## 项目速览
@@ -31,6 +31,7 @@
 
 - 需要调用 GPU 的命令应使用提权执行，让命令在沙盒外访问 GPU；不要为了绕过沙盒而改用 CPU 跑正式实验或验证。
 - Git 提交消息使用中文，保持简洁明确。
+- 本仓库只跟踪代码、配置、测试和必要文字/小型清单；`runs/`、checkpoint、日志、诊断图、PPT 和生成图片均为本地产物，不进入 Git。
 - 正式实验开始前先保存 git 状态；实验结束并形成结论后，再把结论文档、manifest/summary 路径和必要脚本变化保存到 git。
 - 每次正式实验完成后，及时保存 git 状态；不要把多个实验结果、指标解释和代码变化长期混在一个未提交工作区里。
 - 允许更新长期文档来反映稳定结论；探索期的临时猜测、一次性失败记录和未复核判断不要写入长期文档。
@@ -51,7 +52,7 @@
 - 正式对照实验应固定验证 seed 和全量验证窗口，避免验证集变化掩盖模型、loss 或输入差异。
 - 批量训练或批量评价默认按 `--max-parallel 4` 组织；如显存、I/O 或 GPU 数量不足，再显式降级并说明原因。
 - 正式实验结论汇总前，默认先用 `scripts/eval_topk_checkpoints.py --top-k 3` 重评 `checkpoint_top1/2/3.pt`，并在结论中标注 validation top-k selection 口径。
-- F-A target STFT loss 这轮全量 pilot 由用户手动运行；agent 负责准备代码、测试、manifest、dry-run 和汇总命令。
+- 旧 E/F 路线当前只作参考，不默认续跑；后续实验若重新启用某条路线，先按当前指标和证据账本重新定义假设、对照与停止条件。
 
 ## 运行环境
 
@@ -74,11 +75,11 @@
 - 全量测试：`./.venv/bin/python -m pytest tests`。
 - 配置覆盖语法：`--set data.train_sample_seed=1 --set training.batch_size=128`。
 - 数据审计：`./.venv/bin/python scripts/audit_tho_dataset.py --config configs/tho_research_v2.yaml --output /tmp/tho_audit.csv`。
-- Split 独立性审计：`./.venv/bin/python scripts/audit_split_independence.py --config configs/tho_research_v2.yaml --output-dir runs/audits/split_independence_research_v2`。
+- Split 独立性审计：`./.venv/bin/python scripts/audit_split_independence.py --config configs/tho_research_v2.yaml --output-dir runs/audits/split_independence_research_v2`；脚本固定取消窗口上限并两两审计 train/val/test。
 - 单 run 训练原子入口：`./.venv/bin/python scripts/train_tho_small.py --config configs/tho_research_v2.yaml --set ...`。
 - 从 checkpoint 复评：`./.venv/bin/python scripts/eval_tho_small.py --checkpoint runs/<root>/<timestamp>/checkpoint.pt --metrics-output /tmp/tho_metrics.csv`。
 - Top3 checkpoint 复评：`./.venv/bin/python scripts/eval_topk_checkpoints.py --runs-root runs/<root> --top-k 3 --device cuda:0 --device cuda:1 --max-parallel 4 --metric-workers 4 --metrics-chunk-size 128 --output-prefix runs/<root>_topk`。其中 `--metric-workers` 是每个评价进程内的 metrics chunk 子进程数，默认 target-side cache 写入 `<output-prefix>_target_feature_cache`。
-- 预测图诊断：`./.venv/bin/python scripts/plot_tho_predictions.py --run-dir runs/<root>/<timestamp> --sort-by rr_peak_band_abs_error --max-plots 8`。
+- 预测图诊断：`./.venv/bin/python scripts/plot_tho_predictions.py --run-dir runs/<root>/<timestamp> --sort-by rr_peak_band_robust_abs_error --max-plots 8`。
 - 多 run 汇总：`./.venv/bin/python scripts/summarize_tho_runs.py --runs-root runs/<root> --output /tmp/tho_runs_summary.csv`。
 - 当前批量实验、manifest 和 E3/E4/E5 入口不要从记忆中猜，先读 `scripts/README.md` 的对应小节。
 
@@ -99,7 +100,7 @@
 - `findings.md`：跨阶段稳定结论和当前主线判断。需要快速了解“现在认什么、不再背什么历史包袱”时读取。
 - `docs/tho_small_training.md`：早期小规模 THO 训练设计、产物说明、评价口径和历史阶段结论。维护旧小规模入口时读取。
 - `docs/experiments/metric_schema.md`：当前指标口径、淘汰记录和重算/重评/重训边界。改指标或解释指标前读取。
-- `docs/experiments/current_evidence_ledger.md`：当前 active 证据、默认 anchor 和停止路线。整理阶段结论或决定下一步实验时读取。
+- `docs/experiments/current_evidence_ledger.md`：当前 active 证据、实验 anchor 和停止路线。整理阶段结论或决定下一步实验时读取。
 - `docs/stage_reports/2026-07-08-tho-research-v2-group-meeting-stage-report.md`：组会阶段汇报底稿。准备汇报或需要面向听众解释任务、数据、指标、模型和训练设置时读取。
 - `docs/experiments/time_frequency_input_fusion_plan.md`：时频输入、多分支融合、E1-E5 路线和当前建议。修改 STFT/fusion/E3/E4/E5 相关代码或结论时读取。
 - `docs/experiments/e1_stft_info_gain_20260622.md`：E1 STFT 信息增益、疑点核查和频域输入探索收口。复核 STFT 是否提供信息增益时读取。

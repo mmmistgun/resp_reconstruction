@@ -69,32 +69,33 @@ E1 的频带消融被这些隐含参数混淆，第一轮固定以下默认值�
 
 主护栏：
 
-1. `rr_peak_band_abs_error`：当前模型选择主指标，不能明显恶化。
-2. `rr_spec_abs_error`：频域呼吸率护栏，不能明显恶化。
+1. `rr_peak_band_robust_abs_error`：当前整窗 RR 主护栏，不能明显恶化。
+2. `breath_count_zero_cross_abs_error`：当前周期数量主护栏，不能明显恶化。
 
 任务辅助：
 
-1. `relative_envelope_mae`：相对呼吸强弱误差。
-2. `relative_envelope_corr`：相对呼吸强弱同步。
+1. `rr_peak_band_abs_error`、`rr_spec_abs_error`：旧 peak-band 和频域 RR 辅助解释。
+2. `relative_envelope_mae_lag4s`、`relative_envelope_corr_lag4s`：允许持续时延后的相对呼吸强弱。
 3. `spectrum_similarity`：频谱一致性辅助指标。
 
 诊断指标：
 
-1. `band_limited_corr`：低频方向和形态诊断。
-2. `best_lag_corr`、`best_lag_sec`：小范围时移诊断。
-3. raw `rr_peak_abs_error`：局部毛刺、尖峰和双峰诊断，不作为唯一主护栏。
+1. `band_limited_corr`：zero-lag 低频方向和形态诊断。
+2. `best_lag_corr_4s`、`best_lag_sec_4s`：当前持续时移诊断。
+3. `local_rr_*`：局部节律诊断，结合 valid fraction 和波形复核。
+4. raw `rr_peak_abs_error`：局部毛刺、尖峰和双峰诊断，不作为主护栏。
 
 阶段通过条件：
 
-- 新模型的 `rr_peak_band_abs_error` 均值不能明显劣于同 seed 或同批 baseline。
-- `rr_spec_abs_error` 不能以明显变差换取 peak-band RR 小幅收益。
+- 新模型的 robust RR 和 breath count 均值不能明显劣于同 seed 或同批 baseline。
+- 旧 peak-band/spec 收益不能以任一当前主护栏明显恶化为代价。
 - 至少一个任务辅助指标改善，或低信噪比/节律变化窗口的分层指标改善。
 - 如果 `band_limited_corr` 长期为负，需要明确解释为可接受的任务解还是 polarity 失败。
 
 阶段停止条件：
 
 - 只改善 best val loss，但主护栏恶化。
-- 只改善低频相关，但 `rr_peak_band_abs_error` 和 `rr_spec_abs_error` 明显恶化。
+- 只改善低频相关，但 robust RR 或 breath count 明显恶化。
 - 多 seed 方差大到无法区分模型收益和训练随机性。
 - 新增输入分支只在训练集改善，验证集或跨 samp_id（leave-samp_id-out）口径无收益。
 
@@ -128,8 +129,8 @@ E 系列当前已经从“时频输入是否值得继续”推进到“哪种融
 
 前置确认：
 
-- 先跑 `scripts/audit_split_independence.py --config configs/tho_research_v2.yaml`，
-  确认当前 20260620 数据 train/val 的 `has_samp_id_leakage=false`、`overlap_samp_id_count=0`。
+- 先跑 `scripts/audit_split_independence.py --config configs/tho_research_v2.yaml`；脚本固定取消窗口上限，
+  确认当前 20260620 数据 train/val/test 三个 pair 的 `has_samp_id_leakage=false`、`overlap_samp_id_count=0`。
   数据制作阶段已按 samp_id 分离，这里只是把它固化为可复核的前置门槛。
 - 该确认是后续所有“怀疑高频/宽频带捷径就看跨 samp_id 是否无收益”护栏的事实基础。
   若审计意外报告 samp_id 泄漏，必须先修数据划分，否则 E1 的高频消融护栏失效。
@@ -179,8 +180,9 @@ E0 的 20260620 soft-z 候选重跑已经完成 6 类模型、每类 3 seed。�
 | `multiscale_patch_hann_bandlimited1d` | 3 | 0.5807 | 0.5450 | 0.2375 | 0.7803 | 0.8343 | loss/RR 背离反例 |
 | `polyphase_patch_hann_bandlimited1d` | 3 | 0.6518 | 0.5279 | 0.2321 | 0.7937 | 0.8462 | val loss 和 spec 较好，但 peak-band RR 明显差，是最典型反例 |
 
-E0 支持的阶段结论是：后续不能按 val loss 排序选模，必须继续以
-`rr_peak_band_abs_error` 和长尾谐波误拣为主护栏；`patch_mixer1d` 与
+E0 按当时口径支持的阶段结论是：后续不能按 val loss 排序选模；其中
+`rr_peak_band_abs_error` 和长尾谐波误拣是历史筛选依据。当前重启比较时改用 robust RR 与
+breath count 主护栏；`patch_mixer1d` 与
 `multiscale_decomp_mixer1d` 是解释 STFT 增益的主要纯时序参照。
 
 ### E1：STFT 输入信息增益验证

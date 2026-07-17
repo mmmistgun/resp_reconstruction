@@ -5,7 +5,7 @@
 ## THO research v2 soft-z
 
 - 当前横向比较默认只看 soft-z research v2 主线；旧 rawish state-aligned 结果只作结构或失败模式参考。
-- 当前默认 STFT anchor 倾向 `G3_C_wide_8p0`。
+- 当前实验比较 anchor 倾向 `G3_C_wide_8p0`；尚未定义交付期稳定入口。
 - `G3_C_bandenergy` 只保留为选择性修正候选，暂不替代宽频 STFT anchor。
 - 旧 E/F 系列路线不再作为默认扩展方向；下一步优先围绕难恢复窗口和选择性修正设计。
 

@@ -1,11 +1,13 @@
 # THO research v2 指标口径
 
-日期：2026-07-08
+首次冻结：2026-07-08
+
+代码对齐：2026-07-17
 
 ## 定位
 
-本文冻结当前 THO research v2 实验整理使用的评价口径。它只定义如何解释、
-重评和记录已有实验，不代表已经修改训练代码、汇总脚本或历史 run 产物。
+本文冻结当前 THO research v2 实验整理使用的评价口径，并定义新实验的自动 checkpoint
+选择口径。2026-07-17 已对齐训练期选择、top-k 复评和通用汇总脚本；历史 run 产物不改写。
 
 本仓库是科研实验仓库，当前口径优先，不为旧结果维持兼容成本。整理实验记录的目标是
 服务下一步可信判断，不是维护完整历史排名。旧结果默认不进入当前横向排序；只有当它能直接支撑
@@ -81,8 +83,8 @@
 
 ## 当前排序建议
 
-当前整理记录时使用以下人工解释顺序；在代码完全对齐前，不把任何单个脚本输出视为
-唯一排序真相。
+当前整理记录时使用以下解释顺序。自动选择只固化前两个主护栏及旧 RR 辅助平局项；
+lag-aware 形态和 local RR 仍需人工结合波形解释，不折叠成单一总分。
 
 1. 先确认同数据口径、同 split、同验证窗口、同 seed 配对和同 checkpoint 选择口径。
 2. 看 `rr_peak_band_robust_abs_error` 与 `breath_count_zero_cross_abs_error` 是否守住主护栏。
@@ -177,7 +179,7 @@ local RR 讨论使用下一节的复评结果。派生汇总见：
 - `g_series_local_rr_canonical_delta_summary.csv`
 - `g_series_test_eval_manifest.csv`
 
-当前解释：`G3_C_wide_8p0` 仍是默认 anchor；`G3_C_bandenergy` 在 breath count 和
+当前解释：`G3_C_wide_8p0` 仍是实验比较 anchor；`G3_C_bandenergy` 在 breath count 和
 local RR 上略优，但 robust RR 与 lag-aware 形态不如 wide anchor，只作为
 选择性/条件注入线索保留。本次结果不触发全历史重评，也不触发重训。
 
@@ -200,20 +202,26 @@ local RR 上略优，但 robust RR 与 lag-aware 形态不如 wide anchor，只�
 - 旧 run 缺少可复评 checkpoint，且该模型仍要进入当前正式对照。
 - 需要验证新训练期指标是否影响优化轨迹，而不仅是重新解释同一个 checkpoint。
 
-## 当前已知不一致
+## 2026-07-17 自动选择对齐记录
 
-截至 2026-07-08，文档和代码口径尚未完全统一：
+新代码统一使用以下 lexicographic 排序链：
 
-- `scripts/README.md` 已强调 `rr_peak_band_robust_abs_error`、4s lag、lag-aware relative
-  envelope 和 local RR。
-- `resp_train/experiments/selection.py` 的任务排序仍以
-  `rr_peak_band_abs_error_mean -> frac_gt_1 -> frac_gt_2 -> rr_spec_abs_error_mean ->
-  breath_count_zero_cross_abs_error_mean` 为主。
-- `scripts/summarize_tho_runs.py` 和 `scripts/summarize_f_a_stft_loss.py` 仍主要服务旧的
-  peak-band / spec / count / relative envelope 汇总链。
+1. `rr_peak_band_robust_abs_error_mean`；
+2. `breath_count_zero_cross_abs_error_mean`；
+3. `rr_peak_band_abs_error_mean`；
+4. `rr_spec_abs_error_mean`。
 
-因此，在更新 selection 或 summarizer 前，当前正式实验整理应显式标注“人工按本文口径
-解释”，不能把旧脚本的排序字段直接写成当前最终口径。
+前两项是当前主护栏；后两项仅在主护栏完全持平时辅助打破平局。训练期
+`checkpoint_best_rr.pt` 从本次变更起按 robust RR 保存，`checkpoint_best_task.pt`、
+`eval_topk_checkpoints.py` 和 `summarize_tho_runs.py` 使用同一主护栏定义。top-k 的
+`--select-only` 若发现旧 `metrics_topN.csv` 缺少 robust RR 或 breath count，会明确失败，
+不静默退回旧排序。
+
+该变化不改写历史 checkpoint、CSV 或既有 canonical test 结论：
+
+- 旧 `checkpoint_best_rr.pt` / `checkpoint_best_task.pt` 的语义以生成时代码和 run 配置为准；
+- 当前 active G 系列已有现行指标的 canonical test 证据，不因此批量重训或覆盖历史结果；
+- 旧 run 若重新进入当前比较，优先旁路重评保留的 top-k；没有可复评 checkpoint 时再判断是否重训。
 
 ## 后续整理动作
 

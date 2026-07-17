@@ -1,8 +1,9 @@
 # 脚本索引
 
-本目录暂时保持脚本平铺，不移动文件。当前数量还少，平铺能减少命令路径变化；等腹带、消融、整夜推理和更多诊断脚本加入后，再考虑按子目录分类。
+本目录暂时保持脚本平铺，不移动文件；入口较多，先按本文主线、历史实验和诊断小节定位，不从文件名猜运行口径。
 
-当前脚本以 THO 小规模实验为主，默认配置来自 `configs/tho_small.yaml`：
+`configs/tho_small.yaml` 保留给早期 THO 小规模实验；当前 soft-z research v2 主线见下文和
+`configs/tho_research_v2*.yaml`。小规模配置的默认口径为：
 
 - 默认输入集：`mixed_zscore`
 - 默认训练抽样：`data.train_sample_strategy=stratified_random`
@@ -43,7 +44,8 @@
 
 ## Split 独立性审计
 
-在解释 L1 或模型实验前，先检查 train/val 是否共享 `samp_id` 或 `(samp_id, segment_id)`：
+在解释模型实验前，先两两检查 train/val/test 是否共享 `samp_id` 或
+`(samp_id, segment_id)`：
 
 ```bash
 ./.venv/bin/python scripts/audit_split_independence.py \
@@ -51,8 +53,10 @@
   --output-dir runs/audits/split_independence_research_v2
 ```
 
-脚本会输出 `summary.csv`、重叠明细和分布对照表。若 `summary.csv` 中 `overlap_samp_id_count` 或
-`overlap_segment_count` 大于 0，当前结果只能作为 within-subject / within-dataset 开发指标，不应作为跨个体泛化结论。
+审计固定把 `max_train_windows`、`max_val_windows` 和 test 上限视为 `null`，并关闭 preload；训练或 smoke
+配置中的窗口抽样上限不会缩小审计范围。`summary.csv` 包含 train-val、train-test、val-test 三行，另输出
+重叠明细和三 split 分布对照表。任一行的 `overlap_samp_id_count` 或 `overlap_segment_count` 大于 0 时，
+当前结果不能作为跨个体泛化结论。
 
 ## 训练与评价
 
@@ -98,7 +102,7 @@
 1. 先运行 split 独立性审计，确认当前结果应解释为 within-subject 开发指标，还是可以支撑跨 `samp_id` 泛化结论。
 2. 使用同一个验证 seed 和全量窗口，避免验证集变化掩盖 loss 差异。
 3. 每完成一次正式实验 run 后提交一次仓库状态，提交信息写明实验口径和关键权重。
-4. 先按任务指标筛选：`rr_peak_band_robust_abs_error` 守住整窗呼吸率护栏；再看 `best_lag_corr_4s`、`best_lag_sec_4s`、`relative_envelope_mae_lag4s`、`relative_envelope_corr_lag4s` 和当前 `local_rr_*`，确认允许持续时延后的低频形态、相对强弱和局部 RR 是否改善。2026-07-09 起 `local_rr_*` 转为 40 秒窗口、10 秒步长 + 更严格 spectral-guided peak 间距口径；legacy 20 秒/5 秒寻峰口径和 v3 过零探针退入历史，不再作为默认评价列输出。`rr_peak_band_abs_error` 和 `rr_spec_abs_error` 保留为历史/频域兼容护栏，不再单独主导排序。
+4. 先按任务指标筛选：`rr_peak_band_robust_abs_error` 与 `breath_count_zero_cross_abs_error` 是当前两个主护栏；再看 `best_lag_corr_4s`、`best_lag_sec_4s`、`relative_envelope_mae_lag4s`、`relative_envelope_corr_lag4s` 和当前 `local_rr_*`，确认允许持续时延后的低频形态、相对强弱和局部 RR 是否改善。2026-07-09 起 `local_rr_*` 转为 40 秒窗口、10 秒步长 + 更严格 spectral-guided peak 间距口径；legacy 20 秒/5 秒寻峰口径和 v3 过零探针退入历史，不再作为默认评价列输出。`rr_peak_band_abs_error` 和 `rr_spec_abs_error` 保留为历史/频域兼容护栏，不再单独主导排序。
 5. `rr_peak_abs_error` 保留为原始尖峰诊断；当前代码会在 research v2 数据中先按 THO/BCG 共同好段 mask 去掉坏段，再按连续好段计算 raw peak RR。未遮罩旧式诊断保存在 `rr_peak_unmasked_abs_error`。`band_limited_corr` 是 zero-lag 形态诊断；BCG 与 THO 可能存在个体化持续时延，因此主要结合 `best_lag_corr_4s` 和 `best_lag_sec_4s` 解释低频形态是否恢复。`breath_count_zero_cross_abs_error` 继续作为低质量信号下是否恢复合理周期数量的轻量护栏，并额外输出上升/下降过零计数供边界诊断。
 
 效率口径建议：正式对照实验仍应显式记录 `training.batch_size`。当前
@@ -152,8 +156,8 @@
 
 脚本默认跑 6 个候选模型，每个模型 3 个 seed：`20260700`、`20260710`、`20260837`。
 `20260837` 是本轮额外加入的随机 seed。2026-06-20 结果记录在
-`docs/experiments/softz_20260620_model_candidates.md`。模型选择仍以
-`rr_peak_band_abs_error` 为主护栏，`rr_peak_abs_error` 只作为原始尖峰和局部毛刺
+`docs/experiments/softz_20260620_model_candidates.md`。该批结果保留当时的历史选择口径：
+`rr_peak_band_abs_error` 曾作为主护栏，`rr_peak_abs_error` 只作为原始尖峰和局部毛刺
 诊断指标。自当前统计口径起，research v2 的 `rr_peak_abs_error` 会基于
 `rr_peak_valid_mask` 跳过 THO/BCG 坏段；旧式整窗 raw peak 记录在
 `rr_peak_unmasked_abs_error`，旧 run 如需横向比较应重算。`band_limited_corr`、
@@ -596,7 +600,7 @@ F-D 不改变 waveform 输出空间；第一批只比较 `F-D0_high_stft_anchor`
 - `epoch_metrics.csv`：开启 `training.epoch_metrics.enabled=true` 时，每轮全量 val 的 epoch 级任务指标汇总。
 - `metrics.csv`：`training.final_checkpoint` 指定 checkpoint 在 val 子集上的逐窗口指标。
 - `checkpoint.pt`：验证损失最优 checkpoint。
-- `checkpoint_best_rr.pt` 与 `checkpoint_best_task.pt`：开启 epoch metrics 时，分别按 epoch 级 RR 误差和任务排序链择优的 checkpoint。
+- `checkpoint_best_rr.pt` 与 `checkpoint_best_task.pt`：开启 epoch metrics 时，分别按 epoch 级 `rr_peak_band_robust_abs_error_mean`，以及 robust RR → breath count → 旧 peak-band → spec 排序链择优的 checkpoint。
 - `metrics_val_loss.csv`、`metrics_best_rr.csv`、`metrics_best_task.csv`：开启对应 checkpoint 时的逐窗口指标；
   `metrics.csv` 始终对应 `training.final_checkpoint` 指定的最终评价 checkpoint。
 - `checkpoint_top1/2/3.pt` 与 `checkpoint_topk.csv`：按 `val_loss` 排序保留的 topK checkpoint，用于探索期复评。
@@ -717,13 +721,12 @@ smoke 可额外传入 `--workers 2 --max-plots 2`。
 ### `eval_topk_checkpoints.py`
 
 重评一个 runs 根目录下每个 run 的 `checkpoint_top1/2/3.pt`，生成 `metrics_topN.csv`，并按任务主指标为每个 run
-选择一个 topK checkpoint。默认选择排序为：
+选择一个 topK checkpoint。当前选择排序为：
 
-1. `rr_peak_band_abs_error_mean`
-2. `frac_gt_1`
-3. `frac_gt_2`
-4. `rr_spec_abs_error_mean`
-5. `breath_count_zero_cross_abs_error_mean`
+1. `rr_peak_band_robust_abs_error_mean`（主护栏）
+2. `breath_count_zero_cross_abs_error_mean`（主护栏）
+3. `rr_peak_band_abs_error_mean`（主护栏持平时的辅助项）
+4. `rr_spec_abs_error_mean`（主护栏持平时的辅助项）
 
 ```bash
 ./.venv/bin/python scripts/eval_topk_checkpoints.py \
@@ -748,7 +751,7 @@ smoke 可额外传入 `--workers 2 --max-plots 2`。
 
 - `--dry-run`：只写 manifest 并打印计划，不执行评价或择优。
 - `--eval-only`：只生成 `metrics_topN.csv`，不输出择优表。
-- `--select-only`：跳过评价，直接从已有 `metrics_topN.csv` 生成 all/best 表。
+- `--select-only`：跳过评价，直接从已有 `metrics_topN.csv` 生成 all/best 表；若旧 CSV 缺少任一当前主护栏，脚本会拒绝择优并要求先重评。
 - `--force`：覆盖已有 `metrics_topN.csv`。
 - `--metric-workers N`：每个评价进程用 N 个 metrics chunk 子进程并行计算逐窗口指标。worker 内会把
   `evaluation.metric_workers` 固定为 `1`，避免外层进程池和旧线程池嵌套。外层 `--max-parallel` 与内层
@@ -762,8 +765,8 @@ smoke 可额外传入 `--workers 2 --max-plots 2`。
 训练内 epoch metrics：每个 epoch 复用 `validate()` 的全量 val 预测计算任务指标。正式 runner 会传入
 `training.epoch_metrics.metrics_workers=auto` 和 `training.epoch_metrics.target_workers=auto`，并由
 `batch_utils.build_launch_plan()` 把实际并发槽数写入 `RESP_TRAIN_MAX_PARALLEL`，训练进程再按 CPU 核数和
-并发数自动下调每个 run 的 metrics / target worker。checkpoint 选择以 epoch 级汇总为颗粒度；默认任务排序链为
-`rr_peak_band_abs_error_mean -> frac_gt_1 -> frac_gt_2 -> rr_spec_abs_error_mean -> breath_count_zero_cross_abs_error_mean`。
+并发数自动下调每个 run 的 metrics / target worker。checkpoint 选择以 epoch 级汇总为颗粒度；当前任务排序链为
+`rr_peak_band_robust_abs_error_mean -> breath_count_zero_cross_abs_error_mean -> rr_peak_band_abs_error_mean -> rr_spec_abs_error_mean`。
 逐窗口 metrics 仍只用于诊断。
 
 注意：这是同一验证集内的 topK 任务指标择优，适合探索复核；正式结论需要标注为 validation top-k selection。
@@ -903,12 +906,12 @@ BCG 频谱主峰法和峰谷检测法只是诊断参照，不是训练目标。�
 
 默认按 `rr_peak_abs_error` 从大到小优先绘制，便于先看共同好段内原始尖峰和峰谷形态最差的窗口。
 若要复核坏段对旧式整窗 raw peak 的污染，可改用 `--sort-by rr_peak_unmasked_abs_error`。
-如果要按当前任务指标筛查，则改为 `--sort-by rr_peak_band_abs_error`。例如：
+如果要按当前主 RR 护栏筛查，则改为 `--sort-by rr_peak_band_robust_abs_error`。例如：
 
 ```bash
 ./.venv/bin/python scripts/plot_tho_predictions.py \
   --run-dir runs/tho_small/<timestamp> \
-  --sort-by rr_peak_band_abs_error \
+  --sort-by rr_peak_band_robust_abs_error \
   --max-plots 8
 ```
 
@@ -918,7 +921,7 @@ BCG 频谱主峰法和峰谷检测法只是诊断参照，不是训练目标。�
 ```bash
 ./.venv/bin/python scripts/plot_tho_predictions.py \
   --run-dir runs/tho_small/<timestamp> \
-  --sort-by rr_peak_band_abs_error \
+  --sort-by rr_peak_band_robust_abs_error \
   --scale-mode robust \
   --max-plots 8
 ```
@@ -1033,8 +1036,9 @@ F0 prediction、candidate prediction、残差和低频频谱画到同一张图�
 ### `summarize_tho_runs.py`
 
 汇总 `runs/tho_small/*` 下各 run 的训练损失、模型指标、平凡基线指标和审计数量。
-输出中的 `selection_task_*` 列用于模型选择，当前主指标是
-`selection_task_rr_peak_band_abs_error_mean`；`selection_waveform_*` 列用于波形诊断；
+输出中的 `selection_task_*` 列用于模型选择；当前两个主护栏依次是
+`selection_task_rr_peak_band_robust_abs_error_mean` 和
+`selection_task_breath_count_zero_cross_abs_error_mean`。`selection_waveform_*` 列用于波形诊断；
 `best_val_loss` 只作为训练代理指标，不作为最终选择依据。
 
 ```bash
