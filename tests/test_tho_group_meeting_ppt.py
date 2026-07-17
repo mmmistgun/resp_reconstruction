@@ -16,6 +16,16 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = REPO_ROOT / "docs/stage_reports/20260708/组会汇报.pptx"
 FINAL_DECK = REPO_ROOT / "docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx"
+RUN_STAGE_REPORT_ARTIFACT_INTEGRATION = os.environ.get("RUN_STAGE_REPORT_ARTIFACT_INTEGRATION") == "1"
+requires_stage_report_artifacts = pytest.mark.skipif(
+    not RUN_STAGE_REPORT_ARTIFACT_INTEGRATION,
+    reason="设置 RUN_STAGE_REPORT_ARTIFACT_INTEGRATION=1 后显式验证本地未跟踪 PPT/PNG 产物",
+)
+
+
+def _require_stage_report_artifacts() -> None:
+    if not RUN_STAGE_REPORT_ARTIFACT_INTEGRATION:
+        pytest.skip("设置 RUN_STAGE_REPORT_ARTIFACT_INTEGRATION=1 后显式验证本地未跟踪 PPT/PNG 产物")
 
 
 def test_discussion_evidence_catalog_resolves_formal_configs_and_signal_sources():
@@ -1093,6 +1103,7 @@ def test_case_assets_builds_real_delta_stability_strata_and_complete_cases(tmp_p
     assert all(length == 18_000 for length in metadata["case_prediction_lengths"].values())
 
 
+@requires_stage_report_artifacts
 def test_case_manifest_repo_records_resolve_after_checkout_root_moves(tmp_path: Path):
     import shutil
 
@@ -1413,6 +1424,7 @@ def _shape_text(slide, name: str) -> str:
     return next(shape.text for shape in slide.shapes if shape.name == name)
 
 
+@requires_stage_report_artifacts
 def test_generated_main_deck_has_25_slides_black_body_and_editable_diagrams(tmp_path: Path):
     from scripts.tho_group_meeting_ppt.build import build_presentation
     from scripts.tho_group_meeting_ppt.theme import BODY_BLACK
@@ -1437,6 +1449,7 @@ def test_generated_main_deck_has_25_slides_black_body_and_editable_diagrams(tmp_
                     assert run.font.color.rgb == BODY_BLACK
 
 
+@requires_stage_report_artifacts
 def test_backup_contains_balanced_cases_formulas_subject_table_and_commands(tmp_path: Path):
     from scripts.tho_group_meeting_ppt.build import build_presentation
 
@@ -1463,6 +1476,7 @@ def test_backup_contains_balanced_cases_formulas_subject_table_and_commands(tmp_
     assert "eval_topk_checkpoints.py" not in text
 
 
+@requires_stage_report_artifacts
 def test_final_deck_is_complete_editable_and_powerpoint_compatible():
     from zipfile import ZipFile
 
@@ -1647,6 +1661,7 @@ def test_final_deck_is_complete_editable_and_powerpoint_compatible():
     assert all(_estimated_text_height(gap) <= gap.height / Inches(1) for gap in gaps)
 
 
+@requires_stage_report_artifacts
 def test_cli_can_run_from_repository_root():
     result = subprocess.run(
         [sys.executable, "scripts/build_tho_group_meeting_ppt.py", "--charts-only"],
@@ -1671,6 +1686,7 @@ def test_discussion_slide_specs_consume_every_unit_once_and_cover_sections():
     assert all(not hasattr(spec, "max_chars") for spec in SLIDE_GROUPS)
 
 
+@requires_stage_report_artifacts
 def test_discussion_deck_is_editable_readable_and_uses_three_line_tables(tmp_path: Path):
     from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
     from scripts.tho_group_meeting_ppt.theme import BODY_BLACK, is_three_line_table
@@ -1732,6 +1748,7 @@ def test_discussion_deck_is_editable_readable_and_uses_three_line_tables(tmp_pat
     assert hashlib.sha256(TEMPLATE.read_bytes()).hexdigest() == template_hash
 
 
+@requires_stage_report_artifacts
 def test_discussion_evidence_gap_is_native_and_actionable(tmp_path: Path):
     from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
 
@@ -1748,6 +1765,7 @@ def test_discussion_evidence_gap_is_native_and_actionable(tmp_path: Path):
     assert all("所需字段：" in text and "建议入口：" in text for text in gaps)
 
 
+@requires_stage_report_artifacts
 def test_cli_discussion_routes_are_mutually_exclusive_and_default_to_discussion(tmp_path: Path):
     script = REPO_ROOT / "scripts/build_tho_group_meeting_ppt.py"
     result = subprocess.run(
@@ -1778,6 +1796,7 @@ def test_cli_default_output_is_the_documented_formal_delivery(monkeypatch):
 
 @pytest.fixture(scope="module")
 def deterministic_discussion_decks(tmp_path_factory):
+    _require_stage_report_artifacts()
     from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
 
     root = tmp_path_factory.mktemp("deterministic_discussion")
@@ -1787,15 +1806,15 @@ def deterministic_discussion_decks(tmp_path_factory):
     return outputs
 
 
-def test_discussion_pptx_is_byte_deterministic_and_matches_formal_file(
+def test_discussion_pptx_is_byte_deterministic(
     deterministic_discussion_decks,
 ):
     from zipfile import ZIP_DEFLATED, ZipFile
 
     first, second = deterministic_discussion_decks
-    hashes = [hashlib.sha256(path.read_bytes()).hexdigest() for path in (first, second, FINAL_DECK)]
+    hashes = [hashlib.sha256(path.read_bytes()).hexdigest() for path in (first, second)]
     assert len(set(hashes)) == 1
-    for path in (first, second, FINAL_DECK):
+    for path in (first, second):
         with ZipFile(path) as archive:
             infos = archive.infolist()
             assert [info.filename for info in infos] == sorted(info.filename for info in infos)
@@ -1822,7 +1841,7 @@ def test_discussion_core_metadata_is_project_owned_and_reproducible(
         "dcterms:created": "2026-07-08T00:00:00Z",
         "dcterms:modified": "2026-07-08T00:00:00Z",
     }
-    for path in (*deterministic_discussion_decks, FINAL_DECK):
+    for path in deterministic_discussion_decks:
         with ZipFile(path) as archive:
             core = archive.read("docProps/core.xml")
         text = core.decode("utf-8")
@@ -1840,7 +1859,7 @@ def test_discussion_app_metadata_matches_actual_deck_without_template_statistics
 
     namespace = {"app": "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"}
     forbidden_titles = ("实验结果", "实验结论", "思考", "工作安排")
-    for path in (*deterministic_discussion_decks, FINAL_DECK):
+    for path in deterministic_discussion_decks:
         with ZipFile(path) as archive:
             app_xml = archive.read("docProps/app.xml")
         text = app_xml.decode("utf-8")
@@ -1923,6 +1942,7 @@ def test_canonical_four_model_table_reads_manifest_backed_five_metrics():
 
 @pytest.fixture(scope="module")
 def revised_discussion_deck(tmp_path_factory):
+    _require_stage_report_artifacts()
     from scripts.tho_group_meeting_ppt.build import build_discussion_presentation
 
     output = tmp_path_factory.mktemp("revised_discussion") / "discussion.pptx"
@@ -2047,6 +2067,7 @@ def _copy_discussion_assets(tmp_path: Path) -> Path:
     return target
 
 
+@requires_stage_report_artifacts
 def test_discussion_asset_resolver_validates_all_19_manifested_assets(tmp_path: Path):
     from scripts.tho_group_meeting_ppt.detail_slides import resolve_discussion_assets
 
@@ -2055,6 +2076,7 @@ def test_discussion_asset_resolver_validates_all_19_manifested_assets(tmp_path: 
 
 
 @pytest.mark.parametrize("tamper", ["asset", "generator", "source"])
+@requires_stage_report_artifacts
 def test_discussion_asset_resolver_rejects_tampered_evidence(tmp_path: Path, tamper: str):
     from scripts.tho_group_meeting_ppt.detail_slides import resolve_discussion_assets
 
@@ -2092,8 +2114,8 @@ def test_case_titles_respect_logo_safe_area_and_local_rr_has_single_evidence_bou
 
 
 @pytest.mark.skipif(
-    os.environ.get("RUN_LIBREOFFICE_INTEGRATION") != "1",
-    reason="设置 RUN_LIBREOFFICE_INTEGRATION=1 后显式运行 LibreOffice 集成测试",
+    os.environ.get("RUN_LIBREOFFICE_INTEGRATION") != "1" or not RUN_STAGE_REPORT_ARTIFACT_INTEGRATION,
+    reason="同时设置 RUN_STAGE_REPORT_ARTIFACT_INTEGRATION=1 和 RUN_LIBREOFFICE_INTEGRATION=1 后运行",
 )
 def test_key_pages_survive_real_libreoffice_pdf_and_png_render(tmp_path: Path):
     from PIL import Image, ImageStat

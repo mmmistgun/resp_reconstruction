@@ -79,7 +79,7 @@
 10. BCG 二次谐波问题。
 11. 研究议题与下一步。
 
-正式模板是 `docs/stage_reports/20260708/组会汇报.pptx`，内容底稿是 `docs/stage_reports/2026-07-08-tho-research-v2-group-meeting-stage-report.md`，最终输出固定为 `docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx`。成品共 65 页；流程、公式、文字和表格等主体内容是 PowerPoint native editable 对象，并引用 19 张经 manifest 校验的证据图和 5 张三线表。
+本地模板路径是 `docs/stage_reports/20260708/组会汇报.pptx`，内容底稿是 `docs/stage_reports/2026-07-08-tho-research-v2-group-meeting-stage-report.md`，本地最终输出路径固定为 `docs/stage_reports/20260708/THO_research_v2_阶段进展_组会汇报.pptx`。PPT/PPTX 和生成图片是可再生产物，按代码仓库边界不进入 Git。最近一次本地产物共 65 页；流程、公式、文字和表格等主体内容是 PowerPoint native editable 对象，并引用 19 张经 manifest 校验的证据图和 5 张三线表。
 
 ### 证据目录与资产
 
@@ -90,11 +90,11 @@
 - `metric_figures.py::build_metric_assets` → `metric_assets_manifest.json`。
 - `case_figures.py::build_case_assets` → `case_assets_manifest.json`。
 
-四份 manifest 均位于 `docs/stage_reports/20260708/generated_assets/discussion/`；组装前会校验 19 张图的路径、SHA-256 和关键上游证据，不接受静默替换。
+四份受跟踪 manifest 位于 `docs/stage_reports/20260708/generated_assets/discussion/`；其引用的 PNG 不受 Git 跟踪。组装前会校验 19 张图的路径、SHA-256 和指标/生成器等关键上游证据，不接受静默替换。manifest 中的 `metric_schema` 只记录生成时解释快照；当前主线指标文档可以继续演进，不反向作为历史图片的组装依赖，真实指标代码变化仍会触发校验失败。
 
 ### 生成命令与 CLI 边界
 
-在执行以下命令前，必须先满足外部证据前置。Git 不包含已忽略的 `runs/` 和 `docs/figure/`，因此干净 checkout 或新 worktree 不能直接执行 `--evidence-only`、`--assets-only` 或默认重建。已跟踪的正式 PPT 和 `docs/stage_reports/20260708/generated_assets/discussion/` 中的生成资产可以在干净 checkout 中直接阅读，但这不等于重建所需的上游证据已被 Git 保存。
+在执行以下命令前，必须先满足外部证据前置。Git 不包含已忽略的 `runs/`、`docs/figure/`、PPT/PPTX 或生成图片，因此干净 checkout 或新 worktree 既不能直接阅读最终 deck/图片，也不能执行 `--evidence-only`、`--assets-only` 或默认重建。仓库只保存生成代码、文字底稿和必要的小型 manifest；汇报产物与实验历史由仓库外介质管理。
 
 最小必需证据路径类别与代表入口包括：
 
@@ -142,14 +142,16 @@ HOME="$lo_home" XDG_RUNTIME_DIR="$runtime_dir" SAL_USE_VCLPLUGIN=svp \
 pdfinfo "$render_dir/THO_research_v2_阶段进展_组会汇报.pdf" | rg '^Pages:'
 ```
 
-常规回归测试中 LibreOffice integration 默认 skip；需要真实 PDF/PNG 渲染检查时显式执行：
+常规回归测试不依赖本地未跟踪 PPT/PNG，冻结汇报产物集成和 LibreOffice 渲染默认 skip。
+先在仓库外确认上游证据与本地产物已同步；需要验证冻结产物及真实 PDF/PNG 渲染时显式执行：
 
 ```bash
-RUN_LIBREOFFICE_INTEGRATION=1 ./.venv/bin/python -m pytest \
+RUN_STAGE_REPORT_ARTIFACT_INTEGRATION=1 RUN_LIBREOFFICE_INTEGRATION=1 \
+  ./.venv/bin/python -m pytest \
   tests/test_tho_group_meeting_ppt.py tests/test_rr_peak_band_metric_demo_ppt.py
 ```
 
-最近一次显式 LibreOffice integration 验证为 `104 passed`（约 116 s）。生成器会固定 ZIP 成员排序、时间戳、平台属性和压缩方式，并清理模板残留的 `docProps/core.xml` / `docProps/app.xml` metadata；连续 build 必须产生相同 SHA-256，并与正式文件一致。
+最近一次显式 LibreOffice integration 验证为 `104 passed`（约 116 s）。生成器会固定 ZIP 成员排序、时间戳、平台属性和压缩方式，并清理模板残留的 `docProps/core.xml` / `docProps/app.xml` metadata；连续 build 必须产生相同 SHA-256。本地冻结 deck 可在仓库外另行核对，但不作为代码回归基线。
 
 ### 科研边界与未解决证据缺口
 

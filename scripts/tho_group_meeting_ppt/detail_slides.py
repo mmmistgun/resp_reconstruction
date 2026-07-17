@@ -249,10 +249,11 @@ def _validate_manifest_sources(repo_root: Path, manifest_name: str, manifest: Ma
         sources = manifest.get("sources", {})
         for key in (
             "signal_metadata_json", "source_run_config", "source_metrics_csv", "signal_npz",
-            "metric_code", "metric_evaluate_code", "metric_figure_code", "robust_rr_demo_code", "metric_schema",
+            "metric_code", "metric_evaluate_code", "metric_figure_code", "robust_rr_demo_code",
         ):
             record = sources.get(key) if isinstance(sources, Mapping) else None
             _validate_record(Path(manifest_name), f"sources.{key}", record, _record_path(repo_root, record or {}))
+        # metric_schema 记录生成时的解释快照；当前主线文档会继续演进，不作为历史图片组装依赖。
     else:
         if manifest.get("generator") != "scripts.tho_group_meeting_ppt.case_figures.build_case_assets":
             raise ValueError("generator 标识错误")
