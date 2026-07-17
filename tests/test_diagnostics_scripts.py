@@ -54,6 +54,8 @@ def _write_minimal_run(run_dir: Path, *, val_loss: float = 1.0) -> None:
                 "rr_spec_abs_error": 1.5,
                 "rr_peak_abs_error": 2.5,
                 "rr_peak_band_abs_error": 0.6,
+                "rr_peak_band_robust_abs_error": 0.55,
+                "breath_count_zero_cross_abs_error": 1.0,
                 "envelope_corr": 0.25,
                 "relative_envelope_corr": 0.42,
                 "relative_envelope_mae": 0.18,
@@ -383,9 +385,11 @@ def test_summarize_runs_marks_task_selection_metrics(tmp_path):
 
     frame = summarize_runs(root, output)
 
-    assert frame["selection_primary_metric"].tolist() == ["rr_peak_band_abs_error_mean"]
-    assert frame["selection_secondary_metric"].tolist() == ["rr_spec_abs_error_mean"]
+    assert frame["selection_primary_metric"].tolist() == ["rr_peak_band_robust_abs_error_mean"]
+    assert frame["selection_secondary_metric"].tolist() == ["breath_count_zero_cross_abs_error_mean"]
     assert frame["selection_waveform_role"].tolist() == ["diagnostic"]
+    assert frame["selection_task_rr_peak_band_robust_abs_error_mean"].tolist() == [0.55]
+    assert frame["selection_task_breath_count_zero_cross_abs_error_mean"].tolist() == [1.0]
     assert frame["selection_task_rr_peak_band_abs_error_mean"].tolist() == [0.6]
     assert frame["selection_task_relative_envelope_mae_median"].tolist() == [0.18]
     assert frame["selection_waveform_rr_peak_abs_error_mean"].tolist() == [2.5]

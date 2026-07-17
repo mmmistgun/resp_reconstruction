@@ -32,6 +32,7 @@ def _metrics(errors: list[float], spectrum: list[float], target_rr: list[float])
             {
                 "dataset_row_id": idx,
                 "rr_peak_band_abs_error": error,
+                "rr_peak_band_robust_abs_error": 0.9 * error,
                 "rr_spec_abs_error": 0.2 + 0.1 * idx,
                 "breath_count_zero_cross_abs_error": idx % 2,
                 "relative_envelope_mae": 0.2,
@@ -80,6 +81,7 @@ def test_summarize_f_a_runs_outputs_detail_pair_delta_and_strata(tmp_path):
     assert set(detail["label"]) == {"F0_native_stft_pre_mixer", "F-A0_dist"}
     delta_row = paired.iloc[0]
     assert delta_row["label"] == "F-A0_dist"
+    assert delta_row["delta_rr_peak_band_robust_abs_error_mean"] < 0
     assert delta_row["delta_rr_peak_band_abs_error_mean"] < 0
     assert delta_row["delta_frac_gt_1"] < 0
     assert {"baseline_hard", "baseline_easy", "low_spectrum", "fast_rr"} <= set(strata["stratum"])

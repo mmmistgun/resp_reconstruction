@@ -10,15 +10,23 @@ from omegaconf import OmegaConf
 
 
 METRICS = [
+    "rr_peak_band_robust_abs_error",
+    "breath_count_zero_cross_abs_error",
     "rr_peak_band_abs_error",
     "rr_spec_abs_error",
-    "breath_count_zero_cross_abs_error",
     "relative_envelope_mae",
     "relative_envelope_corr",
+    "relative_envelope_mae_lag4s",
+    "relative_envelope_corr_lag4s",
     "spectrum_similarity",
     "band_limited_corr",
     "best_lag_corr",
     "best_lag_sec",
+    "best_lag_corr_4s",
+    "best_lag_sec_4s",
+    "local_rr_mae",
+    "local_rr_corr",
+    "local_rr_valid_frac",
 ]
 
 
@@ -142,8 +150,13 @@ def _stratified_delta_frame(detail: pd.DataFrame) -> pd.DataFrame:
                 "n_windows": int(len(frame)),
             }
             for metric in METRICS:
-                base = pd.to_numeric(frame[f"{metric}_baseline"], errors="coerce")
-                cand = pd.to_numeric(frame[f"{metric}_candidate"], errors="coerce")
+                baseline_column = f"{metric}_baseline"
+                candidate_column = f"{metric}_candidate"
+                if baseline_column not in frame or candidate_column not in frame:
+                    record[f"delta_{metric}_mean"] = np.nan
+                    continue
+                base = pd.to_numeric(frame[baseline_column], errors="coerce")
+                cand = pd.to_numeric(frame[candidate_column], errors="coerce")
                 record[f"delta_{metric}_mean"] = float((cand - base).mean())
             records.append(record)
     return pd.DataFrame.from_records(records)

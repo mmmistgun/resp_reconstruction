@@ -14,26 +14,39 @@ if str(REPO_ROOT) not in sys.path:
 
 
 METRIC_COLUMNS = [
-    "rr_spec_abs_error",
-    "rr_peak_band_abs_error",
     "rr_peak_band_robust_abs_error",
     "breath_count_zero_cross_abs_error",
+    "rr_peak_band_abs_error",
+    "rr_spec_abs_error",
     "rr_peak_abs_error",
     "envelope_corr",
     "relative_envelope_corr",
     "relative_envelope_mae",
+    "relative_envelope_corr_lag4s",
+    "relative_envelope_mae_lag4s",
     "spectrum_similarity",
     "band_limited_corr",
     "best_lag_corr",
     "best_lag_sec",
+    "best_lag_corr_4s",
+    "best_lag_sec_4s",
+    "local_rr_mae",
+    "local_rr_corr",
+    "local_rr_valid_frac",
 ]
 
 TASK_SELECTION_METRICS = [
+    "rr_peak_band_robust_abs_error",
+    "breath_count_zero_cross_abs_error",
     "rr_peak_band_abs_error",
     "rr_spec_abs_error",
-    "breath_count_zero_cross_abs_error",
     "relative_envelope_mae",
     "relative_envelope_corr",
+    "relative_envelope_mae_lag4s",
+    "relative_envelope_corr_lag4s",
+    "local_rr_mae",
+    "local_rr_corr",
+    "local_rr_valid_frac",
     "spectrum_similarity",
 ]
 
@@ -42,6 +55,8 @@ WAVEFORM_DIAGNOSTIC_METRICS = [
     "band_limited_corr",
     "best_lag_corr",
     "best_lag_sec",
+    "best_lag_corr_4s",
+    "best_lag_sec_4s",
 ]
 
 
@@ -117,9 +132,10 @@ def _quality_counts(frame: pd.DataFrame) -> str:
 
 def _add_selection_fields(record: dict[str, Any]) -> None:
     """显式标注模型选择口径，避免把训练 loss 或波形诊断当作唯一目标。"""
-    record["selection_primary_metric"] = "rr_peak_band_abs_error_mean"
-    record["selection_secondary_metric"] = "rr_spec_abs_error_mean"
-    record["selection_tertiary_metric"] = "relative_envelope_mae_mean"
+    record["selection_primary_metric"] = "rr_peak_band_robust_abs_error_mean"
+    record["selection_secondary_metric"] = "breath_count_zero_cross_abs_error_mean"
+    record["selection_tertiary_metric"] = "rr_peak_band_abs_error_mean"
+    record["selection_quaternary_metric"] = "rr_spec_abs_error_mean"
     record["selection_waveform_role"] = "diagnostic"
     for metric in TASK_SELECTION_METRICS:
         _copy_metric_summary(record, metric, role="task")

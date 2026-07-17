@@ -14,7 +14,11 @@ import numpy as np
 import pandas as pd
 from omegaconf import OmegaConf
 
-from resp_train.experiments.selection import TASK_SELECTION_COLUMNS
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from resp_train.experiments.selection import TASK_GUARD_COLUMNS, TASK_SELECTION_COLUMNS
 
 
 METRICS = [
@@ -233,6 +237,8 @@ def summarize_topk_results(runs_root: Path, *, top_k: int = 3) -> tuple[pd.DataF
     if all_frame.empty:
         return all_frame, all_frame.copy()
 
+    _validate_guard_metrics(all_frame)
+
     best = (
         all_frame.sort_values(["run_dir", *SELECTION_COLUMNS], na_position="last")
         .groupby("run_dir", as_index=False, sort=False)
@@ -240,6 +246,27 @@ def summarize_topk_results(runs_root: Path, *, top_k: int = 3) -> tuple[pd.DataF
         .reset_index(drop=True)
     )
     return all_frame, best
+
+
+def _validate_guard_metrics(frame: pd.DataFrame) -> None:
+    """禁止在缺少当前主护栏的旧 metrics 上静默退回旧排序。"""
+
+    for run_dir, group in frame.groupby("run_dir", sort=False):
+        guard_values = pd.DataFrame(index=group.index)
+        for column in TASK_GUARD_COLUMNS:
+            values = group[column] if column in group else pd.Series(np.nan, index=group.index)
+            guard_values[column] = pd.to_numeric(values, errors="coerce")
+        missing = [
+            column
+            for column in TASK_GUARD_COLUMNS
+            if not guard_values[column].notna().any()
+        ]
+        if missing or not guard_values.notna().all(axis=1).any():
+            detail = f"missing={missing}" if missing else "没有 checkpoint 同时包含两个主护栏"
+            raise ValueError(
+                f"Top-k 指标缺少当前主护栏，不能择优: run_dir={run_dir} {detail}; "
+                "请先按当前指标重评 checkpoint_topN.pt"
+            )
 
 
 def write_topk_summary(all_frame: pd.DataFrame, best_frame: pd.DataFrame, paths: OutputPaths) -> None:
@@ -459,9 +486,9 @@ def main() -> None:
             "seed",
             "rank",
             "epoch",
+            "rr_peak_band_robust_abs_error_mean",
+            "breath_count_zero_cross_abs_error_mean",
             "rr_peak_band_abs_error_mean",
-            "frac_gt_1",
-            "frac_gt_2",
             "rr_spec_abs_error_mean",
         ]
         print(best_frame[display_columns].to_string(index=False), flush=True)

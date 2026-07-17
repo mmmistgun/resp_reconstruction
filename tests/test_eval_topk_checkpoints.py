@@ -1,6 +1,9 @@
+import subprocess
+import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from resp_train.experiments.selection import TASK_SELECTION_COLUMNS
 import scripts.eval_topk_checkpoints as topk
@@ -26,14 +29,26 @@ def _make_run(root: Path, arm: str = "f_d0_high_stft_anchor", branch: str = "dua
     return run_dir
 
 
-def _write_metrics(path: Path, peak: list[float], spec: list[float] | None = None) -> None:
+def _write_metrics(
+    path: Path,
+    peak: list[float],
+    spec: list[float] | None = None,
+    *,
+    robust: list[float] | None = None,
+    count: list[float] | None = None,
+) -> None:
     if spec is None:
         spec = [0.2 for _ in peak]
+    if robust is None:
+        robust = peak
+    if count is None:
+        count = [1.0 for _ in peak]
     pd.DataFrame(
         {
             "rr_peak_band_abs_error": peak,
+            "rr_peak_band_robust_abs_error": robust,
             "rr_spec_abs_error": spec,
-            "breath_count_zero_cross_abs_error": [1.0 for _ in peak],
+            "breath_count_zero_cross_abs_error": count,
             "relative_envelope_mae": [0.3 for _ in peak],
             "relative_envelope_corr": [0.5 for _ in peak],
             "spectrum_similarity": [0.9 for _ in peak],
@@ -161,23 +176,81 @@ def test_run_one_sleeps_before_eval_when_launch_delay_is_set(tmp_path, monkeypat
 
 def test_summarize_topk_results_selects_best_rank_by_task_metrics(tmp_path):
     run_dir = _make_run(tmp_path)
-    _write_metrics(run_dir / "metrics_top1.csv", peak=[0.1, 1.5, 2.5], spec=[0.1, 0.1, 0.1])
-    _write_metrics(run_dir / "metrics_top2.csv", peak=[0.2, 0.3, 0.4], spec=[0.3, 0.3, 0.3])
-    _write_metrics(run_dir / "metrics_top3.csv", peak=[0.2, 0.3, 1.4], spec=[0.2, 0.2, 0.2])
+    _write_metrics(
+        run_dir / "metrics_top1.csv",
+        peak=[0.1, 1.5, 2.5],
+        spec=[0.1, 0.1, 0.1],
+        robust=[0.5, 0.5, 0.5],
+        count=[0.0, 0.0, 0.0],
+    )
+    _write_metrics(
+        run_dir / "metrics_top2.csv",
+        peak=[0.2, 0.3, 0.4],
+        spec=[0.3, 0.3, 0.3],
+        robust=[0.2, 0.2, 0.2],
+        count=[2.0, 2.0, 2.0],
+    )
+    _write_metrics(
+        run_dir / "metrics_top3.csv",
+        peak=[0.2, 0.3, 1.4],
+        spec=[0.2, 0.2, 0.2],
+        robust=[0.2, 0.2, 0.2],
+        count=[1.0, 1.0, 1.0],
+    )
 
     all_frame, best_frame = topk.summarize_topk_results(tmp_path, top_k=3)
 
     assert len(all_frame) == 3
     assert best_frame[["run_dir", "rank"]].to_dict("records") == [
-        {"run_dir": str(run_dir), "rank": 2}
+        {"run_dir": str(run_dir), "rank": 3}
     ]
-    assert best_frame.iloc[0]["rr_peak_band_abs_error_mean"] == 0.3
-    assert best_frame.iloc[0]["frac_gt_1"] == 0.0
+    assert best_frame.iloc[0]["rr_peak_band_robust_abs_error_mean"] == pytest.approx(0.2)
+    assert best_frame.iloc[0]["breath_count_zero_cross_abs_error_mean"] == pytest.approx(1.0)
     assert best_frame.iloc[0]["seed"] == 20260700
 
 
 def test_topk_selection_columns_reuse_training_task_selection_contract():
     assert topk.SELECTION_COLUMNS == list(TASK_SELECTION_COLUMNS)
+
+
+def test_summarize_topk_results_rejects_metrics_without_current_guards(tmp_path):
+    run_dir = _make_run(tmp_path)
+    for rank in (1, 2, 3):
+        _write_metrics(run_dir / f"metrics_top{rank}.csv", peak=[0.1 * rank])
+        frame = pd.read_csv(run_dir / f"metrics_top{rank}.csv").drop(columns="rr_peak_band_robust_abs_error")
+        frame.to_csv(run_dir / f"metrics_top{rank}.csv", index=False)
+
+    with pytest.raises(ValueError, match="缺少当前主护栏"):
+        topk.summarize_topk_results(tmp_path, top_k=3)
+
+
+def test_summarize_topk_results_requires_both_guards_on_same_checkpoint(tmp_path):
+    run_dir = _make_run(tmp_path)
+    for rank in (1, 2, 3):
+        _write_metrics(run_dir / f"metrics_top{rank}.csv", peak=[0.1 * rank])
+    first = pd.read_csv(run_dir / "metrics_top1.csv")
+    first["breath_count_zero_cross_abs_error"] = float("nan")
+    first.to_csv(run_dir / "metrics_top1.csv", index=False)
+    for rank in (2, 3):
+        frame = pd.read_csv(run_dir / f"metrics_top{rank}.csv")
+        frame["rr_peak_band_robust_abs_error"] = float("nan")
+        frame.to_csv(run_dir / f"metrics_top{rank}.csv", index=False)
+
+    with pytest.raises(ValueError, match="同时包含两个主护栏"):
+        topk.summarize_topk_results(tmp_path, top_k=3)
+
+
+def test_eval_topk_script_help_works_outside_repo_root(tmp_path):
+    result = subprocess.run(
+        [sys.executable, str(Path(topk.__file__).resolve()), "--help"],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "checkpoint_topN" in result.stdout
 
 
 def test_output_paths_default_to_runs_root_name(tmp_path):

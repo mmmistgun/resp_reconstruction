@@ -191,7 +191,7 @@ class ThoExperiment(BaseExperiment):
             return
         if not bool(record.get("checkpoint_gate_passed", True)):
             return
-        rr_value = _finite_float(record.get("val_rr_peak_band_abs_error_mean"))
+        rr_value = _finite_float(record.get("val_rr_peak_band_robust_abs_error_mean"))
         if rr_value is not None and (self._best_rr_value is None or rr_value < self._best_rr_value):
             self._best_rr_value = rr_value
             save_checkpoint(
@@ -341,19 +341,22 @@ def _baseline_enabled(cfg: DictConfig) -> bool:
 
 
 def _format_metrics_summary(metrics: pd.DataFrame) -> str:
-    """训练结束后输出最常看的 RR 误拣摘要。"""
-    column = "rr_peak_band_abs_error"
-    if column not in metrics:
+    """训练结束后输出当前两个主任务护栏。"""
+    rr_column = "rr_peak_band_robust_abs_error"
+    count_column = "breath_count_zero_cross_abs_error"
+    if rr_column not in metrics or count_column not in metrics:
         return ""
-    values = pd.to_numeric(metrics[column], errors="coerce").dropna()
-    if values.empty:
-        return f"metrics: n={len(metrics)} {column}=nan"
+    rr_values = pd.to_numeric(metrics[rr_column], errors="coerce").dropna()
+    count_values = pd.to_numeric(metrics[count_column], errors="coerce").dropna()
+    if rr_values.empty or count_values.empty:
+        return f"metrics: n={len(metrics)} {rr_column}=nan {count_column}=nan"
     return (
-        f"metrics: n={len(metrics)} {column} "
-        f"mean={float(values.mean()):.6f} "
-        f"median={float(values.median()):.6f} "
-        f"p95={float(values.quantile(0.95)):.6f} "
-        f"frac_gt_1={float(np.mean(values.to_numpy() > 1.0)):.6f}"
+        f"metrics: n={len(metrics)} {rr_column} "
+        f"mean={float(rr_values.mean()):.6f} "
+        f"median={float(rr_values.median()):.6f} "
+        f"p95={float(rr_values.quantile(0.95)):.6f} "
+        f"frac_gt_1={float(np.mean(rr_values.to_numpy() > 1.0)):.6f} "
+        f"{count_column} mean={float(count_values.mean()):.6f}"
     )
 
 

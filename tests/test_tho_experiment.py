@@ -163,6 +163,8 @@ def test_tho_experiment_logs_final_metric_summary(monkeypatch, tmp_path: Path):
         return pd.DataFrame(
             {
                 "rr_peak_band_abs_error": [0.2, 1.2, 2.5],
+                "rr_peak_band_robust_abs_error": [0.1, 0.8, 1.5],
+                "breath_count_zero_cross_abs_error": [0.0, 1.0, 2.0],
                 "envelope_corr": [0.5, 0.6, 0.7],
             }
         )
@@ -173,7 +175,10 @@ def test_tho_experiment_logs_final_metric_summary(monkeypatch, tmp_path: Path):
     log_text = (run_dir / "train.log").read_text(encoding="utf-8")
 
     assert seen_show_progress == [True]
-    assert "metrics: n=3 rr_peak_band_abs_error mean=1.300000 median=1.200000 p95=2.370000 frac_gt_1=0.666667" in log_text
+    assert (
+        "metrics: n=3 rr_peak_band_robust_abs_error mean=0.800000 median=0.800000 "
+        "p95=1.430000 frac_gt_1=0.333333 breath_count_zero_cross_abs_error mean=1.000000"
+    ) in log_text
 
 
 def test_tho_experiment_epoch_metrics_write_summary_and_task_checkpoints(monkeypatch, tmp_path: Path):
@@ -200,6 +205,7 @@ def test_tho_experiment_epoch_metrics_write_summary_and_task_checkpoints(monkeyp
         return pd.DataFrame(
             {
                 "rr_peak_band_abs_error": errors,
+                "rr_peak_band_robust_abs_error": errors,
                 "rr_spec_abs_error": [1.0 for _ in errors],
                 "breath_count_zero_cross_abs_error": [2.0 for _ in errors],
                 "relative_envelope_corr": [0.5 for _ in errors],
@@ -219,6 +225,7 @@ def test_tho_experiment_epoch_metrics_write_summary_and_task_checkpoints(monkeyp
     history = pd.read_csv(run_dir / "train_history.csv")
     assert epoch_metrics["epoch"].tolist() == [1, 2]
     assert history["val_rr_peak_band_abs_error_mean"].tolist() == [2.75, 0.35]
+    assert history["val_rr_peak_band_robust_abs_error_mean"].tolist() == [2.75, 0.35]
     assert history["val_frac_gt_1"].tolist() == [1.0, 0.0]
     assert (run_dir / "checkpoint_best_rr.pt").exists()
     assert (run_dir / "checkpoint_best_task.pt").exists()
@@ -270,6 +277,7 @@ def test_task_checkpoints_respect_checkpoint_gate(monkeypatch, tmp_path: Path):
         epoch=1,
         record={
             "checkpoint_gate_passed": False,
+            "val_rr_peak_band_robust_abs_error_mean": 0.1,
             "val_rr_peak_band_abs_error_mean": 0.1,
             "val_frac_gt_1": 0.0,
             "val_frac_gt_2": 0.0,
@@ -279,6 +287,65 @@ def test_task_checkpoints_respect_checkpoint_gate(monkeypatch, tmp_path: Path):
     )
 
     assert calls == []
+
+
+def test_task_checkpoints_use_robust_rr_then_breath_count_guards(monkeypatch, tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg.training.epoch_metrics = {"enabled": True}
+    experiment = ThoExperiment(cfg)
+    saved_paths = []
+
+    monkeypatch.setattr(
+        "resp_train.experiments.tho.save_checkpoint",
+        lambda path, **kwargs: saved_paths.append(path.name),
+    )
+
+    common = {
+        "checkpoint_gate_passed": True,
+        "val_rr_peak_band_abs_error_mean": 10.0,
+        "val_rr_spec_abs_error_mean": 10.0,
+    }
+    experiment.update_task_checkpoints(
+        run_dir=tmp_path,
+        model=None,
+        optimizer=None,
+        epoch=1,
+        record={
+            **common,
+            "val_rr_peak_band_robust_abs_error_mean": 0.1,
+            "val_breath_count_zero_cross_abs_error_mean": 2.0,
+        },
+    )
+    experiment.update_task_checkpoints(
+        run_dir=tmp_path,
+        model=None,
+        optimizer=None,
+        epoch=2,
+        record={
+            **common,
+            "val_rr_peak_band_robust_abs_error_mean": 0.2,
+            "val_breath_count_zero_cross_abs_error_mean": 0.0,
+            "val_rr_peak_band_abs_error_mean": 0.0,
+            "val_rr_spec_abs_error_mean": 0.0,
+        },
+    )
+    experiment.update_task_checkpoints(
+        run_dir=tmp_path,
+        model=None,
+        optimizer=None,
+        epoch=3,
+        record={
+            **common,
+            "val_rr_peak_band_robust_abs_error_mean": 0.1,
+            "val_breath_count_zero_cross_abs_error_mean": 1.0,
+        },
+    )
+
+    assert saved_paths == [
+        "checkpoint_best_rr.pt",
+        "checkpoint_best_task.pt",
+        "checkpoint_best_task.pt",
+    ]
 
 
 def test_validate_checkpoint_config_catches_stft_shape_mismatch():
