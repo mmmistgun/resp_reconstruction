@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
 import random
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -42,6 +45,41 @@ def save_config(cfg: DictConfig, run_dir: str | Path) -> Path:
     path = Path(run_dir) / "config.yaml"
     OmegaConf.save(config=cfg, f=path)
     return path
+
+
+def save_execution_manifest(path: str | Path, **context: object) -> Path:
+    """保存最小复现信息；Git 不可用时显式记录错误而不是中断实验。"""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    payload: dict[str, object] = {
+        "created_at": datetime.now().astimezone().isoformat(),
+        "command": list(sys.argv),
+        "git_commit": commit.stdout.strip() if commit.returncode == 0 else None,
+        "git_dirty": bool(status.stdout.strip()) if status.returncode == 0 else None,
+        "git_error": None,
+        **context,
+    }
+    errors = [result.stderr.strip() for result in (commit, status) if result.returncode != 0]
+    if errors:
+        payload["git_error"] = "; ".join(error for error in errors if error) or "git command failed"
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return output
 
 
 def setup_logger(run_dir: str | Path) -> logging.Logger:

@@ -31,6 +31,7 @@ def train_one_epoch(
     scaler = torch.amp.GradScaler(resolved_device.type, enabled=amp_enabled)
     model.to(resolved_device)
     model.train()
+    loss_fn.train()
     meter = _LossMeter()
     non_blocking = resolved_device.type == "cuda"
 
@@ -43,13 +44,10 @@ def train_one_epoch(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
-        loss_kwargs = _loss_sample_weight_kwargs(loss_fn, batch, resolved_device)
         optimizer.zero_grad(set_to_none=True)
         with torch.amp.autocast(resolved_device.type, enabled=amp_enabled):
             pred = model(sensor, sst=sst) if sst is not None else model(sensor)
-            loss, parts = loss_fn(pred, target, **loss_kwargs)
-        if bool(getattr(loss_fn, "log_component_grad_norms", False)) and hasattr(loss_fn, "component_gradient_norms"):
-            parts = {**parts, **loss_fn.component_gradient_norms(pred, target, **loss_kwargs)}
+            loss, parts = loss_fn(pred, target)
         if amp_enabled:
             scaler.scale(loss).backward()
             if grad_clip_norm is not None:
@@ -66,7 +64,7 @@ def train_one_epoch(
         meter.update(loss, parts, batch_size=sensor.size(0))
         progress.set_postfix(loss=f"{meter.summary()['loss']:.4f}")
 
-    return meter.summary()
+    return _finalize_loss_summary(loss_fn, meter.summary())
 
 
 @torch.no_grad()
@@ -85,6 +83,7 @@ def validate(
     resolved_device = torch.device(device)
     model.to(resolved_device)
     model.eval()
+    loss_fn.eval()
     meter = _LossMeter()
     non_blocking = resolved_device.type == "cuda"
     pred_batches: list[np.ndarray] = []
@@ -100,9 +99,8 @@ def validate(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
-        loss_kwargs = _loss_sample_weight_kwargs(loss_fn, batch, resolved_device)
         raw_pred = model(sensor, sst=sst) if sst is not None else model(sensor)
-        loss, parts = loss_fn(raw_pred, target, **loss_kwargs)
+        loss, parts = loss_fn(raw_pred, target)
         meter.update(loss, parts, batch_size=sensor.size(0))
         if return_predictions:
             _append_prediction_batch(
@@ -114,7 +112,7 @@ def validate(
             )
         progress.set_postfix(loss=f"{meter.summary()['loss']:.4f}")
 
-    summary = meter.summary()
+    summary = _finalize_loss_summary(loss_fn, meter.summary())
     if not return_predictions:
         return summary
     return summary, _prediction_dict_from_batches(
@@ -243,6 +241,11 @@ def _prediction_dict_from_arrays(
         "dataset_row_id": np.asarray([int(m.get("dataset_row_id", -1)) for m in meta_records], dtype=np.int64),
         "split": np.asarray([str(m.get("split", "")) for m in meta_records]),
         "input_set": np.asarray([str(m.get("input_set", "")) for m in meta_records]),
+        "samp_id": np.asarray([int(m.get("samp_id", -1)) for m in meta_records], dtype=np.int64),
+        "coupling_state_id": np.asarray(
+            [int(m.get("coupling_state_id", m.get("segment_id", -1))) for m in meta_records],
+            dtype=np.int64,
+        ),
         "residual_quality_class": np.asarray([str(m.get("residual_quality_class", "")) for m in meta_records]),
     }
     if meta_records and "rr_peak_valid_mask" in meta_records[0]:
@@ -286,32 +289,15 @@ def _move_batch(
 
 
 def _batch_sst(batch: Mapping[str, torch.Tensor], device: torch.device, *, non_blocking: bool = False):
-    """E4-SST：若 batch 含预计算 sst 则搬到设备，否则返回 None（向后兼容，其它模型无此键）。"""
+    """为保留的可选时频模型传递离线特征；当前 baseline 不使用。"""
     sst = batch.get("sst") if hasattr(batch, "get") else None
     if sst is None:
         return None
     return sst.to(device, non_blocking=non_blocking)
 
 
-def _loss_sample_weight_kwargs(
-    loss_fn: nn.Module,
-    batch: Mapping[str, Any],
-    device: torch.device,
-) -> dict[str, torch.Tensor]:
-    """让 loss 可选地从 batch meta 派生样本权重；未实现时保持旧调用方式。"""
-    if not hasattr(loss_fn, "sample_weights_from_meta") or not hasattr(batch, "get"):
-        return {}
-    meta = batch.get("meta")
-    if meta is None:
-        return {}
-    sample_weight = loss_fn.sample_weights_from_meta(meta, device=device)
-    if sample_weight is None:
-        return {}
-    return {"sample_weight": sample_weight}
-
-
 def _waveform_output(output: Any) -> torch.Tensor:
-    """从普通 tensor 或 F-B dict 输出中取最终 waveform。"""
+    """从 Tensor 或保留模型的结构化输出中取 waveform。"""
     if isinstance(output, Mapping):
         if "waveform" not in output:
             raise KeyError("模型输出 dict 必须包含 waveform")
@@ -344,6 +330,8 @@ class _LossMeter:
     def __init__(self) -> None:
         self.total_weight = 0
         self.totals: dict[str, float] = {}
+        self.aggregate_sums: dict[str, float] = {}
+        self.aggregate_counts: dict[str, float] = {}
 
     def update(self, loss: torch.Tensor, parts: Mapping[str, Any], batch_size: int) -> None:
         self.total_weight += batch_size
@@ -353,9 +341,27 @@ class _LossMeter:
                 item = float(value.detach().cpu())
             else:
                 item = float(value)
+            if name.startswith("__sum_"):
+                key = name.removeprefix("__sum_")
+                self.aggregate_sums[key] = self.aggregate_sums.get(key, 0.0) + item
+                continue
+            if name.startswith("__count_"):
+                key = name.removeprefix("__count_")
+                self.aggregate_counts[key] = self.aggregate_counts.get(key, 0.0) + item
+                continue
             self.totals[name] = self.totals.get(name, 0.0) + item * batch_size
 
     def summary(self) -> dict[str, float]:
         if self.total_weight == 0:
             raise ValueError("没有可用 batch，无法计算平均 loss")
-        return {name: value / self.total_weight for name, value in self.totals.items()}
+        result = {name: value / self.total_weight for name, value in self.totals.items()}
+        for name, total in self.aggregate_sums.items():
+            count = self.aggregate_counts.get(name, 0.0)
+            result[name] = total / count if count > 0.0 else 0.0
+        return result
+
+
+def _finalize_loss_summary(loss_fn: nn.Module, summary: Mapping[str, float]) -> dict[str, float]:
+    if hasattr(loss_fn, "aggregate_epoch_summary"):
+        return dict(loss_fn.aggregate_epoch_summary(summary))
+    return dict(summary)

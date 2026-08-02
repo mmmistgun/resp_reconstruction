@@ -1,1070 +1,128 @@
-# 脚本索引
+# 当前 THO 实验入口
 
-本目录暂时保持脚本平铺，不移动文件；入口较多，先按本文主线、历史实验和诊断小节定位，不从文件名猜运行口径。
+本文只描述 2026-08-02 冻结的新呼吸重建协议。旧 E/F/G probe、旧 loss、旧 metrics、旧 gate/topK 和历史 checkpoint 语义不再属于当前 workflow；旧代码与说明通过 Git 追溯，历史 run 原地保留。
 
-`configs/tho_small.yaml` 保留给早期 THO 小规模实验；当前 soft-z research v2 主线见下文和
-`configs/tho_research_v2*.yaml`。小规模配置的默认口径为：
+协议定义见 `docs/experiments/loss_metrics_restart_plan_20260729.md`。
 
-- 默认输入集：`mixed_zscore`
-- 默认训练抽样：`data.train_sample_strategy=stratified_random`
-- 默认验证抽样：`data.val_sample_strategy=stratified_random`
-- 默认固定验证 seed：`data.val_sample_seed=20260602`
-- `head` 抽样只建议临时 debug，不作为正式实验口径
+## 当前固定口径
 
-所有支持 `--set` 的脚本都使用 OmegaConf dotlist 覆盖配置，例如：
+- 数据：2026-06-20 research v2 soft-z。
+- 输入：`bcg_rawish_segment_soft_z_key`。
+- target：`target_waveform_segment_soft_z_key`。
+- baseline：纯时域 `patch_mixer1d`。
+- 正式输出：$\Pi=S\circ B$，统一 `0.05–0.70 Hz`。
+- checkpoint：完整 validation Local RR MAE 最小 epoch。
+- early stopping：关闭。
+- designated test：模型与训练预算全部冻结后才显式运行。
 
-```bash
---set data.train_sample_seed=1 --set loss.smooth_weight=0.001
-```
+## 数据与 split 审计
 
-训练入口会检查必要依赖；如需新增第三方库，先确认再安装。
-
-## 推荐工作流
-
-1. 先审计本次配置对应的数据子集，确认抽样数量和质量分层。
-2. 跑平凡基线，给模型指标一个参照。
-3. 跑训练脚本，保存完整 run 目录。
-4. 必要时从 checkpoint 重新评价，或导出不同数量的诊断预测。
-5. 绘制预测图，检查主频、峰谷、包络同步和失败样本。
-6. 汇总多个 run，比较 loss、seed 和采样策略变化。
-
-## 数据检查
-
-### `audit_tho_dataset.py`
-
-生成胸带小规模训练数据审计表，检查 split、input_set、残差质量分层和可用窗口数量。脚本复用训练数据工厂的过滤和抽样口径，避免审计结果与训练入口不一致。
+数据审计：
 
 ```bash
 ./.venv/bin/python scripts/audit_tho_dataset.py \
-  --config configs/tho_small.yaml \
-  --output /tmp/tho_audit.csv
+  --config configs/tho_research_v2.yaml \
+  --output /tmp/tho_restart_audit.csv
 ```
 
-常用：固定验证 seed、改变训练 seed 时，审计命令也应传入同样覆盖项，确保审计和训练口径一致。
-
-## Split 独立性审计
-
-在解释模型实验前，先两两检查 train/val/test 是否共享 `samp_id` 或
-`(samp_id, segment_id)`：
+Split 独立性审计：
 
 ```bash
 ./.venv/bin/python scripts/audit_split_independence.py \
   --config configs/tho_research_v2.yaml \
-  --output-dir runs/audits/split_independence_research_v2
+  --output-dir runs/audits/split_independence_restart
 ```
 
-审计固定把 `max_train_windows`、`max_val_windows` 和 test 上限视为 `null`，并关闭 preload；训练或 smoke
-配置中的窗口抽样上限不会缩小审计范围。`summary.csv` 包含 train-val、train-test、val-test 三行，另输出
-重叠明细和三 split 分布对照表。任一行的 `overlap_samp_id_count` 或 `overlap_segment_count` 大于 0 时，
-当前结果不能作为跨个体泛化结论。
+这些审计不是每个训练 run 的重复前置步骤。协议首次实现或数据/split 发生变化时执行并保存结果；普通 run 只保留加载、shape 与 finite 断言。
 
-## 训练与评价
+## 训练
 
-### `train_tho_small.py`
-
-训练胸带参考小规模模型，并输出 run 目录。该脚本是薄入口，负责解析命令行并委托 `ThoExperiment` 执行实验流程。默认使用 `configs/tho_small.yaml`，可用 `--set` 覆盖配置。
+统一入口：
 
 ```bash
-./.venv/bin/python scripts/train_tho_small.py \
-  --config configs/tho_small.yaml \
-  --set data.train_sample_seed=1 \
-  --set data.val_sample_seed=2 \
-  --set data.max_train_windows=16 \
-  --set data.max_val_windows=8 \
-  --set training.epochs=1 \
-  --set model.base_channels=4 \
-  --set outputs.max_prediction_windows=4
-```
-
-正式小规模对照建议固定验证 seed，只改变训练 seed 或 loss 参数：
-
-```bash
-./.venv/bin/python scripts/train_tho_small.py \
-  --config configs/tho_small.yaml \
-  --set data.train_sample_seed=1 \
-  --set data.val_sample_seed=20260602 \
-  --set training.epochs=10
-```
-
-### 当前 20260620 soft-z 主线
-
-2026-06-20 起，`configs/tho_research_v2.yaml` 默认切到
-`20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf`
-数据集。新版索引字段已改名，当前主线使用 soft-z 字段：
-
-- BCG 输入：`bcg_rawish_segment_soft_z_key`
-- THO 目标：`target_waveform_segment_soft_z_key`
-
-旧的 rawish state-aligned 结果仍可追溯，但不要和 20260620 soft-z 结果直接横向比较；
-涉及结论筛选时需要在新数据口径下重跑。当前阶段继续把波形作为重要证据，但不是
-唯一选择目标。执行顺序建议固定为：
-
-1. 先运行 split 独立性审计，确认当前结果应解释为 within-subject 开发指标，还是可以支撑跨 `samp_id` 泛化结论。
-2. 使用同一个验证 seed 和全量窗口，避免验证集变化掩盖 loss 差异。
-3. 每完成一次正式实验 run 后提交一次仓库状态，提交信息写明实验口径和关键权重。
-4. 先按任务指标筛选：`rr_peak_band_robust_abs_error` 与 `breath_count_zero_cross_abs_error` 是当前两个主护栏；再看 `best_lag_corr_4s`、`best_lag_sec_4s`、`relative_envelope_mae_lag4s`、`relative_envelope_corr_lag4s` 和当前 `local_rr_*`，确认允许持续时延后的低频形态、相对强弱和局部 RR 是否改善。2026-07-09 起 `local_rr_*` 转为 40 秒窗口、10 秒步长 + 更严格 spectral-guided peak 间距口径；legacy 20 秒/5 秒寻峰口径和 v3 过零探针退入历史，不再作为默认评价列输出。`rr_peak_band_abs_error` 和 `rr_spec_abs_error` 保留为历史/频域兼容护栏，不再单独主导排序。
-5. `rr_peak_abs_error` 保留为原始尖峰诊断；当前代码会在 research v2 数据中先按 THO/BCG 共同好段 mask 去掉坏段，再按连续好段计算 raw peak RR。未遮罩旧式诊断保存在 `rr_peak_unmasked_abs_error`。`band_limited_corr` 是 zero-lag 形态诊断；BCG 与 THO 可能存在个体化持续时延，因此主要结合 `best_lag_corr_4s` 和 `best_lag_sec_4s` 解释低频形态是否恢复。`breath_count_zero_cross_abs_error` 继续作为低质量信号下是否恢复合理周期数量的轻量护栏，并额外输出上升/下降过零计数供边界诊断。
-
-效率口径建议：正式对照实验仍应显式记录 `training.batch_size`。当前
-`patch_mixer1d + WeakSyncLoss` 在 RTX 4070 Ti SUPER 上建议先用
-`training.batch_size=128`；它比历史 `batch_size=8` 明显减少小 step 调度开销，
-同时比 `256` 保留更多每 epoch 更新步。`training.use_amp=true` 已支持 18000 点
-非 2 次幂窗口，但当前模型在 `batch_size=128` 下 AMP 吞吐收益不明显，可作为显存
-余量不足或更大 batch 的备用选项。
-
-注意：2026-06-17 至 2026-06-18 的 rawish state-aligned L0-L12 分支已经完成历史
-评估，不再作为当前默认训练入口。旧结论只能作为模型结构候选来源，不能作为新版
-数据的最终排序。
-
-`configs/tho_research_v2.yaml` 保留为小窗口 smoke / 调试默认口径；`configs/tho_research_v2_smoke.yaml`
-显式固定同一 smoke 口径，`configs/tho_research_v2_formal.yaml` 固定正式实验运行口径：全量窗口、
-`batch_size=128`、`data.preload_windows=true`、`training.num_workers=0`、方向 gate、epoch 级任务指标和
-`training.final_checkpoint=best_task`。批量 runner 仍可通过 `--set` 覆盖模型结构、输出目录和 seed。
-
-正式训练使用全量窗口和 batch128 效率口径。单个模型示例：
-
-```bash
-./.venv/bin/python scripts/train_tho_small.py \
+./.venv/bin/python scripts/train_tho.py \
   --config configs/tho_research_v2.yaml \
-  --set data.max_train_windows=null \
-  --set data.max_val_windows=null \
-  --set data.train_sample_seed=20260610 \
-  --set data.val_sample_seed=20260611 \
-  --set model.name=patch_mixer1d \
-  --set model.patch_len=256 \
-  --set model.patch_stride=128 \
-  --set model.mixer_layers=2 \
-  --set loss.high_freq_weight=0.2 \
-  --set loss.relative_envelope_weight=0.03 \
-  --set loss.phase_alignment_weight=0.0 \
-  --set loss.signed_corr_weight=0.2 \
-  --set training.epochs=50 \
-  --set training.batch_size=128 \
-  --set training.patience=8 \
-  --set training.min_delta=0.001 \
-  --set training.use_amp=false \
+  --set training.device=cuda:0
+```
+
+### 实现 smoke
+
+Smoke 不是科研结果：
+
+```bash
+./.venv/bin/python scripts/train_tho.py \
+  --config configs/tho_research_v2.yaml \
+  --set data.max_train_windows=32 \
+  --set data.max_val_windows=32 \
+  --set training.epochs=2 \
+  --set training.batch_size=8 \
+  --set training.seed=20260802 \
   --set training.device=cuda:0 \
-  --set training.show_progress=false \
-  --set outputs.run_root=runs/tho_research_v2_20260620_softz_model_candidates
+  --set outputs.run_root=runs/tho_restart_b0_smoke
 ```
 
-候选模型批量重跑可以使用：
+### 单 seed 预算 pilot
+
+默认 config 即 pilot：完整 train/validation、50 epochs、seed `20260802`、batch 128。只需指定设备：
 
 ```bash
-./.venv/bin/python scripts/run_20260620_softz_candidates.py
-```
-
-脚本默认跑 6 个候选模型，每个模型 3 个 seed：`20260700`、`20260710`、`20260837`。
-`20260837` 是本轮额外加入的随机 seed。2026-06-20 结果记录在
-`docs/experiments/softz_20260620_model_candidates.md`。该批结果保留当时的历史选择口径：
-`rr_peak_band_abs_error` 曾作为主护栏，`rr_peak_abs_error` 只作为原始尖峰和局部毛刺
-诊断指标。自当前统计口径起，research v2 的 `rr_peak_abs_error` 会基于
-`rr_peak_valid_mask` 跳过 THO/BCG 坏段；旧式整窗 raw peak 记录在
-`rr_peak_unmasked_abs_error`，旧 run 如需横向比较应重算。`band_limited_corr`、
-`best_lag_corr` 和 `best_lag_sec` 只作为低频形态和残余时移诊断指标。
-
-### 实验矩阵 manifest
-
-多因素对比实验可以用小脚本生成 manifest，保存预期实验配置和 `tag -> overrides` 映射。
-这类脚本只负责展开规格，不负责启动训练、分配 GPU 或管理并行。正式训练仍以
-`train_tho_small.py --set ...` 作为原子入口，并行度由 shell、tmux、任务队列或人工调度控制。
-
-E1 STFT 信息增益实验的 manifest 生成器：
-
-```bash
-./.venv/bin/python scripts/build_e1_stft_info_gain_manifest.py \
-  --phase main \
-  --encoder conv2d \
-  --manifest runs/tho_research_v2_20260620_e1_stft_info_gain_manifest.csv
-```
-
-当前并发训练批量脚本会直接启动训练，并支持 `--device` 重复传入与 `--max-parallel`
-多进程并行。主实验仍建议先用 `--dry-run` 检查矩阵和 manifest，再正式跑。这些脚本默认
-显式启用 `data.preload_windows=true` 和 `training.num_workers=0`，让完整多 epoch 训练复用
-内存中的窗口；streaming 多 worker 只建议在内存受限的诊断场景临时手动覆盖。脚本仍会按
-并发槽位错峰 30 秒启动，以减轻预加载数据、DataLoader 构建和 GPU 初始化峰值；如需关闭
-错峰可传 `--start-stagger-sec 0`。历史
-`run_20260620_softz_candidates.py` 是串行候选脚本，不属于这套并发调度入口。
-
-```bash
-# E3-B：可学习频带前端探针
-./.venv/bin/python scripts/run_e3_b_probe.py \
-  --dry-run \
-  --manifest runs/e3_b_manifest.csv
-
-# F-A2 confidence guard：复用 F0/原 F-A2/F-A2b，只训练低置信加权 STFT loss 候选
-./.venv/bin/python scripts/run_f_a2_confidence_guard_probe.py \
-  --dry-run \
-  --manifest runs/f_a2_confidence_guard_manifest.csv
-
-# F-A2 peak-anchor：复用既有 F-A2 系列，只训练 F-A2f peak-anchor 候选
-./.venv/bin/python scripts/run_f_a2_peak_anchor_probe.py \
-  --dry-run \
-  --manifest runs/f_a2_peak_anchor_manifest.csv
-
-# E3-C1：STFT 注入位置消融，4 个 dual arm + 2 个 time_only substrate × 3 seed
-./.venv/bin/python scripts/run_e3_c1_injection_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/e3_c1_manifest.csv
-
-# E3-C2：对 C1B/C1C 补 native token 注入消融，默认使用 checkpoint.pt 对齐 metrics.csv 口径
-./.venv/bin/python scripts/eval_e3_c_ablate_stft.py \
-  --runs-root runs/e3_c1 \
-  --arm e3_c1b_token_pre_mixer \
-  --branch dual \
-  --mode normal \
-  --mode stft_zero \
-  --mode stft_shuffle_time \
-  --mode stft_shuffle_batch \
-  --device cuda:0 \
-  --max-parallel 1 \
-  --manifest runs/e3_c2_c1b_ablation_manifest.csv
-
-./.venv/bin/python scripts/eval_e3_c_ablate_stft.py \
-  --runs-root runs/e3_c1 \
-  --arm e3_c1c_token_mid_mixer \
-  --branch dual \
-  --mode normal \
-  --mode stft_zero \
-  --mode stft_shuffle_time \
-  --mode stft_shuffle_batch \
-  --device cuda:1 \
-  --max-parallel 1 \
-  --manifest runs/e3_c2_c1c_ablation_manifest.csv
-
-# E3-C2：按 paired time-only baseline 固定分层，分表输出两类 delta
-./.venv/bin/python scripts/summarize_e3_c2_layers.py \
-  --manifest runs/e3_c1_manifest.csv \
-  --output-dir runs/e3_c2
-
-# E5-A0：gated native pre-mixer 首轮探针，1 个 time-only substrate + 2 个 dual arm × 3 seed
-./.venv/bin/python scripts/run_e5_a0_gated_fusion_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/e5_a0_manifest.csv
-
-# E5-A1：cross-attention 从头训练，1 个 time-only substrate + 2 个 dual arm × 3 seed
-./.venv/bin/python scripts/run_e5_a1_cross_attention_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/e5_a1_manifest.csv
-
-# E5-A2：同 seed time-only checkpoint warm-start + 分组学习率
-# 先确认 E5-A1T 的 time-only run 已完成，并把 root 传给 --warm-start-root。
-./.venv/bin/python scripts/run_e5_a2_cross_attention_warm_start_probe.py \
-  --warm-start-root runs/e5_a1/e5_a1t_native_time_only/time_only \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/e5_a2_manifest.csv
-
-# G 系列：STFT 输入时间分辨率和频带范围 G0/G1 pilot
-./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
-  --stage g0-g1 \
-  --dry-run \
-  --manifest runs/g_series_stft_input_manifest.csv
-
-./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
-  --stage g0-g1 \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 4 \
-  --manifest runs/g_series_stft_input_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/eval_topk_checkpoints.py \
-  --runs-root runs/g_series_stft_input \
-  --top-k 3 \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 4 \
-  --metric-workers 4 \
-  --metrics-chunk-size 128 \
-  --start-stagger-sec 30 \
-  --output-prefix runs/g_series_stft_input_topk
-
-# G2：使用 G1 选出的 C 档 win=2000/hop=250 扫频带与编码方式
-./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
-  --stage g2 \
-  --seed 20260700 \
-  --seed 20260837 \
-  --seed 20260901 \
-  --dry-run \
-  --manifest runs/g_series_stft_input_g2_manifest.csv
-
-./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
-  --stage g2 \
-  --seed 20260700 \
-  --seed 20260837 \
-  --seed 20260901 \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 4 \
-  --manifest runs/g_series_stft_input_g2_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/eval_topk_checkpoints.py \
-  --runs-root runs/g_series_stft_input \
-  --top-k 3 \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 4 \
-  --metric-workers 4 \
-  --metrics-chunk-size 128 \
-  --start-stagger-sec 30 \
-  --output-prefix runs/g_series_stft_input_topk
-
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/g_series_stft_input_g2_manifest.csv \
-  --output runs/g_series_stft_input_g2_summary.csv \
-  --paired-output runs/g_series_stft_input_g2_paired_delta.csv \
-  --strata-output runs/g_series_stft_input_g2_strata_delta.csv
-
-# G3：复核 C/B x {wide_8p0, bandenergy, high_1p2_8p0}
-./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
-  --stage g3 \
-  --seed 20260700 \
-  --seed 20260837 \
-  --seed 20260901 \
-  --dry-run \
-  --manifest runs/g_series_stft_input_g3_manifest.csv
-
-./.venv/bin/python scripts/run_g_series_stft_input_probe.py \
-  --stage g3 \
-  --seed 20260700 \
-  --seed 20260837 \
-  --seed 20260901 \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 4 \
-  --manifest runs/g_series_stft_input_g3_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/eval_topk_checkpoints.py \
-  --runs-root runs/g_series_stft_input \
-  --top-k 3 \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 4 \
-  --metric-workers 4 \
-  --metrics-chunk-size 128 \
-  --start-stagger-sec 30 \
-  --manifest runs/g_series_stft_input_topk_g3_eval_manifest.csv \
-  --output-prefix runs/g_series_stft_input_topk
-
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/g_series_stft_input_g3_manifest.csv \
-  --output runs/g_series_stft_input_g3_summary.csv \
-  --paired-output runs/g_series_stft_input_g3_paired_delta.csv \
-  --strata-output runs/g_series_stft_input_g3_strata_delta.csv
-```
-
-`run_f_a2_peak_anchor_probe.py` 用于 F-A2f：复用 `F0_native_stft_pre_mixer`、
-原 `F-A2_dist_bandE`、`F-A2b_dist_bandE_w005`、`F-A2d_confScoreInv_w005` 和
-`F-A2e_confLevelMedLow_w005`，只训练 `F-A2f_peak_anchor_w005` 三个 seed。该候选保留
-`stft_band_energy_weight=0.005`，新增 `stft_peak_anchor_weight=0.005` 和
-`stft_peak_anchor_sigma_bins=1.0`，用于约束 target STFT 主峰 bin 附近的预测概率。
-训练完成后继续使用 `summarize_f_a_stft_loss.py` 汇总：
-
-```bash
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_a2_peak_anchor_manifest.csv \
-  --output runs/f_a2_peak_anchor_summary.csv \
-  --paired-output runs/f_a2_peak_anchor_paired_delta.csv \
-  --strata-output runs/f_a2_peak_anchor_strata_delta.csv
-```
-
-`run_f_a2_target_rr_anchor_probe.py` 用于 F-A2g：复用 F0、F-A2、F-A2b、
-F-A2d、F-A2e 和 F-A2f，只训练 `F-A2g_targetRRAware_w005` 三个 seed。该候选保留
-`dist=0.02`、`bandE=0.005`、`peak_anchor=0.005`，并设置
-`stft_peak_anchor_mode=target_rr_guard`、`stft_peak_anchor_guard_tolerance_bpm=2.0`、
-`stft_peak_anchor_target_quantile=0.5`，用于屏蔽明显低于样本级 target STFT
-frame-peak 中位数的次谐波 anchor 帧。推荐按双卡、每卡两个任务、90 秒错峰启动：
-
-```bash
-./.venv/bin/python scripts/run_f_a2_target_rr_anchor_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 4 \
-  --manifest runs/f_a2_target_rr_anchor_manifest.csv \
-  --start-stagger-sec 90
-```
-
-训练完成后汇总：
-
-```bash
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_a2_target_rr_anchor_manifest.csv \
-  --output runs/f_a2_target_rr_anchor_summary.csv \
-  --paired-output runs/f_a2_target_rr_anchor_paired_delta.csv \
-  --strata-output runs/f_a2_target_rr_anchor_strata_delta.csv
-```
-
-`run_f_b_aux_probe.py` 用于 F-B0/F-B1：复用 `F0_native_stft_pre_mixer`，只训练
-`F-B0_aux_enc1` 与 `F-B1_aux_consistency_detach`。该 probe 不进入 residual 或输出空间路线，
-只验证 target-STFT auxiliary head 是否只是旁路，以及 delayed consistency 是否能传导到
-最终 waveform。推荐先 dry-run 生成 manifest：
-
-```bash
-./.venv/bin/python scripts/run_f_b_aux_probe.py \
-  --dry-run \
-  --manifest runs/f_b_aux_manifest.csv
-
-./.venv/bin/python scripts/run_f_b_aux_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/f_b_aux_manifest.csv \
-  --start-stagger-sec 90
-```
-
-F-B/F-C summary 继续复用 `summarize_f_a_stft_loss.py`，该脚本当前同时识别 `F-A*`、`F-B*`
-与 `F-C*` 候选：
-
-```bash
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_b_aux_manifest.csv \
-  --output runs/f_b_aux_summary.csv \
-  --paired-output runs/f_b_aux_paired_delta.csv \
-  --strata-output runs/f_b_aux_strata_delta.csv
-```
-
-`run_f_b2_residual_probe.py` 用于受控推进 F-B2：复用 `F0_native_stft_pre_mixer` 与已完成的
-`F-B1_aux_consistency_detach`，只训练 `F-B2_low_complex_residual`。该版本保留主 waveform
-decoder，并从 shared token 预测低频复数 STFT residual，经 iSTFT 形成小幅 residual 加到主输出：
-
-```bash
-./.venv/bin/python scripts/run_f_b2_residual_probe.py \
-  --dry-run \
-  --manifest runs/f_b2_residual_manifest.csv
-
-./.venv/bin/python scripts/run_f_b2_residual_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/f_b2_residual_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_b2_residual_manifest.csv \
-  --output runs/f_b2_residual_summary.csv \
-  --paired-output runs/f_b2_residual_paired_delta.csv \
-  --strata-output runs/f_b2_residual_strata_delta.csv
-```
-
-`run_f_b_feature_extractor_probe.py` 用于 3.5 特征提取器选择：复用
-`F0_native_stft_pre_mixer` 与 `F-B1_aux_consistency_detach`，只训练
-`F-B1b_aux_enc2_band_aware_consistency`。该 probe 只替换 auxiliary head 为
-`model.fb_aux_head=enc2_band_aware_aux`，不改 residual：
-
-```bash
-./.venv/bin/python scripts/run_f_b_feature_extractor_probe.py \
-  --dry-run \
-  --manifest runs/f_b_feature_extractor_manifest.csv
-
-./.venv/bin/python scripts/run_f_b_feature_extractor_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/f_b_feature_extractor_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_b_feature_extractor_manifest.csv \
-  --output runs/f_b_feature_extractor_summary.csv \
-  --paired-output runs/f_b_feature_extractor_paired_delta.csv \
-  --strata-output runs/f_b_feature_extractor_strata_delta.csv
-```
-
-`run_f_b_enc3_residual_probe.py` 用于用户明确要求继续后的 Enc3 / residual cap
-受控 probe：复用 `F0_native_stft_pre_mixer` 与 `F-B2_low_complex_residual`，只训练
-`F-B3_enc3_tfgrid_residual` 和 `F-B3b_enc3_tfgrid_residual_cap`。前者把 residual
-head 换成 TF-Grid-lite complex STFT head；后者在同一 head 后增加
-`model.fb_residual_energy_cap=0.05`，限制 residual RMS 不超过 base waveform RMS 的 5%：
-
-```bash
-./.venv/bin/python scripts/run_f_b_enc3_residual_probe.py \
-  --dry-run \
-  --manifest runs/f_b_enc3_residual_manifest.csv
-
-./.venv/bin/python scripts/run_f_b_enc3_residual_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/f_b_enc3_residual_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_b_enc3_residual_manifest.csv \
-  --output runs/f_b_enc3_residual_summary.csv \
-  --paired-output runs/f_b_enc3_residual_paired_delta.csv \
-  --strata-output runs/f_b_enc3_residual_strata_delta.csv
-```
-
-`run_f_c_stft_output_probe.py` 用于 F-C0 low-complex-STFT 主输出受控 probe：复用
-`F0_native_stft_pre_mixer`，只训练 `F-C0_low_complex_stft_output` 三个 seed。该版本不改 target
-或 metrics 口径，只把模型主输出改为 `0-3Hz` complex STFT real/imag，再经 iSTFT 还原 waveform。
-F-C0 会保留 `training.checkpoint_gate.metric=auto_direction`，但把 `training.checkpoint_gate.max`
-放宽到 `1.0`，用于避免高风险输出空间在 `0.5` 严格方向护栏下完全不产出 checkpoint/metrics：
-
-```bash
-./.venv/bin/python scripts/run_f_c_stft_output_probe.py \
-  --dry-run \
-  --manifest runs/f_c_stft_output_manifest.csv
-
-./.venv/bin/python scripts/run_f_c_stft_output_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/f_c_stft_output_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_c_stft_output_manifest.csv \
-  --output runs/f_c_stft_output_summary.csv \
-  --paired-output runs/f_c_stft_output_paired_delta.csv \
-  --strata-output runs/f_c_stft_output_strata_delta.csv
-```
-
-`precompute_f_d_highfreq_cache.py` 与 `run_f_d_highfreq_probe.py` 用于 F-D 高频输入表征受控 probe。
-F-D 不改变 waveform 输出空间；第一批只比较 `F-D0_high_stft_anchor`、`F-D1_high_cwt` 和
-`F-D2_high_cwt_modulation`，并复用 `F0_native_stft_pre_mixer` 作为 paired anchor。F-D1/F-D2
-使用离线缓存，缓存文件仍通过历史 `data.sst_cache_path` / batch `sst` 通道传入模型：
-
-```bash
-./.venv/bin/python scripts/precompute_f_d_highfreq_cache.py \
+./.venv/bin/python scripts/train_tho.py \
   --config configs/tho_research_v2.yaml \
-  --mode cwt \
-  --out runs/f_d_highfreq_cache/high_cwt_1_8hz_36x180.npz \
-  --workers 1
-
-./.venv/bin/python scripts/precompute_f_d_highfreq_cache.py \
-  --config configs/tho_research_v2.yaml \
-  --mode modulation \
-  --out runs/f_d_highfreq_cache/high_cwt_modulation_1_8hz_8x180.npz \
-  --workers 1
-
-./.venv/bin/python scripts/run_f_d_highfreq_probe.py \
-  --dry-run \
-  --manifest runs/f_d_highfreq_manifest.csv
-
-./.venv/bin/python scripts/run_f_d_highfreq_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/f_d_highfreq_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_d_highfreq_manifest.csv \
-  --output runs/f_d_highfreq_summary.csv \
-  --paired-output runs/f_d_highfreq_paired_delta.csv \
-  --strata-output runs/f_d_highfreq_strata_delta.csv
+  --set training.device=cuda:0
 ```
 
-`run_f_d_feature_extractor_probe.py` 用于 F-D 特征提取网络小分支：复用
-`F0_native_stft_pre_mixer`、`F-D0_high_stft_anchor`、`F-D1_high_cwt` 和
-`F-D2_high_cwt_modulation`，只训练 `F-D1b_high_cwt_cnn_tcn` 与
-`F-D2b_high_cwt_modulation_res_tcn` 三个 seed。该 probe 不改变 high-CWT/modulation 缓存、loss 或输出定义。
+若 pilot 的最小 validation Local RR epoch 位于 41–50，正式预算统一为 80 epochs；否则为 50。Pilot 不进入正式结果，也不查看 test。
+
+### 三 seed 正式 baseline
+
+冻结正式 epoch 数后，分别运行 seed `20260811 / 20260812 / 20260813`。示例中的 `<EPOCHS>` 只能替换为 pilot 决定的 50 或 80：
 
 ```bash
-./.venv/bin/python scripts/run_f_d_feature_extractor_probe.py \
-  --dry-run \
-  --manifest runs/f_d_feature_extractor_manifest.csv
-
-./.venv/bin/python scripts/run_f_d_feature_extractor_probe.py \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --manifest runs/f_d_feature_extractor_manifest.csv \
-  --start-stagger-sec 90
-
-./.venv/bin/python scripts/summarize_f_a_stft_loss.py \
-  --manifest runs/f_d_feature_extractor_manifest.csv \
-  --output runs/f_d_feature_extractor_summary.csv \
-  --paired-output runs/f_d_feature_extractor_paired_delta.csv \
-  --strata-output runs/f_d_feature_extractor_strata_delta.csv
+./.venv/bin/python scripts/train_tho.py \
+  --config configs/tho_research_v2.yaml \
+  --set training.epochs=<EPOCHS> \
+  --set training.seed=20260811 \
+  --set training.device=cuda:0 \
+  --set outputs.run_root=runs/tho_restart_b0_formal/seed_20260811
 ```
 
-每个 run 输出到配置中的 `outputs.run_root/<timestamp>/`；`configs/tho_small.yaml` 默认是
-`runs/tho_small`，`configs/tho_research_v2.yaml` 默认是 `runs/tho_research_v2`。常见产物包括：
+另外两个 seed 使用完全相同配置，只改变训练 seed 与输出目录。
 
-- `config.yaml`：本次 resolved config 快照。
-- `audit.csv`：训练数据工厂生成的数据审计摘要。
-- `baseline_metrics.csv`：val 子集平凡基线指标。
-- `train_history.csv`：每轮训练和验证损失。
-- `epoch_metrics.csv`：开启 `training.epoch_metrics.enabled=true` 时，每轮全量 val 的 epoch 级任务指标汇总。
-- `metrics.csv`：`training.final_checkpoint` 指定 checkpoint 在 val 子集上的逐窗口指标。
-- `checkpoint.pt`：验证损失最优 checkpoint。
-- `checkpoint_best_rr.pt` 与 `checkpoint_best_task.pt`：开启 epoch metrics 时，分别按 epoch 级 `rr_peak_band_robust_abs_error_mean`，以及 robust RR → breath count → 旧 peak-band → spec 排序链择优的 checkpoint。
-- `metrics_val_loss.csv`、`metrics_best_rr.csv`、`metrics_best_task.csv`：开启对应 checkpoint 时的逐窗口指标；
-  `metrics.csv` 始终对应 `training.final_checkpoint` 指定的最终评价 checkpoint。
-- `checkpoint_top1/2/3.pt` 与 `checkpoint_topk.csv`：按 `val_loss` 排序保留的 topK checkpoint，用于探索期复评。
-- `test_metrics.csv`、`test_summary.csv`、`test_eval_manifest.csv`：通过 `eval_tho_test.py` 对固定 checkpoint 做 held-out test 评价时生成。
+## Checkpoint 复评
+
+Validation 复评：
+
+```bash
+./.venv/bin/python scripts/eval_tho.py \
+  --checkpoint runs/<run>/checkpoint_best_local_rr.pt \
+  --split val \
+  --metrics-output /tmp/tho_restart_val_metrics.csv
+```
+
+Designated test 必须显式确认：
+
+```bash
+./.venv/bin/python scripts/eval_tho.py \
+  --checkpoint runs/<run>/checkpoint_best_local_rr.pt \
+  --split test \
+  --confirm-designated-test \
+  --metrics-output runs/<run>/test_metrics.csv
+```
+
+Test 命令会同时计算五项 primary、IBI + coverage、coherence 与 nDTW。不得用 test 结果重选 epoch、模型、频带或阈值。
+
+## 当前 run 产物
+
+- `config.yaml`：resolved config。
+- `run_manifest.json`：运行命令、Git commit 与 dirty 状态。
+- `audit.csv`：数据加载审计摘要。
+- `train_history.csv`：每 epoch 仅含五项 train loss、`val_core_loss` 和 `val_local_rr_mae`。
+- `checkpoint_best_local_rr.pt`：Local RR 严格最小 epoch；完全并列时保留更早 epoch。
+- `checkpoint_final.pt`：固定预算最后 epoch，仅用于追溯。
+- `metrics.csv`：选中 checkpoint 的完整 validation 逐 sample 指标。
+- `metrics_summary.csv`：逐 sample direct-mean validation 汇总。
+- `test_metrics.csv` / `test_metrics_summary.csv`：显式 designated test 评价产物。
+- `*_metrics_manifest.json`：checkpoint 复评的命令、split、配置与代码版本。
 - `train.log`：训练日志。
 
-### `eval_tho_small.py`
-
-从 `checkpoint.pt` 重新生成指标。脚本委托 checkpoint 评价函数执行加载、配置一致性校验和指标计算。默认读取 checkpoint 同目录的 `config.yaml`。
-
-```bash
-./.venv/bin/python scripts/eval_tho_small.py \
-  --checkpoint runs/tho_small/<timestamp>/checkpoint.pt \
-  --metrics-output /tmp/tho_metrics.csv
-```
-
-注意：显式传入 `--config` 或 `--set` 时，会校验模型结构、验证集定义、窗口参数和评价频带等关键字段，避免用不一致配置误评 checkpoint。
-checkpoint 复评只构建验证集数据；即使训练配置中 `data.preload_windows=true`，也不会为了评价预加载 train 窗口。
-逐窗口指标中的 Butterworth 带通滤波器系数会按 `(fs, low_hz, high_hz, order)` 缓存；缓存只跳过重复系数设计，不改变
-`sosfiltfilt` 的输出。同一窗口内还会复用 pred/target 的带通结果和频带功率分布，避免 RR peak-band、zero-cross、
-band-limited corr、best-lag corr、RR spec 和 spectrum similarity 重复计算同一中间量。
-
-### `eval_tho_test.py`
-
-固定一个已经由 val 选定的 checkpoint，在 held-out test split 上生成最终评价结果。默认读取 checkpoint 同目录的
-`config.yaml`，使用 `data.test_split` / `data.max_test_windows` / `data.test_sample_strategy` /
-`data.test_sample_seed`；旧 run 的配置若没有这些字段，则默认 `test_split=test`、全量 test 窗口、
-`test_sample_strategy=stratified_random`、`test_sample_seed=training.seed`。
-
-```bash
-./.venv/bin/python scripts/eval_tho_test.py \
-  --checkpoint runs/tho_research_v2/<timestamp>/checkpoint.pt
-```
-
-默认输出到 checkpoint 同目录：
-
-- `test_metrics.csv`：test split 逐窗口指标。
-- `test_summary.csv`：test split 汇总指标。
-- `test_eval_manifest.csv`：checkpoint、config、split、采样策略、窗口数和输出路径。
-
-脚本不会保存 `test_predictions.npz`；预测只在内存中用于计算指标，避免为全量 test 额外占用磁盘空间。test 结果只应在
-模型结构、seed 候选和 checkpoint/topK 选择已经由 val 固定后生成，不能反向参与模型选择。
-
-### `run_g_series_test_eval.py`
-
-按外部 specs CSV 并发运行一批 `eval_tho_test.py`。CSV 至少包含 `label,seed,checkpoint` 三列；当前 G 系列代表
-checkpoint 清单保存为 `configs/eval_specs/g_series_test_eval_20260705.csv`。脚本本身不内置 checkpoint，后续换模型时只需换
-`--specs`。
-
-```bash
-./.venv/bin/python scripts/run_g_series_test_eval.py \
-  --specs configs/eval_specs/g_series_test_eval_20260705.csv \
-  --output-dir runs/test_eval_g_series_20260705 \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --metric-workers 4 \
-  --metrics-chunk-size 128
-```
-
-- `--max-parallel` 是总并发数；两块卡各一个进程时设为 `2`，两块卡各两个进程时设为 `4`。
-- `--metric-workers` 是每个 test 进程内的 metrics chunk 子进程数；`--metrics-chunk-size` 控制每个 chunk 处理的窗口数。
-- 默认 `--target-cache-dir` 为 `output-dir/target_feature_cache`。同一批 test 评价中，共享 test split、target 和 mask 的 checkpoint 会复用 target 侧 envelope、频谱、带通、RR 和局部 RR 特征；cache key 包含 target 数组、`dataset_row_id`、`rr_peak_valid_mask` 和相关评价配置。
-- `--dry-run` 只写调度 manifest 并打印计划。
-- 默认跳过已经存在完整 `metrics/summary/manifest` 输出的任务；需要覆盖时加 `--force`。
-
-### G 系列四模型完整测试集可视化
-
-`export_g_series_comparison_cache.py` 与 `plot_g_series_comparison.py` 将 G 系列的 4 个验证集冻结 checkpoint
-用于逐窗口波形复核。冻结清单是
-`configs/eval_specs/g_series_four_model_visualization.csv`：`g0_time_only` 使用 seed `20260837` 的
-`checkpoint_top1`，其余 3 个模型使用 seed `20260700` 的既定 topK checkpoint。它们来自 legacy validation
-top-k 选择，不使用 test 指标重选。
-
-先由用户执行 GPU 缓存导出。建议先加 `--dry-run` 复核 checkpoint、设备和输出路径；去掉该参数后才会创建完整
-测试集缓存。
-
-```bash
-./.venv/bin/python scripts/export_g_series_comparison_cache.py \
-  --spec configs/eval_specs/g_series_four_model_visualization.csv \
-  --output-dir runs/g_series_four_model_cache \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --dry-run
-
-./.venv/bin/python scripts/export_g_series_comparison_cache.py \
-  --spec configs/eval_specs/g_series_four_model_visualization.csv \
-  --output-dir runs/g_series_four_model_cache \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2
-```
-
-缓存只有在 4 个模型预测、共享 BCG/THO 数组和 manifest 全部完成校验后才标为 `complete`。完成后再运行纯 CPU
-绘图；它不重做 GPU 推理。`--workers auto` 在 102 核机器上使用 48 个进程，每个 worker 内限制
-OMP/MKL/OpenBLAS/NUMEXPR 为单线程。
-
-```bash
-./.venv/bin/python scripts/plot_g_series_comparison.py \
-  --cache-dir runs/g_series_four_model_cache \
-  --metrics-dir runs/test_eval_g_series_20260709_local_rr_canonical \
-  --output-dir runs/g_series_four_model_plots \
-  --filter exclude-input-stable \
-  --stable-fraction 0.20 \
-  --workers auto
-```
-
-每张 PNG 顶部包含 BCG soft-z 输入与 `0.05–0.7 Hz` 呼吸带分量；中间依次为 4 个子图，每张叠加同一呼吸带滤波后的
-THO 与一个模型的滤波预测。THO 使用左 y 轴、模型预测使用右 y 轴，二者都使用 Matplotlib 默认 autoscale，避免某个信号的幅值范围压缩另一个信号。归一化 Welch 频谱与逐窗口 canonical 指标表位于同一底行；
-频谱仅用于比较频率结构，不比较绝对能量。
-默认过滤只从 BCG 输入计算稳定度，排除稳定度最高的 20%，不读取 THO、任何模型输出或 test metrics；它不是目标侧或
-模型侧的后验挑样。输出目录默认不可覆盖，完整成功时包含 `window_index.csv`、`filter_summary.csv`、`figures/` 和
-`plot_manifest.json`。需要复用同一个输出目录重新绘图时显式添加 `--overwrite`，脚本会覆盖同名 PNG、CSV 和 manifest，
-但不会清理目录中的其他文件。任一窗口失败时只写 `plot_failure_manifest.json`，不发布 `plot_manifest.json`。小规模 CPU
-smoke 可额外传入 `--workers 2 --max-plots 2`。
-
-### `eval_topk_checkpoints.py`
-
-重评一个 runs 根目录下每个 run 的 `checkpoint_top1/2/3.pt`，生成 `metrics_topN.csv`，并按任务主指标为每个 run
-选择一个 topK checkpoint。当前选择排序为：
-
-1. `rr_peak_band_robust_abs_error_mean`（主护栏）
-2. `breath_count_zero_cross_abs_error_mean`（主护栏）
-3. `rr_peak_band_abs_error_mean`（主护栏持平时的辅助项）
-4. `rr_spec_abs_error_mean`（主护栏持平时的辅助项）
-
-```bash
-./.venv/bin/python scripts/eval_topk_checkpoints.py \
-  --runs-root runs/f_d_highfreq \
-  --top-k 3 \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --metric-workers 4 \
-  --metrics-chunk-size 128 \
-  --start-stagger-sec 30 \
-  --output-prefix runs/f_d_highfreq_topk
-```
-
-输出：
-
-- `<output-prefix>_eval_manifest.csv`：本次 topK 评价任务。
-- `<output-prefix>_all_metrics.csv`：所有已评估 `metrics_topN.csv` 的逐 checkpoint 汇总。
-- `<output-prefix>_best_by_rr.csv`：每个 run 按上面排序择优后的 checkpoint。
-
-常用控制：
-
-- `--dry-run`：只写 manifest 并打印计划，不执行评价或择优。
-- `--eval-only`：只生成 `metrics_topN.csv`，不输出择优表。
-- `--select-only`：跳过评价，直接从已有 `metrics_topN.csv` 生成 all/best 表；若旧 CSV 缺少任一当前主护栏，脚本会拒绝择优并要求先重评。
-- `--force`：覆盖已有 `metrics_topN.csv`。
-- `--metric-workers N`：每个评价进程用 N 个 metrics chunk 子进程并行计算逐窗口指标。worker 内会把
-  `evaluation.metric_workers` 固定为 `1`，避免外层进程池和旧线程池嵌套。外层 `--max-parallel` 与内层
-  `--metric-workers` 会相乘占用 CPU；例如 `--max-parallel 4 --metric-workers 4` 最多会有 16 个 metrics 子进程。
-- `--metrics-chunk-size N`：每个 metrics chunk 处理的窗口数，默认 `128`。窗口很多时可保留默认；窗口较少时 worker 数会自动受 chunk 数限制。
-- `--target-cache-dir DIR`：target-side feature cache 目录。默认根据 `output-prefix` 生成
-  `<output-prefix>_target_feature_cache`。同一 run 的 `checkpoint_top1/2/3.pt` 共享 val split、target 和 mask 时会复用 target 侧计算。
-- `--start-stagger-sec S`：按并发槽位错开启动，降低同时读取 checkpoint/config 和初始化评价进程造成的硬盘峰值。例如
-  `--max-parallel 4 --start-stagger-sec 30` 会给同一批并发任务分配 `0/30/60/90s` 启动延迟。
-
-训练内 epoch metrics：每个 epoch 复用 `validate()` 的全量 val 预测计算任务指标。正式 runner 会传入
-`training.epoch_metrics.metrics_workers=auto` 和 `training.epoch_metrics.target_workers=auto`，并由
-`batch_utils.build_launch_plan()` 把实际并发槽数写入 `RESP_TRAIN_MAX_PARALLEL`，训练进程再按 CPU 核数和
-并发数自动下调每个 run 的 metrics / target worker。checkpoint 选择以 epoch 级汇总为颗粒度；当前任务排序链为
-`rr_peak_band_robust_abs_error_mean -> breath_count_zero_cross_abs_error_mean -> rr_peak_band_abs_error_mean -> rr_spec_abs_error_mean`。
-逐窗口 metrics 仍只用于诊断。
-
-注意：这是同一验证集内的 topK 任务指标择优，适合探索复核；正式结论需要标注为 validation top-k selection。
-
-## 诊断分析
-
-### BCG 呼吸带二次谐波显著窗口分层
-
-`analyze_bcg_second_harmonic.py` 用于离线回答：当输入 BCG 的低频呼吸成分在 THO
-参考呼吸率二倍频附近出现显著峰值或能量时，四个 G 系列模型能否恢复正确的呼吸节律。
-它是使用 THO 参考构造的先验分析，不是推理时质量检测器，也不改变训练、checkpoint、
-测试指标或数据划分。
-
-分析只使用 `0.05-0.7Hz` 的 BCG / THO 低频分量。先要求 THO 的稳健呼吸率与频谱呼吸率
-相差不超过 `1 bpm`，且 `2*f_THO` 仍在 `0.7Hz` 内，再按验证集冻结的阈值分层：
-
-- `strong_harmonic`：BCG 主峰接近 `2*f_THO`，且二倍频相对基频、全带能量占比均达到阈值。
-- `peak_doubling`：只有 BCG 主峰接近 `2*f_THO`，能量条件未同时达到阈值。
-- `harmonic_prominent`：二倍频能量显著，但 BCG 主峰未落在 `2*f_THO` 容差内。
-- `harmonic_negative`：上述倍频证据均不成立。
-
-前三层的并集记为 `harmonic_positive_union`。正式汇报必须同时给出各子层覆盖率，不能只报告并集。
-
-完整流程如下。`discover` 和 `apply` 会主动移除配置中的 smoke 窗口上限，覆盖完整 val / test split；
-输出文件使用排他写入，若目标目录已有同名文件应换新目录，避免覆盖既有结果。
-
-1. 在完整验证集生成形态特征和候选阈值：
-
-```bash
-./.venv/bin/python scripts/analyze_bcg_second_harmonic.py discover \
-  --config configs/tho_research_v2.yaml \
-  --split val \
-  --output-dir runs/bcg_second_harmonic_20260710/validation_full_v2
-```
-
-2. 画高值、阈值附近和低值窗口，人工复核候选：
-
-```bash
-./.venv/bin/python scripts/plot_bcg_second_harmonic.py validation-review \
-  --config configs/tho_research_v2.yaml \
-  --features runs/bcg_second_harmonic_20260710/validation_full_v2/validation_harmonic_features.csv \
-  --proposal runs/bcg_second_harmonic_20260710/validation_full_v2/proposed_harmonic_thresholds.json \
-  --candidate-id candidate_040 \
-  --output-dir runs/bcg_second_harmonic_20260710/validation_full_v2/figures_candidate_040
-```
-
-3. 写下复核说明并冻结阈值。冻结文件只允许由 val proposal 产生，后续 `apply` 不会修改它：
-
-```bash
-./.venv/bin/python scripts/analyze_bcg_second_harmonic.py freeze \
-  --proposal runs/bcg_second_harmonic_20260710/validation_full_v2/proposed_harmonic_thresholds.json \
-  --candidate-id candidate_040 \
-  --output runs/bcg_second_harmonic_20260710/harmonic_thresholds.json \
-  --review-note "已复核高值、阈值附近和低值案例；正式结果分 strong/peak/prominent 子层报告"
-```
-
-4. 将冻结阈值一次性应用到完整独立测试集，并单独检查不可判定窗口覆盖率：
-
-```bash
-./.venv/bin/python scripts/analyze_bcg_second_harmonic.py apply \
-  --config configs/tho_research_v2.yaml \
-  --split test \
-  --thresholds runs/bcg_second_harmonic_20260710/harmonic_thresholds.json \
-  --output-dir runs/bcg_second_harmonic_20260710/test_v2
-```
-
-5. 复用现有 12 份逐窗口 metrics，按固定标签比较四个模型：
-
-```bash
-./.venv/bin/python scripts/analyze_bcg_second_harmonic.py summarize-metrics \
-  --labels runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv \
-  --eval-root runs/test_eval_g_series_20260709_local_rr_canonical \
-  --dataset-index /mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/training/dataset_index.csv \
-  --output-dir runs/bcg_second_harmonic_20260710/model_metrics
-```
-
-6. 先预演 checkpoint、设备和阳性窗口数；正式导出涉及 GPU 和较大预测文件，由用户手动运行：
-
-```bash
-./.venv/bin/python scripts/export_harmonic_predictions.py \
-  --spec configs/eval_specs/g_series_test_eval_20260705.csv \
-  --labels runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv \
-  --output-dir runs/bcg_second_harmonic_20260710/predictions \
-  --device cuda:0 \
-  --device cuda:1 \
-  --max-parallel 2 \
-  --dry-run
-```
-
-去掉 `--dry-run` 后正式导出。每个 NPZ 保存固定阳性窗口的 `r_tho_hat`、`tho_ref` 和 `dataset_row_id`，
-旁边的 manifest 记录 checkpoint、配置与标签哈希。
-
-7. 对导出的模型输出计算纠正状态并画平衡案例：
-
-```bash
-./.venv/bin/python scripts/analyze_bcg_second_harmonic.py summarize-corrections \
-  --labels runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv \
-  --thresholds runs/bcg_second_harmonic_20260710/harmonic_thresholds.json \
-  --predictions-dir runs/bcg_second_harmonic_20260710/predictions \
-  --output-dir runs/bcg_second_harmonic_20260710/corrections
-
-./.venv/bin/python scripts/plot_bcg_second_harmonic.py model-cases \
-  --config configs/tho_research_v2.yaml \
-  --labels runs/bcg_second_harmonic_20260710/test_v2/test_harmonic_labels.csv \
-  --thresholds runs/bcg_second_harmonic_20260710/harmonic_thresholds.json \
-  --corrections runs/bcg_second_harmonic_20260710/corrections/model_harmonic_correction.csv \
-  --predictions-dir runs/bcg_second_harmonic_20260710/predictions \
-  --output-dir runs/bcg_second_harmonic_20260710/figures \
-  --seed 20260837
-```
-
-“已纠正”定义为模型输出主峰回到 THO 基频容差内，且二倍频 / 基频能量比相对输入下降至少
-`20%`；只满足能量比下降记为“部分纠正”。这一判据用于解释模型是否抑制倍频，不替代
-稳健 RR、周期计数、局部 RR 和时延校正后形态指标。
-
-### `baseline_tho_hilbert.py`
-
-在 val 子集运行平凡基线，输出逐窗口 RR/主频、峰谷、包络相关和频谱相似度指标。脚本复用训练数据工厂口径，保证 baseline 与训练验证子集一致。
-
-```bash
-./.venv/bin/python scripts/baseline_tho_hilbert.py \
-  --config configs/tho_small.yaml \
-  --output /tmp/baseline_metrics.csv
-```
-
-BCG 频谱主峰法和峰谷检测法只是诊断参照，不是训练目标。质量好的片段可能能靠规则法读出合理结果，质量差的片段规则法失败也不等同于模型路线失败。
-
-### `plot_tho_predictions.py`
-
-读取一个 run 的 `metrics.csv`，按指标选出待查看窗口，再用 `checkpoint.pt` 重新推理这些窗口并生成预测/参考波形诊断图。默认输出到 `<run-dir>/plots/`。
-
-```bash
-./.venv/bin/python scripts/plot_tho_predictions.py \
-  --run-dir runs/tho_small/<timestamp> \
-  --max-plots 8
-```
-
-默认按 `rr_peak_abs_error` 从大到小优先绘制，便于先看共同好段内原始尖峰和峰谷形态最差的窗口。
-若要复核坏段对旧式整窗 raw peak 的污染，可改用 `--sort-by rr_peak_unmasked_abs_error`。
-如果要按当前主 RR 护栏筛查，则改为 `--sort-by rr_peak_band_robust_abs_error`。例如：
-
-```bash
-./.venv/bin/python scripts/plot_tho_predictions.py \
-  --run-dir runs/tho_small/<timestamp> \
-  --sort-by rr_peak_band_robust_abs_error \
-  --max-plots 8
-```
-
-如果窗口里存在短时极端体动，普通整窗 z-score 会把正常呼吸区间压得很小，导致视觉判断偏向
-异常段。此时可以使用 robust 显示尺度重画：
-
-```bash
-./.venv/bin/python scripts/plot_tho_predictions.py \
-  --run-dir runs/tho_small/<timestamp> \
-  --sort-by rr_peak_band_robust_abs_error \
-  --scale-mode robust \
-  --max-plots 8
-```
-
-### `audit_motion_dominance.py`
-
-审计指定 run 的窗口是否被短时极端事件支配。脚本读取 run 的 `config.yaml` 和
-`metrics.csv`，按同一数据口径重新取出 input/target，输出 input 与 target 各自的
-robust 尺度、std/robust 比例、top 1% 能量占比、极端样本占比和建议归因：
-
-- `task_regular`：input/target 都未被极端事件支配。
-- `task_input_robustness`：input 被支配但 target 未被支配，优先在训练/评价任务侧做鲁棒处理或降权。
-- `dataset_label_review`：target 被支配但 input 未被支配，优先回查标签/目标信号质量。
-- `dataset_quality_flag`：input 和 target 都被支配，优先在数据集制作侧沉淀质量标记，训练侧再按标记分层或降权。
-
-```bash
-./.venv/bin/python scripts/audit_motion_dominance.py \
-  --run-dir runs/tho_small/<timestamp> \
-  --output runs/diagnostics/<name>/motion_dominance.csv
-```
-
-只审计指定窗口：
-
-```bash
-./.venv/bin/python scripts/audit_motion_dominance.py \
-  --run-dir runs/tho_small/<timestamp> \
-  --row-id 10196 \
-  --row-id 12908
-```
-
-### `diagnose_f_a2_guard_windows.py`
-
-生成 F-A2 护栏窗口级诊断表。脚本读取 F-A manifest，按 seed 配对 F0 与候选 run，
-输出逐窗口 paired delta、诊断分桶汇总、easy 退化 top list 和 hard 改善 top list。
-它只做离线诊断，不启动训练，也不改写已有 run 产物。
-
-```bash
-./.venv/bin/python scripts/diagnose_f_a2_guard_windows.py \
-  --manifest runs/f_a2_confidence_guard_manifest.csv \
-  --candidate-label F-A2b_dist_bandE_w005 \
-  --candidate-label F-A2d_confScoreInv_w005 \
-  --candidate-label F-A2e_confLevelMedLow_w005 \
-  --output-dir runs/diagnostics/f_a2_guard_windows \
-  --top-n 50
-```
-
-主要输出：
-
-- `window_delta.csv`：逐 `dataset_row_id` 的 F0 vs candidate delta 和诊断标签。
-- `bucket_summary.csv`：按 target RR、baseline spectrum、count error、lag 和 clean/dirty easy 等分桶汇总。
-- `top_degraded_easy.csv`：baseline easy 中退化最大的窗口，用于后续 paired 波形图复核。
-- `top_improved_hard.csv`：baseline hard 中改善最大的窗口，用于确认 hard 收益来源。
-
-### `plot_paired_f_a2_windows.py`
-
-按 `diagnose_f_a2_guard_windows.py` 的输出清单，重新推理 F0 与候选 run，并把 target、
-F0 prediction、candidate prediction、残差和低频频谱画到同一张图。脚本按 run_dir 批量缓存
-预测，避免每个窗口重复加载 checkpoint。需要真实 checkpoint 推理时按仓库 GPU 规则提权运行。
-
-```bash
-./.venv/bin/python scripts/plot_paired_f_a2_windows.py \
-  --window-list runs/diagnostics/f_a2_guard_windows/top_degraded_easy.csv \
-  --candidate-label F-A2b_dist_bandE_w005 \
-  --output-dir runs/diagnostics/f_a2_guard_windows/paired_plots_top_degraded_fa2b \
-  --max-rows 8 \
-  --scale-mode robust \
-  --device cuda:0
-```
-
-复核最严重 dirty easy：
-
-```bash
-./.venv/bin/python scripts/plot_paired_f_a2_windows.py \
-  --window-list runs/diagnostics/f_a2_guard_windows/window_delta.csv \
-  --candidate-label F-A2b_dist_bandE_w005 \
-  --filter-column dirty_easy_lowspec \
-  --sort-by delta_rr_peak_band_abs_error \
-  --output-dir runs/diagnostics/f_a2_guard_windows/paired_plots_dirty_easy_fa2b \
-  --max-rows 8 \
-  --scale-mode robust \
-  --device cuda:0
-```
-
-复核 hard 改善窗口：
-
-```bash
-./.venv/bin/python scripts/plot_paired_f_a2_windows.py \
-  --window-list runs/diagnostics/f_a2_guard_windows/top_improved_hard.csv \
-  --candidate-label F-A2b_dist_bandE_w005 \
-  --output-dir runs/diagnostics/f_a2_guard_windows/paired_plots_top_improved_hard_fa2b \
-  --max-rows 8 \
-  --scale-mode robust \
-  --device cuda:0
-```
-
-### `summarize_f_a2_stft_ratios.py`
-
-对同一批窗口重新推理并补算 target、F0 和 candidate 的 `0.1-0.7Hz`、`0.3-1.2Hz`、
-`1.2-3Hz` STFT band energy，以及 `log(harm/low)` 和 `log(high/low)` delta。
-默认 STFT 口径与 F-A loss 一致：`fs=100Hz`、`win_length=3000`、`hop_length=500`、
-`n_fft=3000`、`center=False` 近似口径。
-
-```bash
-./.venv/bin/python scripts/summarize_f_a2_stft_ratios.py \
-  --window-list runs/diagnostics/f_a2_guard_windows/top_degraded_easy.csv \
-  --candidate-label F-A2b_dist_bandE_w005 \
-  --output runs/diagnostics/f_a2_guard_windows/stft_ratios_top_degraded_fa2b.csv \
-  --max-rows 30 \
-  --device cuda:0
-```
-
-### `summarize_tho_runs.py`
-
-汇总 `runs/tho_small/*` 下各 run 的训练损失、模型指标、平凡基线指标和审计数量。
-输出中的 `selection_task_*` 列用于模型选择；当前两个主护栏依次是
-`selection_task_rr_peak_band_robust_abs_error_mean` 和
-`selection_task_breath_count_zero_cross_abs_error_mean`。`selection_waveform_*` 列用于波形诊断；
-`best_val_loss` 只作为训练代理指标，不作为最终选择依据。
-
-```bash
-./.venv/bin/python scripts/summarize_tho_runs.py \
-  --runs-root runs/tho_small \
-  --output /tmp/tho_runs_summary.csv
-```
-
-汇总表适合先筛查趋势，但不能替代诊断图。尤其是当前数据量小、窗口间相关性强，单个 run 的数值差异需要配合固定验证集和多训练 seed 才能形成更稳的判断。
-
-## 分类建议
-
-当脚本数量继续增加时，推荐迁移到以下结构：
-
-```text
-scripts/
-  data/
-    audit_tho_dataset.py
-  train/
-    train_tho_small.py
-    eval_tho_small.py
-    eval_tho_test.py
-  diagnostics/
-    baseline_tho_hilbert.py
-    plot_tho_predictions.py
-  summarize_tho_runs.py
-```
-
-迁移前需要同步更新文档、测试和常用命令。
+不再生成或解释旧 `checkpoint.pt`、`checkpoint_best_rr.pt`、`checkpoint_best_task.pt`、`checkpoint_topN.pt`、`epoch_metrics.csv`、旧 target-feature cache 或旧指标 summary。

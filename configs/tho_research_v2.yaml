@@ -9,12 +9,12 @@ data:
   target_task: waveform
   bcg_input_key: bcg_rawish_segment_soft_z_key
   target_key: target_waveform_segment_soft_z_key
-  max_train_windows: 1024
-  max_val_windows: 256
+  max_train_windows: null
+  max_val_windows: null
   max_test_windows: null
   filter_unusable: true
   drop_nonfinite_windows: false
-  preload_windows: false
+  preload_windows: true
   train_sample_strategy: stratified_random
   val_sample_strategy: stratified_random
   test_sample_strategy: stratified_random
@@ -31,95 +31,62 @@ window:
   duration_sec: 180
 
 model:
-  name: unet1d_tiny
+  name: patch_mixer1d
   in_channels: 1
   out_channels: 1
   base_channels: 16
+  patch_len: 256
+  patch_stride: 128
+  mixer_layers: 2
+  overlap_window: hann
+  output_smoothing_kernel: 1
 
 loss:
-  envelope_weight: 1.0
-  spectrum_weight: 0.2
-  smooth_weight: 0.10
-  high_freq_weight: 0.2
-  relative_envelope_weight: 0.03
-  phase_alignment_weight: 0.005
-  band_waveform_weight: 0.0
-  curvature_weight: 0.0
-  rhythm_weight: 0.0
-  signed_cosine_weight: 0.0
-  # 极性 warmup（E1-C/D 定稿，两项叠加）：把反相 basin 填浅，避免约 1/3 seed 因初始化
-  # 落入反极性被方向门控拦掉。验证：E1-C1 5/5 seed 不翻转、E1-D 6/6 配对仍保住 STFT
-  # 净增益（Δfrac_gt_1≈-2.3pp）、且 band/best-lag corr 同向提升、gate fail 降为 0。
-  # signed_cosine：纯早期 warmup，0.1→0.0（ep6 后归零，不影响后期增益判定）。
-  signed_cosine_schedule:
-    mode: linear
-    start_epoch: 1
-    end_epoch: 6
-    start_weight: 0.1
-    end_weight: 0.0
-  # signed_corr：早期加强 + 常驻方向项，0.6→0.2（ep6 后保留 0.2 作为持续极性约束）。
-  signed_corr_weight: 0.2
-  signed_corr_schedule:
-    mode: linear
-    start_epoch: 1
-    end_epoch: 6
-    start_weight: 0.6
-    end_weight: 0.2
-  signed_rms_envelope_weight: 0.0
-  signed_mean_weight: 0.0
-  si_sdr_weight: 0.0
-  phase_alignment_zero_weight: 0.5
-  phase_alignment_lag_weight: 0.5
-  phase_alignment_lag_penalty_weight: 0.1
-  phase_alignment_max_sec: 0.5
-  phase_alignment_step_sec: 0.1
-  phase_alignment_temperature: 0.05
-  signed_env_temperature: 0.25
-  signed_mean_window_sec: 2.0
-  rhythm_min_period_sec: 2.0
-  rhythm_max_period_sec: 20.0
-  rhythm_step_sec: 0.25
-  rhythm_temperature: 0.08
-  envelope_window_sec: 2.0
-  spectrum_low_hz: 0.05
-  spectrum_high_hz: 0.7
+  band_low_hz: 0.05
+  band_high_hz: 0.70
+  scale_eps: 1.0e-8
+  dynamic_eps: 1.0e-8
+  corr_eps: 1.0e-8
+  power_eps: 1.0e-8
+  envelope_eps: 1.0e-8
+  max_lag_sec: 0.30
+  global_rhythm_window_sec: 180
+  local_rhythm_window_sec: 30
+  local_rhythm_hop_sec: 10
+  envelope_window_sec: 10
+  envelope_step_sec: 5
+  sync_weight: 1.0
+  rhythm_weight: 0.5
+  effort_weight: 0.25
+  pol_start_weight: 0.05
+  pol_fraction: 0.15
+  smooth_l1_beta: 0.5
 
 evaluation:
-  max_lag_sec: 1.0
-  lag_bandpass_order: 4
+  local_rr_window_sec: 60
+  local_rr_step_sec: 15
+  ibi_peak_distance_samples: 142
+  ibi_match_tolerance_sec: 0.5
+  ibi_coverage_threshold: 0.80
+  ndtw_fs: 10
+  ndtw_radius_sec: 0.30
 
 training:
-  epochs: 3
-  batch_size: 8
+  epochs: 50
+  batch_size: 128
   learning_rate: 0.001
-  num_workers: 4
-  persistent_workers: true
-  prefetch_factor: 2
-  seed: 20260610
+  adam_betas: [0.9, 0.999]
+  adam_eps: 1.0e-8
+  weight_decay: 0.0
+  num_workers: 0
+  persistent_workers: false
+  prefetch_factor: null
+  seed: 20260802
   device: auto
-  patience: 5
-  min_delta: 0.0
   lr_scheduler: none
   grad_clip_norm: null
   use_amp: false
   show_progress: auto
-  checkpoint_gate:
-    metric: ""
-    min: null
-    max: null
-  epoch_metrics:
-    enabled: true
-    metrics_workers: 32
-    metrics_chunk_size: 64
-    target_workers: 32
-    target_chunk_size: 64
-
-baseline:
-  enabled: true
-  bandpass_low_hz: 0.05
-  bandpass_high_hz: 0.7
-  filter_order: 4
 
 outputs:
-  run_root: runs/tho_research_v2
-  max_prediction_windows: 32
+  run_root: runs/tho_restart_b0_pilot

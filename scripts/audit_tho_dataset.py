@@ -13,13 +13,15 @@ from resp_train.data.factory import build_tho_data
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="生成胸带小规模训练数据审计表")
-    parser.add_argument("--config", default="configs/tho_small.yaml")
+    parser = argparse.ArgumentParser(description="生成当前 THO 协议的数据审计表")
+    parser.add_argument("--config", default="configs/tho_research_v2.yaml")
     parser.add_argument("--output", default="audit.csv")
     parser.add_argument("--set", dest="overrides", action="append", default=[], help="OmegaConf dotlist 覆盖，可重复传入")
     args = parser.parse_args()
 
     cfg = load_config(args.config, overrides=args.overrides)
+    # 一次性索引审计不读取波形；避免沿用正式训练的全量 preload。
+    cfg.data.preload_windows = False
     data = build_tho_data(cfg)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

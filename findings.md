@@ -1,21 +1,13 @@
-# 稳定发现
+# 当前研究口径
 
-本文件只记录跨阶段稳定结论；详细证据仍放在 `docs/experiments/*.md`。
+当前工作树只承载 2026-08-02 冻结的 THO 呼吸重建重启协议。完整定义见 `docs/experiments/loss_metrics_restart_plan_20260729.md`。
 
-## THO research v2 soft-z
+- 数据与 split 沿用 research v2 soft-z 口径，不改变 target、subject/session 隔离或窗口长度。
+- 第一版 baseline 是纯时域 `patch_mixer1d`，从头训练；旧实验 checkpoint 和结果不参与比较。
+- 正式输出统一为完整 180 秒上的 $\Pi=S\circ B$，频带为 `0.05–0.70 Hz`。
+- Loss 只保留同步、节律、努力趋势和训练早期极性四项。
+- Checkpoint 只按完整 validation 的 Local RR MAE 严格最小值选择，关闭 early stopping。
+- Validation/test 使用逐 sample direct mean；IBI 同时报告 MedAE 与 coverage；coherence 和 nDTW 只在 designated test 运行；不增加 event F1 或 CCC。
+- 第一阶段只做 smoke、单 seed pilot 和三 seed baseline，不打开 designated test。
 
-- 当前横向比较默认只看 soft-z research v2 主线；旧 rawish state-aligned 结果只作结构或失败模式参考。
-- 当前实验比较 anchor 倾向 `G3_C_wide_8p0`；尚未定义交付期稳定入口。
-- `G3_C_bandenergy` 只保留为选择性修正候选，暂不替代宽频 STFT anchor。
-- 旧 E/F 系列路线不再作为默认扩展方向；下一步优先围绕难恢复窗口和选择性修正设计。
-
-## 指标与选择
-
-- 当前排序优先看 `rr_peak_band_robust_abs_error` 与 `breath_count_zero_cross_abs_error`，其他频域、形态、包络和 lag-aware 指标主要用于解释。
-- 局部呼吸率后续围绕新版局部 RR 指标展开；旧局部 RR 算法已淘汰，不进入当前 summary、证据账本或汇报正文。
-- 训练 / 验证损失只作训练诊断；模型选择必须结合任务指标、checkpoint 选择口径和 held-out test 复评。
-
-## 重评边界
-
-- 指标、mask、target feature cache 或 checkpoint 选择口径变化后，旧 run 若要参与当前讨论，应按当前口径重评或重训。
-- 被淘汰的指标和路线只保留一处归档记录，不在当前文档体系中反复解释。
+旧代码、旧配置和旧说明不放入仓库内 archive，也不维持兼容入口；需要追溯时使用 Git 历史。历史 `runs/`、checkpoint、CSV、图表和原始数据不改写。
