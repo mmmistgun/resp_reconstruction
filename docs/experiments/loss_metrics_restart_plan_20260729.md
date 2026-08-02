@@ -4,7 +4,7 @@
 
 最后更新：2026-08-02
 
-状态：核心协议与首批矩阵已冻结；实现、定向回归与一次性 `B0_smoke` 已通过，正式 pilot 尚未启动
+状态：实现、GPU batch 128 验收与 `B0_pilot` 已通过；正式三 seed 预算冻结为 50 epochs，尚未启动
 
 ## 1. 定位
 
@@ -1089,9 +1089,9 @@ Designated test 只在 loss、五项 primary、IBI、两个 test-only 指标、�
 
 | 阶段 | 实验 ID | 范围 | seed | 最大 epoch | 产出与停止条件 | 状态 |
 |---|---|---|---:|---:|---|---|
-| 实现验收 | `B0_smoke` | `max_train_windows=32`、`max_val_windows=32`、`batch_size=8`；不是科研结果 | `20260802` | `2` | 只检查真实数据 forward/backward、finite、日志、Local RR checkpoint 和产物契约；确定性测试已通过，GPU smoke 尚待用户运行 | 待运行 |
-| 预算 pilot | `B0_pilot` | 完整 train + 完整 validation | `20260802` | `50` | 不看 test；若非有限、无法产生 Local RR checkpoint，或选中 checkpoint 的 validation signed PCC `<0`，则停止正式 baseline 并另立诊断任务 | 待运行 |
-| 正式 baseline | `B0_formal` | 完整 train + 完整 validation，全部从头训练 | `20260811 / 20260812 / 20260813` | 由 pilot 冻结为 `50` 或 `80` | 三个 seed 分别报告及作描述性 mean ± SD；不做 paired delta、bootstrap 或显著性检验 | 待运行 |
+| 实现验收 | `B0_smoke` | `max_train_windows=32`、`max_val_windows=32`、`batch_size=8`；另做 batch 128 单 batch GPU 验收；不是科研结果 | `20260802` | `2` | 检查真实数据 forward/backward、finite、日志、Local RR checkpoint、产物契约与正式 batch 显存可行性 | 已通过 |
+| 预算 pilot | `B0_pilot` | 完整 train + 完整 validation | `20260802` | `50` | 不看 test；若非有限、无法产生 Local RR checkpoint，或选中 checkpoint 的 validation signed PCC `<0`，则停止正式 baseline 并另立诊断任务 | 已通过；最佳 epoch=7 |
+| 正式 baseline | `B0_formal` | 完整 train + 完整 validation，全部从头训练 | `20260811 / 20260812 / 20260813` | `50`（由 pilot 规则冻结） | 三个 seed 分别报告及作描述性 mean ± SD；不做 paired delta、bootstrap 或显著性检验 | 待运行 |
 
 正式最大 epoch 使用预先冻结的自适应规则：若 `B0_pilot` 的最小 validation Local RR epoch 位于 `41–50`（端点包含），正式预算固定为 `80`；否则固定为 `50`。只使用最佳 epoch 的位置作此决定，不根据 Whole RR、PCC、effort、IBI 或 test 调预算。Pilot 仅用于冻结训练时间范围，不进入正式 baseline 数值汇总；正式三个 seed 不复用 pilot seed。
 
@@ -1187,7 +1187,7 @@ Subject-macro、跨 sample 比例 pooling、paired-seed delta、bootstrap 与显
 
 ### 阶段 C：当前实施
 
-Loss、metrics、validation/checkpoint、配置、现行入口与定向测试已经统一替换；当前测试集合 `240 passed`。合成信号、轻量实验生命周期和真实数据 CPU `B0_smoke` 均已通过；此后普通训练不重复整套资格验证。Loss–metric 桥接验证不属于本阶段，若未来确有必要另立任务。正式 pilot 与三 seed baseline 仍由用户另行启动。
+Loss、metrics、validation/checkpoint、配置、现行入口与定向测试已经统一替换；当前测试集合 `240 passed`。合成信号、轻量实验生命周期、真实数据 CPU `B0_smoke`、GPU batch 128 验收和完整 `B0_pilot` 均已通过；此后普通训练不重复整套资格验证。Loss–metric 桥接验证不属于本阶段，若未来确有必要另立任务。下一步只运行三 seed 正式 baseline，不打开 designated test。
 
 ## 13. 留档与兼容策略
 
@@ -1201,4 +1201,26 @@ Loss、metrics、validation/checkpoint、配置、现行入口与定向测试已
 - CPU `B0_smoke`：32 train + 32 validation、batch 8、2 epochs、seed `20260802`，运行成功；`val_local_rr_mae` 从 `2.022188` 降至 `1.059387 bpm`。
 - Smoke 生成 resolved config、数据审计、最小复现 manifest、两个 checkpoint、训练历史和选中 checkpoint 的完整 validation metrics/summary。验收目录为 `/tmp/tho_restart_b0_smoke_final/20260802_012915_672737`。
 - Validation checkpoint 复评成功；test 入口在缺少显式确认时拒绝执行。
-- 以上仅属实现验收，不构成科研结果。未运行 designated test、完整 pilot、三 seed 正式 baseline 或任何长时间 GPU 训练。
+- 以上仅属实现验收，不构成科研结果；后续 pilot 结果单独记录于第 15 节。当前仍未运行 designated test 或三 seed 正式 baseline。
+
+## 15. B0 Pilot 结果与正式预算冻结（2026-08-02）
+
+运行目录：`runs/tho_restart_b0_pilot/20260802_171938_601573`。运行基于 Git commit `da41f8f`，启动时工作树干净；使用完整 `10141` 个 train 窗口、`2675` 个 validation 窗口、`batch_size=128`、seed `20260802`、固定 50 epochs，未执行 designated test 推理或指标计算。
+
+Checkpoint selector 在第 7 epoch 达到最低 validation Local RR MAE `0.640705 bpm`，因此按第 8.2 节预注册规则，正式三 seed 最大 epoch 冻结为 **50**，不扩展到 80。`val_core_loss` 的最低点在第 50 epoch（`0.350582`），而 Local RR 最优较早出现；这正是将 Local RR 作为唯一 selector、而不按最低 loss 选 checkpoint 的预期情形，不据此改变选模规则。
+
+选中 checkpoint 的完整 validation 结果：
+
+| 指标 | 结果 |
+|---|---:|
+| Whole-window RR MAE | `0.549586 bpm` |
+| Local RR MAE | `0.640705 bpm` |
+| Local RR prediction-valid fraction | `1.000000` |
+| Global effort Spearman | `0.485396` |
+| Local effort Spearman | `0.494586` |
+| Lag-aware signed PCC | `0.839307` |
+| IBI-MedAE | `0.082923 s`（`1960` 个可解释 sample） |
+| IBI coverage | `0.846381` |
+| IBI interpretable fraction | `0.732710` |
+
+停止条件均未触发：训练和评价无 NaN/Inf，Local RR checkpoint 正常产生，平均 signed PCC 为正。需要保留的唯一明显风险是 `18.58%` 的样本最佳 lag 命中 `±0.30 s` 边界，且 p95 为 `0.30 s`；正负边界命中近似对称（`254/243`）。当前不基于 pilot validation 扩大 lag，因为这会改变已冻结的时间容忍定义并使正式 baseline 口径漂移。该现象随正式结果如实报告；若未来要判断是否存在范围截断，作为独立 lag-sensitivity 任务处理，不阻塞当前三 seed baseline。
