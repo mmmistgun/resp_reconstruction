@@ -9,12 +9,12 @@
 - 数据：2026-06-20 research v2 soft-z。
 - 输入：`bcg_rawish_segment_soft_z_key`。
 - target：`target_waveform_segment_soft_z_key`。
-- baseline：纯时域 `patch_mixer1d`。
+- 最终学习模型：纯时域 `patch_mixer1d`；M1 多尺度候选未入选。
 - 训练 loss：`L_sync + 0.25 L_effort`；rhythm 与短期 polarity 已由消融删除。
 - 正式输出：$\Pi=S\circ B$，统一 `0.05–0.70 Hz`。
 - checkpoint：完整 validation Local RR MAE 最小 epoch。
 - early stopping：关闭。
-- designated test：模型与训练预算全部冻结后才显式运行。
+- designated test：最终 PatchMixer 三个 seed 与固定带传统参照已经冻结，尚未执行。
 
 ## 数据与 split 审计
 
@@ -144,11 +144,11 @@ done
 
 第五个实验 `B0_final_loss_patchmixer` 在物理精简前同时设置 `rhythm_weight=0` 与 `pol_start_weight=0`，三个 seed 已完成并确认没有联合删除交互，结果位于 `runs/tho_restart_b0_final_loss_patchmixer`。当前默认配置已经直接采用最终两项 loss，并拒绝旧字段重新进入训练；旧命令由对应 run manifest 追溯，不再作为当前可运行入口保留。
 
-结果接受 `dirty-but-runtime-audited` provenance 例外，详见协议第 20 节。零权重分量已经从当前实现物理删除，下一步是第六个多尺度纯时域模型；仍不运行 designated test。
+结果接受 `dirty-but-runtime-audited` provenance 例外，详见协议第 20 节。零权重分量已经从当前实现物理删除。
 
-### M1 参数匹配多尺度纯时域模型
+### M1 参数匹配多尺度纯时域模型（已完成，未入选）
 
-M1 使用 `multiscale_patch_mixer1d`，四个 patch 尺度为 `256 / 512 / 1024 / 2048` 点，`base_channels=1`，总参数 `11664`；B0 为 `11408`。模型 raw head 不内置频带投影，继续统一使用公共 $\Pi=S\circ B$。
+M1 使用 `multiscale_patch_mixer1d`，四个 patch 尺度为 `256 / 512 / 1024 / 2048` 点，`base_channels=1`，总参数 `11664`；B0 为 `11408`。模型 raw head 不内置频带投影，继续统一使用公共 $\Pi=S\circ B$。以下命令只追溯已完成的验收和正式运行，不再用于追加预算或调参。
 
 先做一次 batch 128 GPU 验收；该结果不构成科研结果：
 
@@ -188,7 +188,15 @@ for seed in 20260811 20260812 20260813; do
 done
 ```
 
-M1 不运行额外 pilot，也不打开 designated test。
+M1 validation 提高了 effort，但 Whole/Local RR、signed PCC、IBI 与 coverage 均退化，因此未入选最终模型集合，也不进入 designated test。详细结果见协议第 22 节。
+
+### 最终模型集合
+
+- 学习模型：`B0_final_loss_patchmixer` 三个 Local RR 最优 checkpoint。
+- 确定性参照：`F0_fixed_band_bcg`。
+- M1：仅作 validation 负结果留档。
+
+在 designated test 执行前，不再根据 validation 修改 loss、模型、epoch、频带、阈值或 detector。
 
 ## 固定呼吸带传统基线
 

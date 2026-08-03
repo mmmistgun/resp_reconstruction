@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-03
+最后更新：2026-08-04
 
-状态：最终 loss `L_sync + 0.25 L_effort` 已由三项消融和联合删除实验确认并物理精简；下一步为多尺度纯时域模型，designated test 仍封存
+状态：最终 loss 与模型集合已由 validation 冻结；选中 `patch_mixer1d + L_sync + 0.25 L_effort`，M1 未入选，等待一次性 designated test
 
 ## 1. 定位
 
@@ -1260,6 +1260,7 @@ Lag 边界风险在三个 seed 上稳定存在：最佳 lag 命中 `±0.30 s` �
 | 3 | `A2_no_effort` | `effort_weight: 0.25 → 0` | `20260811 / 20260812 / 20260813` | 50 | 已完成；支持保留 |
 | 4 | `A3_no_pol` | `pol_start_weight: 0.05 → 0` | `20260811 / 20260812 / 20260813` | 50 | 已完成；支持删除 |
 | 5 | `B0_final_loss_patchmixer` | 同时使用 `rhythm_weight=0`、`pol_start_weight=0`，模型不变 | 同上 | 50 | 已完成；接受 provenance 例外 |
+| 6 | `M1_multiscale_time` | 参数匹配的 `2.56 / 5.12 / 10.24 / 20.48 s` 四分支纯时域模型 | 同上 | 50 | 已完成；effort 改善但其余任务轴退化，未入选 |
 
 不增加 `no_sync`：`L_sync` 定义了方向正确的残余时延容忍同步任务，是核心目标而不是可选辅助约束；删除它会改变任务，而不是普通的 loss 精简消融。
 
@@ -1406,4 +1407,37 @@ test 状态。新增定向测试与现有协议测试通过，当前全量测试
 
 除模型外，数据、split、最终两项 loss、optimizer、batch 128、50 epochs、三个正式 seed、Local RR checkpoint selector、metrics、聚合与无效值规则全部不变。不增加预算 pilot或权重搜索。工程阶段先运行一次 batch 128 单 batch GPU 验收；通过后直接运行 seed `20260811 / 20260812 / 20260813`，逐 seed 报告并给出描述性 mean ± sample SD。Designated test、lag sensitivity 和历史 STFT 双分支继续不进入本实验。
 
-模型注册、raw-head 直通融合、参数匹配、架构冻结、最终两项 loss、实验生命周期和固定带 baseline 的全量回归测试为 `255 passed`；尚未启动 M1 GPU 验收或正式训练。
+模型注册、raw-head 直通融合、参数匹配、架构冻结、最终两项 loss、实验生命周期和固定带 baseline 的全量回归测试为 `255 passed`。Batch 128 GPU 验收与正式三 seed 已完成，结果和模型冻结决定见第 22 节。
+
+## 22. M1 Validation 结果与最终模型集合冻结（2026-08-04）
+
+M1 正式结果位于 `runs/tho_restart_m1_multiscale_time`。三个 run 均使用 commit `a47475d`、完整 train/validation、50 epochs、batch 128、seed `20260811 / 20260812 / 20260813` 和冻结的最终两项 loss。三次训练均完整结束，历史与核心指标 finite，checkpoint epoch 与最低 Local RR epoch 一致，逐样本结果只包含 validation。
+
+按 sample direct mean，再对三个 seed 报告算术 mean ± sample SD：
+
+| Validation 指标 | `B0_final_loss_patchmixer` | `M1_multiscale_time` | M1 相对结果 |
+|---|---:|---:|---|
+| Whole-window RR MAE（bpm） | `0.5127 ± 0.0030` | `0.5286 ± 0.0075` | 退化 |
+| Local RR MAE（bpm） | `0.6270 ± 0.0008` | `0.6514 ± 0.0057` | 退化 |
+| Global effort Spearman | `0.4880 ± 0.0025` | `0.5116 ± 0.0054` | 改善 |
+| Local effort Spearman | `0.4982 ± 0.0011` | `0.5261 ± 0.0048` | 改善 |
+| Lag-aware signed PCC | `0.8397 ± 0.0007` | `0.8284 ± 0.0085` | 退化 |
+| IBI-MedAE（s） | `0.08430 ± 0.00117` | `0.09168 ± 0.00182` | 退化 |
+| IBI coverage | `0.84553 ± 0.00110` | `0.83388 ± 0.00491` | 退化 |
+| IBI interpretable fraction | `0.72710 ± 0.00411` | `0.70604 ± 0.00617` | 退化 |
+
+M1 的最佳 epoch 为 `50 / 48 / 4`，而最终 PatchMixer 为 `7 / 7 / 8`。M1 三个 seed 的 effort 指标均改善，但 Whole/Local RR、signed PCC、IBI 与 coverage 均下降，且跨 seed 波动更大。Local RR 是预注册的唯一 checkpoint selector，因此不构造综合分数用 effort 改善覆盖主任务退化。两个 seed 的最佳 epoch 接近预算末端不触发事后 80-epoch 扩展：M1 固定 50 epochs 是参数匹配结构比较的一部分，结果已在多数任务轴落后，追加预算会成为结果驱动搜索。
+
+完整性检查均通过：Local RR prediction-valid fraction 全部为 `1.0`，prediction degenerate fraction 全部为 `0.0`，每个 seed 只有 `1/2675` 个负 PCC 样本；无 NaN/Inf、split 变化、checkpoint 失配或 test 推理。最佳 lag 边界命中率为 `19.17% ± 0.14%`，略高于最终 PatchMixer 的 `18.13% ± 0.04%`，不改变已冻结 `±0.30 s` 规则。
+
+三个 M1 manifest 均记录 `git_dirty=true`。运行时主工作树的可见 dirty 内容为 `.gitignore` 与 `docs/methods/`，不在训练导入或数据路径中；用户已明确拒绝额外 worktree，并按既定口径接受 runtime-audited dirty provenance。M1 结果可用于当前 validation 模型选择，但不声称是完全干净工作树的最高等级复现证据。
+
+### 22.1 最终模型集合
+
+Validation 决策至此冻结，不再继续 M1 预算、base channel 或融合权重搜索：
+
+- 最终学习模型：`patch_mixer1d + L_sync + 0.25 L_effort`，使用 `B0_final_loss_patchmixer` 的三个 `checkpoint_best_local_rr.pt`。
+- 确定性传统参照：`F0_fixed_band_bcg`。
+- `M1_multiscale_time`：作为参数匹配的任务交换/负结果留档，不进入 designated test。
+
+下一步只按第 7.3 节进行一次性 designated test：分别评价最终 PatchMixer 的三个 seed，并评价一次确定性固定带参照；test 不参与模型、epoch、频带、阈值或 detector 的重新选择。若在 test 前再次修改 loss、模型、训练预算或 validation 选择，本节冻结状态自动失效，必须重新明确模型集合后才能打开 test。
