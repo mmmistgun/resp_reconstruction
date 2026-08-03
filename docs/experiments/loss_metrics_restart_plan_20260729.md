@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-02
+最后更新：2026-08-03
 
-状态：实现、GPU batch 128 验收与 `B0_pilot` 已通过；正式三 seed 预算冻结为 50 epochs，尚未启动
+状态：实现、GPU batch 128 验收、`B0_pilot` 与三 seed `B0_formal` 均已通过；designated test 仍封存
 
 ## 1. 定位
 
@@ -12,7 +12,7 @@
 
 本轮设计不继承此前实验路线、默认 loss、主指标、排序规则、checkpoint 选择逻辑或既有结论。代码与文档不另建 `archive/`：旧版本依靠 Git 历史追溯，历史 run 原地保留但不进入新实验比较。
 
-Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检查并按冻结定义实现。本次只运行了定向单测、轻量生命周期验收与一次性 CPU `B0_smoke`；不启动 pilot 或正式训练，也不重评历史 checkpoint。
+Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检查并按冻结定义实现。定向单测、轻量生命周期验收、一次性 CPU `B0_smoke`、GPU batch 128 验收、预算 pilot 与三 seed 正式 baseline 均已完成；未重评历史 checkpoint，也未执行 designated test。
 
 ## 2. 当前目标与边界
 
@@ -1091,7 +1091,7 @@ Designated test 只在 loss、五项 primary、IBI、两个 test-only 指标、�
 |---|---|---|---:|---:|---|---|
 | 实现验收 | `B0_smoke` | `max_train_windows=32`、`max_val_windows=32`、`batch_size=8`；另做 batch 128 单 batch GPU 验收；不是科研结果 | `20260802` | `2` | 检查真实数据 forward/backward、finite、日志、Local RR checkpoint、产物契约与正式 batch 显存可行性 | 已通过 |
 | 预算 pilot | `B0_pilot` | 完整 train + 完整 validation | `20260802` | `50` | 不看 test；若非有限、无法产生 Local RR checkpoint，或选中 checkpoint 的 validation signed PCC `<0`，则停止正式 baseline 并另立诊断任务 | 已通过；最佳 epoch=7 |
-| 正式 baseline | `B0_formal` | 完整 train + 完整 validation，全部从头训练 | `20260811 / 20260812 / 20260813` | `50`（由 pilot 规则冻结） | 三个 seed 分别报告及作描述性 mean ± SD；不做 paired delta、bootstrap 或显著性检验 | 待运行 |
+| 正式 baseline | `B0_formal` | 完整 train + 完整 validation，全部从头训练 | `20260811 / 20260812 / 20260813` | `50`（由 pilot 规则冻结） | 三个 seed 分别报告及作描述性 mean ± SD；不做 paired delta、bootstrap 或显著性检验 | 已通过；最佳 epoch=`7 / 7 / 8` |
 
 正式最大 epoch 使用预先冻结的自适应规则：若 `B0_pilot` 的最小 validation Local RR epoch 位于 `41–50`（端点包含），正式预算固定为 `80`；否则固定为 `50`。只使用最佳 epoch 的位置作此决定，不根据 Whole RR、PCC、effort、IBI 或 test 调预算。Pilot 仅用于冻结训练时间范围，不进入正式 baseline 数值汇总；正式三个 seed 不复用 pilot seed。
 
@@ -1187,7 +1187,7 @@ Subject-macro、跨 sample 比例 pooling、paired-seed delta、bootstrap 与显
 
 ### 阶段 C：当前实施
 
-Loss、metrics、validation/checkpoint、配置、现行入口与定向测试已经统一替换；当前测试集合 `240 passed`。合成信号、轻量实验生命周期、真实数据 CPU `B0_smoke`、GPU batch 128 验收和完整 `B0_pilot` 均已通过；此后普通训练不重复整套资格验证。Loss–metric 桥接验证不属于本阶段，若未来确有必要另立任务。下一步只运行三 seed 正式 baseline，不打开 designated test。
+Loss、metrics、validation/checkpoint、配置、现行入口与定向测试已经统一替换；当前测试集合 `240 passed`。合成信号、轻量实验生命周期、真实数据 CPU `B0_smoke`、GPU batch 128 验收、完整 `B0_pilot` 和三 seed `B0_formal` 均已通过；此后普通训练不重复整套资格验证。Loss–metric 桥接验证不属于本阶段，若未来确有必要另立任务。首批新协议 baseline 已建立，designated test 继续封存，直到候选模型集合与后续 validation 迭代全部冻结。
 
 ## 13. 留档与兼容策略
 
@@ -1201,7 +1201,7 @@ Loss、metrics、validation/checkpoint、配置、现行入口与定向测试已
 - CPU `B0_smoke`：32 train + 32 validation、batch 8、2 epochs、seed `20260802`，运行成功；`val_local_rr_mae` 从 `2.022188` 降至 `1.059387 bpm`。
 - Smoke 生成 resolved config、数据审计、最小复现 manifest、两个 checkpoint、训练历史和选中 checkpoint 的完整 validation metrics/summary。验收目录为 `/tmp/tho_restart_b0_smoke_final/20260802_012915_672737`。
 - Validation checkpoint 复评成功；test 入口在缺少显式确认时拒绝执行。
-- 以上仅属实现验收，不构成科研结果；后续 pilot 结果单独记录于第 15 节。当前仍未运行 designated test 或三 seed 正式 baseline。
+- 以上仅属实现验收，不构成科研结果；pilot 与三 seed 正式 baseline 分别记录于第 15、16 节。当前仍未运行 designated test。
 
 ## 15. B0 Pilot 结果与正式预算冻结（2026-08-02）
 
@@ -1224,3 +1224,33 @@ Checkpoint selector 在第 7 epoch 达到最低 validation Local RR MAE `0.64070
 | IBI interpretable fraction | `0.732710` |
 
 停止条件均未触发：训练和评价无 NaN/Inf，Local RR checkpoint 正常产生，平均 signed PCC 为正。需要保留的唯一明显风险是 `18.58%` 的样本最佳 lag 命中 `±0.30 s` 边界，且 p95 为 `0.30 s`；正负边界命中近似对称（`254/243`）。当前不基于 pilot validation 扩大 lag，因为这会改变已冻结的时间容忍定义并使正式 baseline 口径漂移。该现象随正式结果如实报告；若未来要判断是否存在范围截断，作为独立 lag-sensitivity 任务处理，不阻塞当前三 seed baseline。
+
+## 16. B0 Formal 三 seed Validation Baseline（2026-08-03）
+
+三个正式 run 分别位于：
+
+- `runs/tho_restart_b0_formal/seed_20260811/20260802_222224_529372`
+- `runs/tho_restart_b0_formal/seed_20260812/20260802_224223_339456`
+- `runs/tho_restart_b0_formal/seed_20260813/20260802_230108_464045`
+
+三次运行均基于 Git commit `ecbe073` 且启动时工作树干净，固定完整 `10141` 个 train 窗口、`2675` 个 validation 窗口、`batch_size=128` 和 50 epochs，只改变训练 seed。三次均完整结束，训练历史全部有限；选中 checkpoint 的 epoch 依次为 `7 / 7 / 8`。逐样本结果只包含 validation，没有执行 designated test，因而未计算 test-only coherence 或 nDTW。
+
+按第 8.2 节冻结口径，每个 seed 先对 sample 直接算术平均，再对三个 seed 报告描述性算术 mean ± sample SD：
+
+| 指标 | seed 20260811 | seed 20260812 | seed 20260813 | 三 seed mean ± SD |
+|---|---:|---:|---:|---:|
+| Whole-window RR MAE（bpm） | `0.534223` | `0.524641` | `0.535556` | `0.531473 ± 0.005954` |
+| Local RR MAE（bpm） | `0.630805` | `0.631485` | `0.636688` | `0.632993 ± 0.003218` |
+| Local RR prediction-valid fraction | `1.000000` | `1.000000` | `1.000000` | `1.000000 ± 0.000000` |
+| Global effort Spearman | `0.485754` | `0.493683` | `0.487456` | `0.488964 ± 0.004174` |
+| Local effort Spearman | `0.497981` | `0.500445` | `0.498872` | `0.499099 ± 0.001248` |
+| Lag-aware signed PCC | `0.839783` | `0.838648` | `0.839176` | `0.839202 ± 0.000568` |
+| IBI-MedAE（s） | `0.082414` | `0.083606` | `0.084327` | `0.083449 ± 0.000966` |
+| IBI coverage | `0.847246` | `0.843796` | `0.845377` | `0.845473 ± 0.001727` |
+| IBI interpretable fraction | `0.730841` | `0.726729` | `0.727850` | `0.728474 ± 0.002126` |
+
+三个 seed 的 joint target eligible fraction 均为 `1.0`，prediction degenerate fraction 均为 `0.0`，且 mean signed PCC 均为正；每个 seed 只有 `1/2675` 个样本 signed PCC 为负，不构成 checkpoint 级极性失败。核心指标中未发现 NaN/Inf，IBI-MedAE 的缺失只发生在按冻结定义不可解释的样本，并由 interpretable fraction 与 coverage 同时披露。
+
+Lag 边界风险在三个 seed 上稳定存在：最佳 lag 命中 `±0.30 s` 的比例分别为 `18.06% / 18.21% / 17.91%`，三 seed mean ± SD 为 `18.06% ± 0.15%`，且各 seed 的 p95 均为 `0.30 s`。正式 baseline 不据此改变已冻结 lag；若未来研究范围截断或放宽容忍度，必须作为独立 lag-sensitivity 任务，不与本结果混合。
+
+本节只建立新协议下的 validation baseline，不声称优于历史模型。Designated test 继续按第 7.3 节封存；只有候选模型、训练预算与 validation 选择全部冻结后，才对最终模型集合统一评价一次，且 test 结果不得反向修改当前协议。
