@@ -1329,3 +1329,42 @@ $$
 由于两个 leave-one-term-out 结果不能单独排除联合删除的交互，第五个实验必须先运行 `B0_final_loss_patchmixer`。它只同时设置 `rhythm_weight=0` 和 `pol_start_weight=0`，其他科学配置完全不变；该结果确认后，再决定是否将零权重分量从实现中物理删除并进入第六个多尺度模型实验。
 
 配置层已只开放上述 `final_sync_effort` 精确组合，并继续拒绝其他任意权重或多项置零；精确总 loss、旧 checkpoint 配置复评和实验生命周期回归测试均通过，当前全量测试为 `254 passed`。正式运行命令见 `scripts/README.md`，尚未启动第五个实验。
+
+## 19. 固定呼吸带传统基线（2026-08-03）
+
+为建立深度学习与传统固定滤波方法的同口径参照，新增确定性基线
+`F0_fixed_band_bcg`。它不重新设计滤波器，而是直接读取当前 research v2 数据集已经导出的
+`bcg_resp_band_state_aligned_segment_soft_z`，将其作为 prediction 与同一窗口的
+`target_waveform_segment_soft_z_key` 比较。该源信号来自 `0.05–0.70 Hz` 四阶零相位
+Butterworth 呼吸带 BCG，并使用与当前深度学习输入相同的 segment soft-z 表示层级。
+
+比较口径完全复用现行协议：相同 dataset admission、完整 validation split、180 秒窗口、
+$\Pi=S\circ B$、五项 primary、IBI + coverage、target-only eligibility、prediction 失败值和
+逐 sample direct mean。该方法没有训练、随机初始化或 checkpoint selector，因此只产生一个
+确定性结果，不构造 seed mean ± SD。Validation 不计算 test-only coherence/nDTW，designated
+test 继续封存。
+
+完整 validation 共 `2675` 个 sample，结果保存于
+`runs/tho_fixed_band_baseline/20260803_152032_531386`：
+
+| 指标 | `F0_fixed_band_bcg` | `B0_full_loss_patchmixer` 三 seed mean | 方向 |
+|---|---:|---:|---|
+| Whole-window RR MAE（bpm） | `1.059457` | `0.531473` | 越低越好 |
+| Local RR MAE（bpm） | `1.662157` | `0.632993` | 越低越好 |
+| Local RR prediction-valid fraction | `1.000000` | `1.000000` | 越高越好 |
+| Global effort Spearman | `0.431058` | `0.488964` | 越高越好 |
+| Local effort Spearman | `0.434005` | `0.499099` | 越高越好 |
+| Lag-aware signed PCC | `0.731464` | `0.839202` | 越高越好 |
+| IBI-MedAE（s） | `0.071889` | `0.083449` | 越低越好，必须结合 coverage |
+| IBI coverage | `0.581893` | `0.845473` | 越高越好 |
+| IBI interpretable fraction | `0.428411` | `0.728474` | 越高越好 |
+
+固定呼吸带基线全部 Local RR prediction 有效，joint target eligibility 为 `1.0`，prediction
+degenerate fraction 为 `0.0`。其较低的条件 IBI-MedAE 只来自 coverage 达标的 `1146` 个
+sample；由于 IBI coverage 和 interpretable fraction 明显更低，不能据此单独声称逐呼吸节律
+优于 PatchMixer。整体结果表明固定呼吸带信号已经提供较强的波形与节律信息，但在 Whole/Local
+RR、努力趋势、signed PCC 和 IBI 覆盖上均留下明确的深度学习改善空间。
+
+实现入口为 `scripts/eval_tho_fixed_band_baseline.py`，逐 sample 指标、summary、resolved config
+与执行 manifest 均已保存。未修改数据、split、target、metrics、checkpoint 规则或 designated
+test 状态。新增定向测试与现有协议测试通过，当前全量测试为 `257 passed`。

@@ -159,6 +159,28 @@ done
 
 这三个 run 完成并确认后，才考虑物理删除零权重分量和实现第六个多尺度纯时域模型；仍不运行 designated test。
 
+## 固定呼吸带传统基线
+
+`F0_fixed_band_bcg` 直接使用当前数据集的
+`bcg_resp_band_state_aligned_segment_soft_z` 作为预测，数据 admission、validation split、
+canonical 输出算子、五项 primary、IBI、eligibility 和逐 sample direct mean 均与深度学习一致。
+该方法是确定性基线，不训练、不选择 checkpoint，也不报告 seed 方差。
+
+完整 validation 统计：
+
+```bash
+./.venv/bin/python scripts/eval_tho_fixed_band_baseline.py \
+  --config configs/tho_research_v2.yaml \
+  --split val \
+  --run-root runs/tho_fixed_band_baseline
+```
+
+实现 smoke 可以额外传入 `--max-windows 8`，但 smoke 不构成科研结果。Designated test 仍需
+显式添加 `--split test --confirm-designated-test`，且只能在最终模型集合冻结后统一运行。
+
+该入口保存 `resolved_config.yaml`、`run_manifest.json`、`sample_metrics.csv` 和
+`summary.csv`；不生成 checkpoint。
+
 ## Checkpoint 复评
 
 Validation 复评：
