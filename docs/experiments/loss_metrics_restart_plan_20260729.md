@@ -4,7 +4,7 @@
 
 最后更新：2026-08-03
 
-状态：`B0_formal` 与三项 loss 消融均已完成；候选最终 loss 冻结为 `L_sync + 0.25 L_effort`，等待重建 PatchMixer baseline；designated test 仍封存
+状态：最终 loss `L_sync + 0.25 L_effort` 已由三项消融和联合删除实验确认并物理精简；下一步为多尺度纯时域模型，designated test 仍封存
 
 ## 1. 定位
 
@@ -118,7 +118,7 @@ Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检
 
 ## 5. Loss 设计区
 
-状态：第一版数学定义、参数和边界语义已冻结并实现；确定性回归验收已通过
+状态：消融后最终训练目标只保留 `L_sync + 0.25 L_effort`；第 5.4、5.6、5.7 节保留为已淘汰候选的历史定义，当前实现以第 5.10 节为准
 
 设计来源：`docs/temp/loss 20260729.md`。本节将该草稿整理为正式实验设计；局部节律尺度由草稿中的 40 秒调整为 30 秒，其他尚未明确的实现细节不从旧代码中默认继承。
 
@@ -126,14 +126,12 @@ Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检
 
 模型可以在网络内部产生原始 head 输出 $\hat y$，但本任务的规范化重建结果定义为 $\hat x=\Pi(\hat y)$。Loss/metric 的**数值计算对象**是 canonical $\hat x/x$；规范化前的 target 频带信号 $b=B(y)$ 只用于 target eligibility，raw/band 中间量只用于 finite guard。只有 $\hat x$ 正式导出；$\hat y$ 不解释为原始 waveform 重建结果。因此带外、DC、整窗绝对尺度和原始传感器 waveform 都不属于本任务的可辨识目标。
 
-Loss 不再要求一个通用波形误差同时承担所有任务，而是精简为四个互不重复的作用域：
+Loss 不再要求一个通用波形误差同时承担所有任务。第一版四项候选经第 18、20 节消融后，最终只保留两个互补作用域：
 
 1. `L_sync`：负责呼吸频带波形的有符号同步，容忍很小的传感器延迟。
-2. `L_rhythm`：负责全局和局部呼吸节律，不约束绝对能量。
-3. `L_effort`：负责相对呼吸努力随时间的变深、变浅趋势，不要求固定线性幅值映射。
-4. `L_pol`：只在训练早期锚定极性，随后退火到零，避免长期与 signed PCC 重复。
+2. `L_effort`：负责相对呼吸努力随时间的变深、变浅趋势，不要求固定线性幅值映射。
 
-核心目标可以暂时概括为：在允许不超过 0.3 秒小延迟的前提下，恢复方向正确的呼吸频带波形、全局与 30 秒局部节律，以及相对努力趋势。
+核心目标概括为：在允许不超过 0.3 秒小延迟的前提下，恢复方向正确的呼吸频带波形及相对努力趋势。Whole/Local RR 和 IBI 继续作为正式评价轴，但不再配置独立节律 loss；这是 validation 消融结果，而不是认为节律不重要。
 
 本版暂不把点对点 raw-waveform 重建、绝对幅值、逐事件拓扑或局部 RR 回归加入核心 loss。它们后续只能在证明具有独立作用后再进入，不能重新堆成冗余 loss 集合。
 
@@ -183,7 +181,7 @@ S(b)
 \epsilon_{\mathrm{scale}}=10^{-8}
 $$
 
-这一步只固定不可辨识的整窗增益；同一个 180 秒窗口内的相对强弱变化仍完整保留。对近零输出，分母中的 $\epsilon_{\mathrm{scale}}$ 只负责避免除零，且该输出仍会被同步、节律、努力和无效输出规则惩罚；它不等于已经证明近零处梯度温和。
+这一步只固定不可辨识的整窗增益；同一个 180 秒窗口内的相对强弱变化仍完整保留。对近零输出，分母中的 $\epsilon_{\mathrm{scale}}$ 只负责避免除零，且该输出仍会被同步、努力和无效输出规则惩罚；它不等于已经证明近零处梯度温和。
 
 投影和尺度规范化都在完整 180 秒、18000 点上执行。`B` 的频带端点包含在内，`n_fft=18000`，不 padding、不使用可训练参数，并关闭 AMP。`rfft/irfft` 固定使用 `norm="backward"` 的默认配对和 one-sided 实谱。先对整窗执行一次 $\Pi$，局部 loss/metrics 再从 $\hat x$ 和 $x$ 中切窗；不对每个局部窗重复滤波或重新做整窗尺度规范化。Loss、validation 和 test 必须使用同一实现语义。
 
@@ -199,14 +197,12 @@ $$
 
 上述审计曾支持把下限提高到 `0.10 Hz`，但当前导出索引没有 apnea 类型、事件起止或 apnea burden 字段，无法证明所有 `0.05–0.10 Hz` 成分都与连续 OSA 无关。为避免在任务输出中不可逆删除潜在慢变化，也避免为 waveform、loss、RR、IBI 和 effort 维护多套频带，本轮最终统一选择 `0.05–0.70 Hz`。这不等于把所有低频峰都认定为可靠呼吸；低频漂移、短窗周期数不足和 OSA/慢呼吸混淆作为统一频带的已知解释边界保留，但不再通过拆分频带处理。
 
-四项 loss 的作用域固定如下：
+最终两项 loss 的作用域固定如下：
 
 | loss 项 | 信号域 | 时间作用域 | 负责内容 | 明确不负责 | 生效阶段 |
 |---|---|---|---|---|---|
 | $\mathcal L_{\mathrm{sync}}$ | 呼吸频带波形 | 整个 180 秒窗口，小延迟搜索范围 $\pm0.3$ 秒 | 有符号波形同步、整体形态方向、小延迟容忍 | 局部节律分布、绝对幅值 | 全训练阶段 |
-| $\mathcal L_{\mathrm{rhythm}}$ | 呼吸频带归一化功率谱 | 全局 180 秒 + 局部 30 秒窗口 | 整体和局部节律、主频/谐波分布 | 绝对能量、相位、极性 | 全训练阶段 |
 | $\mathcal L_{\mathrm{effort}}$ | 对齐后的呼吸频带 log-RMS 包络 | 整个 180 秒趋势，10 秒包络、5 秒采样 | 相对努力变深/变浅趋势 | 绝对幅值标定、快速波形细节 | 全训练阶段 |
-| $\mathcal L_{\mathrm{pol}}$ | 对齐并按窗标准化后的呼吸频带波形 | 中央共同有效区间 | 训练早期极性锚定 | 长期形态优化、节律 | 前 15% optimizer steps，随后为零 |
 
 这里的 `B` 是本轮新任务定义中的频带投影，$\Pi=S\circ B$ 才是正式输出算子；二者都不静默沿用旧配置中的 Butterworth 阶数、`0.05 Hz` 下限或其他历史滤波参数。
 
@@ -284,11 +280,13 @@ x^{a}_t=x_t,
 \qquad t\in\mathcal I
 $$
 
-`L_effort` 和 `L_pol` 统一使用 $(\hat x^a,x^a)$，不允许各自重新选择延迟；它们的 target eligibility 必须先包含 `L_sync` 的中央共同区间 dynamic 条件，因此不会对 sync-ineligible sample 使用任意 $k$。这里必须使用 signed PCC，不能使用 $|c_k|$ 或 $c_k^2$，否则极性翻转会被错误视为等价解。
+`L_effort` 使用 $(\hat x^a,x^a)$，不允许重新选择延迟；其 target eligibility 必须先包含 `L_sync` 的中央共同区间 dynamic 条件，因此不会对 sync-ineligible sample 使用任意 $k$。这里必须使用 signed PCC，不能使用 $|c_k|$ 或 $c_k^2$，否则极性翻转会被错误视为等价解。
 
 评价期另行定义 $\tau^*_{\mathrm{eval}}$。训练与评价使用同一个无惩罚 lag 含义，但仍保留不同名称以区分生命周期；lag 只用于容忍残余对齐误差，不作为需要模型最小化的科学目标。
 
-### 5.4 全局与 30 秒局部节律频谱损失
+### 5.4 全局与 30 秒局部节律频谱损失（已由消融删除）
+
+本节记录消融前 `L_rhythm` 的精确定义，仅用于解释 `A1_no_rhythm`；它已退出当前配置、训练计算、梯度和日志。
 
 对时间尺度 $s$，在呼吸频带 $\mathcal B$ 内定义归一化功率谱：
 
@@ -419,7 +417,9 @@ $$
 
 Sample eligibility 同时要求：满足 `L_sync` 的 target dynamic 条件，且 target 的 $q(x^a)$ 有限、总体方差大于 $10^{-8}$。Loss 端不设置 prediction-variance 硬分支；所有有限 prediction 都按稳定 PCC 公式计算，严格常量时 $\rho=0$、`L_effort=1`。先逐 sample 计算，再只对该项 eligible sample 取 batch 算术均值；无 eligible sample 时返回 graph-connected 0 并记录计数。
 
-### 5.6 训练早期极性锚定损失
+### 5.6 训练早期极性锚定损失（已由消融删除）
+
+本节记录消融前 `L_pol` 的精确定义，仅用于解释 `A3_no_pol`；它已退出当前配置、训练计算、optimizer-step 状态和日志。
 
 数据载体本身已经是 soft-z，本项不再次执行 soft-z 压缩。令 $Z_w(\cdot)$ 表示在 lag 对齐后的单个样本共同有效区间上执行普通标准化：
 
@@ -477,9 +477,9 @@ $$
 
 `L_pol` 复用 `L_sync` 的 target-only eligibility；prediction 近常量不排除。先逐 sample 对 $N_a$ 个点取均值，再对 eligible sample 取 batch 算术均值；无 eligible sample 时返回 graph-connected 0 并记录计数。权重从 0.05 降到 0；退火结束后，极性和同步由 signed `L_sync` 负责，不让 SmoothL1 波形项长期重复施压。一次性验收必须包含精确反相 $\hat x=-x$ 样例，确认该项在反相点仍提供非零、方向正确的梯度。
 
-### 5.7 总损失与默认权重
+### 5.7 消融前候选总损失与默认权重（历史）
 
-第一版总损失为：
+第一版消融候选总损失为：
 
 $$
 \boxed{
@@ -525,17 +525,15 @@ $$
 
 ### 5.8 Loss 组合与最小训练记录
 
-当前权重作为第一版冻结值。只在一次性实现验收中用固定 mini-batch 确认数值和梯度方向无异常，不在每次训练前重复校准，也不据此启动权重搜索。
+最终权重由预注册消融冻结。只在一次性实现验收中用固定 mini-batch 确认数值和梯度方向无异常，不在每次训练前重复校准，也不据此启动权重搜索。
 
-训练优化侧每个 epoch 只持久化五个数值：
+训练优化侧每个 epoch 只持久化三个训练数值：
 
 - `loss_total`；
 - `loss_sync`；
-- `loss_rhythm`；
-- `loss_effort`；
-- `loss_pol`。
+- `loss_effort`。
 
-四个分量记录加权前的 epoch mean；固定权重、极性退火和其他参数由 resolved config 保存。Validation 侧每个 epoch 只额外持久化 `val_core_loss` 与 `val_local_rr_mae`，精确定义和角色见第 7.2 节。默认不记录加权分量、有效样本比例、lag 分布、全局/局部 rhythm 子项、梯度范数、loss 相关性或分层 loss。若未来出现明确优化问题，再另立诊断任务。
+两个分量记录加权前的 epoch mean；固定权重由 resolved config 保存。Validation 侧每个 epoch 只额外持久化 `val_core_loss` 与 `val_local_rr_mae`，精确定义和角色见第 7.2 节。默认不记录加权分量、有效样本比例、lag 分布、梯度范数、loss 相关性或分层 loss。若未来出现明确优化问题，再另立诊断任务。
 
 ### 5.9 Loss 一次性实现验收
 
@@ -548,13 +546,26 @@ $$
 - 不产生 NaN、Inf 或无梯度路径。
 - batch 聚合、sample 聚合和 mask 归一化符合定义。
 - 用人工构造样例验证排序关系，而不只验证代码能够运行。
-- 对 $\pm0.3$ 秒内外延迟、极性翻转、倍频、半频、幅值缩放和局部努力变化分别做定向测试。
-- 验证 30 秒局部谱项确实响应局部节律变化，而全局 180 秒谱项主要响应整窗节律分布。
+- 对 $\pm0.3$ 秒内外延迟、极性翻转、幅值缩放和局部努力变化分别做定向测试。
 - 验证 `L_effort` 对整体幅值缩放基本不敏感，但能区分相对努力趋势方向。
-- 验证极性项退火到零后不再参与总 loss 和梯度。
-- 对 raw head 呼吸频带 RMS 从 $10^{-8}$ 到 $10^{-3}$ 以及 exact-zero 的输入，检查 $\Pi$、四项 loss 和梯度均 finite，并确认近零规范化梯度没有压倒其余分量；该检查只做实现资格验收，不在每次训练前重复。
+- 对 raw head 呼吸频带 RMS 从 $10^{-8}$ 到 $10^{-3}$ 以及 exact-zero 的输入，检查 $\Pi$、两项 loss 和梯度均 finite，并确认近零规范化梯度没有压倒其余分量；该检查只做实现资格验收，不在每次训练前重复。
 
 验收通过后将确定性样例固化为回归测试，不要求每个训练 run 启动前重复执行。
+
+### 5.10 消融后最终训练 Loss
+
+第 18 节的三个 leave-one-term-out 实验支持删除 `L_rhythm`、保留 `L_effort`、删除 `L_pol`；第 20 节联合删除实验未发现不良交互。因此当前唯一训练目标冻结为：
+
+$$
+\boxed{
+\mathcal L_{\mathrm{final}}
+=
+\mathcal L_{\mathrm{sync}}
++0.25\mathcal L_{\mathrm{effort}}
+}
+$$
+
+当前配置和实现不再包含 rhythm 频谱参数、rhythm 权重、polarity 权重/退火或 SmoothL1 参数。旧 run sidecar 中这些字段只用于追溯；当前训练配置一旦重新出现旧 rhythm/polarity 权重字段即明确失败，不提供静默忽略或重新启用路径。节律仍由 Whole/Local RR 与 IBI 正式评价，并由有符号频带同步提供间接训练约束，但不再声称存在独立的可微节律代理项。
 
 ## 6. Metrics 设计区
 
@@ -949,22 +960,7 @@ Loss 中若某个分量在整个 batch 没有任何 target-valid 样本，该分
 
 ### 6.10 与 Loss 时间尺度的关系
 
-训练和评价的局部尺度有意不完全相同：
-
-- `L_rhythm` 使用 30 秒窗口、10 秒 hop，目标是提供更密集、可解释的局部频谱训练信号。
-- Local RR metric 使用 60 秒窗口、15 秒 step，目标是得到更稳定、约 1 bpm 分辨率的局部平均 RR。
-- 更细的逐呼吸变化由 IBI-MedAE 检查，不用继续缩短 Local RR 窗口。
-
-这不是同一 metric 的口径漂移，而是“训练监督分辨率”和“稳定评价分辨率”的职责分离。当前阶段不安排 loss–metric 桥接验证；若未来需要验证 30 秒训练代理量是否传导到 60 秒 RR 或 IBI，应另立独立任务，不纳入本轮实现范围。
-
-节律配置必须显式拆开，禁止复用一个含糊的 `local_window_seconds`：
-
-```text
-loss.rhythm.local_window_seconds = 30
-loss.rhythm.local_hop_seconds = 10
-metrics.local_rr.window_seconds = 60
-metrics.local_rr.step_seconds = 15
-```
+消融后不再存在 30 秒 rhythm loss。Local RR 继续独立使用 60 秒窗口、15 秒 step，以获得较稳定、约 1 bpm 分辨率的局部平均 RR；更细的逐呼吸变化由 IBI-MedAE 检查。该评价口径没有因删除训练代理项而改变，也不新增 loss–metric 桥接验证。
 
 effort loss 与 metrics 统一使用 10 秒 RMS 包络、5 秒采样。二者只保留算法职责差异：loss 对 log-RMS 使用可微 Pearson，metrics 对同一基础包络使用 Spearman；Global metric 作用于 180 秒，Local metric 再按 60 秒/15 秒聚合。
 
@@ -994,9 +990,8 @@ effort loss 与 metrics 统一使用 10 秒 RMS 包络、5 秒采样。二者只
 | 任务目标 | 训练 loss | primary metric | guardrail | 诊断 metric | 允许的不变性/容差 | 失败判据 |
 |---|---|---|---|---|---|---|
 | 有符号呼吸频带波形同步 | $\mathcal L_{\mathrm{sync}}$ | Lag-aware signed band-limited PCC | 全 prediction finite | $|\tau^*|$ median、p95、边界命中率 | 容忍 $\pm0.3$ 秒延迟；不容忍极性翻转 | 非有限使评价失败；选中 checkpoint 的 validation 平均 PCC 小于 0 表示方向/极性科学失败，不触发重选 epoch |
-| 全局与局部呼吸节律 | $\mathcal L_{\mathrm{rhythm}}$：180 秒 + 30 秒 | Whole-window RR MAE；Local RR MAE（60 秒/15 秒） | Local RR 是唯一 checkpoint selector；无额外阈值 | IBI-MedAE + coverage；Local RR prediction-valid fraction | 不要求绝对能量、相位或极性一致 | 无效 RR 计 39 bpm；prediction-valid fraction 只解释结果，不作门槛 |
+| 全局与局部呼吸节律 | 无独立 loss；由 $\mathcal L_{\mathrm{sync}}$ 间接约束 | Whole-window RR MAE；Local RR MAE（60 秒/15 秒） | Local RR 是唯一 checkpoint selector；无额外阈值 | IBI-MedAE + coverage；Local RR prediction-valid fraction | 不要求绝对能量或相位单独匹配 | 无效 RR 计 39 bpm；prediction-valid fraction 只解释结果，不作门槛 |
 | 相对呼吸努力趋势 | $\mathcal L_{\mathrm{effort}}$：10 秒 log-RMS、5 秒采样 | Global/Local effort-trend Spearman | 无额外 guardrail | 无默认附加诊断 | 容忍整体幅值缩放和单调非线性标定 | target 常量时不可评价；prediction 常量记 `-1` |
-| 训练早期极性稳定 | $\mathcal L_{\mathrm{pol}}$，前 15% optimizer steps 退火至零 | 不单独增加指标；由 signed PCC 覆盖 | 同第一行 | 无默认附加诊断 | 仅允许小延迟，不允许符号翻转 | 选中 checkpoint 的 validation signed PCC 小于 0 表示极性目标失败，不回头重选 epoch |
 
 ### 7.2 Validation、checkpoint 与 early stopping
 
@@ -1008,11 +1003,10 @@ $$
 \mathcal L_{\mathrm{val,core}}
 =
 \mathcal L_{\mathrm{sync}}
-+0.5\mathcal L_{\mathrm{rhythm}}
 +0.25\mathcal L_{\mathrm{effort}}
 $$
 
-三个分量分别在完整 validation 上按各自 target-eligible sample 汇总后再组合，不能先求 batch total loss 再对 batch 等权平均。这里明确排除 $\mathcal L_{\mathrm{pol}}$：它只负责训练早期稳定且权重随 optimizer step 变化，若纳入会使不同 epoch 的 validation 数值不再对应同一个目标函数。训练中的 $\mathcal L_{\mathrm{pol}}$ 仍按第 5.6–5.7 节保留。
+两个分量分别在完整 validation 上按各自 target-eligible sample 汇总后再组合，不能先求 batch total loss 再对 batch 等权平均。该式与训练最终 loss 完全一致，仅用于观察优化过程，不参与 checkpoint 排序。
 
 第二项是唯一用于 checkpoint 选择的完整 validation Local RR MAE，按第 6.3.2 与 6.9 节执行 local → sample → direct mean，并已把 prediction 无法估计 RR 的 target-eligible 局部窗按 39 bpm 计错。选择规则只有：
 
@@ -1128,14 +1122,14 @@ Designated test 只在 loss、五项 primary、IBI、两个 test-only 指标、�
 实现直接替换当前 THO 主路径，不维护新旧协议切换或兼容层；模型注册表和数据基础设施保留。旧实现不复制到仓库内 `archive/`，需要时从 Git 恢复：
 
 - 新增 `resp_train/protocols/respiration.py`：Torch/NumPy 共用的 $B$、$S$、$\Pi$、频带和边界基础算子。
-- 新增 `resp_train/losses/task.py`，只实现冻结的四项 loss、optimizer-step 极性退火和 eligible 聚合；删除旧 loss 模块与旧权重分支。
+- 新增 `resp_train/losses/task.py`；消融后只实现冻结的 sync、effort 与 eligible 聚合，rhythm、polarity 及 optimizer-step 退火已物理删除。
 - 新增 `resp_train/metrics/task.py`，只实现五项 primary、IBI + coverage、test-only coherence/nDTW、逐 sample 结果和 direct-mean summary；删除旧 metrics 模块与旧指标列。
 - 重写 `resp_train/experiments/tho.py` 为独立的当前生命周期：每 epoch 最小日志、完整 Local RR 选模、两个 checkpoint 和选中 checkpoint 完整 validation 评价；删除旧 `BaseExperiment`、gate、best-task、topK 和 early-stopping 路径。
 - 直接更新 `configs/tho_research_v2.yaml` 为纯时域 PatchMixer baseline 冻结配置；旧 run 的 resolved config 继续留在各自 run 目录作溯源。
 - 当前入口固定为 `scripts/train_tho.py` 和 `scripts/eval_tho.py`；删除旧 small/test 入口，不提供转发壳。Test 必须显式传入 `--confirm-designated-test` 并遵守第 7.3/8.2 节。
 - 修改 `resp_train/engine/train.py`：只增加 loss 模块训练/评价状态、optimizer-step 与 eligible sum/count 聚合的通用钩子。
 - 更新包导出、`AGENTS.md` 和 `scripts/README.md`，只描述当前新协议；旧 probe 代码、配置和长期说明退出当前工作树，由 Git 历史追溯。
-- 新增定向测试：输出投影、四项 loss/梯度/退火、RR/IBI/effort/PCC/coherence/nDTW、无效值、Local RR checkpoint 和配置契约。
+- 新增定向测试：输出投影、两项最终 loss/梯度、RR/IBI/effort/PCC/coherence/nDTW、无效值、Local RR checkpoint 和配置契约。
 - 旧 loss/metrics/checkpoint/runner 测试退出当前测试集合，旧模型与当前数据基础设施测试保留。历史 run、checkpoint、CSV、图表和原始数据不删除或改写。
 
 若后续设计改变 target、数据构造、窗口、split、标签或 mask，需单独增加影响面说明，不能混在普通 loss/metric 实现中静默修改。
@@ -1149,7 +1143,7 @@ Designated test 只在 loss、五项 primary、IBI、两个 test-only 指标、�
 | 2026-07-29 | 局部节律尺度 | 局部频谱窗口从草稿的 40 秒改为 30 秒，第一版 hop 保持 10 秒 | 半分钟尺度更容易解释，同时仍覆盖多个正常呼吸周期 | 快速呼吸、极慢呼吸和非稳态窗口上的频率分辨率仍需合成信号验证 | 是 |
 | 2026-07-31 | 输出空间 | raw head 仅作内部量；正式输出为 $\Pi=S\circ B$ 后的呼吸频带、整窗单位尺度表示 | 任务从来不是原始 waveform 或绝对幅值重建；显式删除带外与尺度零空间 | FFT 投影的有限值、中心化、尺度和 Torch/NumPy 一致性已由定向测试验收 | 已实现 |
 | 2026-07-31 | 频带候选 | 曾依据 1024 个 train 窗口审计建议 `0.10–0.70 Hz`，未查看 val/test target | 多数 `<0.10 Hz` 主导案例像瞬态与慢基线 | 审计没有 OSA 事件标签，不能排除连续 OSA 相关慢变化 | 2026-08-01 已替代 |
-| 2026-08-01 | 统一频带 | waveform、四项 loss、五项 primary、IBI 与 test-only 指标统一使用 `0.05–0.70 Hz`（3–42 bpm） | 避免不可逆删除潜在连续 OSA 慢变化，也避免多套频带带来的解释分叉 | 0.05–0.10 Hz 更易受漂移影响，30/60 秒短窗在低端仅有 1.5/3 个周期 | 当前阶段冻结 |
+| 2026-08-01 | 统一频带 | waveform、当时的四项候选 loss、五项 primary、IBI 与 test-only 指标统一使用 `0.05–0.70 Hz`（3–42 bpm） | 避免不可逆删除潜在连续 OSA 慢变化，也避免多套频带带来的解释分叉 | 0.05–0.10 Hz 更易受漂移影响，30/60 秒短窗在低端仅有 1.5/3 个周期 | 当前阶段冻结；最终两项 loss 沿用 |
 | 2026-07-31 | Metrics 第一版结构 | 正式报告保留 Whole RR、Local RR、Global/Local effort Spearman 和 lag-aware signed PCC 五项；IBI-MedAE + coverage 保留；曾暂定 coherence、nDTW、CCC 仅 test | 分别覆盖整体节律、局部平均节律、相对努力和联合波形/极性，同时限制补充指标角色 | test-only 指标当时尚未精确定义 | 2026-08-01 已替代 |
 | 2026-07-31 | 训练与评价局部尺度分工 | 训练节律 loss 使用 30 秒/10 秒，Local RR 评价使用 60 秒/15 秒，逐呼吸变化由 IBI 补充 | 训练需要较密监督，谱 RR 评价需要足够周期数和约 1 bpm 分辨率 | 当前不做跨尺度桥接验证；若未来需要，另立独立任务 | 是 |
 | 2026-08-01 | Lag 规则 | 100 Hz 下搜索 `-30…30` samples，统一中央 179.4 秒支撑；训练、后续 loss 对齐和评价统一使用无惩罚 hard argmax，`L_sync=1-c[k*]` | lag 只容忍残余对齐误差，不作为值得模型优化的科学目标 | 边界、符号和反相语义已由确定性测试验收 | 已实现 |
@@ -1174,7 +1168,7 @@ Designated test 只在 loss、五项 primary、IBI、两个 test-only 指标、�
 ### 阶段 A：本轮已完成
 
 - 冻结数据/任务口径、规范化输出空间、统一频带与防泄漏边界。
-- 冻结四项 loss 的公式、参数、lag、STFT、envelope 与无效值语义。
+- 记录四项候选 loss，并由正式消融冻结最终 sync + effort 两项、lag、envelope 与无效值语义。
 - 冻结五项 primary、IBI + coverage、RR/IBI 算法、逐 sample direct-mean 汇总与 checkpoint 规则。
 - 冻结 test-only coherence 与 nDTW 的精确实现和失败语义；CCC 因与 signed PCC 冗余删除。
 - 冻结纯时域 PatchMixer baseline、单 seed pilot、`50/80` epoch 预算分支和三 seed 正式 baseline 矩阵。
@@ -1265,7 +1259,7 @@ Lag 边界风险在三个 seed 上稳定存在：最佳 lag 命中 `±0.30 s` �
 | 2 | `A1_no_rhythm` | `rhythm_weight: 0.5 → 0` | `20260811 / 20260812 / 20260813` | 50 | 已完成；支持删除 |
 | 3 | `A2_no_effort` | `effort_weight: 0.25 → 0` | `20260811 / 20260812 / 20260813` | 50 | 已完成；支持保留 |
 | 4 | `A3_no_pol` | `pol_start_weight: 0.05 → 0` | `20260811 / 20260812 / 20260813` | 50 | 已完成；支持删除 |
-| 5 | `B0_final_loss_patchmixer` | 同时使用 `rhythm_weight=0`、`pol_start_weight=0`，模型不变 | 同上 | 50 | 待运行 |
+| 5 | `B0_final_loss_patchmixer` | 同时使用 `rhythm_weight=0`、`pol_start_weight=0`，模型不变 | 同上 | 50 | 已完成；接受 provenance 例外 |
 
 不增加 `no_sync`：`L_sync` 定义了方向正确的残余时延容忍同步任务，是核心目标而不是可选辅助约束；删除它会改变任务，而不是普通的 loss 精简消融。
 
@@ -1326,9 +1320,9 @@ $$
 L_{\mathrm{final}}=L_{\mathrm{sync}}+0.25L_{\mathrm{effort}}.
 $$
 
-由于两个 leave-one-term-out 结果不能单独排除联合删除的交互，第五个实验必须先运行 `B0_final_loss_patchmixer`。它只同时设置 `rhythm_weight=0` 和 `pol_start_weight=0`，其他科学配置完全不变；该结果确认后，再决定是否将零权重分量从实现中物理删除并进入第六个多尺度模型实验。
+由于两个 leave-one-term-out 结果不能单独排除联合删除的交互，第五个实验运行 `B0_final_loss_patchmixer`，只同时设置 `rhythm_weight=0` 和 `pol_start_weight=0`，其他科学配置完全不变。第 20 节结果未见不良交互，因此零权重分量已从当前实现物理删除，第六个实验进入多尺度模型。
 
-配置层已只开放上述 `final_sync_effort` 精确组合，并继续拒绝其他任意权重或多项置零；精确总 loss、旧 checkpoint 配置复评和实验生命周期回归测试均通过，当前全量测试为 `254 passed`。正式运行命令见 `scripts/README.md`，尚未启动第五个实验。
+第五个实验与 provenance 例外见第 20 节。旧 run 的 resolved config 和结果原地保留；当前默认配置不再携带已删除分量的参数。
 
 ## 19. 固定呼吸带传统基线（2026-08-03）
 
@@ -1368,3 +1362,48 @@ RR、努力趋势、signed PCC 和 IBI 覆盖上均留下明确的深度学习�
 实现入口为 `scripts/eval_tho_fixed_band_baseline.py`，逐 sample 指标、summary、resolved config
 与执行 manifest 均已保存。未修改数据、split、target、metrics、checkpoint 规则或 designated
 test 状态。新增定向测试与现有协议测试通过，当前全量测试为 `257 passed`。
+
+## 20. 最终 Loss 的 PatchMixer 联合删除实验（2026-08-03）
+
+`B0_final_loss_patchmixer` 位于 `runs/tho_restart_b0_final_loss_patchmixer`，使用相同 PatchMixer、完整 train/validation、50 epochs、seed `20260811 / 20260812 / 20260813` 和 Local RR checkpoint selector，只同时将 `rhythm_weight` 与 `pol_start_weight` 置零。三个 run 均完成 50 epochs，最佳 epoch 为 `7 / 7 / 8`，checkpoint epoch 与训练历史一致，逐样本结果只包含 validation。
+
+按 sample direct mean，再对三个 seed 报告算术 mean ± sample SD：
+
+| 指标 | `B0_full_loss_patchmixer` | `A1_no_rhythm` | `B0_final_loss_patchmixer` |
+|---|---:|---:|---:|
+| Whole-window RR MAE（bpm） | `0.5315 ± 0.0060` | `0.5156 ± 0.0026` | `0.5127 ± 0.0030` |
+| Local RR MAE（bpm） | `0.6330 ± 0.0032` | `0.6272 ± 0.0011` | `0.6270 ± 0.0008` |
+| Global effort Spearman | `0.4890 ± 0.0042` | `0.4874 ± 0.0025` | `0.4880 ± 0.0025` |
+| Local effort Spearman | `0.4991 ± 0.0012` | `0.4977 ± 0.0010` | `0.4982 ± 0.0011` |
+| Lag-aware signed PCC | `0.8392 ± 0.0006` | `0.8397 ± 0.0006` | `0.8397 ± 0.0007` |
+| IBI-MedAE（s） | `0.08345 ± 0.00097` | `0.08429 ± 0.00145` | `0.08430 ± 0.00117` |
+| IBI coverage | `0.84547 ± 0.00173` | `0.84561 ± 0.00100` | `0.84553 ± 0.00110` |
+| IBI interpretable fraction | `0.72847 ± 0.00213` | `0.72735 ± 0.00374` | `0.72710 ± 0.00411` |
+
+联合删除相对 `A1_no_rhythm` 没有出现任务轴退化：Local RR、effort 与 signed PCC 保持相当，Whole RR 的三 seed mean 进一步降低。三个 run 的 Local RR prediction-valid fraction 均为 `1.0`、prediction degenerate fraction 均为 `0.0`，每个 seed 仍只有 `1/2675` 个负 PCC 样本；未发现 NaN/Inf、checkpoint 失配、split 变化或 test 推理。最佳 lag 边界命中率为 `18.13% ± 0.04%`，继续按既有独立 lag-sensitivity 边界处理。
+
+### 20.1 Provenance 例外
+
+三个 run 的 manifest 均记录 commit `7d86a0d`，但 `git_dirty=true`。运行现场审计发现 dirty 内容来自并行存在的固定呼吸带 baseline、EWT 资料以及文档修改；当前可见变更没有修改或导入 `train_tho.py` 所使用的配置、模型、loss、训练引擎或数据路径。固定带 baseline 只由其独立入口和测试导入，协议文档在首个 run 启动后发生修改，也不参与运行时计算。
+
+因此数值可用于确认联合删除与冻结最终 loss，但不包装成完全干净工作树上的最高等级复现证据。2026-08-03 用户明确接受该 `dirty-but-runtime-audited` provenance 例外并选择继续，不重复三个 seed；若未来将该结果作为严格论文复现证据，应从干净隔离 worktree 重新运行。该例外不改变数据、split、target、metrics、checkpoint selector 或 designated-test 封存规则。
+
+### 20.2 当前实现结论
+
+最终训练目标确认并物理精简为 $L_{\mathrm{sync}}+0.25L_{\mathrm{effort}}$。当前 loss 实现、默认配置和训练日志已删除 rhythm 频谱计算、polarity SmoothL1、退火状态及对应参数/列；旧 run 与旧 resolved config 原地保留用于追溯，当前训练配置若出现旧 rhythm/polarity 权重字段会明确失败。定向实验生命周期与当前固定带 baseline 测试均通过。下一科学实验为第六个 `M1_multiscale_time`，仍只使用 train/validation。
+
+## 21. M1 参数匹配多尺度纯时域模型（2026-08-03）
+
+第六个实验 `M1_multiscale_time` 只检验“在近似相同参数预算下，把单一短 patch 表示重新分配到多个呼吸周期尺度是否有益”。当前 PatchMixer 使用 `patch_len=256`、`stride=128`、`base_channels=16`、2 个 mixer block，共 `11408` 个可训练参数。M1 冻结为：
+
+- 模型注册名：`multiscale_patch_mixer1d`。
+- 四个纯时域分支，patch 长度 `256 / 512 / 1024 / 2048` 点，即 `2.56 / 5.12 / 10.24 / 20.48 s`。
+- 每个分支 stride 固定为 patch 长度的 `0.5`，使用 Hann overlap-add 和 2 个 mixer block。
+- 每个分支 `base_channels=1`，四个 waveform 分支用 4 个可学习 softmax 标量融合；总参数 `11664`，比 B0 多 `256`（`2.24%`）。
+- 模型只输出未投影 raw head，不内置低通、高通、FFT mask、尺度规范化或旧 bandlimited output；正式输出仍统一由公共 $\Pi=S\circ B$ 定义。
+
+选择 `base_channels=1` 不是声称单通道最优，而是防止四分支模型把“多尺度”与约 12 倍参数增长混在一起。该实验回答的是参数匹配下的结构重分配；若结果不佳，只能否定这一冻结候选，不能外推为所有多尺度模型无效。
+
+除模型外，数据、split、最终两项 loss、optimizer、batch 128、50 epochs、三个正式 seed、Local RR checkpoint selector、metrics、聚合与无效值规则全部不变。不增加预算 pilot或权重搜索。工程阶段先运行一次 batch 128 单 batch GPU 验收；通过后直接运行 seed `20260811 / 20260812 / 20260813`，逐 seed 报告并给出描述性 mean ± sample SD。Designated test、lag sensitivity 和历史 STFT 双分支继续不进入本实验。
+
+模型注册、raw-head 直通融合、参数匹配、架构冻结、最终两项 loss、实验生命周期和固定带 baseline 的全量回归测试为 `255 passed`；尚未启动 M1 GPU 验收或正式训练。

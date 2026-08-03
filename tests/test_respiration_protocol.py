@@ -39,64 +39,49 @@ def test_lag_priority_matches_frozen_tie_rule() -> None:
 
 def test_loss_identity_is_zero_and_gradient_is_finite() -> None:
     loss_fn = RespirationTaskLoss(_config())
-    loss_fn.set_total_optimizer_steps(10)
     target = _waveform()
     prediction = target.clone().requires_grad_()
     loss, parts = loss_fn(prediction, target)
     loss.backward()
     assert float(loss.detach()) == pytest.approx(0.0, abs=1e-6)
-    for key in ("loss_sync", "loss_rhythm", "loss_effort", "loss_pol"):
+    for key in ("loss_sync", "loss_effort"):
         assert float(parts[key].detach()) == pytest.approx(0.0, abs=1e-6)
     assert prediction.grad is not None
     assert torch.isfinite(prediction.grad).all()
 
 
-def test_inverse_signal_is_penalized_and_polarity_schedule_turns_off() -> None:
+def test_inverse_signal_is_penalized_by_signed_sync() -> None:
     loss_fn = RespirationTaskLoss(_config())
-    loss_fn.set_total_optimizer_steps(100)
     target = _waveform()
     prediction = (-target).clone().requires_grad_()
     loss, parts = loss_fn(prediction, target)
     loss.backward()
     assert float(parts["loss_sync"].detach()) > 1.9
-    assert float(parts["loss_pol"].detach()) > 0.0
-    assert loss_fn.polarity_weight > 0.0
-    loss_fn._optimizer_step = 15
-    assert loss_fn.polarity_weight == pytest.approx(0.0)
+    assert float(loss.detach()) > 1.9
     assert torch.isfinite(prediction.grad).all()
 
 
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        ["loss.rhythm_weight=0"],
-        ["loss.effort_weight=0"],
-        ["loss.pol_start_weight=0"],
-        ["loss.rhythm_weight=0", "loss.pol_start_weight=0"],
-    ],
-)
-def test_registered_loss_ablation_total_uses_the_resolved_zero_weight(overrides: list[str]) -> None:
-    loss_fn = RespirationTaskLoss(_config(overrides))
-    loss_fn.set_total_optimizer_steps(10)
+def test_final_loss_total_contains_only_sync_and_effort() -> None:
+    loss_fn = RespirationTaskLoss(_config())
     target = _waveform()
     prediction = torch.roll(target, shifts=20, dims=-1) + 0.05 * torch.sin(
         2.0 * torch.pi * 0.6 * torch.arange(18000, dtype=torch.float32) / 100.0
     )
-    pol_weight = loss_fn.polarity_weight
     total, parts = loss_fn(prediction, target)
-    expected = (
-        loss_fn.sync_weight * parts["loss_sync"]
-        + loss_fn.rhythm_weight * parts["loss_rhythm"]
-        + loss_fn.effort_weight * parts["loss_effort"]
-        + pol_weight * parts["loss_pol"]
-    )
+    expected = loss_fn.sync_weight * parts["loss_sync"] + loss_fn.effort_weight * parts["loss_effort"]
     torch.testing.assert_close(total, expected)
+    assert set(key for key in parts if not key.startswith("__")) == {"loss_sync", "loss_effort"}
     assert torch.isfinite(total)
+
+
+@pytest.mark.parametrize("override", ["loss.rhythm_weight=0", "loss.pol_start_weight=0"])
+def test_removed_loss_terms_cannot_be_reenabled_for_training(override: str) -> None:
+    with pytest.raises(ValueError, match="训练配置不能再包含"):
+        RespirationTaskLoss(_config([override]))
 
 
 def test_loss_rejects_nonfinite_prediction() -> None:
     loss_fn = RespirationTaskLoss(_config())
-    loss_fn.set_total_optimizer_steps(1)
     target = _waveform()
     prediction = target.clone()
     prediction[..., 0] = float("nan")
@@ -112,20 +97,18 @@ def test_task_output_and_loss_ignore_raw_offset_and_positive_scale() -> None:
     torch.testing.assert_close(canonical_transformed, canonical_target, atol=2e-5, rtol=2e-5)
 
     loss_fn = RespirationTaskLoss(_config())
-    loss_fn.set_total_optimizer_steps(10)
     loss, _ = loss_fn(transformed, target)
     assert float(loss) == pytest.approx(0.0, abs=2e-5)
 
 
 def test_zero_prediction_has_finite_loss_and_gradient() -> None:
     loss_fn = RespirationTaskLoss(_config())
-    loss_fn.set_total_optimizer_steps(10)
     target = _waveform()
     prediction = torch.zeros_like(target, requires_grad=True)
     loss, parts = loss_fn(prediction, target)
     loss.backward()
     assert torch.isfinite(loss)
-    assert all(torch.isfinite(parts[name]) for name in ("loss_sync", "loss_rhythm", "loss_effort", "loss_pol"))
+    assert all(torch.isfinite(parts[name]) for name in ("loss_sync", "loss_effort"))
     assert prediction.grad is not None
     assert torch.isfinite(prediction.grad).all()
 

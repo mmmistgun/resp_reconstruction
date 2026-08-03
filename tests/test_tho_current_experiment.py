@@ -73,9 +73,7 @@ def test_current_experiment_keeps_earliest_local_rr_tie(monkeypatch, tmp_path) -
         "epoch",
         "train_loss_total",
         "train_loss_sync",
-        "train_loss_rhythm",
         "train_loss_effort",
-        "train_loss_pol",
         "val_core_loss",
         "val_local_rr_mae",
     ]

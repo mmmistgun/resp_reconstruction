@@ -63,20 +63,12 @@ def _validate_config(cfg: Any) -> None:
         "loss.scale_eps",
         "loss.dynamic_eps",
         "loss.corr_eps",
-        "loss.power_eps",
         "loss.envelope_eps",
         "loss.max_lag_sec",
-        "loss.global_rhythm_window_sec",
-        "loss.local_rhythm_window_sec",
-        "loss.local_rhythm_hop_sec",
         "loss.envelope_window_sec",
         "loss.envelope_step_sec",
         "loss.sync_weight",
-        "loss.rhythm_weight",
         "loss.effort_weight",
-        "loss.pol_start_weight",
-        "loss.pol_fraction",
-        "loss.smooth_l1_beta",
         "evaluation.local_rr_window_sec",
         "evaluation.local_rr_step_sec",
         "evaluation.ibi_peak_distance_samples",
@@ -103,6 +95,23 @@ def _validate_config(cfg: Any) -> None:
         if value not in sample_strategies:
             raise ValueError(f"{key} 必须是 {sorted(sample_strategies)} 之一，当前为: {value}")
 
+    model_name = str(OmegaConf.select(cfg, "model.name"))
+    allowed_models = {"patch_mixer1d", "multiscale_patch_mixer1d"}
+    if model_name not in allowed_models:
+        raise ValueError(f"当前实验只允许模型 {sorted(allowed_models)}，当前为: {model_name}")
+    if model_name == "multiscale_patch_mixer1d":
+        expected_multiscale = {
+            "model.base_channels": 1,
+            "model.patch_lengths": [256, 512, 1024, 2048],
+            "model.patch_stride_ratio": 0.5,
+            "model.mixer_layers": 2,
+        }
+        for key, expected in expected_multiscale.items():
+            value = OmegaConf.select(cfg, key)
+            normalized = OmegaConf.to_container(value, resolve=True) if OmegaConf.is_config(value) else value
+            if normalized != expected:
+                raise ValueError(f"M1 冻结要求 {key}={expected}，当前为 {value}")
+
     lr_scheduler = OmegaConf.select(cfg, "training.lr_scheduler")
     if lr_scheduler != "none":
         raise ValueError("当前冻结 baseline 不使用 learning-rate scheduler")
@@ -121,15 +130,11 @@ def _validate_config(cfg: Any) -> None:
         "loss.scale_eps": 1e-8,
         "loss.dynamic_eps": 1e-8,
         "loss.corr_eps": 1e-8,
-        "loss.power_eps": 1e-8,
         "loss.envelope_eps": 1e-8,
-        "loss.global_rhythm_window_sec": 180,
-        "loss.local_rhythm_window_sec": 30,
-        "loss.local_rhythm_hop_sec": 10,
         "loss.envelope_window_sec": 10,
         "loss.envelope_step_sec": 5,
-        "loss.pol_fraction": 0.15,
-        "loss.smooth_l1_beta": 0.5,
+        "loss.sync_weight": 1.0,
+        "loss.effort_weight": 0.25,
         "evaluation.local_rr_window_sec": 60,
         "evaluation.local_rr_step_sec": 15,
         "evaluation.ibi_peak_distance_samples": 142,
@@ -143,27 +148,6 @@ def _validate_config(cfg: Any) -> None:
         if float(value) != float(expected):
             raise ValueError(f"当前冻结协议要求 {key}={expected}，当前为 {value}")
 
-    weight_keys = (
-        "loss.sync_weight",
-        "loss.rhythm_weight",
-        "loss.effort_weight",
-        "loss.pol_start_weight",
-    )
-    configured_weights = tuple(float(OmegaConf.select(cfg, key)) for key in weight_keys)
-    allowed_weight_variants = {
-        "full": (1.0, 0.5, 0.25, 0.05),
-        "no_rhythm": (1.0, 0.0, 0.25, 0.05),
-        "no_effort": (1.0, 0.5, 0.0, 0.05),
-        "no_pol": (1.0, 0.5, 0.25, 0.0),
-        "final_sync_effort": (1.0, 0.0, 0.25, 0.0),
-    }
-    if configured_weights not in allowed_weight_variants.values():
-        allowed = ", ".join(allowed_weight_variants)
-        raise ValueError(
-            "loss 权重只允许预注册组合 "
-            f"{allowed}；当前 {dict(zip(weight_keys, configured_weights))}，"
-            "不开放任意 loss 权重搜索"
-        )
     if OmegaConf.select(cfg, "training.grad_clip_norm") is not None:
         raise ValueError("当前冻结 baseline 不使用 gradient clipping")
     if bool(OmegaConf.select(cfg, "training.use_amp")):

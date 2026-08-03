@@ -570,6 +570,49 @@ class MultiScalePatchHannBandlimited1D(nn.Module):
         return _hard_lowpass_output(y, max_freq_hz=self.max_freq_hz, sample_rate=self.sample_rate)
 
 
+class MultiScalePatchMixer1D(nn.Module):
+    """只在时间域使用多尺度 PatchMixer，并保留未投影的 raw head 输出。
+
+    公共任务算子 ``Pi=S(B(.))`` 统一位于模型之后；本模型不内置第二套低通或尺度规范化。
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 16,
+        patch_lengths: list[int] | tuple[int, ...] = (256, 512, 1024, 2048),
+        patch_stride_ratio: float = 0.5,
+        mixer_layers: int = 2,
+    ) -> None:
+        super().__init__()
+        lengths = [max(int(value), 8) for value in patch_lengths]
+        if not lengths:
+            raise ValueError("patch_lengths 不能为空")
+        if float(patch_stride_ratio) <= 0.0:
+            raise ValueError("patch_stride_ratio 必须为正")
+        self.patch_lengths = tuple(lengths)
+        self.branches = nn.ModuleList(
+            [
+                PatchMixer1D(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    base_channels=base_channels,
+                    patch_len=patch_len,
+                    patch_stride=max(1, int(round(patch_len * float(patch_stride_ratio)))),
+                    mixer_layers=mixer_layers,
+                    overlap_window="hann",
+                    output_smoothing_kernel=1,
+                )
+                for patch_len in lengths
+            ]
+        )
+        self.fusion = _WeightedWaveformFusion1D(len(self.branches))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.fusion([branch(x) for branch in self.branches])
+
+
 class PeriodAwarePatchHannBandlimited1D(MultiScalePatchHannBandlimited1D):
     """GFMixer 启发的周期候选 Patch-Hann 带限输出模型。"""
 

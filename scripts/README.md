@@ -10,6 +10,7 @@
 - 输入：`bcg_rawish_segment_soft_z_key`。
 - target：`target_waveform_segment_soft_z_key`。
 - baseline：纯时域 `patch_mixer1d`。
+- 训练 loss：`L_sync + 0.25 L_effort`；rhythm 与短期 polarity 已由消融删除。
 - 正式输出：$\Pi=S\circ B$，统一 `0.05–0.70 Hz`。
 - checkpoint：完整 validation Local RR MAE 最小 epoch。
 - early stopping：关闭。
@@ -139,25 +140,55 @@ done
 
 9 个 run 的 validation 结果支持删除 rhythm、保留 effort、删除短期 polarity。详细决定见协议第 18 节。
 
-### 候选最终 loss 的 PatchMixer baseline
+### 最终 loss 的 PatchMixer baseline（已完成）
 
-第五个实验 `B0_final_loss_patchmixer` 同时设置 `rhythm_weight=0` 与 `pol_start_weight=0`，其余配置不变。配置只额外允许这一组已冻结组合，不允许其他多项置零。三个 seed 依次运行：
+第五个实验 `B0_final_loss_patchmixer` 在物理精简前同时设置 `rhythm_weight=0` 与 `pol_start_weight=0`，三个 seed 已完成并确认没有联合删除交互，结果位于 `runs/tho_restart_b0_final_loss_patchmixer`。当前默认配置已经直接采用最终两项 loss，并拒绝旧字段重新进入训练；旧命令由对应 run manifest 追溯，不再作为当前可运行入口保留。
+
+结果接受 `dirty-but-runtime-audited` provenance 例外，详见协议第 20 节。零权重分量已经从当前实现物理删除，下一步是第六个多尺度纯时域模型；仍不运行 designated test。
+
+### M1 参数匹配多尺度纯时域模型
+
+M1 使用 `multiscale_patch_mixer1d`，四个 patch 尺度为 `256 / 512 / 1024 / 2048` 点，`base_channels=1`，总参数 `11664`；B0 为 `11408`。模型 raw head 不内置频带投影，继续统一使用公共 $\Pi=S\circ B$。
+
+先做一次 batch 128 GPU 验收；该结果不构成科研结果：
+
+```bash
+./.venv/bin/python scripts/train_tho.py \
+  --config configs/tho_research_v2.yaml \
+  --set model.name=multiscale_patch_mixer1d \
+  --set model.base_channels=1 \
+  --set 'model.patch_lengths=[256,512,1024,2048]' \
+  --set model.patch_stride_ratio=0.5 \
+  --set model.mixer_layers=2 \
+  --set data.max_train_windows=128 \
+  --set data.max_val_windows=32 \
+  --set training.epochs=1 \
+  --set training.batch_size=128 \
+  --set training.seed=20260802 \
+  --set training.device=cuda:0 \
+  --set outputs.run_root=/tmp/tho_restart_m1_batch128_acceptance
+```
+
+验收通过后，正式三个 seed 顺序运行：
 
 ```bash
 for seed in 20260811 20260812 20260813; do
   ./.venv/bin/python scripts/train_tho.py \
     --config configs/tho_research_v2.yaml \
-    --set loss.rhythm_weight=0 \
-    --set loss.pol_start_weight=0 \
+    --set model.name=multiscale_patch_mixer1d \
+    --set model.base_channels=1 \
+    --set 'model.patch_lengths=[256,512,1024,2048]' \
+    --set model.patch_stride_ratio=0.5 \
+    --set model.mixer_layers=2 \
     --set training.epochs=50 \
     --set training.seed="${seed}" \
     --set training.device=cuda:0 \
-    --set outputs.run_root="runs/tho_restart_b0_final_loss_patchmixer/seed_${seed}" \
+    --set outputs.run_root="runs/tho_restart_m1_multiscale_time/seed_${seed}" \
     || exit 1
 done
 ```
 
-这三个 run 完成并确认后，才考虑物理删除零权重分量和实现第六个多尺度纯时域模型；仍不运行 designated test。
+M1 不运行额外 pilot，也不打开 designated test。
 
 ## 固定呼吸带传统基线
 
@@ -209,7 +240,7 @@ Test 命令会同时计算五项 primary、IBI + coverage、coherence 与 nDTW�
 - `config.yaml`：resolved config。
 - `run_manifest.json`：运行命令、Git commit 与 dirty 状态。
 - `audit.csv`：数据加载审计摘要。
-- `train_history.csv`：每 epoch 仅含五项 train loss、`val_core_loss` 和 `val_local_rr_mae`。
+- `train_history.csv`：每 epoch 仅含 `train_loss_total`、`train_loss_sync`、`train_loss_effort`、`val_core_loss` 和 `val_local_rr_mae`。
 - `checkpoint_best_local_rr.pt`：Local RR 严格最小 epoch；完全并列时保留更早 epoch。
 - `checkpoint_final.pt`：固定预算最后 epoch，仅用于追溯。
 - `metrics.csv`：选中 checkpoint 的完整 validation 逐 sample 指标。

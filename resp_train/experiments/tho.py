@@ -49,7 +49,6 @@ class ThoExperiment:
             weight_decay=float(self.cfg.training.get("weight_decay", 0.0)),
         )
         total_epochs = int(self.cfg.training.epochs)
-        loss_fn.set_total_optimizer_steps(total_epochs * len(data.train.loader))
         show_progress = _resolve_show_progress(self.cfg)
 
         history: list[dict[str, float | int]] = []
@@ -78,11 +77,9 @@ class ThoExperiment:
                 total_epochs=total_epochs,
                 return_predictions=True,
             )
-            val_core_loss = (
-                float(val_summary["loss_sync"])
-                + 0.5 * float(val_summary["loss_rhythm"])
-                + 0.25 * float(val_summary["loss_effort"])
-            )
+            val_core_loss = float(self.cfg.loss.sync_weight) * float(
+                val_summary["loss_sync"]
+            ) + float(self.cfg.loss.effort_weight) * float(val_summary["loss_effort"])
             val_local_rr = validation_local_rr_mean(val_predictions, self.cfg)
             if not np.isfinite(val_core_loss) or not np.isfinite(val_local_rr):
                 raise ValueError("validation core loss 或 Local RR 非有限")
@@ -91,9 +88,7 @@ class ThoExperiment:
                 "epoch": epoch,
                 "train_loss_total": float(train_summary["loss"]),
                 "train_loss_sync": float(train_summary["loss_sync"]),
-                "train_loss_rhythm": float(train_summary["loss_rhythm"]),
                 "train_loss_effort": float(train_summary["loss_effort"]),
-                "train_loss_pol": float(train_summary["loss_pol"]),
                 "val_core_loss": val_core_loss,
                 "val_local_rr_mae": val_local_rr,
             }

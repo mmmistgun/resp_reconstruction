@@ -15,6 +15,7 @@ from resp_train.models.timeseries import (
     DLinearWaveform,
     FIRFrontendPatchMixer1D,
     MultiScalePatchHannBandlimited1D,
+    MultiScalePatchMixer1D,
     PatchHannBandlimitedOutput1D,
     PatchHannBasisResidualDecoder1D,
     PatchHannControlPointDecoder1D,
@@ -269,6 +270,14 @@ _REGISTRY: dict[str, ModelFactory] = {
         mixer_layers=int(cfg.model.get("mixer_layers", 2)),
         max_freq_hz=float(cfg.model.get("max_freq_hz", 0.7)),
         sample_rate=float(cfg.window.get("target_fs", 100)),
+    ),
+    "multiscale_patch_mixer1d": lambda cfg: MultiScalePatchMixer1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        patch_lengths=list(cfg.model.get("patch_lengths", [256, 512, 1024, 2048])),
+        patch_stride_ratio=float(cfg.model.get("patch_stride_ratio", 0.5)),
+        mixer_layers=int(cfg.model.get("mixer_layers", 2)),
     ),
     "period_aware_patch_hann_bandlimited1d": lambda cfg: PeriodAwarePatchHannBandlimited1D(
         in_channels=int(cfg.model.in_channels),

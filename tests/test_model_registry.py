@@ -6,7 +6,7 @@ from torch import nn
 
 from resp_train.models import build_model, list_models
 from resp_train.models.lowfreq import MultiScaleDecompMixer1D, TimesNetLite1D
-from resp_train.models.timeseries import PatchMixer1D, PeriodicUNet1DTiny
+from resp_train.models.timeseries import MultiScalePatchMixer1D, PatchMixer1D, PeriodicUNet1DTiny
 
 
 def test_unet1d_tiny_is_registered():
@@ -48,6 +48,7 @@ def test_fir_frontend_patch_mixer_is_registered():
         "patch_hann_control_point_decoder1d",
         "patch_hann_basis_residual_decoder1d",
         "patch_hann_bandlimited_output1d",
+        "multiscale_patch_mixer1d",
         "multiscale_patch_hann_bandlimited1d",
         "period_aware_patch_hann_bandlimited1d",
         "polyphase_patch_hann_bandlimited1d",
@@ -213,6 +214,10 @@ def test_build_fir_frontend_patch_mixer_preserves_waveform_shape():
             {"patch_len": 128, "patch_stride": 64, "mixer_layers": 1, "max_freq_hz": 0.7},
         ),
         (
+            "multiscale_patch_mixer1d",
+            {"patch_lengths": [128, 256], "patch_stride_ratio": 0.5, "mixer_layers": 1},
+        ),
+        (
             "multiscale_patch_hann_bandlimited1d",
             {"patch_lengths": [128, 256], "patch_stride_ratio": 0.5, "mixer_layers": 1, "max_freq_hz": 0.7},
         ),
@@ -245,6 +250,21 @@ def test_lowfreq_structure_models_preserve_waveform_shape(model_name, extra):
 
     assert y.shape == (2, 1, 1800)
     assert torch.isfinite(y).all()
+
+
+def test_multiscale_patch_mixer_returns_unprojected_fusion_output():
+    model = MultiScalePatchMixer1D(
+        in_channels=1,
+        out_channels=1,
+        base_channels=2,
+        patch_lengths=[64, 128],
+        patch_stride_ratio=0.5,
+        mixer_layers=1,
+    )
+    x = torch.randn(2, 1, 513)
+    expected = model.fusion([branch(x) for branch in model.branches])
+    torch.testing.assert_close(model(x), expected)
+    assert model.patch_lengths == (64, 128)
 
 
 def test_timesnet_lite_uses_lowpass_signal_for_period_selection():
