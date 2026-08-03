@@ -10,8 +10,8 @@ from resp_train.losses.task import RespirationTaskLoss
 from resp_train.protocols.respiration import canonicalize_numpy, canonicalize_torch, lag_priority
 
 
-def _config():
-    return load_config("configs/tho_research_v2.yaml")
+def _config(overrides: list[str] | None = None):
+    return load_config("configs/tho_research_v2.yaml", overrides=overrides)
 
 
 def _waveform() -> torch.Tensor:
@@ -64,6 +64,33 @@ def test_inverse_signal_is_penalized_and_polarity_schedule_turns_off() -> None:
     loss_fn._optimizer_step = 15
     assert loss_fn.polarity_weight == pytest.approx(0.0)
     assert torch.isfinite(prediction.grad).all()
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        "loss.rhythm_weight=0",
+        "loss.effort_weight=0",
+        "loss.pol_start_weight=0",
+    ],
+)
+def test_registered_loss_ablation_total_uses_the_resolved_zero_weight(override: str) -> None:
+    loss_fn = RespirationTaskLoss(_config([override]))
+    loss_fn.set_total_optimizer_steps(10)
+    target = _waveform()
+    prediction = torch.roll(target, shifts=20, dims=-1) + 0.05 * torch.sin(
+        2.0 * torch.pi * 0.6 * torch.arange(18000, dtype=torch.float32) / 100.0
+    )
+    pol_weight = loss_fn.polarity_weight
+    total, parts = loss_fn(prediction, target)
+    expected = (
+        loss_fn.sync_weight * parts["loss_sync"]
+        + loss_fn.rhythm_weight * parts["loss_rhythm"]
+        + loss_fn.effort_weight * parts["loss_effort"]
+        + pol_weight * parts["loss_pol"]
+    )
+    torch.testing.assert_close(total, expected)
+    assert torch.isfinite(total)
 
 
 def test_loss_rejects_nonfinite_prediction() -> None:

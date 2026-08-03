@@ -1,6 +1,6 @@
 # 当前 THO 实验入口
 
-本文只描述 2026-08-02 冻结的新呼吸重建协议。旧 E/F/G probe、旧 loss、旧 metrics、旧 gate/topK 和历史 checkpoint 语义不再属于当前 workflow；旧代码与说明通过 Git 追溯，历史 run 原地保留。
+本文只描述当前冻结的新呼吸重建协议。旧 E/F/G probe、旧 loss、旧 metrics、旧 gate/topK 和历史 checkpoint 语义不再属于当前 workflow；旧代码与说明通过 Git 追溯，历史 run 原地保留。
 
 协议定义见 `docs/experiments/loss_metrics_restart_plan_20260729.md`。
 
@@ -73,20 +73,71 @@ Smoke 不是科研结果：
 
 若 pilot 的最小 validation Local RR epoch 位于 41–50，正式预算统一为 80 epochs；否则为 50。Pilot 不进入正式结果，也不查看 test。
 
-### 三 seed 正式 baseline
+### 三 seed 正式 baseline（已完成）
 
-冻结正式 epoch 数后，分别运行 seed `20260811 / 20260812 / 20260813`。示例中的 `<EPOCHS>` 只能替换为 pilot 决定的 50 或 80：
+Pilot 已将正式预算冻结为 50 epochs；正式 baseline 已按 seed `20260811 / 20260812 / 20260813` 完成：
 
 ```bash
 ./.venv/bin/python scripts/train_tho.py \
   --config configs/tho_research_v2.yaml \
-  --set training.epochs=<EPOCHS> \
+  --set training.epochs=50 \
   --set training.seed=20260811 \
   --set training.device=cuda:0 \
   --set outputs.run_root=runs/tho_restart_b0_formal/seed_20260811
 ```
 
 另外两个 seed 使用完全相同配置，只改变训练 seed 与输出目录。
+
+### 下一阶段：三个 loss 消融
+
+三个消融保持 PatchMixer、数据、metrics、checkpoint selector、50 epochs 和正式 seeds 不变，只把一个辅助 loss 权重精确置零。配置会拒绝任意中间权重以及同时关闭多个 loss；不进行权重搜索。以下三个循环依次运行，不打开 designated test。
+
+`A1_no_rhythm`：
+
+```bash
+for seed in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/train_tho.py \
+    --config configs/tho_research_v2.yaml \
+    --set loss.rhythm_weight=0 \
+    --set training.epochs=50 \
+    --set training.seed="${seed}" \
+    --set training.device=cuda:0 \
+    --set outputs.run_root="runs/tho_restart_a1_no_rhythm/seed_${seed}" \
+    || exit 1
+done
+```
+
+`A2_no_effort`：
+
+```bash
+for seed in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/train_tho.py \
+    --config configs/tho_research_v2.yaml \
+    --set loss.effort_weight=0 \
+    --set training.epochs=50 \
+    --set training.seed="${seed}" \
+    --set training.device=cuda:0 \
+    --set outputs.run_root="runs/tho_restart_a2_no_effort/seed_${seed}" \
+    || exit 1
+done
+```
+
+`A3_no_pol`：
+
+```bash
+for seed in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/train_tho.py \
+    --config configs/tho_research_v2.yaml \
+    --set loss.pol_start_weight=0 \
+    --set training.epochs=50 \
+    --set training.seed="${seed}" \
+    --set training.device=cuda:0 \
+    --set outputs.run_root="runs/tho_restart_a3_no_pol/seed_${seed}" \
+    || exit 1
+done
+```
+
+这 9 个 run 全部完成后才统一比较并冻结最终 loss。若最终删除任何 loss，下一实验先用最终 loss 重建 PatchMixer baseline；只有完整 loss 不变时，才直接进入多尺度纯时域模型实验。
 
 ## Checkpoint 复评
 

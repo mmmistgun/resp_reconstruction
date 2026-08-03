@@ -128,10 +128,6 @@ def _validate_config(cfg: Any) -> None:
         "loss.local_rhythm_hop_sec": 10,
         "loss.envelope_window_sec": 10,
         "loss.envelope_step_sec": 5,
-        "loss.sync_weight": 1.0,
-        "loss.rhythm_weight": 0.5,
-        "loss.effort_weight": 0.25,
-        "loss.pol_start_weight": 0.05,
         "loss.pol_fraction": 0.15,
         "loss.smooth_l1_beta": 0.5,
         "evaluation.local_rr_window_sec": 60,
@@ -146,6 +142,27 @@ def _validate_config(cfg: Any) -> None:
         value = OmegaConf.select(cfg, key)
         if float(value) != float(expected):
             raise ValueError(f"当前冻结协议要求 {key}={expected}，当前为 {value}")
+
+    weight_keys = (
+        "loss.sync_weight",
+        "loss.rhythm_weight",
+        "loss.effort_weight",
+        "loss.pol_start_weight",
+    )
+    configured_weights = tuple(float(OmegaConf.select(cfg, key)) for key in weight_keys)
+    allowed_weight_variants = {
+        "full": (1.0, 0.5, 0.25, 0.05),
+        "no_rhythm": (1.0, 0.0, 0.25, 0.05),
+        "no_effort": (1.0, 0.5, 0.0, 0.05),
+        "no_pol": (1.0, 0.5, 0.25, 0.0),
+    }
+    if configured_weights not in allowed_weight_variants.values():
+        allowed = ", ".join(allowed_weight_variants)
+        raise ValueError(
+            "loss 权重只允许预注册组合 "
+            f"{allowed}；当前 {dict(zip(weight_keys, configured_weights))}，"
+            "不开放任意 loss 权重搜索"
+        )
     if OmegaConf.select(cfg, "training.grad_clip_norm") is not None:
         raise ValueError("当前冻结 baseline 不使用 gradient clipping")
     if bool(OmegaConf.select(cfg, "training.use_amp")):

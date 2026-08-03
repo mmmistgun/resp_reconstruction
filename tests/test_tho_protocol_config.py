@@ -53,3 +53,37 @@ def test_checkpoint_reevaluation_only_allows_runtime_changes() -> None:
 def test_frozen_protocol_rejects_semantic_drift(override: str, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         load_config("configs/tho_research_v2.yaml", overrides=[override])
+
+
+@pytest.mark.parametrize(
+    ("weight_override", "weight_key"),
+    [
+        ("loss.rhythm_weight=0", "rhythm_weight"),
+        ("loss.effort_weight=0", "effort_weight"),
+        ("loss.pol_start_weight=0", "pol_start_weight"),
+    ],
+)
+def test_registered_loss_ablation_variants_are_allowed(
+    weight_override: str,
+    weight_key: str,
+) -> None:
+    cfg = load_config(
+        "configs/tho_research_v2.yaml",
+        overrides=[weight_override],
+    )
+    assert float(cfg.loss[weight_key]) == 0.0
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        ["loss.sync_weight=0"],
+        ["loss.rhythm_weight=0.25"],
+        ["loss.effort_weight=0.1"],
+        ["loss.pol_start_weight=0.01"],
+        ["loss.rhythm_weight=0", "loss.effort_weight=0"],
+    ],
+)
+def test_loss_ablation_guard_rejects_unregistered_weight_combinations(overrides: list[str]) -> None:
+    with pytest.raises(ValueError, match="不开放任意 loss 权重搜索"):
+        load_config("configs/tho_research_v2.yaml", overrides=overrides)
