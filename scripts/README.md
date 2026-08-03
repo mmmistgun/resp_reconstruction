@@ -88,9 +88,9 @@ Pilot 已将正式预算冻结为 50 epochs；正式 baseline 已按 seed `20260
 
 另外两个 seed 使用完全相同配置，只改变训练 seed 与输出目录。
 
-### 下一阶段：三个 loss 消融
+### 三个 loss 消融（已完成）
 
-三个消融保持 PatchMixer、数据、metrics、checkpoint selector、50 epochs 和正式 seeds 不变，只把一个辅助 loss 权重精确置零。配置会拒绝任意中间权重以及同时关闭多个 loss；不进行权重搜索。以下三个循环依次运行，不打开 designated test。
+三个消融保持 PatchMixer、数据、metrics、checkpoint selector、50 epochs 和正式 seeds 不变，只把一个辅助 loss 权重精确置零。配置拒绝任意中间权重与未预注册组合；不进行权重搜索。以下三个循环已经完成，未打开 designated test。
 
 `A1_no_rhythm`：
 
@@ -137,7 +137,27 @@ for seed in 20260811 20260812 20260813; do
 done
 ```
 
-这 9 个 run 全部完成后才统一比较并冻结最终 loss。若最终删除任何 loss，下一实验先用最终 loss 重建 PatchMixer baseline；只有完整 loss 不变时，才直接进入多尺度纯时域模型实验。
+9 个 run 的 validation 结果支持删除 rhythm、保留 effort、删除短期 polarity。详细决定见协议第 18 节。
+
+### 候选最终 loss 的 PatchMixer baseline
+
+第五个实验 `B0_final_loss_patchmixer` 同时设置 `rhythm_weight=0` 与 `pol_start_weight=0`，其余配置不变。配置只额外允许这一组已冻结组合，不允许其他多项置零。三个 seed 依次运行：
+
+```bash
+for seed in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/train_tho.py \
+    --config configs/tho_research_v2.yaml \
+    --set loss.rhythm_weight=0 \
+    --set loss.pol_start_weight=0 \
+    --set training.epochs=50 \
+    --set training.seed="${seed}" \
+    --set training.device=cuda:0 \
+    --set outputs.run_root="runs/tho_restart_b0_final_loss_patchmixer/seed_${seed}" \
+    || exit 1
+done
+```
+
+这三个 run 完成并确认后，才考虑物理删除零权重分量和实现第六个多尺度纯时域模型；仍不运行 designated test。
 
 ## Checkpoint 复评
 

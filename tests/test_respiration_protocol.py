@@ -67,15 +67,16 @@ def test_inverse_signal_is_penalized_and_polarity_schedule_turns_off() -> None:
 
 
 @pytest.mark.parametrize(
-    "override",
+    "overrides",
     [
-        "loss.rhythm_weight=0",
-        "loss.effort_weight=0",
-        "loss.pol_start_weight=0",
+        ["loss.rhythm_weight=0"],
+        ["loss.effort_weight=0"],
+        ["loss.pol_start_weight=0"],
+        ["loss.rhythm_weight=0", "loss.pol_start_weight=0"],
     ],
 )
-def test_registered_loss_ablation_total_uses_the_resolved_zero_weight(override: str) -> None:
-    loss_fn = RespirationTaskLoss(_config([override]))
+def test_registered_loss_ablation_total_uses_the_resolved_zero_weight(overrides: list[str]) -> None:
+    loss_fn = RespirationTaskLoss(_config(overrides))
     loss_fn.set_total_optimizer_steps(10)
     target = _waveform()
     prediction = torch.roll(target, shifts=20, dims=-1) + 0.05 * torch.sin(

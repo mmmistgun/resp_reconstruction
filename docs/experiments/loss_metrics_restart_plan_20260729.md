@@ -4,7 +4,7 @@
 
 最后更新：2026-08-03
 
-状态：实现、GPU batch 128 验收、`B0_pilot` 与三 seed `B0_formal` 均已通过；designated test 仍封存
+状态：`B0_formal` 与三项 loss 消融均已完成；候选最终 loss 冻结为 `L_sync + 0.25 L_effort`，等待重建 PatchMixer baseline；designated test 仍封存
 
 ## 1. 定位
 
@@ -1187,7 +1187,7 @@ Subject-macro、跨 sample 比例 pooling、paired-seed delta、bootstrap 与显
 
 ### 阶段 C：当前实施
 
-Loss、metrics、validation/checkpoint、配置、现行入口与定向测试已经统一替换；当前测试集合 `251 passed`。合成信号、轻量实验生命周期、真实数据 CPU `B0_smoke`、GPU batch 128 验收、完整 `B0_pilot` 和三 seed `B0_formal` 均已通过；此后普通训练不重复整套资格验证。Loss–metric 桥接验证不属于本阶段，若未来确有必要另立任务。首批新协议 baseline 已建立，designated test 继续封存，直到候选模型集合与后续 validation 迭代全部冻结。
+Loss、metrics、validation/checkpoint、配置、现行入口与定向测试已经统一替换。合成信号、轻量实验生命周期、真实数据 CPU `B0_smoke`、GPU batch 128 验收、完整 `B0_pilot`、三 seed `B0_formal` 和三项 loss 消融均已通过；此后普通训练不重复整套资格验证。Loss–metric 桥接验证不属于本阶段，若未来确有必要另立任务。当前先用候选最终 loss 重建 PatchMixer baseline，再进入多尺度模型；designated test 继续封存。
 
 ## 13. 留档与兼容策略
 
@@ -1257,15 +1257,15 @@ Lag 边界风险在三个 seed 上稳定存在：最佳 lag 命中 `±0.30 s` �
 
 ## 17. 下一阶段：Loss 消融与多尺度模型（2026-08-03）
 
-下一阶段按五个科学实验规划，但不把五个实验不加判断地连续执行。当前五实验集合的默认理解为：已完成的 `B0_full_loss_patchmixer`、三个 leave-one-term-out loss 消融，以及一个多尺度纯时域模型候选。实现 smoke、配置验收和 batch 128 显存验收只属于工程检查，不计为新的科学实验。
+下一阶段按五个科学实验规划，但不把五个实验不加判断地连续执行。前三项 leave-one-term-out 消融已经证明最终 loss 需要改变，因此第五个科学实验按预注册分支改为重建 PatchMixer baseline；多尺度纯时域模型顺延为第六个实验。实现 smoke、配置验收和 batch 128 显存验收只属于工程检查，不计为新的科学实验。
 
 | 顺序 | 实验 ID | 唯一变化 | seed | 最大 epoch | 当前状态 |
 |---:|---|---|---|---:|---|
 | 1 | `B0_full_loss_patchmixer` | 无；第 16 节正式 baseline | `20260811 / 20260812 / 20260813` | 50 | 已完成 |
-| 2 | `A1_no_rhythm` | `rhythm_weight: 0.5 → 0` | `20260811 / 20260812 / 20260813` | 50 | 待运行 |
-| 3 | `A2_no_effort` | `effort_weight: 0.25 → 0` | `20260811 / 20260812 / 20260813` | 50 | 待运行 |
-| 4 | `A3_no_pol` | `pol_start_weight: 0.05 → 0` | `20260811 / 20260812 / 20260813` | 50 | 待运行 |
-| 5 | `M1_multiscale_time` | 只将模型替换为覆盖约 `2.5 / 5 / 10 / 20 s` 尺度的纯时域候选 | 同上 | 50 | 条件待定；见第 17.3 节 |
+| 2 | `A1_no_rhythm` | `rhythm_weight: 0.5 → 0` | `20260811 / 20260812 / 20260813` | 50 | 已完成；支持删除 |
+| 3 | `A2_no_effort` | `effort_weight: 0.25 → 0` | `20260811 / 20260812 / 20260813` | 50 | 已完成；支持保留 |
+| 4 | `A3_no_pol` | `pol_start_weight: 0.05 → 0` | `20260811 / 20260812 / 20260813` | 50 | 已完成；支持删除 |
+| 5 | `B0_final_loss_patchmixer` | 同时使用 `rhythm_weight=0`、`pol_start_weight=0`，模型不变 | 同上 | 50 | 待运行 |
 
 不增加 `no_sync`：`L_sync` 定义了方向正确的残余时延容忍同步任务，是核心目标而不是可选辅助约束；删除它会改变任务，而不是普通的 loss 精简消融。
 
@@ -1275,9 +1275,9 @@ Lag 边界风险在三个 seed 上稳定存在：最佳 lag 命中 `±0.30 s` �
 
 ### 17.2 第二步：三个 Loss 消融
 
-`A1/A2/A3` 在同一代码版本下预注册后全部完成，每个实验直接运行三个正式 seed，共 9 个 run；不先用单 seed 筛掉“不理想”实验，也不根据前一个消融的 validation 结果决定是否运行后一个。三个消融只把目标项权重精确置零，其余权重不补偿、不归一化、不搜索。
+`A1/A2/A3` 已在同一代码版本下全部完成，每个实验直接运行三个正式 seed，共 9 个 run；没有先用单 seed 筛掉“不理想”实验，也没有根据前一个消融的 validation 结果决定是否运行后一个。三个消融只把目标项权重精确置零，其余权重未补偿、归一化或搜索。
 
-配置层只允许四组精确权重组合：`full`、`no_rhythm`、`no_effort`、`no_pol`。不增加通用 loss-variant runner，也不开放任意权重覆盖；resolved config 和 run manifest 继续记录实际权重、seed、命令与代码版本。
+配置层只允许五组精确权重组合：`full`、`no_rhythm`、`no_effort`、`no_pol` 与消融后冻结的 `final_sync_effort`。不增加通用 loss-variant runner，也不开放任意权重覆盖；resolved config 和 run manifest 继续记录实际权重、seed、命令与代码版本。
 
 消融的预注册解释轴为：
 
@@ -1289,10 +1289,7 @@ Lag 边界风险在三个 seed 上稳定存在：最佳 lag 命中 `±0.30 s` �
 
 ### 17.3 第三步：冻结最终 Loss；第四步：条件模型实验
 
-三个消融全部完成后，先形成一次明确的 loss 冻结决策，再进入第五个科学实验：
-
-- 若完整 loss 保持不变，第五个实验为 `M1_multiscale_time`。它只改变模型，先做一次小 smoke 与 batch 128 GPU 验收，再直接运行相同三 seed、50 epochs；不新增预算 pilot。
-- 若删除任何 loss 项，第五个实验改为 `B0_final_loss_patchmixer`，用最终 loss 和原 PatchMixer 重建三 seed baseline。否则同时改变 loss 与模型，无法把差异归因给多尺度结构。此时 `M1_multiscale_time` 顺延为第六个实验。
+三个消融的冻结决策为：删除 `L_rhythm`、保留 `L_effort`、删除 `L_pol`，候选最终目标为 $L_{\mathrm{sync}}+0.25L_{\mathrm{effort}}$。因此第五个实验确定为 `B0_final_loss_patchmixer`，用相同 PatchMixer、三个正式 seed 和 50 epochs 检查同时删除两项后的交互，并建立最终 loss 下的新参照。`M1_multiscale_time` 顺延为第六个实验，避免同时改变 loss 与模型。
 
 多尺度候选只允许围绕当前任务重新定义一个干净的纯时域模型，不直接恢复历史 STFT 双分支、旧辅助头、旧输出约束或旧实验 runner。其尺度应覆盖统一频带对应的快慢周期，且正式输出仍只由公共 $\Pi=S\circ B$ 定义，避免模型内部再叠加一套与协议竞争的输出语义。
 
@@ -1300,4 +1297,35 @@ Lag 边界风险在三个 seed 上稳定存在：最佳 lag 命中 `±0.30 s` �
 
 本阶段全部只使用 train/validation。Designated test 继续封存，直到最终 loss、候选模型集合、训练预算和 validation 选择全部冻结。Lag 范围敏感性继续作为独立任务，不与 loss 消融或多尺度模型实验混合，也不因第 16 节约 18% 的边界命中率临时修改 `±0.30 s`。
 
-三个消融的受限配置组合、精确零权重总 loss 和现有实验生命周期已通过回归测试；当前全量测试为 `251 passed`。正式训练命令见 `scripts/README.md`，尚未启动任何消融 run。
+三个消融均只生成 validation 结果，没有运行 designated test。详细结果和冻结决定见第 18 节。
+
+## 18. 三项 Loss 消融结果与候选最终 Loss（2026-08-03）
+
+三个实验根目录为 `runs/tho_restart_a1_no_rhythm`、`runs/tho_restart_a2_no_effort`、`runs/tho_restart_a3_no_pol`。每项均使用 seed `20260811 / 20260812 / 20260813`、完整 train/validation、50 epochs 与 Local RR checkpoint selector，共 9 个 run。运行均基于干净 commit `aea78a3`，权重组合正确，训练历史有限，checkpoint 与历史最小 Local RR epoch 一致，逐样本结果只包含 validation。
+
+下表沿用 sample direct mean，再对三个 seed 报告算术 mean ± sample SD；箭头只表示该 metric 自身的优劣方向，不构成综合分数：
+
+| 实验 | Whole RR MAE ↓ | Local RR MAE ↓ | Global effort ↑ | Local effort ↑ | signed PCC ↑ |
+|---|---:|---:|---:|---:|---:|
+| `B0_full_loss_patchmixer` | `0.5315 ± 0.0060` | `0.6330 ± 0.0032` | `0.4890 ± 0.0042` | `0.4991 ± 0.0012` | `0.8392 ± 0.0006` |
+| `A1_no_rhythm` | `0.5156 ± 0.0026` | `0.6272 ± 0.0011` | `0.4874 ± 0.0025` | `0.4977 ± 0.0010` | `0.8397 ± 0.0006` |
+| `A2_no_effort` | `0.5188 ± 0.0100` | `0.6328 ± 0.0019` | `0.4786 ± 0.0058` | `0.4937 ± 0.0060` | `0.8435 ± 0.0012` |
+| `A3_no_pol` | `0.5320 ± 0.0062` | `0.6336 ± 0.0040` | `0.4893 ± 0.0042` | `0.4993 ± 0.0011` | `0.8392 ± 0.0005` |
+
+冻结解释严格沿用第 17.2 节的预注册任务轴：
+
+- `A1_no_rhythm` 的 Whole/Local RR 在三个 seed 上均低于 B0。幅度有限，但方向一致，且该项没有在自身目标轴上显示收益；结合精简方向，删除 `L_rhythm`。
+- `A2_no_effort` 的 Global/Local effort 在三个 seed 上均不高于 B0，说明 `L_effort` 提供了独立 effort 监督。PCC 与 IBI 的改善属于跨任务交换，不覆盖预注册解释轴，因此保留 `L_effort` 及权重 `0.25`。
+- `A3_no_pol` 与 B0 的五项核心指标、最佳 epoch、负 PCC 样本和跨 seed 波动近似不变；`L_sync` 已足以固定方向，因此删除 `L_pol`。
+
+九个消融 run 的 Local RR prediction-valid fraction 均为 `1.0`、prediction degenerate fraction 均为 `0.0`；每个 seed 仍只有 `1/2675` 个负 PCC 样本。未发现 NaN/Inf、数据泄漏、split 变化或 checkpoint 失配。未做 paired delta、显著性检验或 test 推理。
+
+候选最终 loss 冻结为：
+
+$$
+L_{\mathrm{final}}=L_{\mathrm{sync}}+0.25L_{\mathrm{effort}}.
+$$
+
+由于两个 leave-one-term-out 结果不能单独排除联合删除的交互，第五个实验必须先运行 `B0_final_loss_patchmixer`。它只同时设置 `rhythm_weight=0` 和 `pol_start_weight=0`，其他科学配置完全不变；该结果确认后，再决定是否将零权重分量从实现中物理删除并进入第六个多尺度模型实验。
+
+配置层已只开放上述 `final_sync_effort` 精确组合，并继续拒绝其他任意权重或多项置零；精确总 loss、旧 checkpoint 配置复评和实验生命周期回归测试均通过，当前全量测试为 `254 passed`。正式运行命令见 `scripts/README.md`，尚未启动第五个实验。

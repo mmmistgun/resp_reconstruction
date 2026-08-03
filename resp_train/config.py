@@ -155,6 +155,7 @@ def _validate_config(cfg: Any) -> None:
         "no_rhythm": (1.0, 0.0, 0.25, 0.05),
         "no_effort": (1.0, 0.5, 0.0, 0.05),
         "no_pol": (1.0, 0.5, 0.25, 0.0),
+        "final_sync_effort": (1.0, 0.0, 0.25, 0.0),
     }
     if configured_weights not in allowed_weight_variants.values():
         allowed = ", ".join(allowed_weight_variants)

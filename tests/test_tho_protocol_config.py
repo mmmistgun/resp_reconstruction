@@ -56,22 +56,26 @@ def test_frozen_protocol_rejects_semantic_drift(override: str, message: str) -> 
 
 
 @pytest.mark.parametrize(
-    ("weight_override", "weight_key"),
+    ("weight_overrides", "zero_weight_keys"),
     [
-        ("loss.rhythm_weight=0", "rhythm_weight"),
-        ("loss.effort_weight=0", "effort_weight"),
-        ("loss.pol_start_weight=0", "pol_start_weight"),
+        (["loss.rhythm_weight=0"], ["rhythm_weight"]),
+        (["loss.effort_weight=0"], ["effort_weight"]),
+        (["loss.pol_start_weight=0"], ["pol_start_weight"]),
+        (
+            ["loss.rhythm_weight=0", "loss.pol_start_weight=0"],
+            ["rhythm_weight", "pol_start_weight"],
+        ),
     ],
 )
 def test_registered_loss_ablation_variants_are_allowed(
-    weight_override: str,
-    weight_key: str,
+    weight_overrides: list[str],
+    zero_weight_keys: list[str],
 ) -> None:
     cfg = load_config(
         "configs/tho_research_v2.yaml",
-        overrides=[weight_override],
+        overrides=weight_overrides,
     )
-    assert float(cfg.loss[weight_key]) == 0.0
+    assert all(float(cfg.loss[key]) == 0.0 for key in zero_weight_keys)
 
 
 @pytest.mark.parametrize(
@@ -82,6 +86,7 @@ def test_registered_loss_ablation_variants_are_allowed(
         ["loss.effort_weight=0.1"],
         ["loss.pol_start_weight=0.01"],
         ["loss.rhythm_weight=0", "loss.effort_weight=0"],
+        ["loss.effort_weight=0", "loss.pol_start_weight=0"],
     ],
 )
 def test_loss_ablation_guard_rejects_unregistered_weight_combinations(overrides: list[str]) -> None:
