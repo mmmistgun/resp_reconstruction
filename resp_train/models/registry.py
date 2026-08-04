@@ -25,6 +25,7 @@ from resp_train.models.timeseries import (
     PeriodicUNet1DTiny,
 )
 from resp_train.models.stft_branch import TimeStftDual1D, TimeStftLowComplexOutput1D
+from resp_train.models.time_stft_fusion import TimeStftFusion1D
 from resp_train.models.unet1d import UNet1DTiny, UNet1DTinyNoSkip1, UNet1DTinyNoSkipAll
 
 
@@ -214,6 +215,23 @@ _REGISTRY: dict[str, ModelFactory] = {
         mixer_layers=int(cfg.model.get("mixer_layers", 2)),
         overlap_window=str(cfg.model.get("overlap_window", "uniform")),
         output_smoothing_kernel=int(cfg.model.get("output_smoothing_kernel", 1)),
+    ),
+    "time_stft_fusion1d": lambda cfg: TimeStftFusion1D(
+        in_channels=int(cfg.model.in_channels),
+        out_channels=int(cfg.model.out_channels),
+        base_channels=int(cfg.model.base_channels),
+        patch_len=int(cfg.model.patch_len),
+        patch_stride=int(cfg.model.patch_stride),
+        mixer_layers=int(cfg.model.mixer_layers),
+        overlap_window=str(cfg.model.overlap_window),
+        output_smoothing_kernel=int(cfg.model.output_smoothing_kernel),
+        sample_rate=float(cfg.window.target_fs),
+        stft_window_samples=int(round(float(cfg.model.stft_window_sec) * float(cfg.window.target_fs))),
+        stft_hop_samples=int(round(float(cfg.model.stft_step_sec) * float(cfg.window.target_fs))),
+        stft_low_hz=float(cfg.loss.band_low_hz),
+        stft_high_hz=float(cfg.loss.band_high_hz),
+        stft_feature_eps=float(cfg.model.stft_feature_eps),
+        stft_channels=int(cfg.model.stft_channels),
     ),
     "patch_mixer1d_fir_frontend": lambda cfg: FIRFrontendPatchMixer1D(
         in_channels=int(cfg.model.in_channels),

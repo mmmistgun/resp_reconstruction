@@ -9,7 +9,7 @@
 - 当前主线从头建立，不继承旧 loss、metrics、checkpoint 选择、实验 runner 或结论。
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
-- 模型注册表与数据基础设施保留，当前 baseline 使用纯时域 `patch_mixer1d`。
+- 模型注册表与数据基础设施保留；纯时域 `patch_mixer1d` 是协议 baseline，当前候选为精简的 `time_stft_fusion1d`。
 - 若未来要恢复历史比较、桥接验证、分层统计或新模型路线，必须作为独立任务重新定义，不提前保留兼容分支。
 
 ## 当前入口
@@ -20,7 +20,7 @@
 - Designated test：复评命令额外传入 `--split test --confirm-designated-test`；不得用 test 反向调协议或选模。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
-- 详细 smoke、pilot 和正式 seed 命令见 `scripts/README.md`。
+- 详细 smoke、batch 128 验收和正式 seed 命令见 `scripts/README.md`。
 
 ## 科研约束
 
@@ -32,7 +32,7 @@
 
 ## 当前验证
 
-- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py`
+- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py`
 - 全量当前测试：`./.venv/bin/python -m pytest tests`
 - GPU 正式运行必须在沙盒外执行；CPU smoke 只用于实现验收，不形成科研结论。
 

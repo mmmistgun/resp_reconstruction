@@ -4,7 +4,7 @@
 
 最后更新：2026-08-04
 
-状态：最终 loss 与模型集合已由 validation 冻结；选中 `patch_mixer1d + L_sync + 0.25 L_effort`，M1 未入选，等待一次性 designated test
+状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；首个时域 + STFT 融合候选 T1 已通过实现与 batch 128 GPU 验收，等待三 seed 正式 validation，designated test 继续封存
 
 ## 1. 定位
 
@@ -12,7 +12,7 @@
 
 本轮设计不继承此前实验路线、默认 loss、主指标、排序规则、checkpoint 选择逻辑或既有结论。代码与文档不另建 `archive/`：旧版本依靠 Git 历史追溯，历史 run 原地保留但不进入新实验比较。
 
-Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检查并按冻结定义实现。定向单测、轻量生命周期验收、一次性 CPU `B0_smoke`、GPU batch 128 验收、预算 pilot 与三 seed 正式 baseline 均已完成；未重评历史 checkpoint，也未执行 designated test。
+Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检查并按冻结定义实现。定向单测、轻量生命周期验收、一次性 CPU `B0_smoke`、GPU batch 128 验收、预算 pilot、三 seed 正式 baseline、loss 消融和 M1 纯时域结构探针均已完成；未重评历史 checkpoint，也未执行 designated test。纯时域模型只承担协议 baseline 与结构对照，不是本项目后续模型研究重点。
 
 ## 2. 当前目标与边界
 
@@ -1409,7 +1409,7 @@ test 状态。新增定向测试与现有协议测试通过，当前全量测试
 
 模型注册、raw-head 直通融合、参数匹配、架构冻结、最终两项 loss、实验生命周期和固定带 baseline 的全量回归测试为 `255 passed`。Batch 128 GPU 验收与正式三 seed 已完成，结果和模型冻结决定见第 22 节。
 
-## 22. M1 Validation 结果与最终模型集合冻结（2026-08-04）
+## 22. M1 Validation 结果与纯时域阶段收口（2026-08-04）
 
 M1 正式结果位于 `runs/tho_restart_m1_multiscale_time`。三个 run 均使用 commit `a47475d`、完整 train/validation、50 epochs、batch 128、seed `20260811 / 20260812 / 20260813` 和冻结的最终两项 loss。三次训练均完整结束，历史与核心指标 finite，checkpoint epoch 与最低 Local RR epoch 一致，逐样本结果只包含 validation。
 
@@ -1426,18 +1426,85 @@ M1 正式结果位于 `runs/tho_restart_m1_multiscale_time`。三个 run 均使�
 | IBI coverage | `0.84553 ± 0.00110` | `0.83388 ± 0.00491` | 退化 |
 | IBI interpretable fraction | `0.72710 ± 0.00411` | `0.70604 ± 0.00617` | 退化 |
 
-M1 的最佳 epoch 为 `50 / 48 / 4`，而最终 PatchMixer 为 `7 / 7 / 8`。M1 三个 seed 的 effort 指标均改善，但 Whole/Local RR、signed PCC、IBI 与 coverage 均下降，且跨 seed 波动更大。Local RR 是预注册的唯一 checkpoint selector，因此不构造综合分数用 effort 改善覆盖主任务退化。两个 seed 的最佳 epoch 接近预算末端不触发事后 80-epoch 扩展：M1 固定 50 epochs 是参数匹配结构比较的一部分，结果已在多数任务轴落后，追加预算会成为结果驱动搜索。
+M1 的最佳 epoch 为 `50 / 48 / 4`，而最终 loss 下的 PatchMixer baseline 为 `7 / 7 / 8`。M1 三个 seed 的 effort 指标均改善，但 Whole/Local RR、signed PCC、IBI 与 coverage 均下降，且跨 seed 波动更大。Local RR 是预注册的唯一 checkpoint selector，因此不构造综合分数用 effort 改善覆盖主任务退化。两个 seed 的最佳 epoch 接近预算末端不触发事后 80-epoch 扩展：M1 固定 50 epochs 是参数匹配结构比较的一部分，结果已在多数任务轴落后，追加预算会成为结果驱动搜索。
 
-完整性检查均通过：Local RR prediction-valid fraction 全部为 `1.0`，prediction degenerate fraction 全部为 `0.0`，每个 seed 只有 `1/2675` 个负 PCC 样本；无 NaN/Inf、split 变化、checkpoint 失配或 test 推理。最佳 lag 边界命中率为 `19.17% ± 0.14%`，略高于最终 PatchMixer 的 `18.13% ± 0.04%`，不改变已冻结 `±0.30 s` 规则。
+完整性检查均通过：Local RR prediction-valid fraction 全部为 `1.0`，prediction degenerate fraction 全部为 `0.0`，每个 seed 只有 `1/2675` 个负 PCC 样本；无 NaN/Inf、split 变化、checkpoint 失配或 test 推理。最佳 lag 边界命中率为 `19.17% ± 0.14%`，略高于 PatchMixer baseline 的 `18.13% ± 0.04%`，不改变已冻结 `±0.30 s` 规则。
 
 三个 M1 manifest 均记录 `git_dirty=true`。运行时主工作树的可见 dirty 内容为 `.gitignore` 与 `docs/methods/`，不在训练导入或数据路径中；用户已明确拒绝额外 worktree，并按既定口径接受 runtime-audited dirty provenance。M1 结果可用于当前 validation 模型选择，但不声称是完全干净工作树的最高等级复现证据。
 
-### 22.1 最终模型集合
+### 22.1 纯时域阶段结论
 
-Validation 决策至此冻结，不再继续 M1 预算、base channel 或融合权重搜索：
+M1 的 validation 决策至此冻结，不再继续其预算、base channel 或纯时域多尺度权重搜索：
 
-- 最终学习模型：`patch_mixer1d + L_sync + 0.25 L_effort`，使用 `B0_final_loss_patchmixer` 的三个 `checkpoint_best_local_rr.pt`。
+- 协议学习 baseline：`patch_mixer1d + L_sync + 0.25 L_effort`，保留 `B0_final_loss_patchmixer` 的三个 `checkpoint_best_local_rr.pt` 作为后续模型的 validation 参照；它不是尚未完成的最终研究模型。
 - 确定性传统参照：`F0_fixed_band_bcg`。
-- `M1_multiscale_time`：作为参数匹配的任务交换/负结果留档，不进入 designated test。
+- `M1_multiscale_time`：作为参数匹配的纯时域任务交换/负结果留档，不继续调参；是否进入最终 designated test 不在此处提前决定。
 
-下一步只按第 7.3 节进行一次性 designated test：分别评价最终 PatchMixer 的三个 seed，并评价一次确定性固定带参照；test 不参与模型、epoch、频带、阈值或 detector 的重新选择。若在 test 前再次修改 loss、模型、训练预算或 validation 选择，本节冻结状态自动失效，必须重新明确模型集合后才能打开 test。
+原“下一步直接执行 designated test”的判断撤回。下一阶段先在冻结的数据、loss、metrics、checkpoint selector 与训练预算下完成时域 + STFT/时频融合候选；只有该阶段的候选集合和 validation 决策全部冻结后，才能重新确定最终 test 模型集合。Test 不参与模型、epoch、频带、阈值或 detector 的选择。
+
+## 23. 下一阶段：时域 + STFT/时频融合（2026-08-04）
+
+### 23.1 科研角色与范围
+
+后续主研究路线确定为**时域 + STFT/时频融合**。`B0_final_loss_patchmixer` 只作为统一协议下的纯时域参照，M1 只回答已经完成的参数匹配多尺度问题；不再围绕纯时域模型继续宽度、尺度或预算搜索。当前也不恢复历史模型 zoo、旧双分支 runner、辅助 STFT target head、复数输出头、门控/cross-attention 组合或旧实验结论。
+
+第一项融合实验只回答一个问题：**在保持 PatchMixer 时间分支、训练目标和评价协议不变时，从同一 BCG 输入提取的局部呼吸带 STFT 表示能否提供有用的互补信息。** STFT 只读取输入 BCG，不读取 target，不产生新的监督项，也不改变最终输出仍为 raw waveform、正式评价统一经过公共 $\Pi=S\circ B$ 的语义。
+
+### 23.2 第一候选 `T1_time_stft_fusion`（设计已冻结）
+
+为避免再次把多个结构变量捆绑在一次实验中，第一候选采用以下最小设计：
+
+| 部分 | 冻结值 | 理由 |
+|---|---|---|
+| 时间分支 | 与 B0 完全相同的 `PatchMixer1D` | 只增加时频表示，保留直接可比的时间域参照 |
+| STFT 输入 | 同一个 `bcg_rawish_segment_soft_z_key` | 不引入第二数据源或 target 派生特征 |
+| STFT 窗/步长 | 30 秒 / 10 秒，`center=False`、不 padding、symmetric Hann | 与已解释的局部呼吸尺度一致；180 秒产生 16 帧，避免额外引入另一套局部时间口径 |
+| STFT 频带 | `0.05–0.70 Hz`，端点包含 | 遵守当前统一呼吸频带，不利用 target 选带，也不在第一版增加宽频带解释 |
+| STFT 特征 | `log1p` 功率谱；每帧频率形状规范化，并增加一条跨 16 帧规范化的相对带内能量通道 | 同时表达局部主频/谱形与相对呼吸努力，且不需要 train/test 统计量 |
+| 时频编码器 | `Conv1d(21,16,3)` → `GroupNorm(1,16)` → SiLU → `Conv1d(16,16,3)` → SiLU | 先验证表示本身，不同时比较 Conv2D、Transformer、分频带或可学习频带 |
+| 对齐 | 将 16 帧特征线性插值到 PatchMixer token 数 | 只做确定性时间轴对齐，不引入可学习重采样 |
+| 融合 | 16 帧线性插值至 token 数，`align_corners=False`；经 `Conv1d(16,16,1)` 后在 mixer 后残差相加，projection 零初始化 | 单一融合位置；初始输出严格等于 B0，输出头与 B0 相同 |
+| 输出与 loss | raw waveform；$L_{\mathrm{sync}}+0.25L_{\mathrm{effort}}$ | 不改变已冻结输出空间和训练目标 |
+
+精确特征定义如下。对第 $t$ 个 3000 点 frame 先减去该 frame 均值，再乘 symmetric Hann $w[n]$：
+
+$$
+P_{t,k}=\left|\operatorname{rFFT}_{3000}\left((x_t[n]-\bar x_t)w[n]\right)_k\right|^2.
+$$
+
+固定 `rFFT norm="backward"`。100 Hz、3000 点下，`0.05–0.70 Hz` 实际包含 $k=2,\ldots,21$ 共 20 个离散 bin（$0.066\overline6,\ldots,0.70$ Hz）；“端点包含”不虚构不存在的 0.05 Hz bin。令 $\epsilon=10^{-8}$、$u_{t,k}=\log(1+P_{t,k})$，每帧谱形为：
+
+$$
+z_{t,k}=\frac{u_{t,k}-\operatorname{mean}_j u_{t,j}}
+{\sqrt{\operatorname{mean}_j(u_{t,j}-\operatorname{mean}_\ell u_{t,\ell})^2+\epsilon}}.
+$$
+
+带内能量先取 $r_t=\log(1+\operatorname{mean}_k P_{t,k})$，再只在同一个 180 秒 sample 的 16 帧之间规范化：
+
+$$
+a_t=\frac{r_t-\operatorname{mean}_s r_s}
+{\sqrt{\operatorname{mean}_s(r_s-\operatorname{mean}_q r_q)^2+\epsilon}}.
+$$
+
+时频分支输入为每帧 $[z_{t,2},\ldots,z_{t,21},a_t]$ 共 21 维。该定义保留窗内相对 effort，主动丢弃与公共 $S$ 不一致的整段绝对尺度；零信号严格得到全零有限特征。谱计算固定 float32，不受 AMP 影响。
+
+T1 共 `13520` 个可训练参数，相比 B0 的 `11408` 增加 `2112`（`18.51%`）。第一版不强制参数完全相同：T1 回答的是“增加一个受限时频分支”是否有益。如果 T1 在三 seed validation 上形成值得继续的改善，再把“STFT 信息收益”与“新增容量收益”的区分作为后续单独对照；不提前把纯时域容量搜索扩展为主线。
+
+### 23.3 实验顺序与停止边界
+
+1. 第 23.2 节的精确数学和模块契约已经冻结，并以独立 `time_stft_fusion1d` 实现；模型注册表保留旧模型，但 T1 不调用旧 `time_stft_dual1d` 的历史多模式配置。
+2. 运行定向单测、CPU 生命周期 smoke 和一次 batch 128 GPU 前向/反向验收；这些只证明实现成立，不形成科研结果。
+3. 保持完整 train/validation、50 epochs、batch 128、seed `20260811 / 20260812 / 20260813`、Local RR checkpoint selector 和现有 metrics 不变，运行 T1 三 seed 正式实验。
+4. T1 完成前不增加 STFT-only、频带、窗长、融合位置、门控、编码器或 loss 消融。T1 结果完成后，再依据预先声明的多指标解释边界决定是否值得展开一个归因对照；不因单个 test 结果返工。
+
+Designated test 在本阶段继续封存。最终 test 集合至少要等 T1 validation 完成后重新明确，不能沿用第 22 节曾经误写的“PatchMixer 已是最终模型”结论。
+
+### 23.4 实现验收（2026-08-04）
+
+- 新增独立 `resp_train/models/time_stft_fusion.py`，只包含冻结的呼吸带 STFT 特征和 T1 融合模型；没有调用或扩展旧 `time_stft_dual1d`。
+- 当前配置已切换为 `time_stft_fusion1d`、seed `20260811` 和独立 T1 run root；配置校验拒绝窗长、步长、通道、epsilon 或 PatchMixer 骨干漂移。
+- 合成验收覆盖：20 个冻结频点、16 帧、零输入有限全零语义、0.2 Hz 频点定位、幅度调制相对 effort、零初始化时与 B0 输出严格相同，以及 projection 暖启后 STFT encoder 获得有限非零梯度。
+- `./.venv/bin/python -m pytest -q tests`：`272 passed`。
+- 一次性 CPU 生命周期 smoke 使用 8 train + 8 validation、batch 4、1 epoch，成功生成两个 checkpoint、完整最小训练历史、逐 sample metrics、summary、config、audit 与 manifest；输出目录为 `/tmp/tho_restart_t1_cpu_smoke/20260804_021007_216139`。该 smoke 的数值不构成科研结果。
+- Batch 128 GPU 验收使用 128 train + 32 validation、1 epoch、seed `20260811`，运行目录为 `/tmp/tho_restart_t1_batch128_acceptance/20260804_104201_521013`。运行生成完整生命周期产物，无 OOM、Traceback 或非有限训练值；两个 checkpoint 的全部模型 tensor 均 finite，零初始化 STFT projection 在一次 optimizer step 后达到非零最大绝对值约 `9.9997e-4`，证明融合路径已开始学习。该验收的 validation 数值不构成科研结果。
+- GPU 验收 manifest 记录 commit `ce8b092` 且 `git_dirty=true`，符合实现尚未提交时的预期；只用于工程验收，不作为正式 provenance。尚未运行正式三 seed T1 或 designated test。

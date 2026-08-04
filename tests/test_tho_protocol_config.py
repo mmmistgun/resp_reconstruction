@@ -8,10 +8,15 @@ from resp_train.experiments.tho import _validate_checkpoint_config
 from resp_train.models import build_model
 
 
-def test_research_v2_config_is_the_frozen_time_only_baseline() -> None:
+def test_research_v2_config_is_the_frozen_t1_candidate() -> None:
     cfg = load_config("configs/tho_research_v2.yaml")
-    assert cfg.model.name == "patch_mixer1d"
+    assert cfg.model.name == "time_stft_fusion1d"
     assert cfg.model.overlap_window == "hann"
+    assert cfg.model.stft_window_sec == 30
+    assert cfg.model.stft_step_sec == 10
+    assert cfg.model.stft_channels == 16
+    assert cfg.model.stft_feature_eps == 1e-8
+    assert sum(parameter.numel() for parameter in build_model(cfg).parameters()) == 13520
     assert cfg.data.max_train_windows is None
     assert cfg.data.max_val_windows is None
     assert cfg.loss.band_low_hz == 0.05
@@ -60,41 +65,17 @@ def test_frozen_protocol_rejects_semantic_drift(override: str, message: str) -> 
         load_config("configs/tho_research_v2.yaml", overrides=[override])
 
 
-def test_m1_multiscale_candidate_is_frozen_and_parameter_matched() -> None:
-    baseline_cfg = load_config("configs/tho_research_v2.yaml")
-    candidate_cfg = load_config(
-        "configs/tho_research_v2.yaml",
-        overrides=[
-            "model.name=multiscale_patch_mixer1d",
-            "model.base_channels=1",
-            "model.patch_lengths=[256,512,1024,2048]",
-            "model.patch_stride_ratio=0.5",
-        ],
-    )
-    baseline_parameters = sum(parameter.numel() for parameter in build_model(baseline_cfg).parameters())
-    candidate_parameters = sum(parameter.numel() for parameter in build_model(candidate_cfg).parameters())
-    assert candidate_parameters == 11664
-    assert abs(candidate_parameters - baseline_parameters) / baseline_parameters < 0.05
-
-
 @pytest.mark.parametrize(
     "override",
     [
-        "model.base_channels=2",
-        "model.patch_lengths=[256,512,1024]",
-        "model.patch_stride_ratio=0.25",
+        "model.base_channels=8",
+        "model.stft_window_sec=60",
+        "model.stft_step_sec=5",
+        "model.stft_channels=8",
+        "model.stft_feature_eps=1e-6",
         "model.mixer_layers=3",
     ],
 )
-def test_m1_multiscale_candidate_rejects_architecture_drift(override: str) -> None:
-    with pytest.raises(ValueError, match="M1 冻结要求"):
-        load_config(
-            "configs/tho_research_v2.yaml",
-            overrides=[
-                "model.name=multiscale_patch_mixer1d",
-                "model.base_channels=1",
-                "model.patch_lengths=[256,512,1024,2048]",
-                "model.patch_stride_ratio=0.5",
-                override,
-            ],
-        )
+def test_t1_candidate_rejects_architecture_drift(override: str) -> None:
+    with pytest.raises(ValueError, match="T1 冻结要求"):
+        load_config("configs/tho_research_v2.yaml", overrides=[override])

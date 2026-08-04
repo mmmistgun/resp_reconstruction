@@ -96,7 +96,7 @@ def _validate_config(cfg: Any) -> None:
             raise ValueError(f"{key} 必须是 {sorted(sample_strategies)} 之一，当前为: {value}")
 
     model_name = str(OmegaConf.select(cfg, "model.name"))
-    allowed_models = {"patch_mixer1d", "multiscale_patch_mixer1d"}
+    allowed_models = {"patch_mixer1d", "multiscale_patch_mixer1d", "time_stft_fusion1d"}
     if model_name not in allowed_models:
         raise ValueError(f"当前实验只允许模型 {sorted(allowed_models)}，当前为: {model_name}")
     if model_name == "multiscale_patch_mixer1d":
@@ -111,10 +111,29 @@ def _validate_config(cfg: Any) -> None:
             normalized = OmegaConf.to_container(value, resolve=True) if OmegaConf.is_config(value) else value
             if normalized != expected:
                 raise ValueError(f"M1 冻结要求 {key}={expected}，当前为 {value}")
+    if model_name == "time_stft_fusion1d":
+        expected_t1 = {
+            "model.in_channels": 1,
+            "model.out_channels": 1,
+            "model.base_channels": 16,
+            "model.patch_len": 256,
+            "model.patch_stride": 128,
+            "model.mixer_layers": 2,
+            "model.overlap_window": "hann",
+            "model.output_smoothing_kernel": 1,
+            "model.stft_window_sec": 30,
+            "model.stft_step_sec": 10,
+            "model.stft_channels": 16,
+            "model.stft_feature_eps": 1e-8,
+        }
+        for key, expected in expected_t1.items():
+            value = OmegaConf.select(cfg, key)
+            if value != expected:
+                raise ValueError(f"T1 冻结要求 {key}={expected}，当前为 {value}")
 
     lr_scheduler = OmegaConf.select(cfg, "training.lr_scheduler")
     if lr_scheduler != "none":
-        raise ValueError("当前冻结 baseline 不使用 learning-rate scheduler")
+        raise ValueError("当前冻结协议不使用 learning-rate scheduler")
 
     if int(OmegaConf.select(cfg, "window.target_fs")) != 100:
         raise ValueError("当前冻结协议要求 window.target_fs=100")
@@ -149,6 +168,6 @@ def _validate_config(cfg: Any) -> None:
             raise ValueError(f"当前冻结协议要求 {key}={expected}，当前为 {value}")
 
     if OmegaConf.select(cfg, "training.grad_clip_norm") is not None:
-        raise ValueError("当前冻结 baseline 不使用 gradient clipping")
+        raise ValueError("当前冻结协议不使用 gradient clipping")
     if bool(OmegaConf.select(cfg, "training.use_amp")):
         raise ValueError("当前冻结协议要求 training.use_amp=false")

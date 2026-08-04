@@ -9,12 +9,12 @@
 - 数据：2026-06-20 research v2 soft-z。
 - 输入：`bcg_rawish_segment_soft_z_key`。
 - target：`target_waveform_segment_soft_z_key`。
-- 最终学习模型：纯时域 `patch_mixer1d`；M1 多尺度候选未入选。
+- 当前候选：`time_stft_fusion1d`；纯时域 PatchMixer 只作为 B0 协议 baseline。
 - 训练 loss：`L_sync + 0.25 L_effort`；rhythm 与短期 polarity 已由消融删除。
 - 正式输出：$\Pi=S\circ B$，统一 `0.05–0.70 Hz`。
 - checkpoint：完整 validation Local RR MAE 最小 epoch。
 - early stopping：关闭。
-- designated test：最终 PatchMixer 三个 seed 与固定带传统参照已经冻结，尚未执行。
+- designated test：继续封存；需等待 T1 validation 和最终模型集合重新冻结。
 
 ## 数据与 split 审计
 
@@ -57,146 +57,46 @@ Smoke 不是科研结果：
   --set data.max_val_windows=32 \
   --set training.epochs=2 \
   --set training.batch_size=8 \
-  --set training.seed=20260802 \
-  --set training.device=cuda:0 \
-  --set outputs.run_root=runs/tho_restart_b0_smoke
-```
-
-### 单 seed 预算 pilot
-
-默认 config 即 pilot：完整 train/validation、50 epochs、seed `20260802`、batch 128。只需指定设备：
-
-```bash
-./.venv/bin/python scripts/train_tho.py \
-  --config configs/tho_research_v2.yaml \
-  --set training.device=cuda:0
-```
-
-若 pilot 的最小 validation Local RR epoch 位于 41–50，正式预算统一为 80 epochs；否则为 50。Pilot 不进入正式结果，也不查看 test。
-
-### 三 seed 正式 baseline（已完成）
-
-Pilot 已将正式预算冻结为 50 epochs；正式 baseline 已按 seed `20260811 / 20260812 / 20260813` 完成：
-
-```bash
-./.venv/bin/python scripts/train_tho.py \
-  --config configs/tho_research_v2.yaml \
-  --set training.epochs=50 \
   --set training.seed=20260811 \
   --set training.device=cuda:0 \
-  --set outputs.run_root=runs/tho_restart_b0_formal/seed_20260811
+  --set outputs.run_root=/tmp/tho_restart_t1_smoke
 ```
 
-另外两个 seed 使用完全相同配置，只改变训练 seed 与输出目录。
+### T1 batch 128 GPU 验收（已通过）
 
-### 三个 loss 消融（已完成）
-
-三个消融保持 PatchMixer、数据、metrics、checkpoint selector、50 epochs 和正式 seeds 不变，只把一个辅助 loss 权重精确置零。配置拒绝任意中间权重与未预注册组合；不进行权重搜索。以下三个循环已经完成，未打开 designated test。
-
-`A1_no_rhythm`：
-
-```bash
-for seed in 20260811 20260812 20260813; do
-  ./.venv/bin/python scripts/train_tho.py \
-    --config configs/tho_research_v2.yaml \
-    --set loss.rhythm_weight=0 \
-    --set training.epochs=50 \
-    --set training.seed="${seed}" \
-    --set training.device=cuda:0 \
-    --set outputs.run_root="runs/tho_restart_a1_no_rhythm/seed_${seed}" \
-    || exit 1
-done
-```
-
-`A2_no_effort`：
-
-```bash
-for seed in 20260811 20260812 20260813; do
-  ./.venv/bin/python scripts/train_tho.py \
-    --config configs/tho_research_v2.yaml \
-    --set loss.effort_weight=0 \
-    --set training.epochs=50 \
-    --set training.seed="${seed}" \
-    --set training.device=cuda:0 \
-    --set outputs.run_root="runs/tho_restart_a2_no_effort/seed_${seed}" \
-    || exit 1
-done
-```
-
-`A3_no_pol`：
-
-```bash
-for seed in 20260811 20260812 20260813; do
-  ./.venv/bin/python scripts/train_tho.py \
-    --config configs/tho_research_v2.yaml \
-    --set loss.pol_start_weight=0 \
-    --set training.epochs=50 \
-    --set training.seed="${seed}" \
-    --set training.device=cuda:0 \
-    --set outputs.run_root="runs/tho_restart_a3_no_pol/seed_${seed}" \
-    || exit 1
-done
-```
-
-9 个 run 的 validation 结果支持删除 rhythm、保留 effort、删除短期 polarity。详细决定见协议第 18 节。
-
-### 最终 loss 的 PatchMixer baseline（已完成）
-
-第五个实验 `B0_final_loss_patchmixer` 在物理精简前同时设置 `rhythm_weight=0` 与 `pol_start_weight=0`，三个 seed 已完成并确认没有联合删除交互，结果位于 `runs/tho_restart_b0_final_loss_patchmixer`。当前默认配置已经直接采用最终两项 loss，并拒绝旧字段重新进入训练；旧命令由对应 run manifest 追溯，不再作为当前可运行入口保留。
-
-结果接受 `dirty-but-runtime-audited` provenance 例外，详见协议第 20 节。零权重分量已经从当前实现物理删除。
-
-### M1 参数匹配多尺度纯时域模型（已完成，未入选）
-
-M1 使用 `multiscale_patch_mixer1d`，四个 patch 尺度为 `256 / 512 / 1024 / 2048` 点，`base_channels=1`，总参数 `11664`；B0 为 `11408`。模型 raw head 不内置频带投影，继续统一使用公共 $\Pi=S\circ B$。以下命令只追溯已完成的验收和正式运行，不再用于追加预算或调参。
-
-先做一次 batch 128 GPU 验收；该结果不构成科研结果：
+该命令只验证显存、前向/反向、checkpoint 和 validation 生命周期，不构成科研结果：
 
 ```bash
 ./.venv/bin/python scripts/train_tho.py \
   --config configs/tho_research_v2.yaml \
-  --set model.name=multiscale_patch_mixer1d \
-  --set model.base_channels=1 \
-  --set 'model.patch_lengths=[256,512,1024,2048]' \
-  --set model.patch_stride_ratio=0.5 \
-  --set model.mixer_layers=2 \
   --set data.max_train_windows=128 \
   --set data.max_val_windows=32 \
   --set training.epochs=1 \
   --set training.batch_size=128 \
-  --set training.seed=20260802 \
+  --set training.seed=20260811 \
   --set training.device=cuda:0 \
-  --set outputs.run_root=/tmp/tho_restart_m1_batch128_acceptance
+  --set outputs.run_root=/tmp/tho_restart_t1_batch128_acceptance
 ```
 
-验收通过后，正式三个 seed 顺序运行：
+验收目录为 `/tmp/tho_restart_t1_batch128_acceptance/20260804_104201_521013`；未出现 OOM、非有限状态或生命周期错误。
+
+### T1 三 seed 正式 validation
+
+T1 沿用已冻结的 50 epochs、batch 128 和正式 seeds，只改变模型表示。验收通过后顺序运行：
 
 ```bash
 for seed in 20260811 20260812 20260813; do
   ./.venv/bin/python scripts/train_tho.py \
     --config configs/tho_research_v2.yaml \
-    --set model.name=multiscale_patch_mixer1d \
-    --set model.base_channels=1 \
-    --set 'model.patch_lengths=[256,512,1024,2048]' \
-    --set model.patch_stride_ratio=0.5 \
-    --set model.mixer_layers=2 \
     --set training.epochs=50 \
     --set training.seed="${seed}" \
     --set training.device=cuda:0 \
-    --set outputs.run_root="runs/tho_restart_m1_multiscale_time/seed_${seed}" \
+    --set outputs.run_root="runs/tho_restart_t1_time_stft_fusion/seed_${seed}" \
     || exit 1
 done
 ```
 
-M1 validation 提高了 effort，但 Whole/Local RR、signed PCC、IBI 与 coverage 均退化，因此未入选最终模型集合，也不进入 designated test。详细结果见协议第 22 节。
-
-### 最终模型集合
-
-- 学习模型：`B0_final_loss_patchmixer` 三个 Local RR 最优 checkpoint。
-- 确定性参照：`F0_fixed_band_bcg`。
-- M1：仅作 validation 负结果留档。
-
-在 designated test 执行前，不再根据 validation 修改 loss、模型、epoch、频带、阈值或 detector。
+T1 完成前不增加 STFT-only、窗长、频带、融合位置、门控或编码器搜索。Designated test 继续封存；B0/M1 和 loss 消融的运行命令由各自 run manifest 与 Git 历史追溯。
 
 ## 固定呼吸带传统基线
 
