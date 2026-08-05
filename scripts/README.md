@@ -9,12 +9,12 @@
 - 数据：2026-06-20 research v2 soft-z。
 - 输入：`bcg_rawish_segment_soft_z_key`。
 - target：`target_waveform_segment_soft_z_key`。
-- 当前候选：`time_stft_fusion1d`；纯时域 PatchMixer 只作为 B0 协议 baseline。
+- 当前候选：T2 宽频 native、T3 宽频 concat、T4 宽频 bandenergy；三者复用现有 `time_stft_dual1d`。纯时域 PatchMixer 只作为 B0 协议 baseline。
 - 训练 loss：`L_sync + 0.25 L_effort`；rhythm 与短期 polarity 已由消融删除。
 - 正式输出：$\Pi=S\circ B$，统一 `0.05–0.70 Hz`。
 - checkpoint：完整 validation Local RR MAE 最小 epoch。
 - early stopping：关闭。
-- designated test：继续封存；需等待 T1 validation 和最终模型集合重新冻结。
+- designated test：继续封存；需等待 T2–T4 validation 和最终模型集合重新冻结。
 
 ## 数据与 split 审计
 
@@ -46,7 +46,7 @@ Split 独立性审计：
   --set training.device=cuda:0
 ```
 
-### 实现 smoke
+### T2 实现 smoke
 
 Smoke 不是科研结果：
 
@@ -59,12 +59,14 @@ Smoke 不是科研结果：
   --set training.batch_size=8 \
   --set training.seed=20260811 \
   --set training.device=cuda:0 \
-  --set outputs.run_root=/tmp/tho_restart_t1_smoke
+  --set outputs.run_root=/tmp/tho_restart_t2_smoke
 ```
 
-### T1 batch 128 GPU 验收（已通过）
+T2、T3、T4 均已分别通过一次性 CPU 生命周期 smoke；数值不构成科研结果。
 
-该命令只验证显存、前向/反向、checkpoint 和 validation 生命周期，不构成科研结果：
+### Batch 128 GPU 验收
+
+T2 native 路径：
 
 ```bash
 ./.venv/bin/python scripts/train_tho.py \
@@ -75,14 +77,28 @@ Smoke 不是科研结果：
   --set training.batch_size=128 \
   --set training.seed=20260811 \
   --set training.device=cuda:0 \
-  --set outputs.run_root=/tmp/tho_restart_t1_batch128_acceptance
+  --set outputs.run_root=/tmp/tho_restart_t2_batch128_acceptance
 ```
 
-验收目录为 `/tmp/tho_restart_t1_batch128_acceptance/20260804_104201_521013`；未出现 OOM、非有限状态或生命周期错误。
+T3 concat-deep 使用不同 decoder，需单独验收：
 
-### T1 三 seed 正式 validation
+```bash
+./.venv/bin/python scripts/train_tho.py \
+  --config configs/tho_research_v2_t3_concat.yaml \
+  --set data.max_train_windows=128 \
+  --set data.max_val_windows=32 \
+  --set training.epochs=1 \
+  --set training.batch_size=128 \
+  --set training.seed=20260811 \
+  --set training.device=cuda:0 \
+  --set outputs.run_root=/tmp/tho_restart_t3_batch128_acceptance
+```
 
-T1 沿用已冻结的 50 epochs、batch 128 和正式 seeds，只改变模型表示。验收通过后顺序运行：
+T4 与 T2 共用内存更低的 native 路径，T2 通过后不重复 batch 128 验收。
+
+### T2 三 seed 正式 validation
+
+先只运行第一顺位 T2：
 
 ```bash
 for seed in 20260811 20260812 20260813; do
@@ -91,12 +107,12 @@ for seed in 20260811 20260812 20260813; do
     --set training.epochs=50 \
     --set training.seed="${seed}" \
     --set training.device=cuda:0 \
-    --set outputs.run_root="runs/tho_restart_t1_time_stft_fusion/seed_${seed}" \
+    --set outputs.run_root="runs/tho_restart_t2_g3c_wide_native/seed_${seed}" \
     || exit 1
 done
 ```
 
-T1 完成前不增加 STFT-only、窗长、频带、融合位置、门控或编码器搜索。Designated test 继续封存；B0/M1 和 loss 消融的运行命令由各自 run manifest 与 Git 历史追溯。
+T2 结果核验后再决定是否依次运行已经冻结的 T3、T4；不根据 T2 数值修改它们的配置。T3 使用 `configs/tho_research_v2_t3_concat.yaml`，T4 使用 `configs/tho_research_v2_t4_bandenergy.yaml`，正式运行仍使用相同三个 seed、50 epochs 和独立 run root。Designated test 继续封存；B0/M1/T1 和 loss 消融由各自 run manifest 与 Git 历史追溯。
 
 ## 固定呼吸带传统基线
 

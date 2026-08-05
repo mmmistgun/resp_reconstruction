@@ -32,7 +32,7 @@ window:
 
 model:
   name: time_stft_dual1d
-  experiment_variant: t2_g3c_wide_native
+  experiment_variant: t3_e3a0_wide_concat
   in_channels: 1
   out_channels: 1
   base_channels: 16
@@ -43,15 +43,16 @@ model:
   overlap_window: hann
   output_smoothing_kernel: 1
   branch_mode: dual
-  stft_win: 2000
-  stft_hop: 250
+  stft_win: 3000
+  stft_hop: 500
   stft_low_hz: 0.05
   stft_high_hz: 8.0
   stft_out_channels: 16
   stft_norm: n0
   stft_encoder_type: conv2d
-  fusion_mode: native_inject
-  stft_inject_position: pre_mixer
+  fusion_mode: concat_generic
+  fuse_len: 600
+  fusion_decoder: deep
 
 loss:
   band_low_hz: 0.05
@@ -93,4 +94,4 @@ training:
   show_progress: auto
 
 outputs:
-  run_root: runs/tho_restart_t2_g3c_wide_native
+  run_root: runs/tho_restart_t3_e3a0_wide_concat

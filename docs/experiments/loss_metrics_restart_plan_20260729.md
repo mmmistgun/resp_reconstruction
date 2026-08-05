@@ -4,7 +4,7 @@
 
 最后更新：2026-08-04
 
-状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；首个时域 + STFT 融合候选 T1 已通过实现与 batch 128 GPU 验收，等待三 seed 正式 validation，designated test 继续封存
+状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；T1 未形成有效收益；三个基于既有有效结构的时频候选 T2–T4 已完成配置、测试与 CPU 验收，等待 GPU 验收和分阶段 validation，designated test 继续封存
 
 ## 1. 定位
 
@@ -1507,4 +1507,73 @@ Designated test 在本阶段继续封存。最终 test 集合至少要等 T1 val
 - `./.venv/bin/python -m pytest -q tests`：`272 passed`。
 - 一次性 CPU 生命周期 smoke 使用 8 train + 8 validation、batch 4、1 epoch，成功生成两个 checkpoint、完整最小训练历史、逐 sample metrics、summary、config、audit 与 manifest；输出目录为 `/tmp/tho_restart_t1_cpu_smoke/20260804_021007_216139`。该 smoke 的数值不构成科研结果。
 - Batch 128 GPU 验收使用 128 train + 32 validation、1 epoch、seed `20260811`，运行目录为 `/tmp/tho_restart_t1_batch128_acceptance/20260804_104201_521013`。运行生成完整生命周期产物，无 OOM、Traceback 或非有限训练值；两个 checkpoint 的全部模型 tensor 均 finite，零初始化 STFT projection 在一次 optimizer step 后达到非零最大绝对值约 `9.9997e-4`，证明融合路径已开始学习。该验收的 validation 数值不构成科研结果。
-- GPU 验收 manifest 记录 commit `ce8b092` 且 `git_dirty=true`，符合实现尚未提交时的预期；只用于工程验收，不作为正式 provenance。尚未运行正式三 seed T1 或 designated test。
+- GPU 验收 manifest 记录 commit `ce8b092` 且 `git_dirty=true`，符合实现尚未提交时的预期；只用于工程验收，不作为正式 provenance。验收完成后执行的正式三 seed T1 见第 24 节；designated test 仍未运行。
+
+## 24. T1 三 seed Validation 结果（2026-08-04）
+
+T1 正式结果位于 `runs/tho_restart_t1_time_stft_fusion`。三个 run 均使用 commit `4f7f60c`、完整 train/validation、50 epochs、batch 128、seed `20260811 / 20260812 / 20260813` 和冻结的两项 loss；最佳 epoch 均为第 7 epoch。三个 checkpoint 都与各自训练历史的最低 Local RR epoch 一致，checkpoint tensor 与训练历史全部 finite，每个 run 均输出 2675 个 validation sample，prediction-valid fraction 为 `1.0`、prediction-degenerate fraction 为 `0.0`，每个 seed 只有 `1/2675` 个负 signed PCC 样本。
+
+按 sample direct mean，再对三个 seed 报告算术 mean ± sample SD：
+
+| Validation 指标 | B0 final-loss PatchMixer | T1 time + STFT | T1 相对 B0 |
+|---|---:|---:|---|
+| Whole-window RR MAE（bpm） | `0.512706 ± 0.002988` | `0.523501 ± 0.003348` | 退化 `+0.010794`；0/3 seed 改善 |
+| Local RR MAE（bpm） | `0.626951 ± 0.000812` | `0.626562 ± 0.002510` | 均值改善 `-0.000389`，但仅 1/3 seed 改善，视为基本持平 |
+| Global effort Spearman | `0.488025 ± 0.002532` | `0.483581 ± 0.003852` | 退化 `-0.004444`；0/3 seed 改善 |
+| Local effort Spearman | `0.498227 ± 0.001125` | `0.493902 ± 0.002162` | 退化 `-0.004325`；0/3 seed 改善 |
+| Lag-aware signed PCC | `0.839730 ± 0.000659` | `0.838840 ± 0.002091` | 退化 `-0.000889`；0/3 seed 改善 |
+| IBI-MedAE（s） | `0.084295 ± 0.001170` | `0.085213 ± 0.001297` | 退化 `+0.000918`；1/3 seed 改善 |
+| IBI coverage | `0.845532 ± 0.001099` | `0.847339 ± 0.001961` | 改善 `+0.001807`；2/3 seed 改善 |
+| IBI interpretable fraction | `0.727103 ± 0.004112` | `0.727477 ± 0.003605` | 改善 `+0.000374`；2/3 seed 改善但幅度很小 |
+| Lag 边界命中比例 | `0.181308 ± 0.000374` | `0.182928 ± 0.002704` | 略增 `+0.001620` |
+
+T1 增加 `18.51%` 参数后，没有在最高优先级 Local RR 上形成跨 seed 一致改善，并在 Whole RR、两项 effort 与 signed PCC 上三个 seed 一致退化。IBI coverage 的小幅改善不足以覆盖主要任务轴的退化，因此 T1 不作为当前有效候选，也不因第 7 epoch 即最佳而追加预算。
+
+该结果不能外推为“时频融合无效”。T1 只检验了一个受限候选：输入 STFT 与输出算子共用 `0.05–0.70 Hz`、只使用 magnitude/power 表示、30 秒/10 秒单尺度，并在 PatchMixer mixer 后残差注入。三个最佳 checkpoint 的 STFT projection 权重 L2 norm 为 `0.881–0.956`，说明分支已经学习到非零注入，失败不能简单归因于零初始化导致分支未启动；更直接的解释是当前窄带表示没有提供足够互补信息，或注入位置无法有效利用它。
+
+三个正式 manifest 均记录 commit `4f7f60c` 且 `git_dirty=true`。运行时未提交内容为独立 IEWT baseline、`.gitignore` 和说明文档；训练入口及其导入路径不导入 `resp_train.baselines`，因此按用户此前接受的 `dirty-but-runtime-audited` provenance 例外使用这些 validation 结果。该例外不改变数据、split、target、loss、metrics、checkpoint selector 或训练预算。三个 run 均未执行 designated test。
+
+下一候选不能同时搜索频带、窗长、编码器与融合位置。当前最值得先重新审视的是 **输入 STFT 频带是否必须等于输出/评价频带**：`0.05–0.70 Hz` 对公共输出、loss 与 metrics 仍应冻结，但把同一窄带强加给 BCG 输入分支，可能使 STFT 与时间分支看到的信息高度冗余。若继续 T2，优先只扩大输入侧频率支持并保持输出侧 `0.05–0.70 Hz` 不变；具体输入上限与固定维度压缩方式需在实现前单独冻结。
+
+## 25. 既有有效结构复核与 T2–T4 模型矩阵（2026-08-04）
+
+### 25.1 对 T1 后续方向的修正
+
+回看重启前仍被列为 active evidence 的模型与普通 validation 结果后，撤回“下一步自行设计 `0.05–3 Hz` T2”的建议。旧 G2 已比较 `0.05–1.2 / 3 / 8 Hz`、bandgroup、bandenergy 与 high-only；普通 checkpoint 口径下，`0.05–8 Hz` 的 fullband Conv2D 最稳，`0.05–3 Hz` 没有超过它。直接重复 `0.05–3 Hz` 会忽略已有负/混合证据。
+
+T1 也不是旧有效 G3 结构的复现。它同时使用 30 秒/10 秒、`0.05–0.70 Hz`、20 个频点、16 帧、逐帧规范化 power、Conv1D 和 post-mixer 注入；旧 G3 anchor 使用 20 秒/2.5 秒、`0.05–8 Hz`、160 个频点、73 帧、N0 `log1p` magnitude、Conv2D 和 pre-mixer 注入。因此 T1 只作为独立负结果，不再围绕它的小改动继续搜索。
+
+旧结果的 loss、checkpoint 和 metrics 与当前协议不同，且部分旧证据包含历史 test 观察，不能直接与 B0/T1 数值比较，也不能作为当前 designated test 调参依据。本节只使用旧普通 validation 结果选择**待重训结构来源**；所有新结论必须来自当前 train/validation、当前 loss/metrics 与当前 Local RR checkpoint。
+
+### 25.2 冻结候选
+
+三个候选均直接复用现有 `TimeStftDual1D`、`STFTEncoder`、`FusionHead` 和 PatchMixer，不新增模型类，不恢复旧 runner、旧 loss、旧 checkpoint gate、top-k、early stopping、辅助 target-STFT head 或兼容配置。
+
+| 实验 | 结构来源与科学问题 | STFT 输入 | 编码/融合 | 参数量 | 状态 |
+|---|---|---|---|---:|---|
+| `T2_g3c_wide_native` | 复核旧 active anchor `G3_C_wide_8p0` 在当前协议下是否仍有净收益 | `win=2000`、`hop=250`、`center=True`、`0.05–8 Hz`、N0 `log1p magnitude`，73 帧/160 bins | Conv2D 16 ch；零初始化 `1×1`；`pre_mixer native_inject`；原生 PatchMixer decoder | `14192` | 第一顺位 |
+| `T3_e3a0_wide_concat` | 复核旧 E1-D/E3-A0.0 强简单融合；检验 richer fusion decoder 是否比窄 token 注入更会利用 STFT | `win=3000`、`hop=500`、`center=True`、`0.05–8 Hz`、N0，37 帧/239 bins | Conv2D 16 ch；time/STFT 对齐到 600；concat + deep FusionHead | `16305` 总参数，其中 PatchMixer 原生 decoder 在该路径不参与 forward | 第二顺位 |
+| `T4_g3c_bandenergy_native` | 复核旧 G3 中唯一仍有讨论价值的低维/条件修正候选 | 与 T2 相同；按既有 5 个重叠频带生成能量序列 | bandenergy Conv1D 16 ch；`pre_mixer native_inject` | `12752` | 第三顺位/条件候选 |
+
+T4 的五个既有重叠频带固定为 `0.05–0.30 / 0.10–0.70 / 0.30–1.20 / 0.70–3.00 / 3.00–8.00 Hz`，不重新选带。T3 的 `fuse_len=600` 和 deep FusionHead 是该完整历史结构的一部分；它不是 T2 的单变量消融，因此只比较完整模型结果，不把差异归因给单独的融合位置。
+
+输入频带与输出频带明确分工：`0.05–8 Hz` 只定义模型从 BCG 可观察的时频上下文，可能包含呼吸位移、心动及呼吸调制信息；公共输出、loss 与所有正式 metrics 继续固定 `0.05–0.70 Hz`。STFT 只读取 BCG，不读取 target，不存在 target 选带或 test-target 泄漏。
+
+### 25.3 执行顺序
+
+1. 为三个冻结候选准备独立 current-protocol config 和严格字段校验；复用现有模型实现，只补当前生命周期测试。
+2. T2 与 T3 各做一次 batch 128 GPU 验收；T4 与 T2 共用更低维的 native 路径，T2 通过后无需单独做显存验收。
+3. 先运行 T2 三 seed，再根据完整五项 primary、IBI + coverage 和有效性结果决定是否依次运行 T3、T4；候选配置本身不因 T2 数值修改。
+4. 每个正式候选均固定完整 train/validation、50 epochs、batch 128、seed `20260811 / 20260812 / 20260813` 和 Local RR checkpoint selector。不同候选不追加 80 epoch，不做 top-k、容差级联或模型内诊断搜索。
+5. 三个候选都不自动进入 designated test。只有当前模型研究阶段收口后，才重新冻结最终 test 集合。
+
+明确停止：不再准备 `0.05–3 Hz` 单独频带臂、STFT-only、gated/cross-attention、token-context、SST/CWT dense map、target-STFT loss、complex STFT 输出或 auxiliary/residual head；这些路线已有旧负/混合证据，且不符合当前精简方向。
+
+### 25.4 当前实现验收
+
+- T2 作为当前默认配置；T3、T4 分别使用独立 config。三个 config 只启用冻结字段，额外 auxiliary、gate、attention、输出头或未预注册模型字段会被配置校验拒绝。
+- 未新增模型类或复制既有融合逻辑；三个候选均由现有 `time_stft_dual1d` 注册入口构建。
+- 定向验收覆盖三个 config 的参数量、完整 18000 点 forward、finite 输出、频点数、bandenergy 数量，以及 T2 零初始化时与同一 PatchMixer 时间分支逐元素相同。
+- 三个候选分别用 8 train + 8 validation、batch 4、1 epoch 完成一次性 CPU 生命周期 smoke，均生成完整 checkpoint、history、metrics 和 manifest；数值不构成科研结果。
+- `./.venv/bin/python -m pytest -q tests`：`282 passed`。
+- 尚未运行 T2/T3 batch 128 GPU 验收、正式 T2–T4 validation 或 designated test。

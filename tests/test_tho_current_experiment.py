@@ -82,6 +82,8 @@ def test_current_experiment_keeps_earliest_local_rr_tie(monkeypatch, tmp_path) -
     assert best["epoch"] == 1
     assert (run_dir / "checkpoint_final.pt").exists()
     assert (run_dir / "metrics.csv").exists()
+    metrics = pd.read_csv(run_dir / "metrics.csv")
+    assert metrics["method"].tolist() == ["t2_g3c_wide_native"]
     assert (run_dir / "metrics_summary.csv").exists()
     assert (run_dir / "run_manifest.json").exists()
 

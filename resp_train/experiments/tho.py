@@ -159,7 +159,7 @@ class ThoExperiment:
             predictions,
             self.cfg,
             include_test_only=include_test_only,
-            method=str(self.cfg.model.name),
+            method=str(self.cfg.model.get("experiment_variant", self.cfg.model.name)),
         )
         frame.insert(0, "evaluation_split", split)
         return frame

@@ -96,7 +96,12 @@ def _validate_config(cfg: Any) -> None:
             raise ValueError(f"{key} 必须是 {sorted(sample_strategies)} 之一，当前为: {value}")
 
     model_name = str(OmegaConf.select(cfg, "model.name"))
-    allowed_models = {"patch_mixer1d", "multiscale_patch_mixer1d", "time_stft_fusion1d"}
+    allowed_models = {
+        "patch_mixer1d",
+        "multiscale_patch_mixer1d",
+        "time_stft_fusion1d",
+        "time_stft_dual1d",
+    }
     if model_name not in allowed_models:
         raise ValueError(f"当前实验只允许模型 {sorted(allowed_models)}，当前为: {model_name}")
     if model_name == "multiscale_patch_mixer1d":
@@ -130,6 +135,63 @@ def _validate_config(cfg: Any) -> None:
             value = OmegaConf.select(cfg, key)
             if value != expected:
                 raise ValueError(f"T1 冻结要求 {key}={expected}，当前为 {value}")
+    if model_name == "time_stft_dual1d":
+        variant = str(OmegaConf.select(cfg, "model.experiment_variant"))
+        common = {
+            "model.name": "time_stft_dual1d",
+            "model.experiment_variant": variant,
+            "model.in_channels": 1,
+            "model.out_channels": 1,
+            "model.base_channels": 16,
+            "model.time_backbone": "patch_mixer1d",
+            "model.patch_len": 256,
+            "model.patch_stride": 128,
+            "model.mixer_layers": 2,
+            "model.overlap_window": "hann",
+            "model.output_smoothing_kernel": 1,
+            "model.branch_mode": "dual",
+            "model.stft_low_hz": 0.05,
+            "model.stft_high_hz": 8.0,
+            "model.stft_out_channels": 16,
+            "model.stft_norm": "n0",
+        }
+        variants = {
+            "t2_g3c_wide_native": {
+                "model.stft_win": 2000,
+                "model.stft_hop": 250,
+                "model.stft_encoder_type": "conv2d",
+                "model.fusion_mode": "native_inject",
+                "model.stft_inject_position": "pre_mixer",
+            },
+            "t3_e3a0_wide_concat": {
+                "model.stft_win": 3000,
+                "model.stft_hop": 500,
+                "model.stft_encoder_type": "conv2d",
+                "model.fusion_mode": "concat_generic",
+                "model.fuse_len": 600,
+                "model.fusion_decoder": "deep",
+            },
+            "t4_g3c_bandenergy_native": {
+                "model.stft_win": 2000,
+                "model.stft_hop": 250,
+                "model.stft_encoder_type": "bandenergy",
+                "model.fusion_mode": "native_inject",
+                "model.stft_inject_position": "pre_mixer",
+            },
+        }
+        if variant not in variants:
+            raise ValueError(f"当前时频实验不允许 variant={variant!r}")
+        expected_variant = {**common, **variants[variant]}
+        for key, expected in expected_variant.items():
+            value = OmegaConf.select(cfg, key)
+            if value != expected:
+                raise ValueError(f"{variant} 冻结要求 {key}={expected}，当前为 {value}")
+        expected_model_keys = {key.removeprefix("model.") for key in expected_variant}
+        extra_model_keys = set(cfg.model.keys()) - expected_model_keys
+        if extra_model_keys:
+            raise ValueError(
+                f"{variant} 不接受未冻结模型字段: {sorted(extra_model_keys)}"
+            )
 
     lr_scheduler = OmegaConf.select(cfg, "training.lr_scheduler")
     if lr_scheduler != "none":
