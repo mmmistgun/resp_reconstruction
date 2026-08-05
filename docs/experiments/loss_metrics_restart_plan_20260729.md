@@ -4,7 +4,7 @@
 
 最后更新：2026-08-04
 
-状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；T1 未形成有效收益；三个基于既有有效结构的时频候选 T2–T4 已完成配置、测试与 CPU 验收，等待 GPU 验收和分阶段 validation，designated test 继续封存
+状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；T1 未形成有效收益；T2/T3 已通过 batch 128 GPU 验收，下一步运行第一顺位 T2 三 seed validation；T4 继续冻结待命，designated test 继续封存
 
 ## 1. 定位
 
@@ -1576,4 +1576,6 @@ T4 的五个既有重叠频带固定为 `0.05–0.30 / 0.10–0.70 / 0.30–1.20
 - 定向验收覆盖三个 config 的参数量、完整 18000 点 forward、finite 输出、频点数、bandenergy 数量，以及 T2 零初始化时与同一 PatchMixer 时间分支逐元素相同。
 - 三个候选分别用 8 train + 8 validation、batch 4、1 epoch 完成一次性 CPU 生命周期 smoke，均生成完整 checkpoint、history、metrics 和 manifest；数值不构成科研结果。
 - `./.venv/bin/python -m pytest -q tests`：`282 passed`。
-- 尚未运行 T2/T3 batch 128 GPU 验收、正式 T2–T4 validation 或 designated test。
+- T2 batch 128 GPU 验收目录为 `/tmp/tho_restart_t2_batch128_acceptance/20260805_155009_160323`；T3 为 `/tmp/tho_restart_t3_batch128_acceptance/20260805_155030_379024`。两者均使用 commit `b508a8a`、128 train + 32 validation、1 epoch、seed `20260811`，无 OOM、Traceback、非有限历史或非有限 checkpoint tensor，prediction-valid fraction 均为 `1.0`、prediction-degenerate fraction 均为 `0.0`。T2 零初始化 projection 在一次 optimizer step 后为非零，T3 完整 concat-deep 生命周期成功。
+- 两个验收 manifest 均因独立 IEWT 工作区内容记录 `git_dirty=true`；这些内容不在训练入口导入路径中。验收仅属工程证据。T4 与 T2 共用更低维 native 路径，不重复 GPU 验收。
+- 尚未运行正式 T2–T4 validation 或 designated test。

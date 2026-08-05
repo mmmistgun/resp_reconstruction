@@ -64,7 +64,7 @@ Smoke 不是科研结果：
 
 T2、T3、T4 均已分别通过一次性 CPU 生命周期 smoke；数值不构成科研结果。
 
-### Batch 128 GPU 验收
+### Batch 128 GPU 验收（已通过）
 
 T2 native 路径：
 
@@ -95,6 +95,8 @@ T3 concat-deep 使用不同 decoder，需单独验收：
 ```
 
 T4 与 T2 共用内存更低的 native 路径，T2 通过后不重复 batch 128 验收。
+
+验收目录分别为 `/tmp/tho_restart_t2_batch128_acceptance/20260805_155009_160323` 和 `/tmp/tho_restart_t3_batch128_acceptance/20260805_155030_379024`。
 
 ### T2 三 seed 正式 validation
 
