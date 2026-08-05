@@ -4,7 +4,7 @@
 
 最后更新：2026-08-04
 
-状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；T1 未形成有效收益；T2/T3 已通过 batch 128 GPU 验收，下一步运行第一顺位 T2 三 seed validation；T4 继续冻结待命，designated test 继续封存
+状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；T1 未形成有效收益；T2 三 seed validation 出现小幅多轴收益但 IBI 退化，保留为 active candidate；下一步运行 T3，T4 继续冻结待命，designated test 继续封存
 
 ## 1. 定位
 
@@ -583,15 +583,15 @@ $$
 新评价体系分成三个任务轴，不再把大量相关指标放入同一排序：
 
 1. **节律**：整窗主节律、60 秒局部平均节律，以及逐呼吸 IBI 稳定性。
-2. **相对努力**：180 秒整体趋势与 60 秒局部趋势。
+2. **相对努力**：180 秒相对努力轨迹与整窗调制范围；按 train-only target 调制量分层补充排序相关性。
 3. **联合波形与极性**：允许小延迟后的有符号呼吸频带相关性。
 
-第一版保留五个 `primary` 报告指标：
+当前保留五个 `primary` 报告指标：
 
 1. Whole-window RR MAE。
 2. Local RR MAE。
-3. Global effort-trend Spearman。
-4. Local effort-trend Spearman。
+3. Envelope trajectory MAE。
+4. Global envelope modulation error。
 5. Lag-aware signed band-limited PCC。
 
 这里的 `primary` 表示 validation 与 designated test 的正式任务轴，不表示五项可以直接平均成一个总分，也不表示五项都参与 checkpoint 排序；第 7.2 节只指定 Local RR 为唯一 selector。补充指标保留两组：IBI-MedAE + coverage 可用于 validation/test，但不参与 checkpoint 排序；coherence 与 nDTW 只在 designated test 计算，不进入训练期、validation、early stopping 或 checkpoint 选择。CCC 删除：在 canonical 输出已经去除整窗均值/尺度、再复用 signed PCC 最佳 lag 的条件下，它与 signed PCC 高度重叠，不能形成新的科学任务轴。
@@ -751,58 +751,86 @@ $$
 
 IBI-MedAE 不进入自动 checkpoint 排序。本轮明确不增加 breath-event precision/recall/F1，IBI 只与 coverage 配套报告。样本级 coverage 小于 0.80 时，该样本的 IBI-MedAE 记为缺失且不可解释，但 coverage 仍保留为 0–1 的实际值。若 target 有 IBI 而 prediction 无法形成有效事件对，则 `coverage=0`。匹配区间内的漏检或多检都会使相应 IBI 对无效并降低 coverage；匹配范围之外的额外事件不被完整评价，因此 IBI 只能作为逐呼吸节律补充结果。
 
-### 6.4 相对努力趋势指标
+### 6.4 相对努力包络指标
 
-直接在第 5.2 节得到的规范化呼吸频带信号 $\hat x$ 与 $x$ 上，按第 5.5 节相同的 valid 规则计算 10 秒 RMS、5 秒步长包络；不再次调用 $B$ 或 $S$：
-
-$$
-E_x[j]
-=
-\sqrt{
-\frac{1}{1000}
-\sum_{r=0}^{999}x[j+r]^2
-+10^{-8}
-}
-$$
-
-完整 180 秒的包络窗口起点为 0、5、…、170 秒，共 35 点；起点为 $s$ 的 60 秒局部窗只使用 $s+0,s+5,\ldots,s+50$ 秒，共 11 点。全部采用左闭右开、valid、无 padding 边界。包络每 5 秒采样一次，避免在 100 Hz 的强自相关序列上制造虚假的样本量。
-
-该 metric 不假设预测与 THO 存在线性幅值标定，因此采用 Spearman 相关。Spearman 固定定义为“分别使用 average ranks 处理并列值，再计算两组 rank 的 Pearson 相关”；target 有资格但 prediction ranks 为常量时直接返回 `-1`，不使用库默认的 NaN。
-
-#### 6.4.1 Global effort-trend Spearman
-
-在完整 180 秒上计算：
+直接在第 5.2 节完整 180 秒 canonical $\hat x/x$ 上计算，不再次调用 $B$、$S$，不使用
+$\tau^*_{\mathrm{eval}}$，也不为包络单独搜索 lag。窗口采用零基、左闭右开、valid、无 padding：
 
 $$
-\rho_{\mathrm{env,global},i}
-=
-\rho_S\left(E_{\hat x,i}^{180s},E_{x,i}^{180s}\right)
+q_x[j]
+=\frac12\log\left(
+\frac1{1000}\sum_{r=0}^{999}x[500j+r]^2+10^{-8}
+\right),\qquad j=0,1,\ldots,34.
 $$
 
-每个样本有 35 个包络点，越大越好。完整 180 秒规范化前 target $b$ 必须 dynamic，且 canonical target 包络有限、总体方差大于 $10^{-8}$；否则该样本的 Global effort 不可评价。Target 有效但 prediction 包络为常量时按 `-1` 计入。它回答整窗哪些阶段呼吸相对较深或较浅的排序是否一致，不评价绝对幅值。
-
-#### 6.4.2 Local effort-trend Spearman
-
-局部评价与 Local RR 使用相同的 60 秒窗口、15 秒步长。每个局部窗口严格包含 11 个 valid 包络采样点：
+$\log$ 为自然对数；完整 180 秒固定产生 35 点，窗口起点为 0、5、…、170 秒。统计量使用
+float64。预测与 target 分别做一次整窗中位数中心化：
 
 $$
-\rho_{\mathrm{env},i,k}
-=
-\rho_S\left(E_{\hat x,i,k},E_{x,i,k}\right)
+\tilde q_{\mathrm{pred}}=q_{\mathrm{pred}}-\operatorname{median}(q_{\mathrm{pred}}),
+\qquad
+\tilde q_{\mathrm{target}}=q_{\mathrm{target}}-\operatorname{median}(q_{\mathrm{target}}).
 $$
 
-样本内部直接取有效局部相关性的中位数：
+不得在更短窗口内重复归一化。所有分位数固定使用 NumPy `method="linear"`。
+
+#### 6.4.1 Envelope trajectory MAE
 
 $$
-\rho_{\mathrm{env,local},i}
-=
-\operatorname{median}_{k\in\mathrm{valid}}
-\left(\rho_{\mathrm{env},i,k}\right)
+E_{\mathrm{traj},i}
+=\frac1{35}\sum_{j=0}^{34}
+\left|\tilde q_{\mathrm{pred},i}[j]-\tilde q_{\mathrm{target},i}[j]\right|.
 $$
 
-这里不使用 Fisher-z，也不保留多种聚合策略。中位数直接、稳健，并避免对仅 11 个包络点得到的局部 Spearman 做额外分布假设。
+代码名称为 `envelope_trajectory_mae`，越低越好。它评价相对努力变化是否在正确时间发生以及变化程度
+是否接近。35 个包络点各计一次，不再通过重叠局部窗重复加权。
 
-参考包络为常量时，Spearman 没有定义。Local 窗口只有在规范化前 target $b$ dynamic，且 canonical target 包络有限、总体方差大于 $10^{-8}$ 时才有资格。Target 有效但 prediction 包络为常量时，Spearman 按最差值 `-1` 处理，不能排除 prediction 逃避评价。若某样本的 9 个局部窗均不具备 target 资格，则该样本的 Local effort Spearman 缺失；这是 target-driven 缺失，不用 prediction 失败值填补。
+#### 6.4.2 Global envelope modulation error
+
+定义稳健调制范围：
+
+$$
+R(q)=Q_{0.90}(q)-Q_{0.10}(q),
+$$
+
+则：
+
+$$
+E_{\mathrm{mod},i}
+=\left|R(q_{\mathrm{pred},i})-R(q_{\mathrm{target},i})\right|.
+$$
+
+代码名称为 `global_envelope_modulation_error`，越低越好。它评价整窗相对努力波动范围，不评价变化
+发生的时间位置，因此必须与 trajectory MAE 配套报告；二者不得组合成总 envelope score。
+
+两个主包络指标对所有 admitted sample 都有定义，不设置 target/prediction dynamic eligibility。Target
+平坦和 prediction 平坦都保留实际有限误差；任一 raw/canonical waveform、log-RMS 或主指标出现
+NaN/Inf 时整个评价失败，不能静默过滤。
+
+#### 6.4.3 Target-stratified envelope Spearman（补充分析）
+
+对完整 admitted training targets 的 $R(q_{\mathrm{target}})$ 使用 linear quantile 冻结三分层：
+
+$$
+c_{\mathrm{low}}=Q_{1/3}^{\mathrm{train}}=0.30875308839006915,
+\qquad
+c_{\mathrm{high}}=Q_{2/3}^{\mathrm{train}}=0.7031542121234101.
+$$
+
+本次阈值来自 10141 个 training targets，sample strategy 为 `stratified_random`、seed 为 `20260610`，
+有序 `dataset_row_id` 的 SHA-256 为
+`f290e569140a2ff7745cf1a5cfa6a4da943644d76498c9b85517d3ae0702c45e`。冻结产物由
+`scripts/freeze_envelope_strata.py` 生成；validation/test 不得重新估计。
+
+分层固定为 Low：$R<c_{\mathrm{low}}$；Medium：$c_{\mathrm{low}}\le R<c_{\mathrm{high}}$；
+High：$R\ge c_{\mathrm{high}}$。对 target log-envelope 总体方差大于 $10^{-8}$ 的样本，分别使用
+average ranks 处理 ties，再计算 prediction/target rank 的标准 Pearson 相关。Target 不满足该条件时
+Spearman target-ineligible；target eligible 但 prediction log-envelope 总体方差不大于 $10^{-8}$ 时固定
+记为 `-1`，不得排除。
+
+Low/Medium/High 只分别报告 mean Spearman、`n_total`、`n_eligible`、target-ineligible 数/比例和
+prediction-degenerate 数/比例；不再汇总为一个总体 Spearman。某层没有 eligible sample 时报告 `NA`
+（机器可读结果为缺失），不填 0 或 −1。该项只作补充解释，不进入 checkpoint 选择。
 
 ### 6.5 联合波形与极性指标
 
@@ -914,15 +942,16 @@ $$
 | Local RR MAE | 局部平均节律是否正确 | 60 秒/15 秒 | local → sample → direct mean | `primary + checkpoint selector` | validation + test | 已冻结 |
 | IBI-MedAE | 逐呼吸周期变化是否正确 | 逐事件 | event → sample → direct mean | `supplementary` | validation + test | 已冻结 |
 | IBI coverage | IBI 结果覆盖多少参考周期 | 逐事件 | event ratio → sample → direct mean | `coverage companion` | validation + test | 已冻结；不增加 event F1 |
-| Global envelope Spearman | 整窗相对努力趋势是否一致 | 180 秒 | envelope point → sample → direct mean | `primary` | validation + test | 已冻结 |
-| Local envelope Spearman | 局部相对努力趋势是否一致 | 60 秒/15 秒 | envelope point → local median → sample → direct mean | `primary` | validation + test | 已冻结 |
+| Envelope trajectory MAE | 相对努力变化是否在正确时间发生且程度接近 | 180 秒、35 个 log-RMS 点 | envelope point → sample → direct mean | `primary` | validation + test | 已冻结 |
+| Global envelope modulation error | 整窗相对努力波动范围是否正确 | 180 秒、Q90−Q10 | sample → direct mean | `primary` | validation + test | 已冻结 |
+| Target-stratified envelope Spearman | 不同 target 调制水平下的包络排序是否一致 | train-frozen Low/Medium/High | envelope point → sample → stratum direct mean | `supplementary` | validation + test | 已冻结；不汇总总体值 |
 | Lag-aware signed PCC | 方向正确的呼吸频带波形是否同步 | 180 秒，$\pm0.3$ 秒 lag | sample → direct mean | `primary` | validation + test | 已冻结 |
 | Respiratory-band coherence | 跨区段频域耦合是否一致 | Welch 60 秒/50% overlap，40 个频带 bin | frequency → sample → direct mean | `supplementary` | test only | 已冻结 |
 | Constrained nDTW | 有限局部变形下的波形差异 | 10 Hz、180 秒，warping ≤0.3 秒 | path → sample → direct mean | `supplementary` | test only | 已冻结 |
 
 ### 6.8 Eligibility 与无效 prediction 处理
 
-Eligibility 只能由 target、固定质量元数据和预先冻结的规则决定，prediction 不得参与样本是否被评价的判定。全局/局部 RR 与 signed PCC 使用第 6.2 节在 $b$ 上的 dynamic 条件；Global/Local effort 还要求对应 target 包络有限且非常量；IBI 使用共同区间的 $b$ dynamic 加至少两个 target 正峰。三类资格分别保存，不能用一个总 valid mask 代替。
+Eligibility 只能由 target、固定质量元数据和预先冻结的规则决定，prediction 不得参与样本是否被评价的判定。全局/局部 RR 与 signed PCC 使用第 6.2 节在 $b$ 上的 dynamic 条件；两个主包络误差覆盖所有 admitted sample，不设动态资格；分层 envelope Spearman 只要求 target log-envelope 总体方差大于 $10^{-8}$；IBI 使用共同区间的 $b$ dynamic 加至少两个 target 正峰。各类资格分别保存，不能用一个总 valid mask 代替。
 
 - Target、$B(y)$ 或 $x$ 出现 NaN/Inf：视为数据错误，训练/validation/test 立即失败，不算作普通 target-ineligible。
 - 有限 target 低于对应 target 动态/变化门槛：该项不具备评价资格，排除时必须保留 eligibility 计数。
@@ -934,7 +963,7 @@ Eligibility 只能由 target、固定质量元数据和预先冻结的规则决�
 | 情况 | 处理 |
 |---|---|
 | signed PCC 的 prediction 退化 | `-1` |
-| Global/Local effort Spearman 的 prediction 退化 | `-1` |
+| Target-stratified envelope Spearman 的 prediction 退化 | target eligible 时记 `-1` |
 | Whole/Local RR 无法从 prediction 估计 | RR 绝对误差记为 `42-3=39 bpm` |
 | IBI 无有效 prediction 事件对 | `coverage=0`，`IBI-MedAE=NaN`，且不能因 MedAE 缺失提高汇总 |
 
@@ -948,21 +977,21 @@ Loss 中若某个分量在整个 batch 没有任何 target-valid 样本，该分
 
 本轮沿用既有评价入口的**逐 sample 直接平均**，暂不实现 subject-balanced 聚合、比例分子分母跨 sample pooling、paired-seed delta 或 bootstrap。局部窗和事件先收敛成 180 秒 sample 指标仍属于 metric 自身定义，不属于额外统计均衡：
 
-1. **sample 内**：Local RR 对 target-eligible 局部误差取算术均值；Local effort 对 eligible 局部 Spearman 取中位数；IBI 对有效 IBI 误差取中位数。
-2. **标量指标汇总**：对所有 target-eligible 180 秒 sample 的指标值直接取算术平均。Prediction 导致的失败已经按第 6.8 节写成有限最差值，不能在求均值前删除。
+1. **sample 内**：Local RR 对 target-eligible 局部误差取算术均值；envelope trajectory MAE 对 35 点等权平均；IBI 对有效 IBI 误差取中位数。
+2. **标量指标汇总**：两个主包络指标对全部 admitted sample 直接平均；其余标量对各自 target-eligible 180 秒 sample 直接平均。Prediction 导致的失败已经按第 6.8 节写成有限最差值，不能在求均值前删除。
 3. **比例项汇总**：先在每个 sample 内计算 IBI coverage 和 Local RR prediction-valid fraction，再对 sample ratio 直接取算术平均；不跨 sample 合并分子分母。
 4. **IBI 条件结果**：IBI-MedAE 只对 sample coverage $\geq0.80$ 的样本级 MedAE 直接取均值，同时单独报告 sample-level coverage 的直接均值和可解释 sample fraction；IBI-MedAE 不得脱离二者单独引用。
 5. **headline**：沿用 `mean` 作为 checkpoint 和主表数值；median、p95 等只在既有汇总入口已经提供时作为描述，不新增 subject 层统计。
 
 多 seed 的跨 seed 配对、mean ± SD 或统计推断属于实验结果最终统计层，等 seed 数量和实验矩阵确定后再单独决定，不进入当前 metrics 实现。正式产物仍保留逐样本数值、sample-level eligibility/coverage 及数据集中的 subject 标识 `samp_id`，使未来可以独立增加 subject-balanced 分析，而无需改变当前默认汇总。
 
-本轮默认不实现 easy/hard、质量、RR 区间或其他探索性分层；若后续产生明确科研问题，再作为独立分析任务设计。
+本轮除第 6.4.3 节已冻结的 target-only envelope modulation 三分层外，不实现 easy/hard、质量、RR 区间或其他探索性分层；若后续产生明确科研问题，再作为独立分析任务设计。
 
 ### 6.10 与 Loss 时间尺度的关系
 
 消融后不再存在 30 秒 rhythm loss。Local RR 继续独立使用 60 秒窗口、15 秒 step，以获得较稳定、约 1 bpm 分辨率的局部平均 RR；更细的逐呼吸变化由 IBI-MedAE 检查。该评价口径没有因删除训练代理项而改变，也不新增 loss–metric 桥接验证。
 
-effort loss 与 metrics 统一使用 10 秒 RMS 包络、5 秒采样。二者只保留算法职责差异：loss 对 log-RMS 使用可微 Pearson，metrics 对同一基础包络使用 Spearman；Global metric 作用于 180 秒，Local metric 再按 60 秒/15 秒聚合。
+effort loss 与 metrics 统一使用 10 秒 log-RMS 包络、5 秒采样。Loss 在 lag 对齐后的共同区间使用可微 Pearson；metrics 不使用 lag，直接在完整 180 秒 35 点上报告中心化轨迹 MAE、Q90−Q10 调制范围误差，并以 train-only target 三分层 Spearman 作补充解释。两者共用观察尺度，但不要求 loss 与 metric 采用相同聚合或 eligibility。
 
 ### 6.11 Metric 一次性实现验收
 
@@ -972,7 +1001,8 @@ effort loss 与 metrics 统一使用 10 秒 RMS 包络、5 秒采样。二者只
 - 分别注入幅度缩放、单调非线性幅值映射、时延、极性翻转、倍频、漏周期和额外周期。
 - 验证固定延迟不影响 IBI，但局部时变延迟会增加 IBI 误差。
 - 验证 IBI-MedAE 不能通过只保留容易事件或生成多余事件获得虚假优势。
-- 验证全局和局部 effort 指标对整体幅值缩放及单调映射的预期不变性。
+- 验证两个主包络指标对整体正幅值缩放不敏感；target 平坦、prediction 伪调制、相同范围但时间顺序错误时返回语义符合定义。
+- 验证 35 点边界、linear quantile、train-frozen 三分层端点、target-ineligible 与 prediction-degenerate 计数。
 - 检查预处理和 mask 是否造成意外不变性或信息泄漏。
 - 检查短有效段、常量信号、低能量信号和无有效事件时的返回语义。
 - 与少量人工构造的确定性样例交叉核对。
@@ -991,7 +1021,7 @@ effort loss 与 metrics 统一使用 10 秒 RMS 包络、5 秒采样。二者只
 |---|---|---|---|---|---|---|
 | 有符号呼吸频带波形同步 | $\mathcal L_{\mathrm{sync}}$ | Lag-aware signed band-limited PCC | 全 prediction finite | $|\tau^*|$ median、p95、边界命中率 | 容忍 $\pm0.3$ 秒延迟；不容忍极性翻转 | 非有限使评价失败；选中 checkpoint 的 validation 平均 PCC 小于 0 表示方向/极性科学失败，不触发重选 epoch |
 | 全局与局部呼吸节律 | 无独立 loss；由 $\mathcal L_{\mathrm{sync}}$ 间接约束 | Whole-window RR MAE；Local RR MAE（60 秒/15 秒） | Local RR 是唯一 checkpoint selector；无额外阈值 | IBI-MedAE + coverage；Local RR prediction-valid fraction | 不要求绝对能量或相位单独匹配 | 无效 RR 计 39 bpm；prediction-valid fraction 只解释结果，不作门槛 |
-| 相对呼吸努力趋势 | $\mathcal L_{\mathrm{effort}}$：10 秒 log-RMS、5 秒采样 | Global/Local effort-trend Spearman | 无额外 guardrail | 无默认附加诊断 | 容忍整体幅值缩放和单调非线性标定 | target 常量时不可评价；prediction 常量记 `-1` |
+| 相对呼吸努力趋势 | $\mathcal L_{\mathrm{effort}}$：10 秒 log-RMS、5 秒采样 | Envelope trajectory MAE；Global envelope modulation error | 两个主指标覆盖全部 admitted sample | Train-frozen target-stratified envelope Spearman | 容忍整体正幅值缩放；不为包络搜索 lag | 主指标非有限使评价失败；分层 Spearman target 常量时不可评价、prediction 常量记 `-1` |
 
 ### 7.2 Validation、checkpoint 与 early stopping
 
@@ -1578,4 +1608,46 @@ T4 的五个既有重叠频带固定为 `0.05–0.30 / 0.10–0.70 / 0.30–1.20
 - `./.venv/bin/python -m pytest -q tests`：`282 passed`。
 - T2 batch 128 GPU 验收目录为 `/tmp/tho_restart_t2_batch128_acceptance/20260805_155009_160323`；T3 为 `/tmp/tho_restart_t3_batch128_acceptance/20260805_155030_379024`。两者均使用 commit `b508a8a`、128 train + 32 validation、1 epoch、seed `20260811`，无 OOM、Traceback、非有限历史或非有限 checkpoint tensor，prediction-valid fraction 均为 `1.0`、prediction-degenerate fraction 均为 `0.0`。T2 零初始化 projection 在一次 optimizer step 后为非零，T3 完整 concat-deep 生命周期成功。
 - 两个验收 manifest 均因独立 IEWT 工作区内容记录 `git_dirty=true`；这些内容不在训练入口导入路径中。验收仅属工程证据。T4 与 T2 共用更低维 native 路径，不重复 GPU 验收。
-- 尚未运行正式 T2–T4 validation 或 designated test。
+- GPU 验收完成时尚未运行正式 T2–T4 validation；随后完成的 T2 结果见第 26 节。Designated test 仍未执行。
+
+## 26. T2 `G3_C_wide_8p0` 当前协议复核结果（2026-08-05）
+
+T2 正式结果位于 `runs/tho_restart_t2_g3c_wide_native`。三个 run 均使用 commit `5632710`、完整 train/validation、50 epochs、batch 128 和 seed `20260811 / 20260812 / 20260813`；最佳 epoch 为 `8 / 6 / 10`，全部与训练历史的最低 Local RR epoch 一致。三个 checkpoint tensor 与训练历史全部 finite，每个 run 均输出 2675 个 validation sample，prediction-valid fraction 为 `1.0`、prediction-degenerate fraction 为 `0.0`，每个 seed 只有 `1/2675` 个负 signed PCC 样本。STFT projection L2 norm 为 `1.218–1.745`，证明宽频分支已被实际使用。
+
+按 sample direct mean，再对三个 seed 报告算术 mean ± sample SD：
+
+| Validation 指标 | B0 final-loss PatchMixer | T2 wide native | T2 相对 B0 |
+|---|---:|---:|---|
+| Whole-window RR MAE（bpm） | `0.512706 ± 0.002988` | `0.512559 ± 0.002194` | 基本持平 `-0.000148`；2/3 seed 改善 |
+| Local RR MAE（bpm） | `0.626951 ± 0.000812` | `0.624996 ± 0.001908` | 改善 `-0.001955`；2/3 seed 改善 |
+| Global effort Spearman | `0.488025 ± 0.002532` | `0.493966 ± 0.003763` | 改善 `+0.005940`；2/3 seed 改善，另 1 seed 近似持平 |
+| Local effort Spearman | `0.498227 ± 0.001125` | `0.502769 ± 0.002875` | 改善 `+0.004541`；3/3 seed 改善 |
+| Lag-aware signed PCC | `0.839730 ± 0.000659` | `0.840499 ± 0.000245` | 改善 `+0.000770`；3/3 seed 改善 |
+| IBI-MedAE（s） | `0.084295 ± 0.001170` | `0.087541 ± 0.002440` | 退化 `+0.003245`；仅 1/3 seed 改善 |
+| IBI coverage | `0.845532 ± 0.001099` | `0.845130 ± 0.001002` | 略退 `-0.000403`；1/3 seed 改善 |
+| IBI interpretable fraction | `0.727103 ± 0.004112` | `0.728224 ± 0.002617` | 略增 `+0.001121`；1/3 seed 改善 |
+| Lag 边界命中比例 | `0.181308 ± 0.000374` | `0.180312 ± 0.009758` | 均值略降，但 seed 波动明显 |
+
+T2 与 T1 不同：它没有在主要任务轴上形成系统性退化，而是在 Local RR、两项 effort 和 signed PCC 上给出小幅正信号，Whole RR 持平。因此旧 G3 结构在当前协议下仍有一定有效性，T2 保留为 active candidate。与此同时，Local RR 改善幅度很小且只有 2/3 seed，IBI-MedAE 退化约 `3.25 ms`，不能把 T2 表述为全面胜出或直接冻结为最终模型。
+
+该结果触发已预注册的后续比较：先运行 T3，检验旧 concat-deep 强融合是否能放大时频收益；之后是否运行 T4，结合 T3 结果和 T2 的 IBI 退化再决定，但不修改 T4 冻结配置。三个 T2 manifest 均记录 `git_dirty=true`；未提交内容仍为独立 IEWT baseline、`.gitignore` 和说明文档，不在训练入口导入路径中，按既定 runtime-audited provenance 例外使用。未执行 designated test。
+
+## 26. 包络 metrics 第二版冻结与实现（2026-08-05）
+
+原 Global/Local effort Spearman 同时受到低 target 变化量、短局部序列和重叠局部聚合影响，不能继续
+作为当前两个包络主轴。它们从当前默认输出和 summary 退出，替换为第 6.4 节的 envelope trajectory
+MAE 与 global envelope modulation error；train-frozen target-stratified Spearman 只作补充解释。
+
+实现位于 `resp_train/metrics/task.py`。公共 evaluator 仍只执行一次 $\Pi=S\circ B$，随后在完整
+180 秒 canonical waveform 上计算 35 点 log-RMS，不复用 waveform lag。两个主指标覆盖全部 admitted
+sample；主指标缺失或非有限使评价失败。逐样本输出同时保存 target modulation、stratum、Spearman
+eligibility 和 prediction-degenerate 状态，summary 分层报告计数与均值，不生成总体 envelope Spearman。
+
+Train-only 阈值由 `scripts/freeze_envelope_strata.py` 在 10141 个 admitted training targets 上复现并写入
+三个 current config；生成产物为 `runs/envelope_strata_train_20260805.json`。旧 checkpoint sidecar 只允许在
+复评入口补入这三个 evaluation-only 冻结字段；data、window、model、loss 及其他 evaluation 字段仍必须与
+checkpoint 一致。该兼容只支持固定 checkpoint 重评，不改变训练 forward、loss 或 checkpoint selector。
+
+本次 metric 变更不要求重训，但 2026-08-05 之前所有 Global/Local effort 数值不再属于当前主结果口径。
+固定传统 baseline、IEWT 与已选模型 checkpoint 必须依次按新指标重评后才能形成新的 validation 比较。
+Designated test 尚未运行，也不得因本次 validation 重评结果调整已冻结指标定义。
