@@ -1632,7 +1632,7 @@ T2 与 T1 不同：它没有在主要任务轴上形成系统性退化，而是�
 
 该结果触发已预注册的后续比较：先运行 T3，检验旧 concat-deep 强融合是否能放大时频收益；之后是否运行 T4，结合 T3 结果和 T2 的 IBI 退化再决定，但不修改 T4 冻结配置。三个 T2 manifest 均记录 `git_dirty=true`；未提交内容仍为独立 IEWT baseline、`.gitignore` 和说明文档，不在训练入口导入路径中，按既定 runtime-audited provenance 例外使用。未执行 designated test。
 
-## 26. 包络 metrics 第二版冻结与实现（2026-08-05）
+## 27. 包络 metrics 第二版冻结与实现（2026-08-05）
 
 原 Global/Local effort Spearman 同时受到低 target 变化量、短局部序列和重叠局部聚合影响，不能继续
 作为当前两个包络主轴。它们从当前默认输出和 summary 退出，替换为第 6.4 节的 envelope trajectory
@@ -1651,3 +1651,155 @@ checkpoint 一致。该兼容只支持固定 checkpoint 重评，不改变训练
 本次 metric 变更不要求重训，但 2026-08-05 之前所有 Global/Local effort 数值不再属于当前主结果口径。
 固定传统 baseline、IEWT 与已选模型 checkpoint 必须依次按新指标重评后才能形成新的 validation 比较。
 Designated test 尚未运行，也不得因本次 validation 重评结果调整已冻结指标定义。
+
+实现验收：定向协议测试 `47 passed`；完整当前测试 `289 passed`。Train-only 阈值复现成功，未读取
+validation/test target，未启动训练或 designated test。
+
+## 28. 新包络 metrics 的 F0 validation 重评（2026-08-05）
+
+第一项重评为确定性传统基线 `F0_fixed_band_bcg`。运行目录：
+`runs/tho_fixed_band_baseline_envelope_v2/20260805_165716_296054`。使用完整 validation 2675 个
+sample、`max_windows=null`、固定 val seed `20260611`，未运行 designated test。Manifest 记录 commit
+`da0c479`、`git_dirty=true`；按用户已接受的 dirty provenance 处理，不据此改动指标。
+
+| 指标 | F0 validation |
+|---|---:|
+| Envelope trajectory MAE ↓ | `0.168553` |
+| Global envelope modulation error ↓ | `0.212177` |
+| Low target modulation Spearman ↑ | `0.221103`（1136/1136 eligible） |
+| Medium target modulation Spearman ↑ | `0.458006`（652/652 eligible） |
+| High target modulation Spearman ↑ | `0.680142`（887/887 eligible） |
+
+两个主包络指标、target modulation 均为 2675/2675 finite；Spearman target-ineligible 和
+prediction-degenerate 均为 0。Low/Medium/High 分别占 validation 的 `42.47% / 24.37% / 33.16%`；
+不强求各占三分之一，因为边界严格由 training targets 冻结。按各层样本数加权后的 Spearman 恰好恢复
+旧 Global effort Spearman `0.431058`，说明分层实现没有改变 sample-level 排序相关语义，只把低调制
+sample 的影响显式拆开。
+
+Whole RR、Local RR、signed PCC、IBI 与旧 F0 重评逐项完全一致，证明本次只替换包络指标路径，未改变
+公共 canonical 输出或其他任务轴。不同 stratum 的 trajectory/modulation 绝对误差不可直接横向解释为
+“高调制更差”，因为 target 动态范围本身不同；后续方法比较应在同一整体 split 及同一 target stratum
+内进行。F0 重评通过，可进入 IEWT validation 重评。
+
+## 29. 新包络 metrics 的 IEWT validation 重评（2026-08-05）
+
+第二项重评为零相位 Python `IEWT`。运行目录：
+`runs/tho_iewt_baseline_envelope_v2/20260805_170706_038393`。使用与 F0 完全相同的完整 validation
+2675 个 sample、train-frozen envelope strata 和公共 evaluator；`max_windows=null`，未运行 designated
+test。Manifest 记录 commit `da0c479`、`git_dirty=true`、`filter_phase=zero_phase` 和
+`matlab_pointwise_parity=false`。
+
+| 包络指标 | F0 | IEWT | IEWT − F0 | 方向 |
+|---|---:|---:|---:|---:|
+| Envelope trajectory MAE | `0.168553` | `0.193583` | `+0.025030` | 越低越好，IEWT 较差 |
+| Global envelope modulation error | `0.212177` | `0.222981` | `+0.010804` | 越低越好，IEWT 均值较差 |
+| Low Spearman | `0.221103` | `0.245810` | `+0.024707` | IEWT 较高 |
+| Medium Spearman | `0.458006` | `0.403953` | `−0.054053` | IEWT 较低 |
+| High Spearman | `0.680142` | `0.590512` | `−0.089630` | IEWT 较低 |
+
+2675 个 `dataset_row_id` 一对一匹配，target modulation 和 stratum 逐样本完全相同。IEWT 的两个主
+包络指标及 target modulation 均为 2675/2675 finite，Spearman target-ineligible 和 prediction-degenerate
+均为 0。
+
+逐样本配对显示：IEWT 的 trajectory MAE 只有 `23.96%` sample 优于 F0，三个 target stratum 的均值
+都退化，其中 High 层增量最大（`+0.044621`）。因此 IEWT 在相对努力变化发生时间和轨迹形状上稳定不如
+直接固定带基线。Global modulation error 的结论更有异质性：IEWT 有 `52.26%` sample 优于 F0，配对
+delta 中位数为 `−0.002649`，但均值为 `+0.010804`，说明少量较大退化拉高均值。分层后，IEWT 只在
+High 层改善调制范围误差（`0.335966` vs `0.346514`），Low/Medium 层均退化。
+
+High 层同时出现“调制范围略好、trajectory MAE 和 Spearman 更差”，说明 IEWT 有时能恢复整体强弱范围，
+但没有把增强/减弱放在正确时段。Low 层 Spearman 略高但两个主误差都更差，也再次说明低调制 target
+上的排序相关只能作补充，不能覆盖主指标。
+
+非包络任务轴上，IEWT 相对 F0 明显改善 Whole RR（`0.584319` vs `1.059457`）、Local RR
+（`0.798060` vs `1.662157`）、signed PCC（`0.794842` vs `0.731464`）和 IBI coverage
+（`0.798221` vs `0.581893`）。IBI-MedAE 条件样本数同时从 1146 增至 1726，因此其数值不能脱离
+coverage 直接解释。综合结论是 IEWT 更擅长节律与波形同步，但不优于 F0 的相对努力轨迹恢复；两个
+传统方法形成互补而非单一全面胜负。IEWT 重评通过，可进入已选模型 checkpoint 重评。
+
+## 30. 新包络 metrics 的 B0 final-loss PatchMixer 重评（2026-08-06）
+
+第三项重评为 `B0_final_loss_patchmixer` 三个既有 Local RR 最优 checkpoint，seed 为
+`20260811 / 20260812 / 20260813`。逐 seed 新产物使用 `metrics_envelope_v2.csv` 与对应 summary/manifest，
+不覆盖旧 metrics。每个 seed 都评价完整 validation 2675 个 sample；三个 manifest 记录复评 commit
+`da0c479`、`git_dirty=true`，未运行 designated test。
+
+三个 seed 的 sample ID、target modulation 和 stratum 完全一致；每个 seed 的两个主包络指标均为
+2675/2675 finite，Spearman target-eligible 为 2675/2675，prediction-degenerate 为 0。旧 metrics 中
+Whole RR、Local RR、prediction-valid fraction、signed PCC、IBI-MedAE 和 IBI coverage 与本次输出
+逐样本最大绝对差均为 0，证明旧 checkpoint evaluation-only 配置迁移没有改变其他任务轴。
+
+| Validation 指标 | B0 mean ± sample SD | F0 | IEWT |
+|---|---:|---:|---:|
+| Envelope trajectory MAE ↓ | `0.155620 ± 0.000653` | `0.168553` | `0.193583` |
+| Global envelope modulation error ↓ | `0.244096 ± 0.005189` | `0.212177` | `0.222981` |
+| Low Spearman ↑ | `0.291283 ± 0.005623` | `0.221103` | `0.245810` |
+| Medium Spearman ↑ | `0.571272 ± 0.002540` | `0.458006` | `0.403953` |
+| High Spearman ↑ | `0.678806 ± 0.001620` | `0.680142` | `0.590512` |
+
+B0 的 trajectory MAE 三个 seed 均优于 F0 和 IEWT；相对 F0 平均降低 `0.012934`，逐 seed
+`65.61%–67.33%` 的 sample 更好；相对 IEWT 平均降低 `0.037963`，逐 seed `80.56%–82.21%` 的
+sample 更好。Low/Medium 层 B0 trajectory 明显最好；High 层 B0（`0.280477`）略差于 F0
+（`0.273663`），但优于 IEWT（`0.318284`）。
+
+Global modulation error 给出不同结论。B0 在 Low/Medium 层最好（分别为 `0.074821 / 0.185484`），
+但 High 层升至 `0.503975`，明显差于 F0 的 `0.346514` 和 IEWT 的 `0.335966`，从而使整体均值反而
+最差。B0 相对 F0/IEWT 的逐样本改善比例也只有 `42.21% / 41.76%`。三个 seed 都出现相同分层模式，
+因此不是单 seed 偶然波动。
+
+这一结果解释了新指标的必要性：B0 的 Low/Medium Spearman 最高、High Spearman 与 F0 基本持平，说明
+努力变化的时间排序和趋势已学到；但训练 `L_effort` 使用相关性，本身不直接约束 log-envelope 动态范围，
+所以旧 Spearman 无法暴露 High-modulation sample 的范围失配。当前证据不能仅由绝对误差判断是过度调制
+还是调制压缩，因为逐样本产物只保存绝对 modulation error；在不新增诊断并重评前不对方向作猜测。
+
+综合结论：B0 是三者中最好的相对努力轨迹恢复方法，也在节律和 waveform 指标上明显优于两个传统方法；
+但它不是包络维度上的全面胜者，High target modulation 的全局变化幅度是明确短板。该短板不触发重训、
+改 loss 或重选 checkpoint；先按同一口径重评 active T2 checkpoint，判断宽频时频分支是否改变这一模式。
+
+## 31. 新包络 metrics 的 T2 wide-native 重评（2026-08-06）
+
+第四项重评为 active candidate `T2_g3c_wide_native` 的三个既有 Local RR 最优 checkpoint，seed 为
+`20260811 / 20260812 / 20260813`。每个 seed 生成独立 `metrics_envelope_v2.csv`、summary 和 manifest，
+不覆盖旧结果；每个文件包含完整 validation 2675 个 sample，未运行 designated test。
+
+三个 seed 的主包络指标均为 2675/2675 finite，Spearman target-eligible 为 2675/2675，
+prediction-degenerate 为 0；sample ID、target modulation 和 stratum 完全一致。Whole RR、Local RR、
+prediction-valid fraction、signed PCC、IBI-MedAE 和 IBI coverage 与旧 T2 metrics 的逐样本最大绝对差
+均为 0。
+
+| Validation 指标 | T2 mean ± sample SD | B0 | F0 | IEWT |
+|---|---:|---:|---:|---:|
+| Envelope trajectory MAE ↓ | `0.153601 ± 0.001251` | `0.155620` | `0.168553` | `0.193583` |
+| Global envelope modulation error ↓ | `0.231247 ± 0.005794` | `0.244096` | `0.212177` | `0.222981` |
+| Low Spearman ↑ | `0.274319 ± 0.004658` | `0.291283` | `0.221103` | `0.245810` |
+| Medium Spearman ↑ | `0.583196 ± 0.002222` | `0.571272` | `0.458006` | `0.403953` |
+| High Spearman ↑ | `0.709681 ± 0.004435` | `0.678806` | `0.680142` | `0.590512` |
+
+与同 seed B0 逐样本配对时，T2 的 trajectory MAE 平均降低 `0.002019`。Seed `20260811/13` 有
+`55.07% / 59.81%` sample 改善，seed `20260812` 仅 `47.33%`，且该 seed 均值只改善
+`0.000098`；因此总体正信号很小，不应表述为每个 seed 均稳定胜出。Global modulation error 三个 seed
+均降低，平均改善 `0.012849`，逐 seed 改善样本比例为 `62.92% / 68.71% / 50.36%`。
+
+分层结果显示宽频分支主要帮助 Medium/High target modulation，而不是 Low：
+
+| 分层指标 | T2 | B0 | T2 − B0 |
+|---|---:|---:|---:|
+| Low trajectory MAE ↓ | `0.075023` | `0.072589` | `+0.002434` |
+| Medium trajectory MAE ↓ | `0.130643` | `0.130428` | `+0.000215` |
+| High trajectory MAE ↓ | `0.271113` | `0.280477` | `−0.009364` |
+| Low modulation error ↓ | `0.070583` | `0.074821` | `−0.004238` |
+| Medium modulation error ↓ | `0.176802` | `0.185484` | `−0.008681` |
+| High modulation error ↓ | `0.477033` | `0.503975` | `−0.026942` |
+| Low Spearman ↑ | `0.274319` | `0.291283` | `−0.016964` |
+| Medium Spearman ↑ | `0.583196` | `0.571272` | `+0.011924` |
+| High Spearman ↑ | `0.709681` | `0.678806` | `+0.030875` |
+
+T2 把 High trajectory MAE 改善到 `0.271113`，略好于 F0 的 `0.273663`，并取得四种方法中最高的
+Medium/High Spearman；说明宽频时频上下文确实改善了较明显努力变化的时间结构。与此同时，High
+modulation error 虽由 B0 的 `0.503975` 降至 `0.477033`，仍明显差于 F0/IEWT 的
+`0.346514 / 0.335966`。因此宽频分支缓解但没有解决动态范围失配，并以 Low 层 trajectory/Spearman
+小幅退化为代价。
+
+当前新指标重评阶段已经完成：F0、IEWT、B0 与 active T2 均使用相同 validation targets 和冻结口径。
+T2 保持 active candidate，但证据仍是多任务权衡而非全面优势；本轮重评本身不授权修改 loss、重训、
+重选 checkpoint 或开启 designated test。

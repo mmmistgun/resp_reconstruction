@@ -28,17 +28,39 @@ def check_required_packages(packages: Iterable[str] = REQUIRED_PACKAGES) -> list
     return missing
 
 
-def load_config(path: str | Path, overrides: Iterable[str] | None = None) -> "DictConfig":
+def load_config(
+    path: str | Path,
+    overrides: Iterable[str] | None = None,
+    *,
+    allow_legacy_envelope_metric_migration: bool = False,
+) -> "DictConfig":
     from omegaconf import OmegaConf
 
     cfg_path = Path(path)
     if not cfg_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {cfg_path}")
     cfg = OmegaConf.load(cfg_path)
+    if allow_legacy_envelope_metric_migration:
+        _migrate_legacy_envelope_metric_config(cfg)
     if overrides:
         cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(list(overrides)))
     _validate_config(cfg)
     return cfg
+
+
+def _migrate_legacy_envelope_metric_config(cfg: Any) -> None:
+    """只为旧 checkpoint sidecar 补入本次重评所需、不会影响训练 forward/loss 的冻结字段。"""
+
+    from omegaconf import OmegaConf
+
+    defaults = {
+        "evaluation.envelope_quantile_method": "linear",
+        "evaluation.envelope_strata_low": 0.30875308839006915,
+        "evaluation.envelope_strata_high": 0.7031542121234101,
+    }
+    for key, value in defaults.items():
+        if OmegaConf.select(cfg, key) is None:
+            OmegaConf.update(cfg, key, value, merge=False)
 
 
 def _validate_config(cfg: Any) -> None:
@@ -76,6 +98,9 @@ def _validate_config(cfg: Any) -> None:
         "evaluation.ibi_coverage_threshold",
         "evaluation.ndtw_fs",
         "evaluation.ndtw_radius_sec",
+        "evaluation.envelope_quantile_method",
+        "evaluation.envelope_strata_low",
+        "evaluation.envelope_strata_high",
         "training.epochs",
         "training.batch_size",
         "training.learning_rate",
@@ -223,11 +248,15 @@ def _validate_config(cfg: Any) -> None:
         "evaluation.ibi_coverage_threshold": 0.8,
         "evaluation.ndtw_fs": 10,
         "evaluation.ndtw_radius_sec": 0.3,
+        "evaluation.envelope_strata_low": 0.30875308839006915,
+        "evaluation.envelope_strata_high": 0.7031542121234101,
     }
     for key, expected in frozen_values.items():
         value = OmegaConf.select(cfg, key)
         if float(value) != float(expected):
             raise ValueError(f"当前冻结协议要求 {key}={expected}，当前为 {value}")
+    if str(OmegaConf.select(cfg, "evaluation.envelope_quantile_method")) != "linear":
+        raise ValueError("当前冻结协议要求 evaluation.envelope_quantile_method=linear")
 
     if OmegaConf.select(cfg, "training.grad_clip_norm") is not None:
         raise ValueError("当前冻结协议不使用 gradient clipping")

@@ -74,6 +74,9 @@ evaluation:
   ibi_coverage_threshold: 0.80
   ndtw_fs: 10
   ndtw_radius_sec: 0.30
+  envelope_quantile_method: linear
+  envelope_strata_low: 0.30875308839006915
+  envelope_strata_high: 0.7031542121234101
 
 training:
   epochs: 50

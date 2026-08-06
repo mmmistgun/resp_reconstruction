@@ -32,6 +32,9 @@ def test_research_v2_config_is_the_frozen_t2_candidate() -> None:
     assert "pol_start_weight" not in cfg.loss
     assert cfg.evaluation.local_rr_window_sec == 60
     assert cfg.evaluation.local_rr_step_sec == 15
+    assert cfg.evaluation.envelope_quantile_method == "linear"
+    assert cfg.evaluation.envelope_strata_low == pytest.approx(0.30875308839006915)
+    assert cfg.evaluation.envelope_strata_high == pytest.approx(0.7031542121234101)
     assert cfg.training.lr_scheduler == "none"
     assert cfg.training.grad_clip_norm is None
     assert cfg.training.use_amp is False
@@ -53,6 +56,15 @@ def test_checkpoint_reevaluation_only_allows_runtime_changes() -> None:
     with pytest.raises(ValueError, match="data"):
         _validate_checkpoint_config(checkpoint_config, changed_protocol)
 
+    reevaluation_metric_update = OmegaConf.create(checkpoint_config)
+    del reevaluation_metric_update.evaluation.envelope_strata_low
+    del reevaluation_metric_update.evaluation.envelope_strata_high
+    del reevaluation_metric_update.evaluation.envelope_quantile_method
+    _validate_checkpoint_config(
+        OmegaConf.to_container(reevaluation_metric_update, resolve=True),
+        cfg,
+    )
+
 
 @pytest.mark.parametrize(
     ("override", "message"),
@@ -60,6 +72,8 @@ def test_checkpoint_reevaluation_only_allows_runtime_changes() -> None:
         ("loss.band_low_hz=0.10", "0.05–0.70"),
         ("loss.sync_weight=0.5", "sync_weight=1.0"),
         ("loss.effort_weight=0.5", "effort_weight=0.25"),
+        ("evaluation.envelope_quantile_method=lower", "envelope_quantile_method=linear"),
+        ("evaluation.envelope_strata_low=0.2", "envelope_strata_low"),
         ("training.lr_scheduler=cosine", "不使用 learning-rate scheduler"),
         ("training.use_amp=true", "use_amp=false"),
     ],
@@ -67,6 +81,22 @@ def test_checkpoint_reevaluation_only_allows_runtime_changes() -> None:
 def test_frozen_protocol_rejects_semantic_drift(override: str, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         load_config("configs/tho_research_v2.yaml", overrides=[override])
+
+
+def test_checkpoint_reevaluation_can_migrate_only_missing_envelope_metric_fields(tmp_path) -> None:
+    cfg = OmegaConf.load("configs/tho_research_v2.yaml")
+    del cfg.evaluation.envelope_quantile_method
+    del cfg.evaluation.envelope_strata_low
+    del cfg.evaluation.envelope_strata_high
+    path = tmp_path / "legacy_config.yaml"
+    OmegaConf.save(cfg, path)
+
+    with pytest.raises(ValueError, match="配置缺少必需字段"):
+        load_config(path)
+    migrated = load_config(path, allow_legacy_envelope_metric_migration=True)
+    assert migrated.evaluation.envelope_quantile_method == "linear"
+    assert migrated.evaluation.envelope_strata_low == pytest.approx(0.30875308839006915)
+    assert migrated.evaluation.envelope_strata_high == pytest.approx(0.7031542121234101)
 
 
 @pytest.mark.parametrize(

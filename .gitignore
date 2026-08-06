@@ -28,6 +28,8 @@ docs/figure/
 
 docs/temp/
 
+/hy_ewt
+
 # 可由脚本重新生成的图片和汇报文件仅保留在本地。
 *.[Pp][Nn][Gg]
 *.[Jj][Pp][Gg]

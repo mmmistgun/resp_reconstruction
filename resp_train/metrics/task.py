@@ -41,6 +41,9 @@ class TaskMetricConfig:
     ibi_coverage_threshold: float
     ndtw_downsample: int
     ndtw_radius: int
+    envelope_strata_low: float
+    envelope_strata_high: float
+    envelope_quantile_method: str
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> "TaskMetricConfig":
@@ -66,6 +69,9 @@ class TaskMetricConfig:
             ibi_coverage_threshold=float(evaluation.ibi_coverage_threshold),
             ndtw_downsample=int(round(fs / float(evaluation.ndtw_fs))),
             ndtw_radius=int(round(float(evaluation.ndtw_radius_sec) * float(evaluation.ndtw_fs))),
+            envelope_strata_low=float(evaluation.get("envelope_strata_low", np.nan)),
+            envelope_strata_high=float(evaluation.get("envelope_strata_high", np.nan)),
+            envelope_quantile_method=str(evaluation.get("envelope_quantile_method", "linear")),
         )
 
 
@@ -79,6 +85,7 @@ def evaluate_task_predictions(
     """按冻结协议生成逐 180 秒 sample 指标。"""
 
     protocol = TaskMetricConfig.from_config(cfg)
+    _validate_envelope_strata(protocol)
     pred = as_batch_waveform_numpy(predictions["r_tho_hat"])
     target = as_batch_waveform_numpy(predictions["tho_ref"])
     if pred.shape != target.shape:
@@ -105,6 +112,8 @@ def evaluate_task_predictions(
             high_hz=protocol.band_high_hz,
             scale_eps=protocol.scale_eps,
         )
+        if not np.isfinite(pred_x).all() or not np.isfinite(target_x).all():
+            raise FloatingPointError("canonical prediction/target 包含 NaN/Inf")
         for offset in range(chunk_stop - chunk_start):
             index = chunk_start + offset
             record = _metadata_record(predictions, index=index, method=method)
@@ -120,6 +129,53 @@ def evaluate_task_predictions(
             )
             records.append(record)
     return pd.DataFrame.from_records(records)
+
+
+def compute_target_envelope_modulations(targets: np.ndarray, cfg: DictConfig) -> np.ndarray:
+    """从 raw target 计算 train-only 包络调制量，供冻结分层阈值使用。"""
+
+    protocol = TaskMetricConfig.from_config(cfg)
+    target = as_batch_waveform_numpy(targets)
+    if target.shape[1] != protocol.length:
+        raise ValueError(f"期望 {protocol.length} 点，实际 {target.shape[1]}")
+    if not np.isfinite(target).all():
+        raise FloatingPointError("training target 包含 NaN/Inf")
+
+    values: list[float] = []
+    for chunk_start in range(0, target.shape[0], _EVALUATION_CHUNK_SIZE):
+        chunk_stop = min(target.shape[0], chunk_start + _EVALUATION_CHUNK_SIZE)
+        _, target_x = canonicalize_numpy(
+            target[chunk_start:chunk_stop],
+            fs=protocol.fs,
+            low_hz=protocol.band_low_hz,
+            high_hz=protocol.band_high_hz,
+            scale_eps=protocol.scale_eps,
+        )
+        if not np.isfinite(target_x).all():
+            raise FloatingPointError("canonical training target 包含 NaN/Inf")
+        values.extend(
+            _envelope_modulation(_log_rms_envelope(target_x[offset], protocol), protocol)
+            for offset in range(chunk_stop - chunk_start)
+        )
+    result = np.asarray(values, dtype=np.float64)
+    if result.size != target.shape[0] or not np.isfinite(result).all():
+        raise FloatingPointError("training target modulation 计算结果不完整或非有限")
+    return result
+
+
+def envelope_strata_cutpoints(modulations: np.ndarray, *, method: str = "linear") -> tuple[float, float]:
+    """按完整 admitted training targets 的 1/3、2/3 分位数冻结分层边界。"""
+
+    values = np.asarray(modulations, dtype=np.float64).reshape(-1)
+    if values.size == 0 or not np.isfinite(values).all():
+        raise ValueError("training target modulation 必须为非空有限数组")
+    if method != "linear":
+        raise ValueError(f"包络分位数方法必须为 linear，当前为 {method!r}")
+    cutpoints = np.quantile(values, [1.0 / 3.0, 2.0 / 3.0], method=method)
+    low, high = float(cutpoints[0]), float(cutpoints[1])
+    if not low < high:
+        raise ValueError(f"包络分层边界必须严格递增，当前为 low={low}, high={high}")
+    return low, high
 
 
 def validation_local_rr_mean(predictions: dict[str, np.ndarray], cfg: DictConfig) -> float:
@@ -167,8 +223,8 @@ def summarize_task_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
         "whole_rr_abs_error_bpm",
         "local_rr_mae_bpm",
         "local_rr_prediction_valid_fraction",
-        "global_effort_spearman",
-        "local_effort_spearman",
+        "envelope_trajectory_mae",
+        "global_envelope_modulation_error",
         "lag_aware_signed_pcc",
         "ibi_medae_sec",
         "ibi_coverage",
@@ -182,6 +238,12 @@ def summarize_task_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
         values = pd.to_numeric(metrics[column], errors="coerce")
         row[f"{column}_mean"] = float(values.mean())
         row[f"{column}_n"] = int(values.notna().sum())
+    for column in ("envelope_trajectory_mae", "global_envelope_modulation_error"):
+        if column in metrics:
+            values = pd.to_numeric(metrics[column], errors="coerce").to_numpy(dtype=np.float64)
+            if values.size != len(metrics) or not np.isfinite(values).all():
+                raise FloatingPointError(f"主包络指标 {column} 包含缺失或非有限值")
+    _add_envelope_strata_summary(row, metrics)
     if {"ibi_interpretable", "ibi_target_eligible"}.issubset(metrics.columns):
         ibi_eligible = metrics["ibi_target_eligible"].astype(bool).to_numpy()
         interpretable = metrics.loc[ibi_eligible, "ibi_interpretable"].astype(bool).to_numpy()
@@ -207,6 +269,57 @@ def summarize_task_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame([row])
 
 
+def _add_envelope_strata_summary(row: dict[str, float | int], metrics: pd.DataFrame) -> None:
+    required = {
+        "envelope_target_stratum",
+        "target_stratified_envelope_spearman",
+        "envelope_spearman_target_eligible",
+        "envelope_spearman_prediction_degenerate",
+    }
+    if not required.issubset(metrics.columns):
+        return
+
+    strata = metrics["envelope_target_stratum"].astype(str)
+    unexpected = sorted(set(strata) - {"low", "medium", "high"})
+    if unexpected:
+        raise ValueError(f"未知 envelope target stratum: {unexpected}")
+    eligible_all = metrics["envelope_spearman_target_eligible"].astype(bool)
+    degenerate_all = metrics["envelope_spearman_prediction_degenerate"].astype(bool)
+    spearman_all = pd.to_numeric(metrics["target_stratified_envelope_spearman"], errors="coerce")
+    for label in ("low", "medium", "high"):
+        in_stratum = strata.eq(label)
+        eligible = in_stratum & eligible_all
+        degenerate = eligible & degenerate_all
+        n_total = int(in_stratum.sum())
+        n_eligible = int(eligible.sum())
+        n_ineligible = n_total - n_eligible
+        n_degenerate = int(degenerate.sum())
+        values = spearman_all.loc[eligible].to_numpy(dtype=np.float64)
+        if values.size and not np.isfinite(values).all():
+            raise FloatingPointError(f"{label} 分层的 eligible envelope Spearman 包含 NaN/Inf")
+        prefix = f"target_stratified_envelope_spearman_{label}"
+        row[f"{prefix}_mean"] = float(np.mean(values)) if values.size else np.nan
+        row[f"{prefix}_n_total"] = n_total
+        row[f"{prefix}_n_eligible"] = n_eligible
+        row[f"{prefix}_target_ineligible_n"] = n_ineligible
+        row[f"{prefix}_target_ineligible_fraction"] = float(n_ineligible / n_total) if n_total else np.nan
+        row[f"{prefix}_prediction_degenerate_n"] = n_degenerate
+        row[f"{prefix}_prediction_degenerate_fraction"] = (
+            float(n_degenerate / n_eligible) if n_eligible else np.nan
+        )
+
+
+def _validate_envelope_strata(cfg: TaskMetricConfig) -> None:
+    if cfg.envelope_quantile_method != "linear":
+        raise ValueError(
+            f"当前冻结协议要求 evaluation.envelope_quantile_method=linear，当前为 {cfg.envelope_quantile_method!r}"
+        )
+    if not np.isfinite(cfg.envelope_strata_low) or not np.isfinite(cfg.envelope_strata_high):
+        raise ValueError("evaluation.envelope_strata_low/high 尚未冻结")
+    if not cfg.envelope_strata_low < cfg.envelope_strata_high:
+        raise ValueError("evaluation.envelope_strata_low 必须小于 envelope_strata_high")
+
+
 def _evaluate_sample(
     pred_x: np.ndarray,
     target_x: np.ndarray,
@@ -226,8 +339,7 @@ def _evaluate_sample(
         whole_error = np.nan
 
     local_rr, local_valid_fraction, local_eligible_windows = _local_rr(pred_x, target_x, target_band, cfg)
-    global_effort, global_effort_eligible = _global_effort(pred_x, target_x, target_band, cfg)
-    local_effort, local_effort_eligible = _local_effort(pred_x, target_x, target_band, cfg)
+    envelope = _envelope_metrics(pred_x, target_x, cfg)
     joint_pcc, best_lag, joint_eligible, prediction_dynamic = _lag_aware_pcc(pred_x, target_x, target_band, cfg)
     ibi_medae, ibi_coverage, ibi_interpretable, ibi_eligible = _ibi_metrics(
         pred_x,
@@ -245,10 +357,7 @@ def _evaluate_sample(
         "local_rr_prediction_valid_fraction": local_valid_fraction,
         "local_rr_target_eligible": bool(local_eligible_windows > 0),
         "local_rr_target_eligible_windows": int(local_eligible_windows),
-        "global_effort_spearman": global_effort,
-        "global_effort_target_eligible": bool(global_effort_eligible),
-        "local_effort_spearman": local_effort,
-        "local_effort_target_eligible": bool(local_effort_eligible),
+        **envelope,
         "lag_aware_signed_pcc": joint_pcc,
         "best_lag_samples": int(best_lag),
         "best_lag_sec": float(best_lag / cfg.fs),
@@ -325,54 +434,84 @@ def _rr_from_power(power: np.ndarray, n_fft: int, cfg: TaskMetricConfig) -> floa
     return float(60.0 * (peak_index + delta) * cfg.fs / float(n_fft))
 
 
-def _rms_envelope(signal: np.ndarray, cfg: TaskMetricConfig) -> np.ndarray:
+def _log_rms_envelope(signal: np.ndarray, cfg: TaskMetricConfig) -> np.ndarray:
     values = np.asarray(signal, dtype=np.float64)
     starts = range(0, values.size - cfg.envelope_window + 1, cfg.envelope_step)
     return np.asarray(
-        [np.sqrt(np.mean(np.square(values[start : start + cfg.envelope_window])) + cfg.envelope_eps) for start in starts],
+        [
+            0.5 * np.log(np.mean(np.square(values[start : start + cfg.envelope_window])) + cfg.envelope_eps)
+            for start in starts
+        ],
         dtype=np.float64,
     )
 
 
-def _spearman_or_worst(pred: np.ndarray, target: np.ndarray, cfg: TaskMetricConfig) -> float:
-    target_ranks = rankdata(target, method="average")
-    pred_ranks = rankdata(pred, method="average")
-    if centered_energy_numpy(pred_ranks) <= cfg.dynamic_eps:
-        return -1.0
-    return _stable_corr_numpy(pred_ranks, target_ranks, eps=cfg.corr_eps)
+def _envelope_metrics(pred: np.ndarray, target: np.ndarray, cfg: TaskMetricConfig) -> dict[str, Any]:
+    pred_env = _log_rms_envelope(pred, cfg)
+    target_env = _log_rms_envelope(target, cfg)
+    expected_points = (cfg.length - cfg.envelope_window) // cfg.envelope_step + 1
+    if pred_env.size != expected_points or target_env.size != expected_points:
+        raise ValueError(
+            f"包络点数异常: prediction={pred_env.size}, target={target_env.size}, expected={expected_points}"
+        )
+    if not np.isfinite(pred_env).all() or not np.isfinite(target_env).all():
+        raise FloatingPointError("canonical log-RMS 包络包含 NaN/Inf")
+
+    pred_centered = pred_env - float(np.median(pred_env))
+    target_centered = target_env - float(np.median(target_env))
+    trajectory_mae = float(np.mean(np.abs(pred_centered - target_centered)))
+    pred_modulation = _envelope_modulation(pred_env, cfg)
+    target_modulation = _envelope_modulation(target_env, cfg)
+    modulation_error = abs(pred_modulation - target_modulation)
+
+    target_variance = float(np.var(target_env, ddof=0))
+    pred_variance = float(np.var(pred_env, ddof=0))
+    target_eligible = target_variance > cfg.dynamic_eps
+    prediction_degenerate = bool(target_eligible and pred_variance <= cfg.dynamic_eps)
+    if not target_eligible:
+        spearman = np.nan
+    elif prediction_degenerate:
+        spearman = -1.0
+    else:
+        target_ranks = rankdata(target_env, method="average")
+        pred_ranks = rankdata(pred_env, method="average")
+        spearman = _pearson_without_epsilon(pred_ranks, target_ranks)
+
+    return {
+        "envelope_trajectory_mae": trajectory_mae,
+        "global_envelope_modulation_error": float(modulation_error),
+        "target_envelope_modulation": float(target_modulation),
+        "envelope_target_stratum": _envelope_stratum(target_modulation, cfg),
+        "target_stratified_envelope_spearman": spearman,
+        "envelope_spearman_target_eligible": bool(target_eligible),
+        "envelope_spearman_prediction_degenerate": prediction_degenerate,
+    }
 
 
-def _global_effort(
-    pred: np.ndarray,
-    target: np.ndarray,
-    target_band: np.ndarray,
-    cfg: TaskMetricConfig,
-) -> tuple[float, bool]:
-    target_env = _rms_envelope(target, cfg)
-    eligible = centered_energy_numpy(target_band) > cfg.dynamic_eps and centered_energy_numpy(target_env) > cfg.dynamic_eps
-    if not eligible:
-        return np.nan, False
-    return _spearman_or_worst(_rms_envelope(pred, cfg), target_env, cfg), True
+def _envelope_modulation(envelope: np.ndarray, cfg: TaskMetricConfig) -> float:
+    quantiles = np.quantile(
+        np.asarray(envelope, dtype=np.float64),
+        [0.10, 0.90],
+        method=cfg.envelope_quantile_method,
+    )
+    return float(quantiles[1] - quantiles[0])
 
 
-def _local_effort(
-    pred: np.ndarray,
-    target: np.ndarray,
-    target_band: np.ndarray,
-    cfg: TaskMetricConfig,
-) -> tuple[float, bool]:
-    values: list[float] = []
-    for start in range(0, cfg.length - cfg.local_rr_window + 1, cfg.local_rr_step):
-        stop = start + cfg.local_rr_window
-        target_env = _rms_envelope(target[start:stop], cfg)
-        if centered_energy_numpy(target_band[start:stop]) <= cfg.dynamic_eps:
-            continue
-        if centered_energy_numpy(target_env) <= cfg.dynamic_eps:
-            continue
-        values.append(_spearman_or_worst(_rms_envelope(pred[start:stop], cfg), target_env, cfg))
-    if not values:
-        return np.nan, False
-    return float(np.median(values)), True
+def _envelope_stratum(target_modulation: float, cfg: TaskMetricConfig) -> str:
+    if target_modulation < cfg.envelope_strata_low:
+        return "low"
+    if target_modulation < cfg.envelope_strata_high:
+        return "medium"
+    return "high"
+
+
+def _pearson_without_epsilon(left: np.ndarray, right: np.ndarray) -> float:
+    a = np.asarray(left, dtype=np.float64) - float(np.mean(left))
+    b = np.asarray(right, dtype=np.float64) - float(np.mean(right))
+    denominator = float(np.sqrt(np.sum(np.square(a)) * np.sum(np.square(b))))
+    if denominator <= 0.0 or not np.isfinite(denominator):
+        raise FloatingPointError("eligible envelope ranks 的 Pearson 分母无效")
+    return float(np.clip(np.sum(a * b) / denominator, -1.0, 1.0))
 
 
 def _lag_aware_pcc(

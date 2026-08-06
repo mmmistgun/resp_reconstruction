@@ -14,6 +14,8 @@
 - 正式输出：$\Pi=S\circ B$，统一 `0.05–0.70 Hz`。
 - checkpoint：完整 validation Local RR MAE 最小 epoch。
 - early stopping：关闭。
+- 包络主指标：`envelope_trajectory_mae` 与 `global_envelope_modulation_error`；
+  `target_stratified_envelope_spearman` 只按 train-frozen Low/Medium/High 分层补充报告。
 - designated test：继续封存；需等待 T2–T4 validation 和最终模型集合重新冻结。
 
 ## 数据与 split 审计
@@ -134,6 +136,42 @@ canonical 输出算子、五项 primary、IBI、eligibility 和逐 sample direct
 
 实现 smoke 可以额外传入 `--max-windows 8`，但 smoke 不构成科研结果。Designated test 仍需
 显式添加 `--split test --confirm-designated-test`，且只能在最终模型集合冻结后统一运行。
+
+## 包络分层阈值复现
+
+当前配置已经冻结 training target modulation 的三分层边界。以下命令只用于复现阈值与 provenance，
+不得用 validation/test 重算：
+
+```bash
+./.venv/bin/python scripts/freeze_envelope_strata.py \
+  --config configs/tho_research_v2.yaml \
+  --output runs/envelope_strata_train_20260805.json
+```
+
+冻结结果为 `low=0.30875308839006915`、`high=0.7031542121234101`，来自 10141 个 admitted
+training targets、linear quantile、train sample seed `20260610`。
+
+## IEWT 传统基线
+
+`IEWT` 使用与深度学习相同的
+`bcg_rawish_wideband_state_aligned_segment_soft_z`，在 100 Hz 下执行协议化 Python IEWT：
+三阶多项式去趋势、三阶 1 Hz 零相位低通、35 秒上下文生成 30 秒输出、六块拼接及整段
+1 Hz 零相位后低通。两处低通均使用 `sosfiltfilt`，阶数和截止频率与原适配协议一致；
+它只读取 BCG，target 只进入公共评价器。
+
+完整 validation 命令为：
+
+```bash
+./.venv/bin/python scripts/eval_tho_iewt_baseline.py \
+  --config configs/tho_research_v2.yaml \
+  --split val \
+  --run-root runs/tho_iewt_baseline
+```
+
+实现 smoke 可传入 `--max-windows 1` 或其他小值。零相位版本已完成单 sample CPU smoke 和完整
+validation 新包络指标重评；此前因果版本只作系统群延迟诊断。当前实现不要求 MATLAB 数值对照，只能描述为依据
+现有 MATLAB 源码定义并进行零相位适配的 Python IEWT，不能声称逐点等价。Designated test 继续要求
+`--split test --confirm-designated-test`。
 
 该入口保存 `resolved_config.yaml`、`run_manifest.json`、`sample_metrics.csv` 和
 `summary.csv`；不生成 checkpoint。

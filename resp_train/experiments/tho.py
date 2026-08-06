@@ -230,7 +230,11 @@ def evaluate_tho_checkpoint(
     if normalized_split == "test" and not confirm_designated_test:
         raise ValueError("designated test 必须显式确认")
     config_path = _resolve_config_path(config_path, checkpoint_path)
-    cfg = load_config(config_path, overrides=overrides)
+    cfg = load_config(
+        config_path,
+        overrides=overrides,
+        allow_legacy_envelope_metric_migration=True,
+    )
     output_path = (
         Path(metrics_output_path)
         if metrics_output_path is not None
@@ -271,6 +275,14 @@ def _validate_checkpoint_config(checkpoint_config: dict | None, cfg: DictConfig)
     for section in ("data", "window", "model", "loss", "evaluation"):
         left = OmegaConf.to_container(OmegaConf.select(checkpoint_cfg, section), resolve=True)
         right = OmegaConf.to_container(OmegaConf.select(cfg, section), resolve=True)
+        if section == "evaluation":
+            evaluation_only_keys = {
+                "envelope_quantile_method",
+                "envelope_strata_low",
+                "envelope_strata_high",
+            }
+            left = {key: value for key, value in dict(left or {}).items() if key not in evaluation_only_keys}
+            right = {key: value for key, value in dict(right or {}).items() if key not in evaluation_only_keys}
         if left != right:
             mismatched.append(section)
     if mismatched:
