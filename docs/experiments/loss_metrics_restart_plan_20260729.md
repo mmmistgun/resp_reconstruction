@@ -4,7 +4,7 @@
 
 最后更新：2026-08-04
 
-状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；T1 未形成有效收益；T2 三 seed validation 出现小幅多轴收益但 IBI 退化，保留为 active candidate；下一步运行 T3，T4 继续冻结待命，designated test 继续封存
+状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；T2 保留为 active candidate；T3 改善包络误差但显著损伤节律、PCC 与 IBI coverage，未入选；下一步运行 T4，designated test 继续封存
 
 ## 1. 定位
 
@@ -1803,3 +1803,27 @@ modulation error 虽由 B0 的 `0.503975` 降至 `0.477033`，仍明显差于 F0
 当前新指标重评阶段已经完成：F0、IEWT、B0 与 active T2 均使用相同 validation targets 和冻结口径。
 T2 保持 active candidate，但证据仍是多任务权衡而非全面优势；本轮重评本身不授权修改 loss、重训、
 重选 checkpoint 或开启 designated test。
+
+## 32. T3 `E3-A0 concat-deep` 当前协议结果（2026-08-06）
+
+T3 正式结果位于 `runs/tho_restart_t3_e3a0_wide_concat`。三个 run 均使用 metrics 冻结提交 `aebe81e`、完整 train/validation、50 epochs、batch 128 和 seed `20260811 / 20260812 / 20260813`，启动时工作树干净。最佳 epoch 为 `13 / 46 / 7`，全部与训练历史的最低 Local RR epoch 一致。三个 checkpoint tensor 与训练历史全部 finite，每个 run 均输出 2675 个 validation sample；prediction-valid fraction 为 `1.0`、prediction-degenerate fraction 为 `0.0`，每个 seed 只有 `1/2675` 个负 signed PCC 样本。第 2 个 seed 的最佳 epoch 为 46 不触发追加预算：T3 已在节律、PCC 和 IBI coverage 上明显落后，事后延长只会形成结果驱动搜索。
+
+按 sample direct mean，再对三个 seed 报告算术 mean ± sample SD：
+
+| Validation 指标 | B0 PatchMixer | T2 wide native | T3 concat-deep | T3 相对 T2 |
+|---|---:|---:|---:|---|
+| Whole-window RR MAE（bpm）↓ | `0.512706 ± 0.002988` | `0.512559 ± 0.002194` | `0.597246 ± 0.006841` | 退化 `+0.084688`；0/3 seed 改善 |
+| Local RR MAE（bpm）↓ | `0.626951 ± 0.000812` | `0.624996 ± 0.001908` | `0.681710 ± 0.013891` | 退化 `+0.056715`；0/3 seed 改善 |
+| Envelope trajectory MAE ↓ | `0.155620 ± 0.000653` | `0.153601 ± 0.001251` | `0.151420 ± 0.002287` | 改善 `-0.002181`；2/3 seed 改善 |
+| Global envelope modulation error ↓ | `0.244096 ± 0.005189` | `0.231247 ± 0.005794` | `0.217393 ± 0.008465` | 改善 `-0.013854`；3/3 seed 改善 |
+| Lag-aware signed PCC ↑ | `0.839730 ± 0.000659` | `0.840499 ± 0.000245` | `0.804695 ± 0.006370` | 退化 `-0.035804`；0/3 seed 改善 |
+| IBI-MedAE（s）↓ | `0.084295 ± 0.001170` | `0.087541 ± 0.002440` | `0.086780 ± 0.000661` | 相对 T2 改善 `-0.000761`，但仍比 B0 差 `+0.002485` |
+| IBI coverage ↑ | `0.845532 ± 0.001099` | `0.845130 ± 0.001002` | `0.809956 ± 0.004072` | 退化 `-0.035173`；0/3 seed 改善 |
+| Low target-modulation Spearman ↑ | `0.291283 ± 0.005623` | `0.274319 ± 0.004658` | `0.321271 ± 0.022939` | 改善 `+0.046951`；3/3 seed 改善 |
+| Medium target-modulation Spearman ↑ | `0.571272 ± 0.002540` | `0.583196 ± 0.002222` | `0.581626 ± 0.005124` | 基本持平 `-0.001570` |
+| High target-modulation Spearman ↑ | `0.678806 ± 0.001620` | `0.709681 ± 0.004435` | `0.723746 ± 0.009212` | 改善 `+0.014065`；3/3 seed 改善 |
+| IBI interpretable fraction ↑ | `0.727103 ± 0.004112` | `0.728224 ± 0.002617` | `0.655078 ± 0.014133` | 退化 `-0.073146`；0/3 seed 改善 |
+
+T3 验证了旧 concat-deep 结构的真实归纳偏置：它在三 seed 上一致降低 global envelope modulation error，并提高 Low/High 分层的包络排序；但这种收益来自一个显著改变输出解码路径的完整模型，同时伴随 Whole/Local RR、signed PCC、IBI coverage 与 interpretable fraction 的一致大幅退化。当前不构造加权总分让包络收益覆盖其他任务轴，因此 T3 不进入 active candidate，也不进入 designated test。
+
+T3 的结果支持继续运行冻结的 T4：T4 保留 T2 的原生 PatchMixer decoder 和 pre-mixer 注入，只把 fullband Conv2D 表示替换为既有五带 bandenergy，能够检验低维频带条件信息是否在不复现 T3 解码退化的前提下改善 Local RR/IBI 或包络轴。T4 配置不因 T3 结果修改。尚未执行 designated test。
