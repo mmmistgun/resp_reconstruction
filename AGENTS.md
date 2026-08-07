@@ -17,7 +17,7 @@
 - 配置：T2 使用 `configs/tho_research_v2.yaml`；T3/T4 使用对应的 `tho_research_v2_t3_concat.yaml` / `tho_research_v2_t4_bandenergy.yaml`
 - 训练：`./.venv/bin/python scripts/train_tho.py --config configs/tho_research_v2.yaml --set training.device=cuda:0`
 - 复评：`./.venv/bin/python scripts/eval_tho.py --checkpoint runs/<run>/checkpoint_best_local_rr.pt --split val`
-- Designated test：复评命令额外传入 `--split test --confirm-designated-test`；不得用 test 反向调协议或选模。
+- Research-test：复评命令额外传入 `--split test --confirm-research-test`。该 split 可在阶段性模型整理后重复观察，也可形成后续独立研究问题，但不得用于重选已训练 run 的 epoch/checkpoint；所有结果均属于 development/research evidence，不表述为无偏 held-out 证据。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细 smoke、batch 128 验收和正式 seed 命令见 `scripts/README.md`。

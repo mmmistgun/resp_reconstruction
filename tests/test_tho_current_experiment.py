@@ -88,7 +88,7 @@ def test_current_experiment_keeps_earliest_local_rr_tie(monkeypatch, tmp_path) -
     assert (run_dir / "run_manifest.json").exists()
 
 
-def test_public_evaluation_api_requires_designated_test_confirmation(tmp_path) -> None:
+def test_public_evaluation_api_requires_research_test_confirmation(tmp_path) -> None:
     with pytest.raises(ValueError, match="显式确认"):
         evaluate_tho_checkpoint(
             checkpoint_path=tmp_path / "missing.pt",

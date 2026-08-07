@@ -31,17 +31,17 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--max-windows", type=int, default=None, help="仅用于实现 smoke；正式统计保持为空")
     parser.add_argument("--set", dest="overrides", action="append", default=[])
     parser.add_argument(
-        "--confirm-designated-test",
+        "--confirm-research-test",
         action="store_true",
-        help="明确确认全部方案已冻结；test 评价必须显式提供",
+        help="明确确认本次将读取可重复观察的 research-test；test 评价必须显式提供",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
-    if args.split == "test" and not args.confirm_designated_test:
-        raise SystemExit("test 评价需要显式添加 --confirm-designated-test")
+    if args.split == "test" and not args.confirm_research_test:
+        raise SystemExit("test 评价需要显式添加 --confirm-research-test")
 
     cfg = prepare_fixed_band_config(load_config(args.config, overrides=args.overrides))
     split_name = str(cfg.data.val_split if args.split == "val" else cfg.data.test_split)
@@ -78,6 +78,7 @@ def main() -> None:
         max_windows=max_windows,
         source_signal_key=FIXED_BAND_EXPECTED_SIGNAL_KEY,
         include_test_only=args.split == "test",
+        evaluation_role="research_test" if args.split == "test" else "validation",
     )
     print(summary.to_string(index=False))
     print(f"run_dir={run_dir}")

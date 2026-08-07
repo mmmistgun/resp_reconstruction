@@ -223,12 +223,12 @@ def evaluate_tho_checkpoint(
     metrics_output_path: str | Path | None,
     overrides: list[str] | None = None,
     split: str = "val",
-    confirm_designated_test: bool = False,
+    confirm_research_test: bool = False,
 ) -> Path:
     checkpoint_path = Path(checkpoint_path)
     normalized_split = str(split).strip().lower()
-    if normalized_split == "test" and not confirm_designated_test:
-        raise ValueError("designated test 必须显式确认")
+    if normalized_split == "test" and not confirm_research_test:
+        raise ValueError("research test 必须显式确认")
     config_path = _resolve_config_path(config_path, checkpoint_path)
     cfg = load_config(
         config_path,
@@ -238,7 +238,7 @@ def evaluate_tho_checkpoint(
     output_path = (
         Path(metrics_output_path)
         if metrics_output_path is not None
-        else checkpoint_path.parent / ("test_metrics.csv" if normalized_split == "test" else "metrics.csv")
+        else checkpoint_path.parent / ("research_test_metrics.csv" if normalized_split == "test" else "metrics.csv")
     )
     experiment = ThoExperiment(cfg)
     experiment.evaluate_checkpoint(
@@ -251,6 +251,7 @@ def evaluate_tho_checkpoint(
         task=ThoExperiment.task_name,
         phase="evaluation",
         split=normalized_split,
+        evaluation_role="research_test" if normalized_split == "test" else "validation",
         checkpoint=str(checkpoint_path.resolve()),
         config=str(Path(config_path).resolve()),
     )

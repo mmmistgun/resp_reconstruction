@@ -9,14 +9,14 @@
 - 数据：2026-06-20 research v2 soft-z。
 - 输入：`bcg_rawish_segment_soft_z_key`。
 - target：`target_waveform_segment_soft_z_key`。
-- 当前候选：T2 宽频 native、T3 宽频 concat、T4 宽频 bandenergy；三者复用现有 `time_stft_dual1d`。纯时域 PatchMixer 只作为 B0 协议 baseline。
+- 当前 research-test 集合：B0 PatchMixer、T2 宽频 native、T4 宽频 bandenergy、F0 固定呼吸带和 IEWT。T1/T3 已由 validation 退出。
 - 训练 loss：`L_sync + 0.25 L_effort`；rhythm 与短期 polarity 已由消融删除。
 - 正式输出：$\Pi=S\circ B$，统一 `0.05–0.70 Hz`。
 - checkpoint：完整 validation Local RR MAE 最小 epoch。
 - early stopping：关闭。
 - 包络主指标：`envelope_trajectory_mae` 与 `global_envelope_modulation_error`；
   `target_stratified_envelope_spearman` 只按 train-frozen Low/Medium/High 分层补充报告。
-- designated test：继续封存；需等待 T2–T4 validation 和最终模型集合重新冻结。
+- research-test：现有 `test` 可在阶段性整理后重复观察，并可形成后续独立科研问题；它不是无偏 held-out 证据，不得用于重选既有 run 的 epoch/checkpoint。
 
 ## 数据与 split 审计
 
@@ -116,7 +116,7 @@ for seed in 20260811 20260812 20260813; do
 done
 ```
 
-T2 结果核验后再决定是否依次运行已经冻结的 T3、T4；不根据 T2 数值修改它们的配置。T3 使用 `configs/tho_research_v2_t3_concat.yaml`，T4 使用 `configs/tho_research_v2_t4_bandenergy.yaml`，正式运行仍使用相同三个 seed、50 epochs 和独立 run root。Designated test 继续封存；B0/M1/T1 和 loss 消融由各自 run manifest 与 Git 历史追溯。
+T2、T3、T4 validation 均已完成。当前保留 T2/T4，并与 B0、F0、IEWT 一起进入阶段性 research-test；B0/M1/T1/T3 和 loss 消融由各自 run manifest 与 Git 历史追溯。
 
 ## 固定呼吸带传统基线
 
@@ -134,8 +134,8 @@ canonical 输出算子、五项 primary、IBI、eligibility 和逐 sample direct
   --run-root runs/tho_fixed_band_baseline
 ```
 
-实现 smoke 可以额外传入 `--max-windows 8`，但 smoke 不构成科研结果。Designated test 仍需
-显式添加 `--split test --confirm-designated-test`，且只能在最终模型集合冻结后统一运行。
+实现 smoke 可以额外传入 `--max-windows 8`，但 smoke 不构成科研结果。Research-test 需
+显式添加 `--split test --confirm-research-test`。
 
 ## 包络分层阈值复现
 
@@ -170,8 +170,8 @@ training targets、linear quantile、train sample seed `20260610`。
 
 实现 smoke 可传入 `--max-windows 1` 或其他小值。零相位版本已完成单 sample CPU smoke 和完整
 validation 新包络指标重评；此前因果版本只作系统群延迟诊断。当前实现不要求 MATLAB 数值对照，只能描述为依据
-现有 MATLAB 源码定义并进行零相位适配的 Python IEWT，不能声称逐点等价。Designated test 继续要求
-`--split test --confirm-designated-test`。
+现有 MATLAB 源码定义并进行零相位适配的 Python IEWT，不能声称逐点等价。Research-test 要求
+`--split test --confirm-research-test`。
 
 该入口保存 `resolved_config.yaml`、`run_manifest.json`、`sample_metrics.csv` 和
 `summary.csv`；不生成 checkpoint。
@@ -187,17 +187,53 @@ Validation 复评：
   --metrics-output /tmp/tho_restart_val_metrics.csv
 ```
 
-Designated test 必须显式确认：
+Research-test 必须显式确认：
 
 ```bash
 ./.venv/bin/python scripts/eval_tho.py \
   --checkpoint runs/<run>/checkpoint_best_local_rr.pt \
   --split test \
-  --confirm-designated-test \
-  --metrics-output runs/<run>/test_metrics.csv
+  --confirm-research-test \
+  --metrics-output runs/<run>/research_test_metrics.csv
 ```
 
-Test 命令会同时计算五项 primary、IBI + coverage、coherence 与 nDTW。不得用 test 结果重选 epoch、模型、频带或阈值。
+Research-test 命令会同时计算五项 primary、IBI + coverage、三层 envelope Spearman、coherence 与 nDTW。结果可解释阶段性差异并形成后续独立研究任务，但不得重选既有 run 的 epoch/checkpoint；所有结论都必须注明是 research/development evidence。
+
+### 当前阶段 research-test 命令
+
+B0、T2、T4 各运行三个 validation-selected seed checkpoint，逐 run 保存结果：
+
+```bash
+for checkpoint in \
+  runs/tho_restart_b0_final_loss_patchmixer/seed_*/20*/checkpoint_best_local_rr.pt \
+  runs/tho_restart_t2_g3c_wide_native/seed_*/20*/checkpoint_best_local_rr.pt \
+  runs/tho_restart_t4_g3c_bandenergy_native/seed_*/20*/checkpoint_best_local_rr.pt; do
+  run_dir="$(dirname "${checkpoint}")"
+  ./.venv/bin/python scripts/eval_tho.py \
+    --checkpoint "${checkpoint}" \
+    --split test \
+    --confirm-research-test \
+    --set training.device=cuda:0 \
+    --metrics-output "${run_dir}/research_test_metrics.csv" \
+    || exit 1
+done
+```
+
+F0 与 IEWT 不训练、无 seed：
+
+```bash
+./.venv/bin/python scripts/eval_tho_fixed_band_baseline.py \
+  --config configs/tho_research_v2.yaml \
+  --split test \
+  --confirm-research-test \
+  --run-root runs/tho_fixed_band_research_test
+
+./.venv/bin/python scripts/eval_tho_iewt_baseline.py \
+  --config configs/tho_research_v2.yaml \
+  --split test \
+  --confirm-research-test \
+  --run-root runs/tho_iewt_research_test
+```
 
 ## 当前 run 产物
 
@@ -209,7 +245,7 @@ Test 命令会同时计算五项 primary、IBI + coverage、coherence 与 nDTW�
 - `checkpoint_final.pt`：固定预算最后 epoch，仅用于追溯。
 - `metrics.csv`：选中 checkpoint 的完整 validation 逐 sample 指标。
 - `metrics_summary.csv`：逐 sample direct-mean validation 汇总。
-- `test_metrics.csv` / `test_metrics_summary.csv`：显式 designated test 评价产物。
+- `research_test_metrics.csv` / `research_test_metrics_summary.csv`：显式 research-test 评价产物。
 - `*_metrics_manifest.json`：checkpoint 复评的命令、split、配置与代码版本。
 - `train.log`：训练日志。
 

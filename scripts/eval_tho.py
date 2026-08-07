@@ -12,27 +12,27 @@ from resp_train.experiments.tho import evaluate_tho_checkpoint
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="复评冻结版 THO checkpoint")
+    parser = argparse.ArgumentParser(description="复评当前 THO checkpoint")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--config", default=None)
     parser.add_argument("--split", choices=("val", "test"), default="val")
     parser.add_argument("--metrics-output", default=None)
     parser.add_argument("--set", dest="overrides", action="append", default=[])
     parser.add_argument(
-        "--confirm-designated-test",
+        "--confirm-research-test",
         action="store_true",
-        help="明确确认模型和协议已冻结；test 评价必须显式提供",
+        help="明确确认本次将读取可重复观察的 research-test；test 评价必须显式提供",
     )
     args = parser.parse_args()
-    if args.split == "test" and not args.confirm_designated_test:
-        raise SystemExit("test 评价需要显式添加 --confirm-designated-test")
+    if args.split == "test" and not args.confirm_research_test:
+        raise SystemExit("test 评价需要显式添加 --confirm-research-test")
     output = evaluate_tho_checkpoint(
         checkpoint_path=args.checkpoint,
         config_path=args.config,
         metrics_output_path=args.metrics_output,
         overrides=args.overrides,
         split=args.split,
-        confirm_designated_test=args.confirm_designated_test,
+        confirm_research_test=args.confirm_research_test,
     )
     print(output)
 

@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-04
+最后更新：2026-08-07
 
-状态：最终 loss 已冻结；时频模型 validation 阶段已完成；T2 为均衡型 active candidate，T4 为局部节律/包络型 active candidate，T1/T3 未入选；停止新增模型，等待冻结 designated test 模型集合
+状态：最终 loss 与 metrics 已冻结；时频模型 validation 阶段已完成；T2 为均衡型 active candidate，T4 为局部节律/包络型 active candidate，T1/T3 未入选；当前进入 B0/T2/T4、F0、IEWT 的阶段性 research-test 评价
 
 ## 1. 定位
 
@@ -12,7 +12,7 @@
 
 本轮设计不继承此前实验路线、默认 loss、主指标、排序规则、checkpoint 选择逻辑或既有结论。代码与文档不另建 `archive/`：旧版本依靠 Git 历史追溯，历史 run 原地保留但不进入新实验比较。
 
-Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检查并按冻结定义实现。定向单测、轻量生命周期验收、一次性 CPU `B0_smoke`、GPU batch 128 验收、预算 pilot、三 seed 正式 baseline、loss 消融和 M1 纯时域结构探针均已完成；未重评历史 checkpoint，也未执行 designated test。纯时域模型只承担协议 baseline 与结构对照，不是本项目后续模型研究重点。
+Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检查并按冻结定义实现。定向单测、轻量生命周期验收、一次性 CPU `B0_smoke`、GPU batch 128 验收、预算 pilot、三 seed 正式 baseline、loss 消融、M1 纯时域结构探针以及 T1–T4 时频实验均已完成。纯时域模型只承担协议 baseline 与结构对照，不是本项目后续模型研究重点。2026-08-07 起，现有 `test` 明确转为可重复观察的 research-test，具体角色见第 7.3 节。
 
 ## 2. 当前目标与边界
 
@@ -27,7 +27,7 @@ Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检
 
 实现阶段仍不做：
 
-- 不启动正式训练、designated test、数据重算或历史结果迁移。
+- 不引入额外测试数据集，不做数据重算或历史结果迁移。
 - 不为旧 loss、metrics、checkpoint、runner 或配置增加兼容层。
 - 不默认复用旧 metrics、旧 checkpoint 排序或旧 baseline。
 - 不在 loss 和 metrics 尚未冻结时讨论具体模型结构调参。
@@ -58,7 +58,7 @@ Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检
 
 2026-08-02 在当前配置上完成一次性索引与 split 独立性审计，未读取波形内容：admission 后 train/val/test 分别为 `10141 / 2675 / 2310` 个窗口；train–val、train–test、val–test 的 `samp_id` 与 segment overlap 均为 0。该审计只在本次实现验收以及未来数据/split 口径变化时重跑，不并入每次训练启动流程。
 
-现有 `test` split 已在历史实验中产生过评价结果，因此本轮不能把它重新称为“从未触碰的 held-out test”。在不改变既有 split 的前提下，本文统一称其为 **designated test split**：新协议仍禁止读取其 target 来设计频带、阈值或 detector，并只在新方案全部冻结后评价一次，但结论必须承认它带有历史观察背景。若未来需要严格的 untouched final test，必须另立数据划分任务并获得新的未触碰 subject/session；本轮不静默改变 split。
+现有 `test` split 已在历史实验中产生过评价结果，2026-08-07 起统一称为 **research-test split**。它保留当前固定 subject/session 隔离，可在阶段性模型整理后重复评价，并允许其结果形成后续独立研究问题；因此所有结果均属于 development/research evidence，而不是无偏 held-out 证据。当前不引入额外测试数据集，也不再声称存在尚未观察的 final test。为保持跨阶段可比性，当前频带、阈值、detector 和 metric 定义仍只依据 train/领域先验冻结；若未来根据 research-test 改变其中任何一项，必须登记为 test-informed 新阶段，既有结果不追溯改写。
 
 本轮任务目标不是逐点复制原始 THO waveform，也不恢复绝对物理幅值或带外细节，而是恢复：
 
@@ -594,7 +594,7 @@ $$
 4. Global envelope modulation error。
 5. Lag-aware signed band-limited PCC。
 
-这里的 `primary` 表示 validation 与 designated test 的正式任务轴，不表示五项可以直接平均成一个总分，也不表示五项都参与 checkpoint 排序；第 7.2 节只指定 Local RR 为唯一 selector。补充指标保留两组：IBI-MedAE + coverage 可用于 validation/test，但不参与 checkpoint 排序；coherence 与 nDTW 只在 designated test 计算，不进入训练期、validation、early stopping 或 checkpoint 选择。CCC 删除：在 canonical 输出已经去除整窗均值/尺度、再复用 signed PCC 最佳 lag 的条件下，它与 signed PCC 高度重叠，不能形成新的科学任务轴。
+这里的 `primary` 表示 validation 与 research-test 的正式任务轴，不表示五项可以直接平均成一个总分，也不表示五项都参与 checkpoint 排序；第 7.2 节只指定 Local RR 为唯一 selector。补充指标保留两组：IBI-MedAE + coverage 可用于 validation/research-test，但不参与 checkpoint 排序；coherence 与 nDTW 只在 research-test 计算，不进入训练期、validation、early stopping 或 checkpoint 选择。CCC 删除：在 canonical 输出已经去除整窗均值/尺度、再复用 signed PCC 最佳 lag 的条件下，它与 signed PCC 高度重叠，不能形成新的科学任务轴。
 
 ### 6.2 公共预处理与冻结频带
 
@@ -605,7 +605,7 @@ $$
 =3\text{--}42\ \mathrm{bpm}
 $$
 
-频带依据只来自领域先验和第 5.2.1 节的 train-only 审计。Val 用于模型选择但不修改 metric 定义；designated test 只能在全部口径冻结后按既定频带报告结果，不能反向修改频带。
+频带依据只来自领域先验和第 5.2.1 节的 train-only 审计。Val 用于 checkpoint 与当前阶段模型选择但不修改 metric 定义；research-test 按同一频带报告，以保持可比性。若其结果未来触发频带修改，该修改必须进入新的、明确标注 test-informed 的研究阶段，而不能覆盖当前阶段定义。
 
 为统一下述算法的“非退化”含义，对任意待评价区间 $W$ 定义中心化能量：
 
@@ -861,9 +861,9 @@ Target 在中央共同区间 dynamic 时该样本才有资格。若 prediction �
 - $\tau^*_{\mathrm{eval}}$ 命中 $\pm0.3$ 秒边界的比例；
 - target eligibility 与 prediction-degenerate 比例。
 
-### 6.6 Test-only 补充指标
+### 6.6 Research-test-only 补充指标
 
-以下两项只在最终 designated test 计算。它们不写入训练期 epoch metrics，不进入 validation summary、early stopping、checkpoint 选择或模型迭代，也不组成新的总分。二者直接使用第 5.2 节得到的 canonical $\hat x/x$，不再次调用 $B$、$S$ 或按各自区间重新标准化。
+以下两项只在 research-test 计算。它们不写入训练期 epoch metrics，不进入 validation summary、early stopping、checkpoint 选择，也不组成新的总分。二者可以用于解释阶段性模型差异，并形成后续独立研究假设；二者直接使用第 5.2 节得到的 canonical $\hat x/x$，不再次调用 $B$、$S$ 或按各自区间重新标准化。
 
 #### 6.6.1 Respiratory-band coherence
 
@@ -946,8 +946,8 @@ $$
 | Global envelope modulation error | 整窗相对努力波动范围是否正确 | 180 秒、Q90−Q10 | sample → direct mean | `primary` | validation + test | 已冻结 |
 | Target-stratified envelope Spearman | 不同 target 调制水平下的包络排序是否一致 | train-frozen Low/Medium/High | envelope point → sample → stratum direct mean | `supplementary` | validation + test | 已冻结；不汇总总体值 |
 | Lag-aware signed PCC | 方向正确的呼吸频带波形是否同步 | 180 秒，$\pm0.3$ 秒 lag | sample → direct mean | `primary` | validation + test | 已冻结 |
-| Respiratory-band coherence | 跨区段频域耦合是否一致 | Welch 60 秒/50% overlap，40 个频带 bin | frequency → sample → direct mean | `supplementary` | test only | 已冻结 |
-| Constrained nDTW | 有限局部变形下的波形差异 | 10 Hz、180 秒，warping ≤0.3 秒 | path → sample → direct mean | `supplementary` | test only | 已冻结 |
+| Respiratory-band coherence | 跨区段频域耦合是否一致 | Welch 60 秒/50% overlap，40 个频带 bin | frequency → sample → direct mean | `supplementary` | research-test only | 已冻结 |
+| Constrained nDTW | 有限局部变形下的波形差异 | 10 Hz、180 秒，warping ≤0.3 秒 | path → sample → direct mean | `supplementary` | research-test only | 已冻结 |
 
 ### 6.8 Eligibility 与无效 prediction 处理
 
@@ -969,7 +969,7 @@ Eligibility 只能由 target、固定质量元数据和预先冻结的规则决�
 
 Local RR prediction-valid fraction 定义为：target-eligible 局部窗中 prediction dynamic 且能返回有限 RR 的比例。Prediction 无效窗已经按 39 bpm 计错；该比例只在选中 checkpoint 的完整 validation/test 报告中帮助解释误差来源，不再作为 checkpoint eligibility 门槛。
 
-两个 test-only 指标复用 signed PCC 的整窗 target eligibility，不增加各自的 sample mask 或 valid fraction。Coherence 的 prediction 退化时所有零分母 bin 按 0 处理，样本结果自然为 0。nDTW 对任何有限 prediction（包括常量）均按实际路径代价计算，不排除样本，也不人为指定上界或失败常数；nDTW 没有自然有限上界，且不参与选模，增加任意 cap 只会污染指标定义。任一 raw/canonical prediction 非有限仍使整个 checkpoint 评价失败。
+两个 research-test-only 指标复用 signed PCC 的整窗 target eligibility，不增加各自的 sample mask 或 valid fraction。Coherence 的 prediction 退化时所有零分母 bin 按 0 处理，样本结果自然为 0。nDTW 对任何有限 prediction（包括常量）均按实际路径代价计算，不排除样本，也不人为指定上界或失败常数；nDTW 没有自然有限上界，且不参与选模，增加任意 cap 只会污染指标定义。任一 raw/canonical prediction 非有限仍使整个 checkpoint 评价失败。
 
 Loss 中若某个分量在整个 batch 没有任何 target-valid 样本，该分量返回与计算图相连的 0，并记录有效数为 0；不得返回 NaN，也不得改变其他分量的固定权重。低幅但经 $\Pi$ 后仍 dynamic 的 prediction 不因原始 head 幅值小而判无效，因为本任务不恢复绝对尺度。
 
@@ -1057,11 +1057,11 @@ $$
 
 这一设计承认 loss 最低 epoch 与任务 metric 最优 epoch 可能不同，因此直接让最高优先级的 Local RR 决定 checkpoint；同时不在每个 epoch 计算全部任务指标，避免重新形成未预注册的多指标搜索。`val_core_loss` 只回答优化代理量是否继续改善，完整 metrics 回答选中模型是否真正完成任务，二者角色不能互换。
 
-### 7.3 Designated test 封存规则
+### 7.3 Research-test 角色与暴露规则
 
-Designated test 只在 loss、五项 primary、IBI、两个 test-only 指标、训练预算、seed、候选模型以及每个 run 的 validation checkpoint 全部冻结后，在本轮协议下评价一次。最终 test 报告五项 primary、IBI-MedAE + coverage，以及 coherence、nDTW；结果不得反向修改频带、阈值、事件检测器、checkpoint 或模型选择。
+Research-test 用于在阶段性模型整理后评价固定的 validation-selected checkpoint。每次报告五项 primary、IBI-MedAE + coverage、三层 envelope Spearman，以及 coherence、nDTW。它可以被重复观察，并可用于提出或决定下一项独立科研任务；但不得据此重选同一训练 run 的 epoch/checkpoint，也不得在一组 test 结果中事后只保留表现最好的 seed 或模型。
 
-该 split 已有历史观察背景，所以本轮结果只能表述为 `designated test evidence`，不能包装成全新的无偏 held-out 证据。若本轮再次根据 test 调整方案，它还将进一步退化为直接的 development evidence。严格 held-out 结论只能来自未来新建且从未查看的 final split；当前不做任何 test-target 审计，也不为此预留兼容或桥接流程。
+该 split 已有历史观察背景，且当前明确允许影响未来研究，所以结果统一表述为 `research-test evidence` 或 `development evidence`，不能包装成全新的无偏 held-out 证据。当前不引入第二个测试数据集。每次访问必须显式传入 `--confirm-research-test`，并记录日期、模型与 checkpoint、seed、代码 commit、metric 版本、完整逐 sample 结果路径，以及该结果是否影响后续任务。当前阶段一次性同时报告 B0/T2/T4 的全部三个预注册 seed 与无训练 F0/IEWT；T1/T3 已由 validation 退出，不因 test 补做。
 
 ## 8. 实验比较协议
 
@@ -1156,7 +1156,7 @@ Designated test 只在 loss、五项 primary、IBI、两个 test-only 指标、�
 - 新增 `resp_train/metrics/task.py`，只实现五项 primary、IBI + coverage、test-only coherence/nDTW、逐 sample 结果和 direct-mean summary；删除旧 metrics 模块与旧指标列。
 - 重写 `resp_train/experiments/tho.py` 为独立的当前生命周期：每 epoch 最小日志、完整 Local RR 选模、两个 checkpoint 和选中 checkpoint 完整 validation 评价；删除旧 `BaseExperiment`、gate、best-task、topK 和 early-stopping 路径。
 - 直接更新 `configs/tho_research_v2.yaml` 为纯时域 PatchMixer baseline 冻结配置；旧 run 的 resolved config 继续留在各自 run 目录作溯源。
-- 当前入口固定为 `scripts/train_tho.py` 和 `scripts/eval_tho.py`；删除旧 small/test 入口，不提供转发壳。Test 必须显式传入 `--confirm-designated-test` 并遵守第 7.3/8.2 节。
+- 当前入口固定为 `scripts/train_tho.py` 和 `scripts/eval_tho.py`；删除旧 small/test 入口，不提供转发壳。Research-test 必须显式传入 `--confirm-research-test` 并遵守第 7.3 节。
 - 修改 `resp_train/engine/train.py`：只增加 loss 模块训练/评价状态、optimizer-step 与 eligible sum/count 聚合的通用钩子。
 - 更新包导出、`AGENTS.md` 和 `scripts/README.md`，只描述当前新协议；旧 probe 代码、配置和长期说明退出当前工作树，由 Git 历史追溯。
 - 新增定向测试：输出投影、两项最终 loss/梯度、RR/IBI/effort/PCC/coherence/nDTW、无效值、Local RR checkpoint 和配置契约。
@@ -1858,3 +1858,17 @@ T4 没有复现 T3 的强解码器退化。它相对 T2 在 Local RR、两项包
 - **T1 / T3**：分别因缺乏净收益和显著节律/coverage 退化退出 active candidate；M1 继续只作纯时域任务交换留档。
 
 本轮不继续窗长、频带、融合位置、bandenergy 边界、通道数、训练预算或新结构搜索。下一步只需冻结 designated test 模型集合。建议将 T2 作为均衡主候选、T4 作为预注册的 Pareto 辅候选；若二者都进入 designated test，必须同时报告且不得根据 test 结果再选“赢家”或返工协议。Designated test 尚未执行。
+
+## 34. 第一阶段 research-test 评价计划（2026-08-07）
+
+本节依据第 7.3 节的新角色定义，取代第 33 节“只运行一次 designated test”的后续安排；第 33 节及更早文字保留为当时的历史决策记录，不再作为当前 test 使用限制。
+
+本阶段固定评价集合为：B0、T2、T4 各三个 validation-selected `checkpoint_best_local_rr.pt`，以及不训练、无 seed 的 F0 和 IEWT。选择发生在读取本阶段 research-test 之前：B0 是协议基线，T2/T4 是 validation 上互不支配的两个 active candidate，F0/IEWT 是输入和算法不同的传统参照；T1/T3 已由 validation 退出，不补做 test。九个学习模型 checkpoint 不因 research-test 重选 epoch，也不事后删 seed。
+
+输出约定：
+
+- 每个学习模型 run 写入 `research_test_metrics.csv`、`research_test_metrics_summary.csv` 和 `research_test_metrics_manifest.json`，不覆盖 validation 产物。
+- F0/IEWT 分别写入新的 `runs/tho_fixed_band_research_test/<timestamp>` 与 `runs/tho_iewt_research_test/<timestamp>`。
+- 完整评价使用固定 2310 个 admitted test 窗口，包含五项 primary、IBI-MedAE + coverage、三层 envelope Spearman、coherence 和 nDTW。
+- 阶段汇总仍沿用逐 sample direct mean；B0/T2/T4 再对三个 seed 报告 mean ± sample SD，F0/IEWT 报告单次确定性结果，不混合成加权总分。
+- 完成后在本节追加代码 commit、运行时间、所有结果路径与阶段结论；若结果影响下一项研究，在新任务中明确标记为 `research-test informed`。
