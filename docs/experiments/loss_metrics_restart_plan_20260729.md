@@ -1872,3 +1872,32 @@ T4 没有复现 T3 的强解码器退化。它相对 T2 在 Local RR、两项包
 - 完整评价使用固定 2310 个 admitted test 窗口，包含五项 primary、IBI-MedAE + coverage、三层 envelope Spearman、coherence 和 nDTW。
 - 阶段汇总仍沿用逐 sample direct mean；B0/T2/T4 再对三个 seed 报告 mean ± sample SD，F0/IEWT 报告单次确定性结果，不混合成加权总分。
 - 完成后在本节追加代码 commit、运行时间、所有结果路径与阶段结论；若结果影响下一项研究，在新任务中明确标记为 `research-test informed`。
+
+评价已于 2026-08-07 完成。全部入口运行在 commit `c9f4cb9` 且 `git_dirty=false`；11 份逐 sample 结果均为完整 2310 行，`split=test`、`joint_prediction_degenerate=0`，数值列无 Inf。学习模型结果写回各自 run 的 `research_test_metrics*.csv/json`；F0 位于 `runs/tho_fixed_band_research_test/20260807_134222_131480`，IEWT 位于 `runs/tho_iewt_research_test/20260807_134559_593049`。
+
+| Research-test 指标 | B0 PatchMixer | T2 wide native | T4 bandenergy native | F0 fixed band | IEWT |
+|---|---:|---:|---:|---:|---:|
+| Whole-window RR MAE（bpm）↓ | `0.709086 ± 0.011954` | `0.705539 ± 0.021057` | **`0.692235 ± 0.010912`** | `1.884850` | `0.837039` |
+| Local RR MAE（bpm）↓ | `0.677298 ± 0.009476` | `0.679782 ± 0.037255` | **`0.661218 ± 0.023321`** | `2.345699` | `0.930880` |
+| Envelope trajectory MAE ↓ | `0.142866 ± 0.000333` | `0.141325 ± 0.000983` | **`0.141216 ± 0.000461`** | `0.164745` | `0.189647` |
+| Global envelope modulation error ↓ | `0.178228 ± 0.003203` | **`0.170461 ± 0.003441`** | `0.170746 ± 0.002559` | `0.178759` | `0.216155` |
+| Lag-aware signed PCC ↑ | `0.857810 ± 0.001413` | `0.860520 ± 0.000189` | **`0.868514 ± 0.005008`** | `0.703697` | `0.778774` |
+| IBI-MedAE（s）↓ | **`0.095513 ± 0.001601`** | `0.098471 ± 0.003650` | `0.098189 ± 0.002619` | `0.139625` | `0.131820` |
+| IBI coverage ↑ | `0.792968 ± 0.000761` | `0.789149 ± 0.007811` | **`0.803697 ± 0.008849`** | `0.350175` | `0.661448` |
+| Respiratory-band coherence ↑ | `0.585303 ± 0.007407` | `0.576825 ± 0.002434` | `0.569568 ± 0.009701` | **`0.659590`** | `0.401598` |
+| Constrained nDTW ↓ | `0.238343 ± 0.001788` | `0.235043 ± 0.000943` | **`0.223197 ± 0.008429`** | `0.378765` | `0.331405` |
+| Low envelope Spearman ↑ | `0.406388 ± 0.006026` | **`0.408161 ± 0.006844`** | `0.400642 ± 0.012006` | `0.317435` | `0.296122` |
+| Medium envelope Spearman ↑ | `0.504139 ± 0.006653` | **`0.520065 ± 0.003004`** | `0.504806 ± 0.011091` | `0.433666` | `0.408830` |
+| High envelope Spearman ↑ | `0.728067 ± 0.001210` | **`0.744641 ± 0.002706`** | `0.737162 ± 0.004465` | `0.700866` | `0.668992` |
+| IBI interpretable fraction ↑ | `0.604473 ± 0.004788` | `0.598124 ± 0.018490` | **`0.629293 ± 0.020362`** | `0.069264` | `0.356710` |
+| Lag 边界命中比例 ↓ | **`0.164502 ± 0.004393`** | `0.174603 ± 0.004629` | `0.178788 ± 0.012487` | `0.134199` | `0.374892` |
+
+本表粗体只标记该行数值最优，不构造总分，也不把 F0 的最高 coherence 解释为总体最好。阶段观察如下：
+
+1. T4 在学习模型中取得最低 Whole/Local RR、最低 envelope trajectory MAE、最高 signed PCC、最高 IBI coverage 和最低 nDTW；因此 research-test 支持把 T4 作为下一项时频研究的主要结构锚点。
+2. T2 的 global envelope modulation error 仅比 T4 低 `0.000285`，并在 Low/Medium/High 三个 target 调制层的 Spearman 全部最高；它仍是必要的 fullband 对照，不能因 T4 在多数轴占优而删除。
+3. B0 保持最低 IBI-MedAE，并在三个学习模型中 coherence 最高；时频融合没有在所有任务轴上支配纯时域基线。B0 继续只作协议基线，不改变“纯时域不是主要研究方向”的定位。
+4. F0 的 coherence 为全表最高，但其 RR、PCC、IBI coverage 和 nDTW 显著较差。这正说明 coherence 主要度量稳定频域耦合，不能单独代表重建质量；其 supplementary 角色合理，不升级为 selector。
+5. IEWT 在五项 primary、IBI/coverage、coherence 与 nDTW 上均未超过三个学习模型，本阶段不投入 IEWT 参数搜索。
+
+这些结论属于 research-test informed 阶段证据。它们不回头修改本批 checkpoint、频带、metric、seed 或表中模型集合；可以用于定义下一项新的模型研究任务。
