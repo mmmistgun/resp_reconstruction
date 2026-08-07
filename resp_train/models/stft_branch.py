@@ -731,18 +731,20 @@ class STFTEncoder(nn.Module):
         if x.dim() != 3 or x.size(1) != 1:
             raise ValueError(f"STFTEncoder 期望输入形状为 (B, 1, L)，实际为 {tuple(x.shape)}")
 
-        waveform = x[:, 0]
-        window = self.stft_window.to(device=waveform.device, dtype=waveform.dtype)
-        spectrum = torch.stft(
-            waveform,
-            n_fft=self.stft_win,
-            hop_length=self.stft_hop,
-            win_length=self.stft_win,
-            window=window,
-            center=True,
-            return_complex=True,
-        )
-        features = torch.log1p(spectrum.abs())
+        # STFT 与幅值变换属于协议数学：即使外层启用 bf16 autocast，也固定用 float32。
+        waveform = x[:, 0].float()
+        with torch.amp.autocast(waveform.device.type, enabled=False):
+            window = self.stft_window.to(device=waveform.device, dtype=torch.float32)
+            spectrum = torch.stft(
+                waveform,
+                n_fft=self.stft_win,
+                hop_length=self.stft_hop,
+                win_length=self.stft_win,
+                window=window,
+                center=True,
+                return_complex=True,
+            )
+            features = torch.log1p(spectrum.abs())
         features = features[:, self.band_start : self.band_end, :]
         encoder_param = next(self.encoder.parameters(), None)
         if encoder_param is not None:

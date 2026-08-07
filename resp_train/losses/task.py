@@ -49,16 +49,83 @@ class RespirationTaskLoss(nn.Module):
             raise ValueError("envelope window/step 必须为正")
 
     def forward(self, prediction: torch.Tensor | Mapping[str, Any], target: torch.Tensor):
+        terms = self._component_terms(prediction, target)
+        pred_x = terms["graph_source"]
+        sync_values = terms["sync_values"]
+        sync_eligible = terms["sync_eligible"]
+        loss_sync = _eligible_mean(sync_values, sync_eligible, pred_x)
+        effort_values = terms["effort_values"]
+        effort_eligible = terms["effort_eligible"]
+        loss_effort = _eligible_mean(effort_values, effort_eligible, pred_x)
+
+        total = self.sync_weight * loss_sync + self.effort_weight * loss_effort
+        parts: dict[str, torch.Tensor | float] = {
+            "loss_sync": loss_sync,
+            "loss_effort": loss_effort,
+            **_aggregation_parts("loss_sync", sync_values, sync_eligible),
+            **_aggregation_parts("loss_effort", effort_values, effort_eligible),
+        }
+        return total, parts
+
+    def differentiable_component_sums(
+        self,
+        prediction: torch.Tensor | Mapping[str, Any],
+        target: torch.Tensor,
+    ) -> dict[str, torch.Tensor]:
+        """返回可微 numerator 与 eligibility count，供精确梯度累积使用。
+
+        普通 ``forward`` 的 batch-mean 语义保持不变；CRD 训练器使用这里的
+        numerator，在一个 accumulation group 的总 eligible count 上归一化。
+        """
+
+        terms = self._component_terms(prediction, target)
+        return {
+            "loss_sync_sum": _eligible_sum(
+                terms["sync_values"],
+                terms["sync_eligible"],
+                terms["graph_source"],
+            ),
+            "loss_sync_count": terms["sync_eligible"].detach().sum(),
+            "loss_effort_sum": _eligible_sum(
+                terms["effort_values"],
+                terms["effort_eligible"],
+                terms["graph_source"],
+            ),
+            "loss_effort_count": terms["effort_eligible"].detach().sum(),
+        }
+
+    @torch.no_grad()
+    def target_component_counts(self, target: torch.Tensor) -> dict[str, torch.Tensor]:
+        """只由 target 计算各 core component 的资格数。"""
+
+        ref = as_batch_waveform_torch(target)
+        self._validate_waveform(ref, name="target")
+        target_band, target_x = canonicalize_torch(
+            ref,
+            fs=self.fs,
+            low_hz=self.band_low_hz,
+            high_hz=self.band_high_hz,
+            scale_eps=self.scale_eps,
+        )
+        sync_eligible, effort_eligible = self._target_eligibility(target_x, target_band)
+        return {
+            "loss_sync_count": sync_eligible.sum(),
+            "loss_effort_count": effort_eligible.sum(),
+        }
+
+    def _component_terms(
+        self,
+        prediction: torch.Tensor | Mapping[str, Any],
+        target: torch.Tensor,
+    ) -> dict[str, torch.Tensor]:
         pred = as_batch_waveform_torch(prediction)
         ref = as_batch_waveform_torch(target)
         if pred.shape != ref.shape:
             raise ValueError(f"prediction/target shape 不一致: {tuple(pred.shape)} vs {tuple(ref.shape)}")
-        if pred.shape[-1] != self.length:
-            raise ValueError(f"期望 {self.length} 点，实际 {pred.shape[-1]}")
-        if not torch.isfinite(pred).all() or not torch.isfinite(ref).all():
-            raise FloatingPointError("prediction/target 包含 NaN/Inf")
+        self._validate_waveform(pred, name="prediction")
+        self._validate_waveform(ref, name="target")
 
-        pred_band, pred_x = canonicalize_torch(
+        _, pred_x = canonicalize_torch(
             pred,
             fs=self.fs,
             low_hz=self.band_low_hz,
@@ -72,29 +139,46 @@ class RespirationTaskLoss(nn.Module):
             high_hz=self.band_high_hz,
             scale_eps=self.scale_eps,
         )
-
         sync_values, sync_eligible, aligned_pred, aligned_target = self._sync_terms(
             pred_x,
             target_x,
             target_band,
         )
-        loss_sync = _eligible_mean(sync_values, sync_eligible, pred_x)
-
         effort_values, effort_eligible = self._effort_terms(
             aligned_pred,
             aligned_target,
             sync_eligible,
         )
-        loss_effort = _eligible_mean(effort_values, effort_eligible, pred_x)
-
-        total = self.sync_weight * loss_sync + self.effort_weight * loss_effort
-        parts: dict[str, torch.Tensor | float] = {
-            "loss_sync": loss_sync,
-            "loss_effort": loss_effort,
-            **_aggregation_parts("loss_sync", sync_values, sync_eligible),
-            **_aggregation_parts("loss_effort", effort_values, effort_eligible),
+        return {
+            "graph_source": pred_x,
+            "sync_values": sync_values,
+            "sync_eligible": sync_eligible,
+            "effort_values": effort_values,
+            "effort_eligible": effort_eligible,
         }
-        return total, parts
+
+    def _validate_waveform(self, waveform: torch.Tensor, *, name: str) -> None:
+        if waveform.shape[-1] != self.length:
+            raise ValueError(f"{name} 期望 {self.length} 点，实际 {waveform.shape[-1]}")
+        if not torch.isfinite(waveform).all():
+            raise FloatingPointError(f"{name} 包含 NaN/Inf")
+
+    def _target_eligibility(
+        self,
+        target_x: torch.Tensor,
+        target_band: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        start = self.max_lag_samples
+        stop = self.length - self.max_lag_samples
+        target_common = target_x[:, start:stop]
+        target_band_common = target_band[:, start:stop]
+        sync_eligible = centered_energy_torch(target_band_common) > self.dynamic_eps
+        target_frames = target_common.unfold(-1, self.envelope_window, self.envelope_step)
+        target_log_rms = 0.5 * torch.log(target_frames.square().mean(dim=-1) + self.envelope_eps)
+        target_valid = torch.isfinite(target_log_rms).all(dim=1) & (
+            centered_energy_torch(target_log_rms) > self.dynamic_eps
+        )
+        return sync_eligible, sync_eligible & target_valid
 
     def _sync_terms(
         self,
@@ -152,6 +236,12 @@ def _stable_corr(left: torch.Tensor, right: torch.Tensor, *, eps: float) -> torc
 def _eligible_mean(values: torch.Tensor, eligible: torch.Tensor, graph_source: torch.Tensor) -> torch.Tensor:
     if bool(eligible.any()):
         return values[eligible].mean()
+    return graph_source.sum() * 0.0
+
+
+def _eligible_sum(values: torch.Tensor, eligible: torch.Tensor, graph_source: torch.Tensor) -> torch.Tensor:
+    if bool(eligible.any()):
+        return values[eligible].sum()
     return graph_source.sum() * 0.0
 
 

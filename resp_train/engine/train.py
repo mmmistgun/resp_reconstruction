@@ -78,9 +78,11 @@ def validate(
     epoch: int | None = None,
     total_epochs: int | None = None,
     return_predictions: bool = False,
+    use_amp: bool = False,
 ):
     """执行验证循环，并返回平均 loss 摘要。"""
     resolved_device = torch.device(device)
+    amp_enabled = bool(use_amp and resolved_device.type == "cuda")
     model.to(resolved_device)
     model.eval()
     loss_fn.eval()
@@ -99,7 +101,12 @@ def validate(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
-        raw_pred = model(sensor, sst=sst) if sst is not None else model(sensor)
+        with torch.amp.autocast(
+            resolved_device.type,
+            dtype=torch.bfloat16,
+            enabled=amp_enabled,
+        ):
+            raw_pred = model(sensor, sst=sst) if sst is not None else model(sensor)
         loss, parts = loss_fn(raw_pred, target)
         meter.update(loss, parts, batch_size=sensor.size(0))
         if return_predictions:
@@ -130,6 +137,7 @@ def save_checkpoint(
     epoch: int,
     metrics: Mapping[str, float],
     cfg: DictConfig | None = None,
+    extra_state: Mapping[str, Any] | None = None,
 ) -> None:
     """保存模型、优化器和当前指标，供后续评价脚本加载。"""
     payload: dict[str, Any] = {
@@ -140,6 +148,8 @@ def save_checkpoint(
     }
     if cfg is not None:
         payload["config"] = OmegaConf.to_container(cfg, resolve=True)
+    if extra_state is not None:
+        payload["extra_state"] = dict(extra_state)
     torch.save(payload, Path(path))
 
 
@@ -152,12 +162,14 @@ def collect_predictions(
     max_windows: int,
     pred_key: str = "r_tho_hat",
     target_key: str = "tho_ref",
+    use_amp: bool = False,
 ) -> dict[str, np.ndarray]:
     """收集少量或完整验证预测，并展开 DataLoader 默认 collate 后的 meta。"""
     if int(max_windows) <= 0:
         raise ValueError("max_windows 必须大于 0")
 
     resolved_device = torch.device(device)
+    amp_enabled = bool(use_amp and resolved_device.type == "cuda")
     model.to(resolved_device)
     model.eval()
     preds: list[np.ndarray] = []
@@ -170,8 +182,14 @@ def collect_predictions(
             raise KeyError("batch 必须包含 meta")
         x = batch["x"].to(resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
-        raw_pred = model(x, sst=sst) if sst is not None else model(x)
-        pred = _waveform_output(raw_pred).detach().cpu().numpy()
+        with torch.amp.autocast(
+            resolved_device.type,
+            dtype=torch.bfloat16,
+            enabled=amp_enabled,
+        ):
+            raw_pred = model(x, sst=sst) if sst is not None else model(x)
+        # NumPy 不支持 torch.bfloat16；评价统一落到 float32，旧 float32 路径数值不变。
+        pred = _waveform_output(raw_pred).float().detach().cpu().numpy()
         target = batch["target"].detach().cpu().numpy()
         preds.append(pred)
         targets.append(target)
@@ -200,7 +218,7 @@ def _append_prediction_batch(
 ) -> None:
     if "meta" not in batch:
         raise KeyError("batch 必须包含 meta")
-    pred = _waveform_output(raw_pred).detach().cpu().numpy()
+    pred = _waveform_output(raw_pred).float().detach().cpu().numpy()
     target = batch["target"].detach().cpu().numpy()
     pred_batches.append(pred)
     target_batches.append(target)

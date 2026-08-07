@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pandas as pd
+import torch
+from torch.utils.data import DataLoader, Dataset
+
+from resp_train.crd.config import CRD_PROTOCOL_VERSION, load_crd_config
+from resp_train.crd.experiment import CRDExperiment
+from resp_train.engine import collect_predictions
+
+
+class _IdentityDataset(Dataset):
+    def __init__(self) -> None:
+        time = torch.arange(18000, dtype=torch.float32) / 100.0
+        envelope = 1.0 + 0.3 * torch.sin(2.0 * torch.pi * 0.01 * time)
+        self.waveform = envelope * torch.sin(2.0 * torch.pi * 0.2 * time)
+
+    def __len__(self) -> int:
+        return 1
+
+    def __getitem__(self, index: int):
+        del index
+        return {
+            "x": self.waveform[None, :],
+            "target": self.waveform[None, :],
+            "meta": {
+                "dataset_row_id": 1,
+                "split": "val",
+                "input_set": "test",
+                "samp_id": 7,
+                "coupling_state_id": 3,
+            },
+        }
+
+
+class _ScaledIdentity(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.scale = torch.nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, signal: torch.Tensor, **_: object) -> dict[str, torch.Tensor]:
+        return {"waveform": signal * self.scale}
+
+
+def test_crd_experiment_writes_complete_nonresumable_lifecycle(monkeypatch, tmp_path) -> None:
+    cfg = load_crd_config(
+        "configs/crd_v1/crd_101_b0_coarse.yaml",
+        overrides=[
+            "protocol.run_role=smoke",
+            "data.max_train_windows=1",
+            "data.max_val_windows=1",
+            "training.epochs=1",
+            "training.batch_size=1",
+            "training.gradient_accumulation_steps=1",
+            "training.device=cpu",
+            "training.show_progress=false",
+            f"outputs.run_root={tmp_path.as_posix()}",
+        ],
+    )
+    dataset = _IdentityDataset()
+    loader = DataLoader(dataset, batch_size=1, shuffle=False)
+    bundle = SimpleNamespace(loader=loader, dataset=dataset)
+    data = SimpleNamespace(
+        train=bundle,
+        val=bundle,
+        audit_summary=pd.DataFrame([{"split": "val", "n_windows": 1}]),
+    )
+    monkeypatch.setattr("resp_train.crd.experiment.build_tho_data", lambda _cfg: data)
+    monkeypatch.setattr("resp_train.crd.experiment.build_crd_model", lambda _cfg: _ScaledIdentity())
+
+    run_dir = CRDExperiment(cfg).train()
+    history = pd.read_csv(run_dir / "train_history.csv")
+    assert list(history.columns) == [
+        "epoch",
+        "optimizer_update",
+        "train_loss_total",
+        "train_loss_sync",
+        "train_loss_effort",
+        "first_learning_rate",
+        "last_learning_rate",
+        "val_core_loss",
+        "val_local_rr_mae",
+    ]
+    assert history.loc[0, "optimizer_update"] == 1
+    checkpoint = torch.load(run_dir / "checkpoint_best_local_rr.pt", map_location="cpu")
+    assert checkpoint["extra_state"]["protocol"] == CRD_PROTOCOL_VERSION
+    assert checkpoint["extra_state"]["resume_supported"] is False
+    assert checkpoint["extra_state"]["update_index"] == 1
+    for filename in (
+        "checkpoint_final.pt",
+        "config.yaml",
+        "run_manifest.json",
+        "audit.csv",
+        "optimizer_parameter_groups.json",
+        "metrics.csv",
+        "metrics_summary.csv",
+    ):
+        assert (run_dir / filename).exists()
+
+
+class _BFloatOutput(torch.nn.Module):
+    def forward(self, signal: torch.Tensor, **_: object) -> torch.Tensor:
+        return signal.to(torch.bfloat16)
+
+
+def test_prediction_collection_converts_bfloat16_before_numpy() -> None:
+    dataset = _IdentityDataset()
+    predictions = collect_predictions(
+        _BFloatOutput(),
+        DataLoader(dataset, batch_size=1),
+        device="cpu",
+        max_windows=1,
+    )
+    assert predictions["r_tho_hat"].dtype.name == "float32"

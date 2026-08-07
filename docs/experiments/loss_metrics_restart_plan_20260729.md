@@ -1901,3 +1901,13 @@ T4 没有复现 T3 的强解码器退化。它相对 T2 在 Local RR、两项包
 5. IEWT 在五项 primary、IBI/coverage、coherence 与 nDTW 上均未超过三个学习模型，本阶段不投入 IEWT 参数搜索。
 
 这些结论属于 research-test informed 阶段证据。它们不回头修改本批 checkpoint、频带、metric、seed 或表中模型集合；可以用于定义下一项新的模型研究任务。
+
+## 35. CRD-Net v1.1 S0/S1 新模型阶段（2026-08-08）
+
+第一阶段 research-test 已完成，因此允许以其为背景证据定义新的模型研究任务，但不得回头改写 B0/T2/T4 checkpoint 或旧阶段结论。新任务命名为 CRD-Net v1.1，当前仅激活 S0/S1：先在统一的 80-epoch AdamW/bf16/eligible-aware accumulation 协议下重训旧 B0/T4，再按 decoder bridge、local Mamba2、Direct analytic frontend、可选 1-Hz global Mamba2 的单因素顺序推进。
+
+本阶段不改变数据、split、target、正式 `Pi`、`L_sync + 0.25 L_effort`、评价指标或 validation Local-RR checkpoint selector。S0/S1 禁止读取 research-test；其结果只作为 development/validation evidence。AM、Morphology、gate、auxiliary、capacity/TCN control 和 S2 以后阶段尚未激活，不得提前实现进正式候选或混入本阶段 run。
+
+CRD 的完整模型、tensor、初始化、依赖、逐 optimizer-step 训练语义、配置角色、S1 停止/保留规则和验收契约冻结在 `docs/experiments/crd_v1_protocol_20260808.md`。该附件由本节纳入当前唯一实验协议；若其与本文冲突，以本文为准。正式运行只能使用 `configs/crd_v1/` 下六个配置与 `scripts/train_crd.py`，且在目标 GPU 的依赖、finite forward/backward 和当前冻结 physical batch 128 acceptance 通过之前不得启动正式三 seed 队列。
+
+实现级验收已于 2026-08-08 完成：固定 `mamba-ssm/causal-conv1d` 版本检查通过；实际 BiMamba2 `B=2,L=1800,D=96` fast-path forward/backward finite；CRD_103 与 CRD_104 各一个 synthetic batch-1 的完整 model/core-loss/backward 均 finite；CRD_101 完成一次 4-train/2-validation CPU 生命周期 smoke，并成功独立复评。随后按预注册工程规则比较 `32×4 / 64×2 / 128×1`：`128×1` 稳态吞吐相对 `32×4` 提升 30.36%，peak reserved 为 10.868 GiB（RTX 4070 Ti SUPER 总显存的 68.17%），因此六个配置在任何正式 run 前统一修订为 physical batch 128、accumulation 1，effective batch 与 LR/update 序列不变；修订后的 CRD_103 完整 acceptance 已通过。全量仓库测试为 `312 passed`。以上均是工程证据，不进入模型效果比较；代码提交且工作树干净后，正式 S0 队列可按顺序启动。

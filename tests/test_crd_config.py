@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from resp_train.crd.config import CRD_PROTOCOL_VERSION, load_crd_config
+
+
+def test_all_crd_s0_s1_configs_are_formal_and_frozen() -> None:
+    paths = sorted(Path("configs/crd_v1").glob("*.yaml"))
+    assert len(paths) == 6
+    for path in paths:
+        cfg = load_crd_config(path)
+        assert cfg.protocol.name == CRD_PROTOCOL_VERSION
+        assert cfg.protocol.run_role == "formal"
+        assert cfg.training.epochs == 80
+        assert cfg.training.batch_size == 128
+        assert cfg.training.gradient_accumulation_steps == 1
+        assert cfg.model.initialization_seed == cfg.training.seed
+
+
+def test_formal_config_rejects_unregistered_batch_change() -> None:
+    with pytest.raises(ValueError, match="physical batch=128"):
+        load_crd_config(
+            "configs/crd_v1/crd_101_b0_coarse.yaml",
+            overrides=["training.batch_size=16"],
+        )
+
+
+def test_smoke_role_allows_only_bounded_engineering_overrides() -> None:
+    cfg = load_crd_config(
+        "configs/crd_v1/crd_101_b0_coarse.yaml",
+        overrides=[
+            "protocol.run_role=smoke",
+            "training.epochs=1",
+            "training.batch_size=2",
+            "training.gradient_accumulation_steps=1",
+            "training.device=cpu",
+            "data.max_train_windows=2",
+            "data.max_val_windows=1",
+        ],
+    )
+    assert cfg.protocol.run_role == "smoke"
+    assert cfg.data.max_train_windows == 2
+
+
+def test_acceptance_role_uses_benchmark_selected_physical_batch() -> None:
+    cfg = load_crd_config(
+        "configs/crd_v1/crd_103_direct_local_mamba.yaml",
+        overrides=[
+            "protocol.run_role=acceptance",
+            "data.max_train_windows=128",
+            "data.max_val_windows=32",
+            "training.epochs=1",
+            "training.device=cuda:0",
+        ],
+    )
+    assert cfg.training.batch_size == 128
+    assert cfg.training.gradient_accumulation_steps == 1
+
+
+def test_crd_config_rejects_resume_and_hidden_model_knobs() -> None:
+    with pytest.raises(ValueError, match="training.resume"):
+        load_crd_config(
+            "configs/crd_v1/crd_101_b0_coarse.yaml",
+            overrides=["training.resume=true"],
+        )
+    with pytest.raises(ValueError, match="model 配置字段"):
+        load_crd_config(
+            "configs/crd_v1/crd_101_b0_coarse.yaml",
+            overrides=["model.local_blocks=5"],
+        )
+    with pytest.raises(ValueError, match="training 配置字段"):
+        load_crd_config(
+            "configs/crd_v1/crd_101_b0_coarse.yaml",
+            overrides=["training.learning_rate=0.1"],
+        )

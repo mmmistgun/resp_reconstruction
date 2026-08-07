@@ -1,8 +1,8 @@
-# 当前 THO 实验入口
+# 当前 THO 与 CRD 实验入口
 
 本文只描述当前冻结的新呼吸重建协议。旧 E/F/G probe、旧 loss、旧 metrics、旧 gate/topK 和历史 checkpoint 语义不再属于当前 workflow；旧代码与说明通过 Git 追溯，历史 run 原地保留。
 
-协议定义见 `docs/experiments/loss_metrics_restart_plan_20260729.md`。
+唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
 ## 当前固定口径
 
@@ -17,6 +17,7 @@
 - 包络主指标：`envelope_trajectory_mae` 与 `global_envelope_modulation_error`；
   `target_stratified_envelope_spearman` 只按 train-frozen Low/Medium/High 分层补充报告。
 - research-test：现有 `test` 可在阶段性整理后重复观察，并可形成后续独立科研问题；它不是无偏 held-out 证据，不得用于重选既有 run 的 epoch/checkpoint。
+- 新 CRD-S0/S1 只读 train/validation；`eval_crd.py` 故意不开放 test，不能套用旧 THO research-test 命令。
 
 ## 数据与 split 审计
 
@@ -117,6 +118,121 @@ done
 ```
 
 T2、T3、T4 validation 均已完成。当前保留 T2/T4，并与 B0、F0、IEWT 一起进入阶段性 research-test；B0/M1/T1/T3 和 loss 消融由各自 run manifest 与 Git 历史追溯。
+
+## CRD-v1.1 S0/S1
+
+六个冻结配置：
+
+```text
+configs/crd_v1/crd_001_b0_retrain.yaml
+configs/crd_v1/crd_002_t4_retrain.yaml
+configs/crd_v1/crd_101_b0_coarse.yaml
+configs/crd_v1/crd_102_b0_local_mamba.yaml
+configs/crd_v1/crd_103_direct_local_mamba.yaml
+configs/crd_v1/crd_104_direct_hier_mamba.yaml
+```
+
+先确认固定原生依赖：
+
+```bash
+./.venv/bin/python -c \
+  "from resp_train.crd.config import check_crd_dependencies; p=check_crd_dependencies(); print(p); raise SystemExit(bool(p))"
+```
+
+在目标 GPU 上执行 actual CRD BiMamba2 的 bf16 fast-path forward/backward 短验收：
+
+```bash
+./.venv/bin/python scripts/check_crd_mamba.py --device cuda:0
+```
+
+选定 variant 的完整 synthetic 单 microbatch 链路验收：
+
+```bash
+./.venv/bin/python scripts/check_crd_variant.py \
+  --config configs/crd_v1/crd_103_direct_local_mamba.yaml \
+  --device cuda:0 \
+  --batch-size 1
+```
+
+### CRD CPU 生命周期 smoke
+
+CPU smoke 只建议用于不含 Mamba 的 001/002/101；下面以 101 为例。它不形成科研结果：
+
+```bash
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_v1/crd_101_b0_coarse.yaml \
+  --set protocol.run_role=smoke \
+  --set data.max_train_windows=4 \
+  --set data.max_val_windows=2 \
+  --set training.epochs=1 \
+  --set training.batch_size=2 \
+  --set training.gradient_accumulation_steps=1 \
+  --set training.device=cpu \
+  --set training.show_progress=false \
+  --set outputs.run_root=/tmp/crd_101_cpu_smoke
+```
+
+### CRD GPU physical-batch-128 acceptance
+
+每种实际要进入正式队列的结构都应单独验收。下面的一次 run 包含 1 个 physical-batch-128 microbatch、一次 optimizer update 和 32 个 validation windows：
+
+```bash
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_v1/crd_103_direct_local_mamba.yaml \
+  --set protocol.run_role=acceptance \
+  --set data.max_train_windows=128 \
+  --set data.max_val_windows=32 \
+  --set training.epochs=1 \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --set outputs.run_root=/tmp/crd_103_batch32_acceptance
+```
+
+如发生 OOM，停止，不在正式命令中临时改变 batch/accumulation；按协议先复验并统一修订为 runner-up `64×2`。Acceptance 目录与数值不进入正式比较。
+
+正式队列前的等效 batch-scaling 工程 benchmark：
+
+```bash
+./.venv/bin/python scripts/benchmark_crd_batch_scaling.py \
+  --config configs/crd_v1/crd_103_direct_local_mamba.yaml \
+  --device cuda:0 \
+  --schemes 32x4 64x2 128x1 \
+  --repeats 3 \
+  --output /tmp/crd_batch_scaling_20260808.json
+```
+
+首轮 cold 不进入吞吐中位数；脚本记录 PyTorch allocated/reserved 峰值并按协议的 10% 吞吐增益、80% 显存安全线给出工程 recommendation。它不运行 validation/test，也不形成模型效果证据。
+
+2026-08-08 的固定 CRD_103 benchmark 中，`32×4 / 64×2 / 128×1` 稳态吞吐分别为 `215.899 / 249.812 / 281.438 samples/s`，peak reserved 分别为 `3114 / 5448 / 10868 MiB`。`128×1` 相对基线提升 30.36%，占 16 GiB 设备显存的 68.17%，因此当前 formal/acceptance 配置已统一冻结为 physical batch 128、accumulation 1；effective batch 仍为 128。
+
+### CRD 正式三 seed
+
+必须按协议决策链逐 variant 推进，而不是一次性启动 001–104。以下模板只在对应上一阶段已经通过且工作树/commit 已冻结时使用：
+
+```bash
+variant=crd_001_b0_retrain
+for seed in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/train_crd.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --set training.seed="${seed}" \
+    --set training.device=cuda:0 \
+    --set outputs.run_root="runs/crd_v1/${variant}/seed_${seed}" \
+    || exit 1
+done
+```
+
+不要覆盖 `epochs/batch/accumulation` 或任何 `max_*_windows`；formal loader 会拒绝。S0 需完成 001/002；S1 按 `101 → 102 → 103 → 可选104` 的停止/保留规则推进。
+
+CRD validation checkpoint 复评：
+
+```bash
+./.venv/bin/python scripts/eval_crd.py \
+  --checkpoint runs/crd_v1/<variant>/seed_<seed>/<timestamp>/checkpoint_best_local_rr.pt \
+  --set training.device=cuda:0 \
+  --metrics-output /tmp/crd_validation_metrics.csv
+```
+
+该入口只读 validation，不接受 `--split test`。
 
 ## 固定呼吸带传统基线
 
@@ -248,5 +364,7 @@ F0 与 IEWT 不训练、无 seed：
 - `research_test_metrics.csv` / `research_test_metrics_summary.csv`：显式 research-test 评价产物。
 - `*_metrics_manifest.json`：checkpoint 复评的命令、split、配置与代码版本。
 - `train.log`：训练日志。
+
+CRD run 额外保存 `optimizer_parameter_groups.json`；其 `train_history.csv` 还记录 optimizer update、每 epoch 首末 LR。CRD checkpoint 的 `extra_state` 保存协议版本、update index/total updates、依赖版本与 `resume_supported=false`。
 
 不再生成或解释旧 `checkpoint.pt`、`checkpoint_best_rr.pt`、`checkpoint_best_task.pt`、`checkpoint_topN.pt`、`epoch_metrics.csv`、旧 target-feature cache 或旧指标 summary。

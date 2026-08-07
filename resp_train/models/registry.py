@@ -183,6 +183,13 @@ def _build_time_stft_low_complex_output1d(cfg: Any) -> TimeStftLowComplexOutput1
     )
 
 
+def _build_crd_v1(cfg: Any) -> nn.Module:
+    # 保持延迟导入：旧模型与旧测试不应因 CRD 的 CUDA 扩展而加载 mamba_ssm。
+    from resp_train.crd.model import build_crd_model
+
+    return build_crd_model(cfg)
+
+
 _REGISTRY: dict[str, ModelFactory] = {
     "unet1d_tiny": lambda cfg: UNet1DTiny(
         in_channels=int(cfg.model.in_channels),
@@ -367,6 +374,7 @@ _REGISTRY: dict[str, ModelFactory] = {
     ),
     "time_stft_dual1d": _build_time_stft_dual1d,
     "time_stft_low_complex_output1d": _build_time_stft_low_complex_output1d,
+    "crd_v1": _build_crd_v1,
 }
 
 

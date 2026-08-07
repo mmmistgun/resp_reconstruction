@@ -1,0 +1,2 @@
+mamba-ssm==2.3.2.post1
+causal-conv1d==1.6.2.post1
