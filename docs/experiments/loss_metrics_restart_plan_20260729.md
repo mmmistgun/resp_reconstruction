@@ -4,7 +4,7 @@
 
 最后更新：2026-08-04
 
-状态：最终 loss 已冻结；纯时域 baseline 阶段已完成；T2 保留为 active candidate；T3 改善包络误差但显著损伤节律、PCC 与 IBI coverage，未入选；下一步运行 T4，designated test 继续封存
+状态：最终 loss 已冻结；时频模型 validation 阶段已完成；T2 为均衡型 active candidate，T4 为局部节律/包络型 active candidate，T1/T3 未入选；停止新增模型，等待冻结 designated test 模型集合
 
 ## 1. 定位
 
@@ -1827,3 +1827,34 @@ T3 正式结果位于 `runs/tho_restart_t3_e3a0_wide_concat`。三个 run 均使
 T3 验证了旧 concat-deep 结构的真实归纳偏置：它在三 seed 上一致降低 global envelope modulation error，并提高 Low/High 分层的包络排序；但这种收益来自一个显著改变输出解码路径的完整模型，同时伴随 Whole/Local RR、signed PCC、IBI coverage 与 interpretable fraction 的一致大幅退化。当前不构造加权总分让包络收益覆盖其他任务轴，因此 T3 不进入 active candidate，也不进入 designated test。
 
 T3 的结果支持继续运行冻结的 T4：T4 保留 T2 的原生 PatchMixer decoder 和 pre-mixer 注入，只把 fullband Conv2D 表示替换为既有五带 bandenergy，能够检验低维频带条件信息是否在不复现 T3 解码退化的前提下改善 Local RR/IBI 或包络轴。T4 配置不因 T3 结果修改。尚未执行 designated test。
+
+## 33. T4 `G3_C bandenergy` 当前协议结果与模型阶段收口（2026-08-07）
+
+T4 正式结果位于 `runs/tho_restart_t4_g3c_bandenergy_native`。三个 run 均使用 commit `be66fa0`、完整 train/validation、50 epochs、batch 128 和 seed `20260811 / 20260812 / 20260813`，启动时工作树干净。最佳 epoch 为 `9 / 35 / 50`，全部与训练历史的最低 Local RR epoch 一致。三个 checkpoint tensor 与训练历史全部 finite，每个 run 均输出 2675 个 validation sample；prediction-valid fraction 为 `1.0`、prediction-degenerate fraction 为 `0.0`，每个 seed 只有 `1/2675` 个负 signed PCC 样本。STFT projection L2 norm 为 `1.545 / 2.694 / 3.437`，低维频带分支已经实际参与训练。
+
+按 sample direct mean，再对三个 seed 报告算术 mean ± sample SD：
+
+| Validation 指标 | B0 PatchMixer | T2 wide native | T4 bandenergy native | T4 相对 T2 |
+|---|---:|---:|---:|---|
+| Whole-window RR MAE（bpm）↓ | `0.512706 ± 0.002988` | `0.512559 ± 0.002194` | `0.536918 ± 0.020185` | 退化 `+0.024359`；0/3 seed 改善 |
+| Local RR MAE（bpm）↓ | `0.626951 ± 0.000812` | `0.624996 ± 0.001908` | `0.614648 ± 0.016329` | 改善 `-0.010348`；2/3 seed 改善；相对 B0 为 3/3 改善 |
+| Envelope trajectory MAE ↓ | `0.155620 ± 0.000653` | `0.153601 ± 0.001251` | `0.149889 ± 0.002279` | 改善 `-0.003712`；3/3 seed 改善 |
+| Global envelope modulation error ↓ | `0.244096 ± 0.005189` | `0.231247 ± 0.005794` | `0.222447 ± 0.013806` | 改善 `-0.008800`；2/3 seed 改善 |
+| Lag-aware signed PCC ↑ | `0.839730 ± 0.000659` | `0.840499 ± 0.000245` | `0.845950 ± 0.004923` | 改善 `+0.005451`；2/3 seed 改善；相对 B0 为 3/3 改善 |
+| IBI-MedAE（s）↓ | `0.084295 ± 0.001170` | `0.087541 ± 0.002440` | `0.082872 ± 0.004286` | 改善 `-0.004669`；3/3 seed 改善；均值也优于 B0 `-0.001423` |
+| IBI coverage ↑ | `0.845532 ± 0.001099` | `0.845130 ± 0.001002` | `0.842107 ± 0.003661` | 退化 `-0.003023`；1/3 seed 改善 |
+| Low target-modulation Spearman ↑ | `0.291283 ± 0.005623` | `0.274319 ± 0.004658` | `0.333122 ± 0.016895` | 改善 `+0.058802`；3/3 seed 改善 |
+| Medium target-modulation Spearman ↑ | `0.571272 ± 0.002540` | `0.583196 ± 0.002222` | `0.586800 ± 0.002208` | 改善 `+0.003604`；2/3 seed 改善 |
+| High target-modulation Spearman ↑ | `0.678806 ± 0.001620` | `0.709681 ± 0.004435` | `0.726429 ± 0.018738` | 改善 `+0.016748`；2/3 seed 改善 |
+| IBI interpretable fraction ↑ | `0.727103 ± 0.004112` | `0.728224 ± 0.002617` | `0.724112 ± 0.006388` | 略退 `-0.004112` |
+| Lag 边界命中比例 ↓ | `0.181308 ± 0.000374` | `0.180312 ± 0.009758` | `0.171340 ± 0.009052` | 改善 `-0.008972`；3/3 seed 改善 |
+
+T4 没有复现 T3 的强解码器退化。它相对 T2 在 Local RR、两项包络主指标、signed PCC、IBI-MedAE 和三层包络 Spearman 的多数轴上改善，且 `12752` 参数少于 T2 的 `14192`；但 Whole RR 三 seed 一致退化，IBI coverage 与 interpretable fraction 略降，跨 seed SD 和最佳 epoch 波动明显大于 T2。seed `20260813` 的最佳 epoch 位于 50 不触发 80 epoch 扩展：预算已冻结，当前证据足以确认其任务交换，追加预算会成为结果驱动搜索。
+
+模型层面不构造加权总分。T2 和 T4 均不被另一者支配：
+
+- **T2 wide native**：Whole/Local RR 和 coverage 更均衡，跨 seed 更稳定；包络、PCC 和 IBI 不如 T4。
+- **T4 bandenergy native**：Local RR、包络轨迹/范围、PCC 和 IBI 更强，结构更小且频带解释更直接；Whole RR、coverage 和跨 seed 稳定性较弱。
+- **T1 / T3**：分别因缺乏净收益和显著节律/coverage 退化退出 active candidate；M1 继续只作纯时域任务交换留档。
+
+本轮不继续窗长、频带、融合位置、bandenergy 边界、通道数、训练预算或新结构搜索。下一步只需冻结 designated test 模型集合。建议将 T2 作为均衡主候选、T4 作为预注册的 Pareto 辅候选；若二者都进入 designated test，必须同时报告且不得根据 test 结果再选“赢家”或返工协议。Designated test 尚未执行。
