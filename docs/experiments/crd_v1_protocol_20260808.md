@@ -378,6 +378,15 @@ Local RR 未触发 3% 恶化线，但 signed PCC 下降严格大于 0.01。依�
 
 D0 只作归因：原正式结论仍由 `checkpoint_best_local_rr.pt` 决定；即使 final checkpoint 跨过停止线，也不能据此事后重选 CRD_101 或自动开放 CRD_102。若要改变 selector，必须另行冻结新协议，并在同一新 selector 下成对重建 CRD_001/101 三 seed 证据。
 
+D0 已在 commit `baeb7c51f85c83cdd28fa6a69285e36461d33e7e` 的干净工作树下完成。六份 manifest 均指向对应 epoch-80 `checkpoint_final.pt`；每份 metrics 均为 2675 个 validation samples、无 Inf、`joint_prediction_degenerate_fraction=0`。结果为：
+
+| 三 seed mean ± sample SD | CRD_001 selected | CRD_001 final | CRD_101 selected | CRD_101 final |
+|---|---:|---:|---:|---:|
+| Local RR MAE | 0.632468 ± 0.004054 | 0.661868 ± 0.010022 | 0.624387 ± 0.003498 | 0.640469 ± 0.010190 |
+| lag-aware signed PCC | 0.840287 ± 0.000860 | 0.841586 ± 0.000585 | 0.787829 ± 0.001328 | 0.788269 ± 0.000799 |
+
+在相同 fixed-final selector 下，CRD_101 相对 CRD_001 的 Local RR 改善 3.2332%，但 signed PCC 仍下降 0.053317；三个配对 seed 的 PCC 分别下降 0.054800、0.052177、0.052975。CRD_101 从 selected 到 final 的 PCC 仅增加 0.000440，而 CRD_001 增加 0.001299，fixed-final 的模型间 PCC 缺口反而比原 selected comparison 扩大约 0.000859。因此 checkpoint selector 不是 CRD_101 PCC 退化的主要解释，原 gate 失败结论保持不变，CRD_102 继续关闭；D1 CRD_105 可以按本修订启动。
+
 ### 16.2 D1：CRD_105 Direct-Coarse
 
 新增唯一诊断候选 `crd_105_direct_coarse`：

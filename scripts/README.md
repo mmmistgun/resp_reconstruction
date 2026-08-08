@@ -283,6 +283,8 @@ CRD validation checkpoint 复评：
 
 若目标文件已经存在，先停止并核对，不得覆盖。D0 结果只判断 selector 是否可能贡献 PCC 下降，不能事后重选 CRD_101 或开放 CRD_102。
 
+D0 已完成：fixed-final 下 CRD_001/101 的 Local RR seed mean 为 `0.661868/0.640469`，signed PCC seed mean 为 `0.841586/0.788269`；PCC 仍下降 `0.053317`，三个配对 seed 全部下降。selector 不是原 PCC 退化的主要解释，CRD_102 继续暂停，下一步进入 CRD_105。
+
 ### CRD_105 Direct-Coarse 诊断
 
 先在目标 GPU 验证完整 synthetic 链路，再运行独立 physical-batch-128 acceptance：

@@ -1919,3 +1919,5 @@ CRD_001/002 与 CRD_101 已在 commit `6f58f36f4839904014031970e5f69262aa6e96f8`
 为区分 Local-RR selector、patch-token bridge 与共享 coarse head，现仅激活 post-result S1D：先对 CRD_001/101 各三个 final checkpoint 做配对 validation 归因复评，再运行新增的 `CRD_105 Direct-Coarse` 三 seed 诊断。CRD_105 使用 Direct analytic frontend 和与 CRD_101 相同的 refinement/head，不含任何 Mamba。其结构、192,781 参数契约、产物隔离、gate 与条件分支均冻结在附件第 15–16 节。
 
 本修订不改变数据、split、target、loss、metrics 或 checkpoint selector，不授权 CRD test，也不自动重新开放 CRD_102。CRD_105 通过原 CRD_001 coarse gate 后，路线改为 `105→103→可选104`；若失败则 coarse 路线停止。CRD_102 只有在未来另行冻结 selector/训练修订且修订版 CRD_101 重新通过三 seed gate 后才可开放。自本节起，`configs/crd_v1/` 下七个配置中仅 001/002/101 的既有结果、105 的诊断队列以及由附件条件开放的 103/104 有效；正式运行仍只使用 `scripts/train_crd.py`，且禁止读取 research-test。
+
+D0 paired final-checkpoint 复评随后在 commit `baeb7c5` 下完成。CRD_001/101 的 fixed-final signed PCC seed mean 分别为 0.841586/0.788269，CRD_101 仍下降 0.053317，且三个配对 seed 全部下降；selector 不能解释原 PCC 失败。D0 不改变正式 checkpoint 或原 gate，现允许按附件第 16.2 节进入 CRD_105 synthetic/acceptance 与 formal diagnostic。
