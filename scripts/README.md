@@ -308,6 +308,8 @@ D0 已完成：fixed-final 下 CRD_001/101 的 Local RR seed mean 为 `0.661868/
 
 两项通过、代码提交且工作树干净后，才运行三 formal seeds：
 
+上述两项已在 commit `be21ba0` 下通过；acceptance 路径为 `/tmp/crd_105_batch128_acceptance/20260808_204245_249478`。该单 epoch 数值只属于工程验收，不作效果解释。当前允许执行：
+
 ```bash
 for seed in 20260811 20260812 20260813; do
   ./.venv/bin/python scripts/train_crd.py \

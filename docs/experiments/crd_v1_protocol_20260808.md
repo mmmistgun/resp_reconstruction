@@ -401,6 +401,8 @@ DirectAnalyticFrontend [B,96,1800]
 
 CRD_105 不注册 local/global Mamba 或 FiLM，trainable params 固定为 192,781。同一 seed 下，它的 Direct frontend 与 CRD_103/104 逐 tensor 同初始化，refinement/head 与 CRD_101–104 逐 tensor 同初始化。配置固定为 `configs/crd_v1/crd_105_direct_coarse.yaml`，protocol manifest/checkpoint 标识固定为 `crd-v1.1-s1d-20260808`，仍使用 formal `80 epochs / physical batch 128 / accumulation 1` 和三个原 formal seeds。正式三 seed 前必须完成该 variant 的 finite synthetic 检查与独立 physical-batch-128 acceptance；smoke/acceptance 不形成效果证据。
 
+CRD_105 工程验收已在 commit `be21ba03573ac1a8fe54d94d410a1a33fd397572`、`git_dirty=false` 下完成。CUDA synthetic batch-1 的 waveform shape 为 `[1,1,18000]`，loss 0.483973，sync/effort eligibility 均为 1，output/input/parameter gradients 全部 finite，peak allocated 30.34 MiB。随后 `/tmp/crd_105_batch128_acceptance/20260808_204245_249478` 使用 128 train windows 形成严格一次 update，并对 32 validation windows 完成 Local-RR selector、best/final checkpoint 和逐 sample metrics；resolved config 为 acceptance `1 epoch / physical batch 128 / accumulation 1`、`max_train/max_val/max_test=128/32/null`，checkpoint model/optimizer tensors finite、update index/total 均为 1、无 prediction degeneracy。该结果只解除 formal 三 seed 的工程阻塞；其中单 epoch Local RR/PCC 等数值不得进入效果比较。
+
 D1 的主 gate 仍以 CRD_001 三 seed mean 为 comparator：Local RR 相对恶化严格大于 3%，或 signed PCC 下降严格大于 0.01，即判定 Direct-Coarse 失败。另报告 CRD_105 vs CRD_101 的全部指标差异用于 bridge 归因，但不另设事后阈值。
 
 ### 16.3 冻结的后续分支

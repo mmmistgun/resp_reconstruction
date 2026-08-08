@@ -1921,3 +1921,5 @@ CRD_001/002 与 CRD_101 已在 commit `6f58f36f4839904014031970e5f69262aa6e96f8`
 本修订不改变数据、split、target、loss、metrics 或 checkpoint selector，不授权 CRD test，也不自动重新开放 CRD_102。CRD_105 通过原 CRD_001 coarse gate 后，路线改为 `105→103→可选104`；若失败则 coarse 路线停止。CRD_102 只有在未来另行冻结 selector/训练修订且修订版 CRD_101 重新通过三 seed gate 后才可开放。自本节起，`configs/crd_v1/` 下七个配置中仅 001/002/101 的既有结果、105 的诊断队列以及由附件条件开放的 103/104 有效；正式运行仍只使用 `scripts/train_crd.py`，且禁止读取 research-test。
 
 D0 paired final-checkpoint 复评随后在 commit `baeb7c5` 下完成。CRD_001/101 的 fixed-final signed PCC seed mean 分别为 0.841586/0.788269，CRD_101 仍下降 0.053317，且三个配对 seed 全部下降；selector 不能解释原 PCC 失败。D0 不改变正式 checkpoint 或原 gate，现允许按附件第 16.2 节进入 CRD_105 synthetic/acceptance 与 formal diagnostic。
+
+CRD_105 的 CUDA synthetic finite 检查与独立 physical-batch-128 acceptance 已在 commit `be21ba0` 下通过；acceptance 严格使用 128/32 个 train/validation windows、一次 optimizer update，完整生命周期与所有 checkpoint tensors finite。该工程证据不参与模型比较，现解除 CRD_105 三 formal seeds 的工程阻塞。
