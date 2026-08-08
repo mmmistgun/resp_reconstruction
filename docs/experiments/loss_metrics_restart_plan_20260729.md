@@ -1925,3 +1925,5 @@ D0 paired final-checkpoint 复评随后在 commit `baeb7c5` 下完成。CRD_001/
 CRD_105 的 CUDA synthetic finite 检查与独立 physical-batch-128 acceptance 已在 commit `be21ba0` 下通过；acceptance 严格使用 128/32 个 train/validation windows、一次 optimizer update，完整生命周期与所有 checkpoint tensors finite。该工程证据不参与模型比较，现解除 CRD_105 三 formal seeds 的工程阻塞。
 
 CRD_105 三 formal seeds 随后在 commit `2bee3e5` 下完成并通过完整性审计。相对 CRD_001，Local RR seed mean 改善 8.1006%，signed PCC 增加 0.006043，三个配对 seed 两项均同方向改善，故通过 Direct-Coarse gate。相对 CRD_101，CRD_105 的 signed PCC 增加 0.058501，支持把原退化定位到 frontend package 而非共享 coarse head。按附件冻结分支，现跳过仍关闭的 CRD_102，开放 `CRD_103 vs CRD_105`；CRD_104 继续等待 103 gate。
+
+CRD_103 三 formal seeds 随后在 commit `ed9d68e` 下完成并通过完整性审计。相对 CRD_105，它的 Local RR seed mean 恶化 0.6905%、0/3 配对 seed 改善、trajectory MAE 恶化 5.2364%，虽然 signed PCC 增加 0.006461，但仍同时违反三项必要保留条件。因此 CRD_103 不保留、CRD_104 不运行，S1D 当前保留 CRD_105；Mamba 带来的 PCC/global-envelope/IBI 收益仅记录为后续独立研究背景，不改变本轮停止决策。

@@ -435,6 +435,31 @@ CRD_105 的 Local RR 未恶化而是改善 8.1006%，signed PCC 未下降而是�
 4. 103 通过后，`104 vs 103` 继续使用同一条件；通过则保留 104，否则保留 103。
 5. 原 CRD_102 只有在未来协议预先冻结新的训练/selector 修订、并由对应的修订版 CRD_101 三 seed 重新通过 CRD_001 gate 后才可重新开放；D0 或单 seed 探索不能满足该条件。本修订不授权启动 CRD_102。
 
-D1 已执行上述第 2 条分支：CRD_105 保留，CRD_102 继续关闭，现开放 `CRD_103 vs CRD_105` formal 三 seed比较；CRD_104 仍等待 103 gate。自该条件分支开放起，尚未正式运行的 CRD_103/104 与 CRD_105 一样固定使用 `crd-v1.1-s1d-20260808` protocol manifest/checkpoint 标识；这只修正结果后路线的 provenance，不改变两者已冻结的模型、训练或 gate。
+D1 已执行上述第 2 条分支：CRD_105 保留，CRD_102 继续关闭，现开放 `CRD_103 vs CRD_105` formal 三 seed 比较；CRD_104 仍等待 103 gate。自该条件分支开放起，尚未正式运行的 CRD_103/104 与 CRD_105 一样固定使用 `crd-v1.1-s1d-20260808` protocol manifest/checkpoint 标识；这只修正结果后路线的 provenance，不改变两者已冻结的模型、训练或 gate。
 
 任何上述正式诊断 run 都只能读取 train/validation。不得因本修订读取 research-test、改变原 CRD_001/101 产物，或复用中断 run 的 best checkpoint。
+
+### 16.4 D2：CRD_103 Local Mamba 结果
+
+CRD_103 三 formal seeds 已在 commit `ed9d68edd7a4b6693155b2129767e7ac7b604a26`、`git_dirty=false` 下完成：
+
+| Seed | Run | Local-RR best epoch | Local RR MAE | signed PCC | trajectory MAE |
+|---:|---|---:|---:|---:|---:|
+| 20260811 | `runs/crd_v1/crd_103_direct_local_mamba/seed_20260811/20260808_223610_091525` | 36 | 0.570364 | 0.847587 | 0.165441 |
+| 20260812 | `runs/crd_v1/crd_103_direct_local_mamba/seed_20260812/20260808_234525_453913` | 9 | 0.609111 | 0.854979 | 0.151075 |
+| 20260813 | `runs/crd_v1/crd_103_direct_local_mamba/seed_20260813/20260809_005357_322787` | 10 | 0.576268 | 0.855807 | 0.156159 |
+
+三个 run 均为 S1D formal `80×128×1`、6400 updates、2675 个 validation samples；history、best/final checkpoint model/optimizer tensors 与逐 sample metrics finite，无 prediction degeneracy，best checkpoint 与严格最低 Local RR epoch 一致。三 seed mean ± sample SD 及冻结 gate 为：
+
+| 指标 | CRD_105 | CRD_103 | 103 相对 105 | Gate |
+|---|---:|---:|---:|---|
+| Whole RR MAE | 0.520911 ± 0.020652 | 0.531336 ± 0.010433 | 恶化 2.0012% | 非 gate |
+| Local RR MAE | 0.581234 ± 0.015801 | 0.585248 ± 0.020876 | 恶化 0.6905% | 需改善至少 0.5%，失败 |
+| 配对 Local RR | — | — | 0/3 seeds 改善 | 需至少 2/3，失败 |
+| trajectory MAE | 0.149718 ± 0.000264 | 0.157558 ± 0.007285 | 恶化 5.2364% | 最多恶化 1.5%，失败 |
+| global envelope error | 0.236005 ± 0.012477 | 0.199587 ± 0.014352 | 改善 15.4310% | 非 gate |
+| lag-aware signed PCC | 0.846330 ± 0.002268 | 0.852791 ± 0.004525 | 增加 0.006461 | 最多下降 0.005，通过 |
+| IBI MedAE | 0.082121 ± 0.002772 | 0.078243 ± 0.002867 | 改善 4.7216% | 非 gate |
+| IBI coverage | 0.826697 ± 0.003483 | 0.836222 ± 0.002067 | 增加 0.009526 | 非 gate |
+
+CRD_103 虽改善 signed PCC、global envelope、IBI MedAE/coverage 与 lag-boundary fraction，但同时使 Whole/Local RR、trajectory MAE 以及 Low/Medium/High 三层 envelope Spearman 退化。它未满足 Local RR mean、2-of-3 paired direction 和 trajectory 三项必要条件，故 D2 判定失败：CRD_103 不保留，CRD_104 不运行，当前 S1D 保留模型为 CRD_105。上述次级收益只能作为未来独立问题的背景证据，不得回头放宽本轮 gate。
