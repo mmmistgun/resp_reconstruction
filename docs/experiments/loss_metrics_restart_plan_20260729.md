@@ -1923,3 +1923,5 @@ CRD_001/002 与 CRD_101 已在 commit `6f58f36f4839904014031970e5f69262aa6e96f8`
 D0 paired final-checkpoint 复评随后在 commit `baeb7c5` 下完成。CRD_001/101 的 fixed-final signed PCC seed mean 分别为 0.841586/0.788269，CRD_101 仍下降 0.053317，且三个配对 seed 全部下降；selector 不能解释原 PCC 失败。D0 不改变正式 checkpoint 或原 gate，现允许按附件第 16.2 节进入 CRD_105 synthetic/acceptance 与 formal diagnostic。
 
 CRD_105 的 CUDA synthetic finite 检查与独立 physical-batch-128 acceptance 已在 commit `be21ba0` 下通过；acceptance 严格使用 128/32 个 train/validation windows、一次 optimizer update，完整生命周期与所有 checkpoint tensors finite。该工程证据不参与模型比较，现解除 CRD_105 三 formal seeds 的工程阻塞。
+
+CRD_105 三 formal seeds 随后在 commit `2bee3e5` 下完成并通过完整性审计。相对 CRD_001，Local RR seed mean 改善 8.1006%，signed PCC 增加 0.006043，三个配对 seed 两项均同方向改善，故通过 Direct-Coarse gate。相对 CRD_101，CRD_105 的 signed PCC 增加 0.058501，支持把原退化定位到 frontend package 而非共享 coarse head。按附件冻结分支，现跳过仍关闭的 CRD_102，开放 `CRD_103 vs CRD_105`；CRD_104 继续等待 103 gate。

@@ -405,6 +405,28 @@ CRD_105 工程验收已在 commit `be21ba03573ac1a8fe54d94d410a1a33fd397572`、`
 
 D1 的主 gate 仍以 CRD_001 三 seed mean 为 comparator：Local RR 相对恶化严格大于 3%，或 signed PCC 下降严格大于 0.01，即判定 Direct-Coarse 失败。另报告 CRD_105 vs CRD_101 的全部指标差异用于 bridge 归因，但不另设事后阈值。
 
+D1 三 formal seeds 已在 commit `2bee3e504c91db8d63cf7c4f6424ca501e3c82a6`、`git_dirty=false` 下完成：
+
+| Seed | Run | Local-RR best epoch | Local RR MAE | signed PCC |
+|---:|---|---:|---:|---:|
+| 20260811 | `runs/crd_v1/crd_105_direct_coarse/seed_20260811/20260808_204605_323232` | 28 | 0.569175 | 0.846919 |
+| 20260812 | `runs/crd_v1/crd_105_direct_coarse/seed_20260812/20260808_211725_152070` | 44 | 0.599122 | 0.843825 |
+| 20260813 | `runs/crd_v1/crd_105_direct_coarse/seed_20260813/20260808_214719_482054` | 14 | 0.575407 | 0.848245 |
+
+三个 run 均为 formal `80×128×1`、6400 updates、2675 个 validation samples；history、best/final checkpoint model/optimizer tensors 与逐 sample metrics finite，无 prediction degeneracy，best checkpoint 与严格最低 Local RR epoch 一致。三 seed mean ± sample SD 为：
+
+| 指标 | CRD_001 | CRD_105 | 105 相对 001 |
+|---|---:|---:|---:|
+| Whole RR MAE | 0.534701 ± 0.012776 | 0.520911 ± 0.020652 | 改善 2.5789% |
+| Local RR MAE | 0.632468 ± 0.004054 | 0.581234 ± 0.015801 | 改善 8.1006% |
+| trajectory MAE | 0.157245 ± 0.001236 | 0.149718 ± 0.000264 | 改善 4.7867% |
+| global envelope error | 0.232488 ± 0.009831 | 0.236005 ± 0.012477 | 恶化 1.5130% |
+| lag-aware signed PCC | 0.840287 ± 0.000860 | 0.846330 ± 0.002268 | 增加 0.006043 |
+| IBI MedAE | 0.084340 ± 0.001021 | 0.082121 ± 0.002772 | 改善 2.6308% |
+| IBI coverage | 0.848257 ± 0.001741 | 0.826697 ± 0.003483 | 下降 0.021560 |
+
+CRD_105 的 Local RR 未恶化而是改善 8.1006%，signed PCC 未下降而是增加 0.006043，故明确通过 CRD_001 coarse gate；三个配对 seed 在 Local RR 与 PCC 上均同方向优于 CRD_001。相对 CRD_101，CRD_105 的 Local RR 改善 6.9112%、signed PCC 增加 0.058501、IBI coverage 增加 0.056450，但 trajectory MAE 恶化 3.1077%。由于 101/105 共享 refinement/head 且都不含 Mamba，该结果把原 PCC 退化定位到 PatchTokenFrontend 与 DirectAnalyticFrontend 的 frontend package 差异，而不是共享 coarse head；它不能进一步把收益拆分为 patch bridge 缺陷或 analytic filterbank 增益。
+
 ### 16.3 冻结的后续分支
 
 1. 若 CRD_105 未通过 CRD_001 coarse gate，coarse decoder/output representation 路线停止，CRD_102/103/104 均不运行。
@@ -412,5 +434,7 @@ D1 的主 gate 仍以 CRD_001 三 seed mean 为 comparator：Local RR 相对恶�
 3. `103 vs 105` 使用第 13 节原 `102 vs 101` 的保留条件：Local RR seed mean 改善至少 0.5%、至少 2/3 配对 seed 方向改善、signed PCC 下降不大于 0.005、trajectory MAE 相对恶化不大于 1.5%。失败则 103 不保留且 104 不运行。
 4. 103 通过后，`104 vs 103` 继续使用同一条件；通过则保留 104，否则保留 103。
 5. 原 CRD_102 只有在未来协议预先冻结新的训练/selector 修订、并由对应的修订版 CRD_101 三 seed 重新通过 CRD_001 gate 后才可重新开放；D0 或单 seed 探索不能满足该条件。本修订不授权启动 CRD_102。
+
+D1 已执行上述第 2 条分支：CRD_105 保留，CRD_102 继续关闭，现开放 `CRD_103 vs CRD_105` formal 三 seed 比较；CRD_104 仍等待 103 gate。
 
 任何上述正式诊断 run 都只能读取 train/validation。不得因本修订读取 research-test、改变原 CRD_001/101 产物，或复用中断 run 的 best checkpoint。
