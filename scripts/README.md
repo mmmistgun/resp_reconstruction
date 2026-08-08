@@ -355,6 +355,8 @@ done
 
 两个 variant 均通过后，执行完整三 seed：
 
+两项 synthetic/acceptance 已在 commit `d60b050`、`git_dirty=false` 下通过；acceptance 路径分别为 `/tmp/crd_102_b0_local_mamba_batch128_acceptance/20260809_021443_770877` 与 `/tmp/crd_104_direct_hier_mamba_batch128_acceptance/20260809_021601_879119`。其单 epoch 指标不作效果解释。工作树重新确认干净后即可执行：
+
 ```bash
 for variant in crd_102_b0_local_mamba crd_104_direct_hier_mamba; do
   for seed in 20260811 20260812 20260813; do

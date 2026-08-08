@@ -483,6 +483,8 @@ CRD_102/104 的模型、初始化、loss、metrics、训练 seed、80 epochs、p
 
 两个 variant 各自在三 seed 前必须通过当前 commit 下的 CUDA synthetic batch-1 finite forward/loss/backward 与独立 physical-batch-128 acceptance。Acceptance 固定 `1 epoch / 128 train / 32 validation / max_test=null`，只解除工程阻塞，不形成效果证据。两项 acceptance 均通过后，CRD_102 与 CRD_104 的三个固定 seed 可以顺序或在独立 GPU 上并行执行，输出分别写入：
 
+两项工程验收已在 commit `d60b050498a9d21bfaa2d7f5a624a7a5d6b09903`、`git_dirty=false` 下完成。CUDA synthetic batch-1 的 102/104 loss 分别为 1.245569/0.407518，output/input/parameter gradients 全部 finite，peak allocated 分别为 349.16/357.28 MiB。对应 acceptance 为 `/tmp/crd_102_b0_local_mamba_batch128_acceptance/20260809_021443_770877` 与 `/tmp/crd_104_direct_hier_mamba_batch128_acceptance/20260809_021601_879119`；两者均严格使用 128 train windows 形成一次 update，并完成 32 条 validation metrics、best/final checkpoint 与 optimizer state，所有 tensors/metrics finite、无 prediction degeneracy。单 epoch Local RR/PCC 等数值不进入效果解释；两项工程门槛均已解除。
+
 ```text
 runs/crd_v1/crd_102_b0_local_mamba/seed_<seed>/
 runs/crd_v1/crd_104_direct_hier_mamba/seed_<seed>/
