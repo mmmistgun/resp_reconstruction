@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- 当前新增且仅激活 CRD-v1.1 的 S0/S1；规范附件为 `docs/experiments/crd_v1_protocol_20260808.md`，由主协议第 35 节纳入。S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
+- 当前新增 CRD-v1.1 的 S0/S1；CRD_101 触发原 gate 后仅额外激活结果后 S1D 诊断，规范附件为 `docs/experiments/crd_v1_protocol_20260808.md`，由主协议第 35–36 节纳入。原 CRD_102 暂停；S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
 - CRD-S0/S1 只使用 train/validation，不读取 research-test；不存在锁定队列和协议修订时不得新增 CRD test 入口。
 
 ## 当前入口
@@ -19,7 +19,7 @@
 - 训练：`./.venv/bin/python scripts/train_tho.py --config configs/tho_research_v2.yaml --set training.device=cuda:0`
 - 复评：`./.venv/bin/python scripts/eval_tho.py --checkpoint runs/<run>/checkpoint_best_local_rr.pt --split val`
 - Research-test：复评命令额外传入 `--split test --confirm-research-test`。该 split 可在阶段性模型整理后重复观察，也可形成后续独立研究问题，但不得用于重选已训练 run 的 epoch/checkpoint；所有结果均属于 development/research evidence，不表述为无偏 held-out 证据。
-- CRD 配置：`configs/crd_v1/` 下六个 S0/S1 配置；训练入口 `./.venv/bin/python scripts/train_crd.py --config configs/crd_v1/<variant>.yaml --set training.device=cuda:0`。
+- CRD 配置：`configs/crd_v1/` 下六个原 S0/S1 配置与一个 `crd_105_direct_coarse` 诊断配置；训练入口 `./.venv/bin/python scripts/train_crd.py --config configs/crd_v1/<variant>.yaml --set training.device=cuda:0`。
 - CRD validation 复评：`./.venv/bin/python scripts/eval_crd.py --checkpoint runs/<run>/checkpoint_best_local_rr.pt`；该入口故意不提供 test split。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`

@@ -217,6 +217,7 @@ Conv1d 32→1,k=1,bias=True
 | `crd_102_b0_local_mamba` | 1,068,745 | 101 在 bridge/refinement 之间增加 6 local BiMamba2 |
 | `crd_103_direct_local_mamba` | 1,144,165 | 102 只把 B0 bridge frontend 换为 Direct analytic frontend |
 | `crd_104_direct_hier_mamba` | 2,256,613 | 103 只增加 1-Hz global BiMamba2 + FiLM |
+| `crd_105_direct_coarse` | 192,781 | 结果后诊断：Direct frontend + 101 refinement/head，不含 Mamba |
 
 参数数目以固定依赖版本和本节构造为契约；单元测试必须在结构漂移时失败。
 
@@ -277,7 +278,7 @@ u >= W:
 
 ## 12. 配置角色与正式 seed
 
-正式 seed 固定为 `20260811 / 20260812 / 20260813`，通过 `training.seed` 覆盖；`model.initialization_seed` 解析为同一值。六个配置位于 `configs/crd_v1/`。
+正式 seed 固定为 `20260811 / 20260812 / 20260813`，通过 `training.seed` 覆盖；`model.initialization_seed` 解析为同一值。六个原 S0/S1 配置与一个结果后诊断配置位于 `configs/crd_v1/`。
 
 - `run_role=formal`：必须 80/128/1，所有 `max_*_windows=null`，结果可进入 S0/S1 validation 证据。
 - `run_role=acceptance`：固定 1 epoch、batch 128、accumulation 1、train/val windows 128/32、test null；只验收正式物理 batch、显存和生命周期，不形成科研结论。
@@ -291,7 +292,7 @@ u >= W:
 
 固定执行 3 repeats：repeat 1 标为 cold，只用于触发 shape/runtime warmup；repeat 2/3 的 samples/s 中位数作为稳态吞吐。计时范围包含 DataLoader collate、host-to-device、target-only eligibility、全部 forward/backward、gradient clipping、AdamW 首次 state 建立与 optimizer step，不包含数据预载、模型构建或 validation。显存同时记录 PyTorch `max_memory_allocated` 与 `max_memory_reserved`，并取全部 repeats 的最大值。
 
-工程选择规则在运行前固定：候选必须全部 repeats finite/无 OOM，peak reserved 不超过设备总显存的 80%，且相对 `32×4` 的稳态吞吐至少提升 10%；满足者中选择稳态 samples/s 最高者，否则保留 `32×4`。任何变更都必须在正式 seed 之前同步本文、六个配置、loader 校验和测试；effective batch、optimizer update 数和 LR 公式不变。
+工程选择规则在运行前固定：候选必须全部 repeats finite/无 OOM，peak reserved 不超过设备总显存的 80%，且相对 `32×4` 的稳态吞吐至少提升 10%；满足者中选择稳态 samples/s 最高者，否则保留 `32×4`。任何变更都必须在正式 seed 之前同步本文、全部激活配置、loader 校验和测试；effective batch、optimizer update 数和 LR 公式不变。
 
 benchmark 已于 2026-08-08 在 RTX 4070 Ti SUPER 16 GiB、CRD_103、固定 128 个 training windows 上完成。三种方案各 3/3 repeats finite、每次恰好一个 update、`N_sync=N_effort=128`：
 
@@ -340,3 +341,65 @@ benchmark 已于 2026-08-08 在 RTX 4070 Ti SUPER 16 GiB、CRD_103、固定 128 
 ```
 
 正式训练前还必须在目标 GPU 通过：固定依赖导入/版本；`scripts/check_crd_mamba.py` 的 Mamba2 `use_mem_eff_path=True` bf16 forward/backward finite；`scripts/check_crd_variant.py` 的所选 variant 单 microbatch forward/loss/backward finite；acceptance 的 physical batch 128 不 OOM。smoke/acceptance 结果不得写入正式比较表。
+
+## 15. CRD_101 结果与原始 gate 执行记录（结果后登记）
+
+本节登记发生在 CRD_101 三 seed validation 结果产生之后，不改写第 13 节的原始停止规则。两个因服务器故障中断的 run 保留为工程追溯，但不进入 seed mean 或任何 gate：
+
+| Seed | Run | 完成状态 |
+|---:|---|---|
+| 20260811 | `runs/crd_v1/crd_101_b0_coarse/seed_20260811/20260808_152029_499890` | 中断于 epoch 25 / update 2000；无 final checkpoint 与 metrics |
+| 20260812 | `runs/crd_v1/crd_101_b0_coarse/seed_20260812/20260808_152045_952796` | 中断于 epoch 24 / update 1920；无 final checkpoint 与 metrics |
+
+正式比较只使用以下三个完整 run：
+
+| Seed | Run | Local-RR best epoch |
+|---:|---|---:|
+| 20260811 | `runs/crd_v1/crd_101_b0_coarse/seed_20260811/20260808_154855_237029` | 72 |
+| 20260812 | `runs/crd_v1/crd_101_b0_coarse/seed_20260812/20260808_155229_535580` | 30 |
+| 20260813 | `runs/crd_v1/crd_101_b0_coarse/seed_20260813/20260808_161853_510867` | 58 |
+
+三者均为 commit `6f58f36f4839904014031970e5f69262aa6e96f8`、`git_dirty=false`、formal `80×128×1`、6400 updates、2675 个 validation samples；history、best/final checkpoint model/optimizer tensors 和逐 sample metrics finite，best checkpoint 与 history 的严格最低 Local RR epoch 一致。
+
+| 三 seed mean ± sample SD | CRD_001 | CRD_101 | 101 相对变化 |
+|---|---:|---:|---:|
+| Local RR MAE | 0.632468 ± 0.004054 | 0.624387 ± 0.003498 | 改善 1.2777% |
+| lag-aware signed PCC | 0.840287 ± 0.000860 | 0.787829 ± 0.001328 | 下降 0.052458 |
+
+Local RR 未触发 3% 恶化线，但 signed PCC 下降严格大于 0.01。依第 13 节原始规则，CRD_101 判定失败，原 `101→102→103→104` 队列关闭；`CRD_102/103/104` 不得按原顺序直接启动。
+
+## 16. S1D 结果后诊断修订（2026-08-08）
+
+本节是在已观察 CRD_101 失败之后制定的 development/validation 诊断协议，证据属性必须明确标为 post-result diagnostic。它不改变数据、split、target、`Pi`、loss、metrics、Local-RR checkpoint selector、formal seeds 或 research-test 禁令，也不把任何诊断结果表述为预注册确认性证据。
+
+### 16.1 D0：CRD_001/101 paired final-checkpoint 复评
+
+对三个完整 CRD_001 和三个完整 CRD_101 的 `checkpoint_final.pt` 复评相同 validation；同时比较各模型 final vs Local-RR-selected checkpoint，以及 CRD_101-final vs CRD_001-final，判断 PCC 下降是否可能主要来自 checkpoint selector。输出必须写入独立的 `runs/crd_v1/crd_final_checkpoint_diagnostic/`，不得覆盖原 run 的 `metrics.csv`、`metrics_summary.csv` 或任何已有复评产物。
+
+D0 只作归因：原正式结论仍由 `checkpoint_best_local_rr.pt` 决定；即使 final checkpoint 跨过停止线，也不能据此事后重选 CRD_101 或自动开放 CRD_102。若要改变 selector，必须另行冻结新协议，并在同一新 selector 下成对重建 CRD_001/101 三 seed 证据。
+
+### 16.2 D1：CRD_105 Direct-Coarse
+
+新增唯一诊断候选 `crd_105_direct_coarse`：
+
+```text
+DirectAnalyticFrontend [B,96,1800]
+→ ResidualDWBlock(96,d=1)
+→ ResidualDWBlock(96,d=2)
+→ 与 CRD_101 完全相同的 10-Hz coarse head
+→ 与 CRD_101 完全相同的 Fourier interpolation 1800→18000
+```
+
+CRD_105 不注册 local/global Mamba 或 FiLM，trainable params 固定为 192,781。同一 seed 下，它的 Direct frontend 与 CRD_103/104 逐 tensor 同初始化，refinement/head 与 CRD_101–104 逐 tensor 同初始化。配置固定为 `configs/crd_v1/crd_105_direct_coarse.yaml`，protocol manifest/checkpoint 标识固定为 `crd-v1.1-s1d-20260808`，仍使用 formal `80 epochs / physical batch 128 / accumulation 1` 和三个原 formal seeds。正式三 seed 前必须完成该 variant 的 finite synthetic 检查与独立 physical-batch-128 acceptance；smoke/acceptance 不形成效果证据。
+
+D1 的主 gate 仍以 CRD_001 三 seed mean 为 comparator：Local RR 相对恶化严格大于 3%，或 signed PCC 下降严格大于 0.01，即判定 Direct-Coarse 失败。另报告 CRD_105 vs CRD_101 的全部指标差异用于 bridge 归因，但不另设事后阈值。
+
+### 16.3 冻结的后续分支
+
+1. 若 CRD_105 未通过 CRD_001 coarse gate，coarse decoder/output representation 路线停止，CRD_102/103/104 均不运行。
+2. 若 CRD_105 通过，说明 Direct-Coarse package 可进入下一阶段，而原 patch-bridge 路线仍保持关闭；跳过 CRD_102，按 `105→103→104` 推进。
+3. `103 vs 105` 使用第 13 节原 `102 vs 101` 的保留条件：Local RR seed mean 改善至少 0.5%、至少 2/3 配对 seed 方向改善、signed PCC 下降不大于 0.005、trajectory MAE 相对恶化不大于 1.5%。失败则 103 不保留且 104 不运行。
+4. 103 通过后，`104 vs 103` 继续使用同一条件；通过则保留 104，否则保留 103。
+5. 原 CRD_102 只有在未来协议预先冻结新的训练/selector 修订、并由对应的修订版 CRD_101 三 seed 重新通过 CRD_001 gate 后才可重新开放；D0 或单 seed 探索不能满足该条件。本修订不授权启动 CRD_102。
+
+任何上述正式诊断 run 都只能读取 train/validation。不得因本修订读取 research-test、改变原 CRD_001/101 产物，或复用中断 run 的 best checkpoint。

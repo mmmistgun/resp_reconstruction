@@ -108,29 +108,47 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
         "crd_102_b0_local_mamba": 1068745,
         "crd_103_direct_local_mamba": 1144165,
         "crd_104_direct_hier_mamba": 2256613,
+        "crd_105_direct_coarse": 192781,
     }
-    shared_trunk_state: dict[str, torch.Tensor] | None = None
+    shared_decoder_state: dict[str, torch.Tensor] | None = None
+    shared_local_state: dict[str, torch.Tensor] | None = None
     direct_frontend_state: dict[str, torch.Tensor] | None = None
     for variant, parameter_count in expected.items():
         cfg = load_crd_config(f"configs/crd_v1/{variant}.yaml")
         model = build_crd_model(cfg)
         assert sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad) == parameter_count
         if variant in {
+            "crd_101_b0_coarse",
+            "crd_102_b0_local_mamba",
+            "crd_103_direct_local_mamba",
+            "crd_104_direct_hier_mamba",
+            "crd_105_direct_coarse",
+        }:
+            current = {
+                **{f"refine.{key}": value for key, value in model.refinement.state_dict().items()},
+                **{f"head.{key}": value for key, value in model.head.state_dict().items()},
+            }
+            if shared_decoder_state is None:
+                shared_decoder_state = {key: value.clone() for key, value in current.items()}
+            else:
+                assert current.keys() == shared_decoder_state.keys()
+                assert all(torch.equal(current[key], shared_decoder_state[key]) for key in current)
+        if variant in {
             "crd_102_b0_local_mamba",
             "crd_103_direct_local_mamba",
             "crd_104_direct_hier_mamba",
         }:
-            current = {
-                **{f"local.{key}": value for key, value in model.local_blocks.state_dict().items()},
-                **{f"refine.{key}": value for key, value in model.refinement.state_dict().items()},
-                **{f"head.{key}": value for key, value in model.head.state_dict().items()},
-            }
-            if shared_trunk_state is None:
-                shared_trunk_state = {key: value.clone() for key, value in current.items()}
+            current_local = model.local_blocks.state_dict()
+            if shared_local_state is None:
+                shared_local_state = {key: value.clone() for key, value in current_local.items()}
             else:
-                assert current.keys() == shared_trunk_state.keys()
-                assert all(torch.equal(current[key], shared_trunk_state[key]) for key in current)
-        if variant in {"crd_103_direct_local_mamba", "crd_104_direct_hier_mamba"}:
+                assert current_local.keys() == shared_local_state.keys()
+                assert all(torch.equal(current_local[key], shared_local_state[key]) for key in current_local)
+        if variant in {
+            "crd_103_direct_local_mamba",
+            "crd_104_direct_hier_mamba",
+            "crd_105_direct_coarse",
+        }:
             current_direct = model.frontend.state_dict()
             if direct_frontend_state is None:
                 direct_frontend_state = {key: value.clone() for key, value in current_direct.items()}
@@ -140,3 +158,14 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
         if variant == "crd_104_direct_hier_mamba":
             assert torch.count_nonzero(model.global_stage.film.weight) == 0
             assert torch.count_nonzero(model.global_stage.film.bias) == 0
+
+
+def test_crd_105_is_direct_coarse_without_mamba() -> None:
+    model = build_crd_model(load_crd_config("configs/crd_v1/crd_105_direct_coarse.yaml")).eval()
+
+    assert len(model.local_blocks) == 0
+    assert model.global_stage is None
+    output = model(torch.randn(1, 1, 18000))
+    assert output["waveform"].shape == (1, 1, 18000)
+    assert output["waveform_10hz"].shape == (1, 1, 1800)
+    assert torch.isfinite(output["waveform"]).all()

@@ -1908,6 +1908,14 @@ T4 没有复现 T3 的强解码器退化。它相对 T2 在 Local RR、两项包
 
 本阶段不改变数据、split、target、正式 `Pi`、`L_sync + 0.25 L_effort`、评价指标或 validation Local-RR checkpoint selector。S0/S1 禁止读取 research-test；其结果只作为 development/validation evidence。AM、Morphology、gate、auxiliary、capacity/TCN control 和 S2 以后阶段尚未激活，不得提前实现进正式候选或混入本阶段 run。
 
-CRD 的完整模型、tensor、初始化、依赖、逐 optimizer-step 训练语义、配置角色、S1 停止/保留规则和验收契约冻结在 `docs/experiments/crd_v1_protocol_20260808.md`。该附件由本节纳入当前唯一实验协议；若其与本文冲突，以本文为准。正式运行只能使用 `configs/crd_v1/` 下六个配置与 `scripts/train_crd.py`，且在目标 GPU 的依赖、finite forward/backward 和当前冻结 physical batch 128 acceptance 通过之前不得启动正式三 seed 队列。
+CRD 的完整模型、tensor、初始化、依赖、逐 optimizer-step 训练语义、配置角色、S1 停止/保留规则和验收契约冻结在 `docs/experiments/crd_v1_protocol_20260808.md`。该附件由本节及后续修订章节纳入当前唯一实验协议；若其与本文冲突，以本文为准。正式运行只能使用 `configs/crd_v1/` 下由最新协议章节明确激活的冻结配置与 `scripts/train_crd.py`，且在目标 GPU 的依赖、finite forward/backward 和当前冻结 physical batch 128 acceptance 通过之前不得启动正式三 seed 队列。
 
-实现级验收已于 2026-08-08 完成：固定 `mamba-ssm/causal-conv1d` 版本检查通过；实际 BiMamba2 `B=2,L=1800,D=96` fast-path forward/backward finite；CRD_103 与 CRD_104 各一个 synthetic batch-1 的完整 model/core-loss/backward 均 finite；CRD_101 完成一次 4-train/2-validation CPU 生命周期 smoke，并成功独立复评。随后按预注册工程规则比较 `32×4 / 64×2 / 128×1`：`128×1` 稳态吞吐相对 `32×4` 提升 30.36%，peak reserved 为 10.868 GiB（RTX 4070 Ti SUPER 总显存的 68.17%），因此六个配置在任何正式 run 前统一修订为 physical batch 128、accumulation 1，effective batch 与 LR/update 序列不变；修订后的 CRD_103 完整 acceptance 已通过。全量仓库测试为 `312 passed`。以上均是工程证据，不进入模型效果比较；代码提交且工作树干净后，正式 S0 队列可按顺序启动。
+实现级验收已于 2026-08-08 完成：固定 `mamba-ssm/causal-conv1d` 版本检查通过；实际 BiMamba2 `B=2,L=1800,D=96` fast-path forward/backward finite；CRD_103 与 CRD_104 各一个 synthetic batch-1 的完整 model/core-loss/backward 均 finite；CRD_101 完成一次 4-train/2-validation CPU 生命周期 smoke，并成功独立复评。随后按预注册工程规则比较 `32×4 / 64×2 / 128×1`：`128×1` 稳态吞吐相对 `32×4` 提升 30.36%，peak reserved 为 10.868 GiB（RTX 4070 Ti SUPER 总显存的 68.17%），因此原六个配置在任何正式 run 前统一修订为 physical batch 128、accumulation 1，effective batch 与 LR/update 序列不变；修订后的 CRD_103 完整 acceptance 已通过。全量仓库测试为 `312 passed`。以上均是工程证据，不进入模型效果比较；代码提交且工作树干净后，正式 S0 队列可按顺序启动。
+
+## 36. CRD_101 结果后 S1D 诊断修订（2026-08-08）
+
+CRD_001/002 与 CRD_101 已在 commit `6f58f36f4839904014031970e5f69262aa6e96f8` 下完成三 formal seeds。CRD_101 相对 CRD_001 的 Local RR seed mean 改善 1.2777%，但 lag-aware signed PCC seed mean 下降 0.052458，严格触发第 35 节所纳入附件的 0.01 停止线；两个服务器故障中断 run 不进入该比较。因此原 `101→102→103→104` 队列关闭，结果不得通过事后重选 checkpoint 改写。
+
+为区分 Local-RR selector、patch-token bridge 与共享 coarse head，现仅激活 post-result S1D：先对 CRD_001/101 各三个 final checkpoint 做配对 validation 归因复评，再运行新增的 `CRD_105 Direct-Coarse` 三 seed 诊断。CRD_105 使用 Direct analytic frontend 和与 CRD_101 相同的 refinement/head，不含任何 Mamba。其结构、192,781 参数契约、产物隔离、gate 与条件分支均冻结在附件第 15–16 节。
+
+本修订不改变数据、split、target、loss、metrics 或 checkpoint selector，不授权 CRD test，也不自动重新开放 CRD_102。CRD_105 通过原 CRD_001 coarse gate 后，路线改为 `105→103→可选104`；若失败则 coarse 路线停止。CRD_102 只有在未来另行冻结 selector/训练修订且修订版 CRD_101 重新通过三 seed gate 后才可开放。自本节起，`configs/crd_v1/` 下七个配置中仅 001/002/101 的既有结果、105 的诊断队列以及由附件条件开放的 103/104 有效；正式运行仍只使用 `scripts/train_crd.py`，且禁止读取 research-test。

@@ -121,7 +121,7 @@ T2、T3、T4 validation 均已完成。当前保留 T2/T4，并与 B0、F0、IEW
 
 ## CRD-v1.1 S0/S1
 
-六个冻结配置：
+六个原 S0/S1 配置与一个结果后诊断配置：
 
 ```text
 configs/crd_v1/crd_001_b0_retrain.yaml
@@ -130,6 +130,7 @@ configs/crd_v1/crd_101_b0_coarse.yaml
 configs/crd_v1/crd_102_b0_local_mamba.yaml
 configs/crd_v1/crd_103_direct_local_mamba.yaml
 configs/crd_v1/crd_104_direct_hier_mamba.yaml
+configs/crd_v1/crd_105_direct_coarse.yaml
 ```
 
 先确认固定原生依赖：
@@ -156,7 +157,7 @@ configs/crd_v1/crd_104_direct_hier_mamba.yaml
 
 ### CRD CPU 生命周期 smoke
 
-CPU smoke 只建议用于不含 Mamba 的 001/002/101；下面以 101 为例。它不形成科研结果：
+CPU smoke 只建议用于不含 Mamba 的 001/002/101/105；下面以 101 为例。它不形成科研结果：
 
 ```bash
 ./.venv/bin/python scripts/train_crd.py \
@@ -221,7 +222,7 @@ for seed in 20260811 20260812 20260813; do
 done
 ```
 
-不要覆盖 `epochs/batch/accumulation` 或任何 `max_*_windows`；formal loader 会拒绝。S0 需完成 001/002；S1 按 `101 → 102 → 103 → 可选104` 的停止/保留规则推进。
+不要覆盖 `epochs/batch/accumulation` 或任何 `max_*_windows`；formal loader 会拒绝。S0 的 001/002 与 S1 的 101 已完成。101 已触发 signed-PCC 停止线，原 `101 → 102 → 103 → 可选104` 队列关闭；当前只允许按协议第 15–16 节执行 final-checkpoint 归因复评与 105 诊断。
 
 CRD validation checkpoint 复评：
 
@@ -233,6 +234,91 @@ CRD validation checkpoint 复评：
 ```
 
 该入口只读 validation，不接受 `--split test`。
+
+### CRD_001/101 paired final-checkpoint 诊断复评
+
+以下复评不改变原 Local-RR checkpoint 结论，输出进入独立诊断目录，不写回六个正式 run。先复评 CRD_001：
+
+```bash
+./.venv/bin/python scripts/eval_crd.py \
+  --checkpoint runs/crd_v1/crd_001_b0_retrain/seed_20260811/20260808_035754_258179/checkpoint_final.pt \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --metrics-output runs/crd_v1/crd_final_checkpoint_diagnostic/crd_001_b0_retrain/seed_20260811/validation_metrics.csv
+
+./.venv/bin/python scripts/eval_crd.py \
+  --checkpoint runs/crd_v1/crd_001_b0_retrain/seed_20260812/20260808_042713_710965/checkpoint_final.pt \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --metrics-output runs/crd_v1/crd_final_checkpoint_diagnostic/crd_001_b0_retrain/seed_20260812/validation_metrics.csv
+
+./.venv/bin/python scripts/eval_crd.py \
+  --checkpoint runs/crd_v1/crd_001_b0_retrain/seed_20260813/20260808_045849_155730/checkpoint_final.pt \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --metrics-output runs/crd_v1/crd_final_checkpoint_diagnostic/crd_001_b0_retrain/seed_20260813/validation_metrics.csv
+```
+
+再复评 CRD_101：
+
+```bash
+./.venv/bin/python scripts/eval_crd.py \
+  --checkpoint runs/crd_v1/crd_101_b0_coarse/seed_20260811/20260808_154855_237029/checkpoint_final.pt \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --metrics-output runs/crd_v1/crd_final_checkpoint_diagnostic/crd_101_b0_coarse/seed_20260811/validation_metrics.csv
+
+./.venv/bin/python scripts/eval_crd.py \
+  --checkpoint runs/crd_v1/crd_101_b0_coarse/seed_20260812/20260808_155229_535580/checkpoint_final.pt \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --metrics-output runs/crd_v1/crd_final_checkpoint_diagnostic/crd_101_b0_coarse/seed_20260812/validation_metrics.csv
+
+./.venv/bin/python scripts/eval_crd.py \
+  --checkpoint runs/crd_v1/crd_101_b0_coarse/seed_20260813/20260808_161853_510867/checkpoint_final.pt \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --metrics-output runs/crd_v1/crd_final_checkpoint_diagnostic/crd_101_b0_coarse/seed_20260813/validation_metrics.csv
+```
+
+若目标文件已经存在，先停止并核对，不得覆盖。D0 结果只判断 selector 是否可能贡献 PCC 下降，不能事后重选 CRD_101 或开放 CRD_102。
+
+### CRD_105 Direct-Coarse 诊断
+
+先在目标 GPU 验证完整 synthetic 链路，再运行独立 physical-batch-128 acceptance：
+
+```bash
+./.venv/bin/python scripts/check_crd_variant.py \
+  --config configs/crd_v1/crd_105_direct_coarse.yaml \
+  --device cuda:0 \
+  --batch-size 1
+
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_v1/crd_105_direct_coarse.yaml \
+  --set protocol.run_role=acceptance \
+  --set data.max_train_windows=128 \
+  --set data.max_val_windows=32 \
+  --set training.epochs=1 \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --set outputs.run_root=/tmp/crd_105_batch128_acceptance
+```
+
+两项通过、代码提交且工作树干净后，才运行三 formal seeds：
+
+```bash
+for seed in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/train_crd.py \
+    --config configs/crd_v1/crd_105_direct_coarse.yaml \
+    --set training.seed="${seed}" \
+    --set training.device=cuda:0 \
+    --set training.show_progress=false \
+    --set outputs.run_root="runs/crd_v1/crd_105_direct_coarse/seed_${seed}" \
+    || exit 1
+done
+```
+
+105 通过 CRD_001 coarse gate 后才允许按 `105 → 103 → 可选104` 推进；105 失败则停止。原 CRD_102 仍处于暂停状态。
 
 ## 固定呼吸带传统基线
 

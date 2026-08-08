@@ -21,6 +21,7 @@ CRD_VARIANTS = (
     "crd_102_b0_local_mamba",
     "crd_103_direct_local_mamba",
     "crd_104_direct_hier_mamba",
+    "crd_105_direct_coarse",
 )
 
 
@@ -131,8 +132,16 @@ class CRDCoarseModel(nn.Module):
         if variant not in CRD_VARIANTS[2:]:
             raise ValueError(f"CRDCoarseModel 不支持 variant={variant!r}")
         self.variant = variant
-        uses_direct = variant in {"crd_103_direct_local_mamba", "crd_104_direct_hier_mamba"}
-        uses_local = variant != "crd_101_b0_coarse"
+        uses_direct = variant in {
+            "crd_103_direct_local_mamba",
+            "crd_104_direct_hier_mamba",
+            "crd_105_direct_coarse",
+        }
+        uses_local = variant in {
+            "crd_102_b0_local_mamba",
+            "crd_103_direct_local_mamba",
+            "crd_104_direct_hier_mamba",
+        }
         uses_global = variant == "crd_104_direct_hier_mamba"
 
         with module_seed(initialization_seed, "direct_frontend" if uses_direct else "patch_frontend"):

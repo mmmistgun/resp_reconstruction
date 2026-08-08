@@ -9,11 +9,7 @@ import pandas as pd
 import torch
 from omegaconf import DictConfig, OmegaConf
 
-from resp_train.crd.config import (
-    CRD_PROTOCOL_VERSION,
-    crd_dependency_versions,
-    load_crd_config,
-)
+from resp_train.crd.config import crd_dependency_versions, load_crd_config
 from resp_train.crd.model import build_crd_model
 from resp_train.crd.training import (
     build_crd_optimizer,
@@ -45,7 +41,7 @@ class CRDExperiment:
             run_dir / "run_manifest.json",
             task=self.task_name,
             phase="train",
-            protocol=CRD_PROTOCOL_VERSION,
+            protocol=str(self.cfg.protocol.name),
             stage=str(self.cfg.protocol.stage),
             run_role=str(self.cfg.protocol.run_role),
             dependency_versions=crd_dependency_versions(),
@@ -147,7 +143,7 @@ class CRDExperiment:
                 val_local_rr,
             )
             checkpoint_extra = {
-                "protocol": CRD_PROTOCOL_VERSION,
+                "protocol": str(self.cfg.protocol.name),
                 "update_index": update_index,
                 "total_updates": total_updates,
                 "resume_supported": False,
@@ -178,7 +174,7 @@ class CRDExperiment:
             metrics=history[-1],
             cfg=self.cfg,
             extra_state={
-                "protocol": CRD_PROTOCOL_VERSION,
+                "protocol": str(self.cfg.protocol.name),
                 "update_index": update_index,
                 "total_updates": total_updates,
                 "resume_supported": False,
@@ -268,7 +264,7 @@ def evaluate_crd_checkpoint(
         output_path.with_name(f"{output_path.stem}_manifest.json"),
         task=CRDExperiment.task_name,
         phase="validation_evaluation",
-        protocol=CRD_PROTOCOL_VERSION,
+        protocol=str(cfg.protocol.name),
         checkpoint=str(checkpoint_path.resolve()),
         config=str(resolved_config.resolve()),
         dependency_versions=crd_dependency_versions(),

@@ -3,10 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from resp_train.crd.config import CRD_PROTOCOL_VERSION, load_crd_config
+from resp_train.crd.config import CRD_DIAGNOSTIC_PROTOCOL_VERSION, CRD_PROTOCOL_VERSION, load_crd_config
 from resp_train.crd.experiment import CRDExperiment
 from resp_train.engine import collect_predictions
 
@@ -44,9 +45,21 @@ class _ScaledIdentity(torch.nn.Module):
         return {"waveform": signal * self.scale}
 
 
-def test_crd_experiment_writes_complete_nonresumable_lifecycle(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize(
+    ("config_path", "expected_protocol"),
+    [
+        ("configs/crd_v1/crd_101_b0_coarse.yaml", CRD_PROTOCOL_VERSION),
+        ("configs/crd_v1/crd_105_direct_coarse.yaml", CRD_DIAGNOSTIC_PROTOCOL_VERSION),
+    ],
+)
+def test_crd_experiment_writes_complete_nonresumable_lifecycle(
+    monkeypatch,
+    tmp_path,
+    config_path: str,
+    expected_protocol: str,
+) -> None:
     cfg = load_crd_config(
-        "configs/crd_v1/crd_101_b0_coarse.yaml",
+        config_path,
         overrides=[
             "protocol.run_role=smoke",
             "data.max_train_windows=1",
@@ -85,7 +98,7 @@ def test_crd_experiment_writes_complete_nonresumable_lifecycle(monkeypatch, tmp_
     ]
     assert history.loc[0, "optimizer_update"] == 1
     checkpoint = torch.load(run_dir / "checkpoint_best_local_rr.pt", map_location="cpu")
-    assert checkpoint["extra_state"]["protocol"] == CRD_PROTOCOL_VERSION
+    assert checkpoint["extra_state"]["protocol"] == expected_protocol
     assert checkpoint["extra_state"]["resume_supported"] is False
     assert checkpoint["extra_state"]["update_index"] == 1
     for filename in (

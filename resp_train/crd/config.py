@@ -12,6 +12,7 @@ from resp_train.crd.model import CRD_VARIANTS
 
 
 CRD_PROTOCOL_VERSION = "crd-v1.1-s0-s1-20260808"
+CRD_DIAGNOSTIC_PROTOCOL_VERSION = "crd-v1.1-s1d-20260808"
 PINNED_DEPENDENCIES = {
     "mamba-ssm": "2.3.2.post1",
     "causal-conv1d": "1.6.2.post1",
@@ -107,8 +108,11 @@ def _validate_crd_config(cfg: DictConfig) -> None:
     if variant not in CRD_VARIANTS:
         raise ValueError(f"未知 CRD variant={variant!r}；可选 {list(CRD_VARIANTS)}")
     expected_stage = "s0" if variant.startswith("crd_00") else "s1"
+    expected_protocol = (
+        CRD_DIAGNOSTIC_PROTOCOL_VERSION if variant == "crd_105_direct_coarse" else CRD_PROTOCOL_VERSION
+    )
     frozen = {
-        "protocol.name": CRD_PROTOCOL_VERSION,
+        "protocol.name": expected_protocol,
         "protocol.stage": expected_stage,
         "data.format": "research_v2",
         "data.dataset_root": (

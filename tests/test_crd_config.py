@@ -4,15 +4,20 @@ from pathlib import Path
 
 import pytest
 
-from resp_train.crd.config import CRD_PROTOCOL_VERSION, load_crd_config
+from resp_train.crd.config import CRD_DIAGNOSTIC_PROTOCOL_VERSION, CRD_PROTOCOL_VERSION, load_crd_config
 
 
-def test_all_crd_s0_s1_configs_are_formal_and_frozen() -> None:
+def test_all_crd_s0_s1_and_diagnostic_configs_are_formal_and_frozen() -> None:
     paths = sorted(Path("configs/crd_v1").glob("*.yaml"))
-    assert len(paths) == 6
+    assert len(paths) == 7
     for path in paths:
         cfg = load_crd_config(path)
-        assert cfg.protocol.name == CRD_PROTOCOL_VERSION
+        expected_protocol = (
+            CRD_DIAGNOSTIC_PROTOCOL_VERSION
+            if cfg.model.variant == "crd_105_direct_coarse"
+            else CRD_PROTOCOL_VERSION
+        )
+        assert cfg.protocol.name == expected_protocol
         assert cfg.protocol.run_role == "formal"
         assert cfg.training.epochs == 80
         assert cfg.training.batch_size == 128
