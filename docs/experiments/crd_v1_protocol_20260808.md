@@ -435,6 +435,6 @@ CRD_105 的 Local RR 未恶化而是改善 8.1006%，signed PCC 未下降而是�
 4. 103 通过后，`104 vs 103` 继续使用同一条件；通过则保留 104，否则保留 103。
 5. 原 CRD_102 只有在未来协议预先冻结新的训练/selector 修订、并由对应的修订版 CRD_101 三 seed 重新通过 CRD_001 gate 后才可重新开放；D0 或单 seed 探索不能满足该条件。本修订不授权启动 CRD_102。
 
-D1 已执行上述第 2 条分支：CRD_105 保留，CRD_102 继续关闭，现开放 `CRD_103 vs CRD_105` formal 三 seed 比较；CRD_104 仍等待 103 gate。
+D1 已执行上述第 2 条分支：CRD_105 保留，CRD_102 继续关闭，现开放 `CRD_103 vs CRD_105` formal 三 seed比较；CRD_104 仍等待 103 gate。自该条件分支开放起，尚未正式运行的 CRD_103/104 与 CRD_105 一样固定使用 `crd-v1.1-s1d-20260808` protocol manifest/checkpoint 标识；这只修正结果后路线的 provenance，不改变两者已冻结的模型、训练或 gate。
 
 任何上述正式诊断 run 都只能读取 train/validation。不得因本修订读取 research-test、改变原 CRD_001/101 产物，或复用中断 run 的 best checkpoint。

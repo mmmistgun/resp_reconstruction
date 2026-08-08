@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from resp_train.crd.config import CRD_DIAGNOSTIC_PROTOCOL_VERSION, CRD_PROTOCOL_VERSION, load_crd_config
+from resp_train.crd.config import (
+    CRD_DIAGNOSTIC_PROTOCOL_VERSION,
+    CRD_DIAGNOSTIC_VARIANTS,
+    CRD_PROTOCOL_VERSION,
+    load_crd_config,
+)
 
 
 def test_all_crd_s0_s1_and_diagnostic_configs_are_formal_and_frozen() -> None:
@@ -14,7 +19,7 @@ def test_all_crd_s0_s1_and_diagnostic_configs_are_formal_and_frozen() -> None:
         cfg = load_crd_config(path)
         expected_protocol = (
             CRD_DIAGNOSTIC_PROTOCOL_VERSION
-            if cfg.model.variant == "crd_105_direct_coarse"
+            if cfg.model.variant in CRD_DIAGNOSTIC_VARIANTS
             else CRD_PROTOCOL_VERSION
         )
         assert cfg.protocol.name == expected_protocol
