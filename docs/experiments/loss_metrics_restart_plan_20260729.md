@@ -1927,3 +1927,9 @@ CRD_105 的 CUDA synthetic finite 检查与独立 physical-batch-128 acceptance 
 CRD_105 三 formal seeds 随后在 commit `2bee3e5` 下完成并通过完整性审计。相对 CRD_001，Local RR seed mean 改善 8.1006%，signed PCC 增加 0.006043，三个配对 seed 两项均同方向改善，故通过 Direct-Coarse gate。相对 CRD_101，CRD_105 的 signed PCC 增加 0.058501，支持把原退化定位到 frontend package 而非共享 coarse head。按附件冻结分支，现跳过仍关闭的 CRD_102，开放 `CRD_103 vs CRD_105`；CRD_104 继续等待 103 gate。
 
 CRD_103 三 formal seeds 随后在 commit `ed9d68e` 下完成并通过完整性审计。相对 CRD_105，它的 Local RR seed mean 恶化 0.6905%、0/3 配对 seed 改善、trajectory MAE 恶化 5.2364%，虽然 signed PCC 增加 0.006461，但仍同时违反三项必要保留条件。因此 CRD_103 不保留、CRD_104 不运行，S1D 当前保留 CRD_105；Mamba 带来的 PCC/global-envelope/IBI 收益仅记录为后续独立研究背景，不改变本轮停止决策。
+
+## 37. CRD S1E 结果后探索性补全（2026-08-09）
+
+在上述 S1D 决策与 CRD_105 保留状态均冻结后，为获得完整结构响应信息，允许额外运行原已停止的 CRD_102 与 CRD_104。该批命名为 S1E，protocol 固定为 `crd-v1.1-s1e-20260809`，证据属性为 post-result exploratory completion；`run_role=formal` 只表示使用完整数据、80 epochs 与三个固定 seed，不把它升级为预注册模型选择证据。
+
+S1E 只描述 `102 vs 101` 的 Local Mamba 补偿效应与 `104 vs 103` 的 Global Mamba 边际效应，并将二者与 CRD_001/105 做全指标背景比较。原 0.5%/2-of-3/PCC/trajectory 条件只作描述性参照，不重新选择模型；CRD_105 的当前保留状态不因 S1E 自动改变。S1E 不修改数据、split、target、loss、metrics、selector 或 seed，禁止读取 research-test。完整比较口径、工程门槛、产物身份与未来证据边界由附件第 17 节冻结。

@@ -326,7 +326,50 @@ done
 
 CRD_105 三 formal seeds 已在 commit `2bee3e5` 下完成：Local RR seed mean `0.581234`、signed PCC seed mean `0.846330`，相对 CRD_001 分别改善 8.1006% 和增加 0.006043，明确通过 gate。当前跳过 CRD_102 并开放 CRD_103；CRD_104 仍等待 `103 vs 105` 结果。未来 CRD_103/104 formal run 与 105 一样记录 `crd-v1.1-s1d-20260808`，不再使用原队列的 protocol 标识。
 
-CRD_103 三 formal seeds 已在 commit `ed9d68e` 下完成：相对 CRD_105，Local RR 恶化 0.6905%、配对方向为 0/3、trajectory MAE 恶化 5.2364%，违反三项必要 gate；signed PCC 虽增加 0.006461，不能单独推翻停止规则。当前保留 CRD_105，CRD_103 不保留，CRD_102/104 均不运行。
+CRD_103 三 formal seeds 已在 commit `ed9d68e` 下完成：相对 CRD_105，Local RR 恶化 0.6905%、配对方向为 0/3、trajectory MAE 恶化 5.2364%，违反三项必要 gate；signed PCC 虽增加 0.006461，不能单独推翻停止规则。S1D 当前保留 CRD_105、CRD_103 不保留，CRD_102/104 不进入模型选择队列；其后仅可按下面的 S1E 身份探索性补跑。
+
+### CRD S1E 探索性补全
+
+结果后协议第 17 节允许补跑 CRD_102/104，但不重新选择本轮模型。两者使用独立 `crd-v1.1-s1e-20260809` protocol；先分别执行 synthetic 与 acceptance：
+
+```bash
+for variant in crd_102_b0_local_mamba crd_104_direct_hier_mamba; do
+  ./.venv/bin/python scripts/check_crd_variant.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --device cuda:0 \
+    --batch-size 1 \
+    || exit 1
+
+  ./.venv/bin/python scripts/train_crd.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --set protocol.run_role=acceptance \
+    --set data.max_train_windows=128 \
+    --set data.max_val_windows=32 \
+    --set training.epochs=1 \
+    --set training.device=cuda:0 \
+    --set training.show_progress=false \
+    --set outputs.run_root="/tmp/${variant}_batch128_acceptance" \
+    || exit 1
+done
+```
+
+两个 variant 均通过后，执行完整三 seed：
+
+```bash
+for variant in crd_102_b0_local_mamba crd_104_direct_hier_mamba; do
+  for seed in 20260811 20260812 20260813; do
+    ./.venv/bin/python scripts/train_crd.py \
+      --config "configs/crd_v1/${variant}.yaml" \
+      --set training.seed="${seed}" \
+      --set training.device=cuda:0 \
+      --set training.show_progress=false \
+      --set outputs.run_root="runs/crd_v1/${variant}/seed_${seed}" \
+      || exit 1
+  done
+done
+```
+
+不要覆盖 epochs/batch/accumulation 或任何 `max_*_windows`，也不要读取 research-test。102/104 的原保留条件只作描述性参照；S1E 结果不会自动推翻当前保留的 CRD_105。
 
 ## 固定呼吸带传统基线
 

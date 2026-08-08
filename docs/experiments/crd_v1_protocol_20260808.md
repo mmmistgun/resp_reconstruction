@@ -463,3 +463,29 @@ CRD_103 三 formal seeds 已在 commit `ed9d68edd7a4b6693155b2129767e7ac7b604a26
 | IBI coverage | 0.826697 ± 0.003483 | 0.836222 ± 0.002067 | 增加 0.009526 | 非 gate |
 
 CRD_103 虽改善 signed PCC、global envelope、IBI MedAE/coverage 与 lag-boundary fraction，但同时使 Whole/Local RR、trajectory MAE 以及 Low/Medium/High 三层 envelope Spearman 退化。它未满足 Local RR mean、2-of-3 paired direction 和 trajectory 三项必要条件，故 D2 判定失败：CRD_103 不保留，CRD_104 不运行，当前 S1D 保留模型为 CRD_105。上述次级收益只能作为未来独立问题的背景证据，不得回头放宽本轮 gate。
+
+## 17. S1E 结果后探索性补全（2026-08-09）
+
+本节在已观察 CRD_101、105、103 全部结果且 S1D 已正式停止之后制定。为补全结构响应信息，额外运行 CRD_102 与 CRD_104，但二者证据固定标记为 post-result exploratory completion；它们不重新开放第 13/16 节决策链、不参与本轮保留模型重选，也不得把结果表述为预注册确认性证据。当前 S1D 保留模型 CRD_105 在 S1E 运行前即已冻结。
+
+### 17.1 冻结问题与比较口径
+
+1. `CRD_102 vs CRD_101` 只回答：在同一失败的 PatchTokenFrontend/coarse package 上，Local BiMamba2 是否产生补偿或新的任务权衡。
+2. `CRD_104 vs CRD_103` 只回答：在已不保留的 Direct + Local Mamba package 上，1-Hz Global BiMamba2 + FiLM 的边际作用。
+3. 对两项比较均报告三个固定 seed 的逐 sample direct-mean、seed mean ± sample SD、逐 seed 配对方向，以及 Whole/Local RR、trajectory、global envelope、signed PCC、IBI MedAE/coverage、三层 envelope Spearman、interpretable fraction 与 lag-boundary fraction。
+4. 第 13/16 节的 `0.5% / 2-of-3 / PCC 0.005 / trajectory 1.5%` 条件仅作为描述性参照，命中与否不改变 CRD_105 的已冻结保留状态。
+5. 另将 CRD_102/104 分别与 CRD_001 和 CRD_105 做全指标描述性比较；这些跨越多个结构因素的比较不能解释为单因素因果效应。
+6. 不构造加权总分、不在 validation 上报告 p-value、不修改 checkpoint selector，也不读取 research-test。若结果提示新的候选路线，必须另建未来协议；不得事后为本批结果制定选择门槛。
+
+### 17.2 运行身份与工程门槛
+
+CRD_102/104 的模型、初始化、loss、metrics、训练 seed、80 epochs、physical batch 128、accumulation 1、6400 updates 和 Local-RR checkpoint selector 均保持原冻结定义。由于现有 runner 的 `formal` role 表示完整预算/完整数据生命周期，两配置仍使用 `run_role=formal`；其探索性证据身份由独立 protocol `crd-v1.1-s1e-20260809` 与本节决定。manifest/checkpoint 必须记录该 protocol 和当次干净 Git commit。
+
+两个 variant 各自在三 seed 前必须通过当前 commit 下的 CUDA synthetic batch-1 finite forward/loss/backward 与独立 physical-batch-128 acceptance。Acceptance 固定 `1 epoch / 128 train / 32 validation / max_test=null`，只解除工程阻塞，不形成效果证据。两项 acceptance 均通过后，CRD_102 与 CRD_104 的三个固定 seed 可以顺序或在独立 GPU 上并行执行，输出分别写入：
+
+```text
+runs/crd_v1/crd_102_b0_local_mamba/seed_<seed>/
+runs/crd_v1/crd_104_direct_hier_mamba/seed_<seed>/
+```
+
+所有 S1E run 仍严格禁止读取 research-test；任何中断或重复 run 必须按完整 lifecycle 审计后再决定是否纳入，不能仅凭存在 best checkpoint 进入汇总。

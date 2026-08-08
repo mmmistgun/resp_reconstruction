@@ -1,5 +1,5 @@
 protocol:
-  name: crd-v1.1-s0-s1-20260808
+  name: crd-v1.1-s1e-20260809
   stage: s1
   run_role: formal
 

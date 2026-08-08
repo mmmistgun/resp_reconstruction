@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- 当前新增 CRD-v1.1 的 S0/S1；CRD_101 触发原 gate 后仅额外激活结果后 S1D 诊断，规范附件为 `docs/experiments/crd_v1_protocol_20260808.md`，由主协议第 35–36 节纳入。CRD_105 已通过 Direct-Coarse gate 并保留；CRD_103 因 Local RR、2-of-3 与 trajectory gate 失败而不保留，CRD_102/104 均关闭。S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
+- 当前新增 CRD-v1.1 的 S0/S1；CRD_101 触发原 gate 后激活结果后 S1D，CRD_105 已保留、CRD_103 未保留。现仅额外激活 post-result S1E exploratory completion，用于跑完 CRD_102/104 并描述结构响应，不重新选择模型；规范附件为 `docs/experiments/crd_v1_protocol_20260808.md`，由主协议第 35–37 节纳入。S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
 - CRD-S0/S1 只使用 train/validation，不读取 research-test；不存在锁定队列和协议修订时不得新增 CRD test 入口。
 
 ## 当前入口
