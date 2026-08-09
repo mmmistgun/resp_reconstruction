@@ -375,6 +375,22 @@ done
 
 六个 S1E run 已在 commit `f8fa658` 下完成并通过审计。102 相对 101 除 trajectory 恶化 3.4048% 外，在 RR、PCC、global envelope 与 IBI 上均大幅改善；104 相对 103 描述性满足原四项条件。相对冻结的 105，102 的 Local RR 改善 4.3138%、3/3 paired 改善、PCC 增加 0.018342且 trajectory 仅恶化 0.2882%；104 的 Local RR/PCC 也改善，但 trajectory 恶化 3.0375%。这些结果只用于下一版确认协议设计，当前不重选模型、不运行 research-test。
 
+### CRD candidate lock
+
+CRD_102/104/105 的九个候选 checkpoint 与 CRD_001 三个 reference 已冻结在：
+
+```text
+docs/experiments/crd_v1_candidate_lock_20260809.json
+```
+
+验证 checkpoint、resolved config、run manifest 和 validation summary 的大小/SHA-256：
+
+```bash
+./.venv/bin/python scripts/verify_crd_candidate_lock.py
+```
+
+选择规则固定为相对 CRD_105 的四项资格门槛后进行五项 primary Pareto；多于一个非支配候选时保留 Pareto set，不强制单赢家。当前尚未激活独立确认数据或 CRD research-test，不要运行任何确认评价命令。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

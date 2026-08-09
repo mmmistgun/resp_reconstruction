@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "lock_id": "crd-v1.1-candidate-lock-20260809",
+  "status": "locked_confirmation_not_activated",
+  "created_after_observing": [
+    "crd_102_b0_local_mamba validation",
+    "crd_104_direct_hier_mamba validation",
+    "crd_105_direct_coarse validation"
+  ],
+  "candidate_variants": [
+    "crd_102_b0_local_mamba",
+    "crd_104_direct_hier_mamba",
+    "crd_105_direct_coarse"
+  ],
+  "anchor_variant": "crd_105_direct_coarse",
+  "reference_variant": "crd_001_b0_retrain",
+  "fixed_seeds": [20260811, 20260812, 20260813],
+  "artifact_convention": {
+    "checkpoint": "checkpoint_best_local_rr.pt",
+    "resolved_config": "config.yaml",
+    "run_manifest": "run_manifest.json",
+    "validation_metrics_summary": "metrics_summary.csv",
+    "associated_artifact_paths": "the checkpoint parent directory plus the fixed filenames above"
+  },
+  "selection_rule": {
+    "aggregation": "per-sample direct mean within seed, then arithmetic mean across the three fixed seeds",
+    "eligibility_comparator": "crd_105_direct_coarse",
+    "anchor_is_automatically_eligible": true,
+    "candidate_eligibility": {
+      "local_rr_relative_improvement_min": 0.005,
+      "local_rr_paired_seed_improvement_min_count": 2,
+      "signed_pcc_absolute_drop_max": 0.005,
+      "trajectory_relative_worsening_max": 0.015,
+      "all_conditions_required": true
+    },
+    "primary_metrics": [
+      {"name": "whole_rr_abs_error_bpm_mean", "direction": "minimize"},
+      {"name": "local_rr_mae_bpm_mean", "direction": "minimize"},
+      {"name": "envelope_trajectory_mae_mean", "direction": "minimize"},
+      {"name": "global_envelope_modulation_error_mean", "direction": "minimize"},
+      {"name": "lag_aware_signed_pcc_mean", "direction": "maximize"}
+    ],
+    "pareto_dominance": "no worse on every primary metric and strictly better on at least one primary metric",
+    "forced_single_winner": false,
+    "multiple_nondominated_outcome": "retain the Pareto set without post-hoc scalarization",
+    "secondary_metrics": [
+      "ibi_medae_sec_mean",
+      "ibi_coverage_mean",
+      "target_stratified_envelope_spearman_low_mean",
+      "target_stratified_envelope_spearman_medium_mean",
+      "target_stratified_envelope_spearman_high_mean",
+      "ibi_interpretable_fraction",
+      "best_lag_boundary_fraction"
+    ],
+    "secondary_metrics_can_override_primary": false,
+    "checkpoint_reselection_allowed": false,
+    "retraining_or_hyperparameter_change_allowed": false,
+    "research_test_authorized": false
+  },
+  "variants": [
+    {
+      "role": "candidate",
+      "variant": "crd_102_b0_local_mamba",
+      "training_commit": "f8fa658443b2bc2a2414f142b2a78c746000daca",
+      "training_protocol": "crd-v1.1-s1e-20260809",
+      "checkpoints": [
+        {
+          "seed": 20260811,
+          "selected_epoch": 13,
+          "checkpoint_path": "runs/crd_v1/crd_102_b0_local_mamba/seed_20260811/20260809_022128_909818/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "92c3c7cb8f08dd09ad696c257d7883d9e54c08a597ea4ce20135842876db5255",
+          "checkpoint_size_bytes": 13034013,
+          "resolved_config_sha256": "0fe6d3868d657b4b2797a99a8f32bd0f601b5df5ba0ec5623d074b9a3e9cbf24",
+          "run_manifest_sha256": "d64942b8724f39be9cd59c03f5d202a96607021744b704ba00f1dcf3dadcb1db",
+          "validation_metrics_summary_sha256": "c33be435366b032b9c94870dec9492bb2554a564b0ca472f0d057f779092b302"
+        },
+        {
+          "seed": 20260812,
+          "selected_epoch": 11,
+          "checkpoint_path": "runs/crd_v1/crd_102_b0_local_mamba/seed_20260812/20260809_032737_110644/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "ce866e01a90c13a5850869d55e8f40094146e26a365c146dc5205a1beee7ea7e",
+          "checkpoint_size_bytes": 13034013,
+          "resolved_config_sha256": "a895befa003076fe71a287dd50e9ac8b7d7f9803f5faa49cb8b5b3e442cdb906",
+          "run_manifest_sha256": "69b7edac6c576ebc1bef586e2ece6e82d1b520b57fc37b6f4f631699271ebf36",
+          "validation_metrics_summary_sha256": "403add54884dad9fc16718396ec2bf66f896dd59376195c99dcd11ab5600cb2d"
+        },
+        {
+          "seed": 20260813,
+          "selected_epoch": 13,
+          "checkpoint_path": "runs/crd_v1/crd_102_b0_local_mamba/seed_20260813/20260809_043403_554605/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "2e0e2dddcb1d4e95e8230931f22e44a632bed2b85a5df2b13da028d04ce3adf8",
+          "checkpoint_size_bytes": 13034013,
+          "resolved_config_sha256": "f46a2acb753c4ba7dcaff17a9279bb917a742edeafaeb06969ca8d86c3a4d954",
+          "run_manifest_sha256": "b9f0f1492a7f0023c3f9c01305973de4cbc4bd8789d82073efb03255de103c3e",
+          "validation_metrics_summary_sha256": "9a7fa3320ada524a9bbd24092812c665864dc100b1927795514c3508d472372a"
+        }
+      ]
+    },
+    {
+      "role": "candidate",
+      "variant": "crd_104_direct_hier_mamba",
+      "training_commit": "f8fa658443b2bc2a2414f142b2a78c746000daca",
+      "training_protocol": "crd-v1.1-s1e-20260809",
+      "checkpoints": [
+        {
+          "seed": 20260811,
+          "selected_epoch": 4,
+          "checkpoint_path": "runs/crd_v1/crd_104_direct_hier_mamba/seed_20260811/20260809_054023_270736/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "d2693c76ede8f47c239e69a9e5a967c12c0461bdb3ac4b70fc2d3cd8e568ce0e",
+          "checkpoint_size_bytes": 27376803,
+          "resolved_config_sha256": "fef1d46284f261cc9d0d4c18224add0d817160b24cf36e186380b28829f5c007",
+          "run_manifest_sha256": "ea456b06e52d51b77990c50d8ab42dd308bd7e5ce8c1652117bc1e76b158425f",
+          "validation_metrics_summary_sha256": "6540322f31389afbad78b951eb9898c5530344950c37f3f75cd60cc2dcfcb1a2"
+        },
+        {
+          "seed": 20260812,
+          "selected_epoch": 72,
+          "checkpoint_path": "runs/crd_v1/crd_104_direct_hier_mamba/seed_20260812/20260809_065353_484711/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "b94ac4b346bc634e4d5cac24cf638c4bf6ac4c398b8ef000786d8895287af200",
+          "checkpoint_size_bytes": 27376803,
+          "resolved_config_sha256": "2292d9c6f8e1d6ba7b34de3c82668d95753e9e26eca3253dff55d766df050f1e",
+          "run_manifest_sha256": "29dfca2156f1d4ca2b6efa810105b977f8c6e4754c4dd64e29e25ac5d9a86cc6",
+          "validation_metrics_summary_sha256": "bfe8fd1b5dcdfb2595aecdd35e9d8ea38395774d9c123bc33878ae76b500db58"
+        },
+        {
+          "seed": 20260813,
+          "selected_epoch": 58,
+          "checkpoint_path": "runs/crd_v1/crd_104_direct_hier_mamba/seed_20260813/20260809_080732_234579/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "26d5664e61aeb09518df9c757d21b64f3cf254b34ad8a7ef22460583e5aaab96",
+          "checkpoint_size_bytes": 27376803,
+          "resolved_config_sha256": "1916c7ca6c4e4bfe050e7992f3a5b2ea71f119ed782774e8bf35202c0e3d3f0f",
+          "run_manifest_sha256": "a73d00f07badbc901eb7448a73fc1ec96b101fefaa06d804dbcd19d0bbdad30a",
+          "validation_metrics_summary_sha256": "c1b447f4de91752086bb89210759c8512866518be47021b96f96515ee3f75559"
+        }
+      ]
+    },
+    {
+      "role": "candidate",
+      "variant": "crd_105_direct_coarse",
+      "training_commit": "2bee3e504c91db8d63cf7c4f6424ca501e3c82a6",
+      "training_protocol": "crd-v1.1-s1d-20260808",
+      "checkpoints": [
+        {
+          "seed": 20260811,
+          "selected_epoch": 28,
+          "checkpoint_path": "runs/crd_v1/crd_105_direct_coarse/seed_20260811/20260808_204605_323232/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "c83135de3749db75f49f3a1a8b9431db550c324d08fdf8a393f939188b8de01f",
+          "checkpoint_size_bytes": 2368487,
+          "resolved_config_sha256": "b8f8988b3ec0723371f86f8f3e10489003f393f39e9d6a3f36a74f2510e3168c",
+          "run_manifest_sha256": "67c6359a83bcd019831612940965939afb0343e9bc936aba6f4f34a90d6baf7a",
+          "validation_metrics_summary_sha256": "1a74e8b594fd2bb999108026f719d4bc2b43c6b5a64bb67d01932f141625fb74"
+        },
+        {
+          "seed": 20260812,
+          "selected_epoch": 44,
+          "checkpoint_path": "runs/crd_v1/crd_105_direct_coarse/seed_20260812/20260808_211725_152070/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "4daee12f297900f8c34d5b0bf32b15e1f3feb1dc877d58013370b2442960dc24",
+          "checkpoint_size_bytes": 2368487,
+          "resolved_config_sha256": "5f18a816bdcf84e7498ec23b0d9abefabbbbc8bd98ec752c35511747d32acdab",
+          "run_manifest_sha256": "aa055d524451d024fdf4da46be5d312fa492f7f75a66535359d9eddef8f56f72",
+          "validation_metrics_summary_sha256": "24d0c6b98df487df826adf8a8e8f29a2c1a0e33a2b942378be658e4e5dadd395"
+        },
+        {
+          "seed": 20260813,
+          "selected_epoch": 14,
+          "checkpoint_path": "runs/crd_v1/crd_105_direct_coarse/seed_20260813/20260808_214719_482054/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "4f70b9d0906189d51c309d68bb7abb9b2075b2ed5ea6fd77e7c6cdce75c92ed6",
+          "checkpoint_size_bytes": 2368487,
+          "resolved_config_sha256": "e66900dca307c5b878b6811bb53a5f43b5ed566accdd16f73076ccf738fbd037",
+          "run_manifest_sha256": "5ff83327459b5b224ff9223dc8bc306aeb4f85e1149c468f48e77be8be2d29d8",
+          "validation_metrics_summary_sha256": "0e7beaecdbd1a3b1ee8ce507c6ce1659ffe6c2c8ea12f9891799b5f0dc76a1f3"
+        }
+      ]
+    },
+    {
+      "role": "reference",
+      "variant": "crd_001_b0_retrain",
+      "training_commit": "6f58f36f4839904014031970e5f69262aa6e96f8",
+      "training_protocol": "crd-v1.1-s0-s1-20260808",
+      "checkpoints": [
+        {
+          "seed": 20260811,
+          "selected_epoch": 17,
+          "checkpoint_path": "runs/crd_v1/crd_001_b0_retrain/seed_20260811/20260808_035754_258179/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "dbb234a110a868bf0a32757d310bd784c1ba7de4b2231230fa93f6e581d6932b",
+          "checkpoint_size_bytes": 177845,
+          "resolved_config_sha256": "50bb00d6af7699fabbd5ae70525e4266f0e575038fc5b44e93192c20ddee79d8",
+          "run_manifest_sha256": "cf68f7f6987584d6ec8db0505b1a271972b214574694bfac80f5d93eb1484972",
+          "validation_metrics_summary_sha256": "bc7720e6cc8b052fa1a666ebd52fb5ad3015dc94dfdf7892710554e6b8b210b0"
+        },
+        {
+          "seed": 20260812,
+          "selected_epoch": 14,
+          "checkpoint_path": "runs/crd_v1/crd_001_b0_retrain/seed_20260812/20260808_042713_710965/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "0065e49086433688dc4d7d9de3a120900f8e62f4fc1066fd1004dd944c10b319",
+          "checkpoint_size_bytes": 177845,
+          "resolved_config_sha256": "7a594f2d9c1a1005ad74c37579057eacddf08526a4e95fb2ed95e46e67de742b",
+          "run_manifest_sha256": "c1f8885736f3dadb164543d04b68f8118237a2b7adce23bb03a042c1664ef521",
+          "validation_metrics_summary_sha256": "3757343ca5b13090200c5746675a962667747fdba2469b44d79e64833f5f09e0"
+        },
+        {
+          "seed": 20260813,
+          "selected_epoch": 21,
+          "checkpoint_path": "runs/crd_v1/crd_001_b0_retrain/seed_20260813/20260808_045849_155730/checkpoint_best_local_rr.pt",
+          "checkpoint_sha256": "e663fa9ede607ae7faf9a0b3c2aed1479cb9e6598a130c5857d13b30190c3bfd",
+          "checkpoint_size_bytes": 177845,
+          "resolved_config_sha256": "ded0d507450288ac3825d19437bf871c2507ec30018f601a2043fde68540f4e4",
+          "run_manifest_sha256": "d7f7922415d597761a54475cc4a0a9b6e01cb8bf64664e13339682208da29cf5",
+          "validation_metrics_summary_sha256": "5bc8b071002abf5458d488d25b268a737238e2fbbead20346c424f88dd3de052"
+        }
+      ]
+    }
+  ]
+}

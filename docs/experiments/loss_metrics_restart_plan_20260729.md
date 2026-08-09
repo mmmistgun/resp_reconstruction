@@ -1937,3 +1937,9 @@ S1E 只描述 `102 vs 101` 的 Local Mamba 补偿效应与 `104 vs 103` 的 Glob
 CRD_102/104 的 CUDA synthetic 与独立 physical-batch-128 acceptance 已在 commit `d60b050` 的干净工作树下通过。两者均以 128 个 train windows 形成一次 update，并完成 32 条 validation metrics 与完整 checkpoint 生命周期；所有 tensors/metrics finite、无 prediction degeneracy。该结果仅解除六个 S1E 完整 run 的工程阻塞，不形成效果证据。
 
 六个 S1E full-budget run 随后在 commit `f8fa658` 下完成并通过完整性审计。102 相对 101 强烈改善 RR、PCC、global envelope 与 IBI，但 trajectory 恶化 3.4048%；104 相对 103 描述性满足原四项条件，显示 Global Mamba + FiLM 对失败的 103 存在补偿。相对已冻结的 105，102 的 Local RR 改善 4.3138%、3/3 paired 改善、PCC 增加 0.018342且 trajectory 仅恶化 0.2882%，形成强探索性候选；104 同样改善 RR/PCC/global envelope，但 trajectory 恶化 3.0375%。这证明原顺序 gate 会漏掉非单调模块交互，但不允许在观察后回改 S1D 结论：105 仍是本轮正式保留结果，102/104 只进入下一版确认协议的候选背景，不授权 CRD research-test。
+
+## 38. CRD candidate lock 与确认前规则冻结（2026-08-09）
+
+S1E 结束后，CRD_102/104/105 各三个 Local-RR-selected checkpoints 已作为候选集合锁定，CRD_001 三 checkpoint 作为只读 reference。精确路径、seed/epoch、训练 commit/protocol、文件大小及 checkpoint/config/manifest/validation-summary SHA-256 固定在 `docs/experiments/crd_v1_candidate_lock_20260809.json`，不得替换为其他 timestamp、final checkpoint 或重训结果。
+
+未来选择采用“相对 CRD_105 的四项资格门槛 + 五项 primary Pareto”规则：Local RR mean 改善至少 0.5%、至少 2/3 paired seed 改善、PCC 下降不超过 0.005、trajectory 恶化不超过 1.5%，全部通过后才进入 Whole/Local/trajectory/global-envelope/PCC 的非支配比较。无唯一非支配候选时保留 Pareto set，不构造加权总分；IBI、三层 Spearman 与 lag-boundary 仅作 secondary。当前只冻结候选和规则，尚未建立独立确认阶段，也不授权读取 CRD research-test；是否建立确认阶段及其数据口径必须在未来另行修订。

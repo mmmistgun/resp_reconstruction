@@ -528,3 +528,32 @@ CRD_102/104 各三个完整 run 均在 commit `f8fa658443b2bc2a2414f142b2a78c746
 4. 相对冻结的 CRD_105，102 的 Whole/Local/global-envelope 分别改善 0.9860%/4.3138%/20.5477%，PCC 增加 0.018342，trajectory 仅恶化 0.2882%，且 Local RR 为 3/3 paired 改善；它描述性满足四项旧条件。104 的 Whole/Local/global-envelope 分别改善 10.3955%/4.5785%/12.2036%，PCC 增加 0.005342，但 trajectory 恶化 3.0375%，描述性不满足旧 trajectory 条件。
 
 S1E 暴露了明显的非单调结构交互：101 或 103 单步失败并不意味着其后继 102 或 104 也必然失败。尽管 102 尤其形成强探索性候选，本节在观察结果前已冻结为不重选模型，因此 CRD_105 仍是 S1D 的正式保留结果；102/104 只能用于设计下一版预先冻结的多候选确认协议，不能在本节事后升级为保留模型，也不能据此读取 research-test。
+
+## 18. 102/104/105 candidate lock 与未来选择规则（2026-08-09）
+
+本节在 S1E validation 结果全部观察之后制定，属于 post-result candidate lock，不把既有探索结果升级为确认性证据。机器可读锁文件固定为 `docs/experiments/crd_v1_candidate_lock_20260809.json`；其中锁定 CRD_102/104/105 各三个 Local-RR-selected checkpoints，并将 CRD_001 三 checkpoint 作为只读 reference。每项记录精确相对路径、SHA-256、文件大小、seed、selected epoch、训练 commit/protocol，以及 resolved config、run manifest、validation metrics summary 的 SHA-256。任何文件缺失、大小或 hash 不一致都必须停止；不得用同 variant 的其他 timestamp、final checkpoint 或重训结果替代。
+
+Candidate lock 提交后禁止：重训候选、改变 checkpoint selector、替换 seed/epoch、修改模型或超参数、根据未来结果调整门槛。若确需变更，必须创建新 lock ID 并保留本锁，不得原地重写其科学语义。当前只冻结候选与规则，**没有激活任何独立确认数据或 research-test 入口**。
+
+### 18.1 资格门槛
+
+CRD_105 是稳定锚点并自动具备资格。未来确认阶段中，CRD_102/104 各自相对 CRD_105 必须同时满足：
+
+1. Local RR seed mean 相对改善至少 0.5%；
+2. 至少 2/3 同 seed 配对方向改善；
+3. lag-aware signed PCC seed mean 下降不大于 0.005；
+4. trajectory MAE seed mean 相对恶化不大于 1.5%。
+
+相对变化仍按 comparator 为分母，误差改善为 `(anchor-candidate)/anchor`、trajectory 恶化为 `(candidate-anchor)/anchor`，等号视为通过。四项必须同时满足；未通过者不能进入 Pareto 选择。
+
+### 18.2 五项 primary Pareto 规则
+
+对通过资格门槛的候选与自动合格的 CRD_105，使用三个固定 seed 的逐 sample direct mean 再做 seed arithmetic mean。Primary 固定为：Whole RR、Local RR、trajectory MAE、global envelope error 最小化，lag-aware signed PCC 最大化。
+
+若模型 A 在全部五项上不差于 B，且至少一项严格优于 B，则 A Pareto-dominate B。最终只保留非支配集合：若恰有一个非支配候选，可选择该候选；若有多个，则保留 Pareto set，不构造加权总分、不临时增加权重或强制唯一赢家。
+
+IBI MedAE/coverage、Low/Medium/High envelope Spearman、IBI interpretable fraction 与 lag-boundary fraction固定为 secondary，只解释非支配候选的任务权衡，不能覆盖资格门槛或 primary Pareto 结果。CRD_001 只提供参考背景，不进入候选选择。
+
+### 18.3 独立确认阶段尚未激活
+
+未来若决定建立独立确认阶段，必须在读取任何确认数据前另行冻结：数据来源与 admission、是否沿用现有 split、sample/subject 统计单位、一次性评价命令、输出目录、缺失/非有限处理及结果表述边界。所有候选必须在相同样本、相同指标、相同顺序下评价一次，禁止根据中间结果停止、替换 checkpoint 或再训练。本节本身不授权读取 research-test，也不改变 CRD_105 作为当前 S1D 正式保留结果的状态。
