@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-07
+最后更新：2026-08-09
 
-状态：最终 loss 与 metrics 已冻结；时频模型 validation 阶段已完成；T2 为均衡型 active candidate，T4 为局部节律/包络型 active candidate，T1/T3 未入选；当前进入 B0/T2/T4、F0、IEWT 的阶段性 research-test 评价
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1E、candidate lock 与选择规则均已冻结，当前激活 S1C 现有 research-test 确认队列，尚未读取 CRD test 结果
 
 ## 1. 定位
 
@@ -1943,3 +1943,11 @@ CRD_102/104 的 CUDA synthetic 与独立 physical-batch-128 acceptance 已在 co
 S1E 结束后，CRD_102/104/105 各三个 Local-RR-selected checkpoints 已作为候选集合锁定，CRD_001 三 checkpoint 作为只读 reference。精确路径、seed/epoch、训练 commit/protocol、文件大小及 checkpoint/config/manifest/validation-summary SHA-256 固定在 `docs/experiments/crd_v1_candidate_lock_20260809.json`，不得替换为其他 timestamp、final checkpoint 或重训结果。
 
 未来选择采用“相对 CRD_105 的四项资格门槛 + 五项 primary Pareto”规则：Local RR mean 改善至少 0.5%、至少 2/3 paired seed 改善、PCC 下降不超过 0.005、trajectory 恶化不超过 1.5%，全部通过后才进入 Whole/Local/trajectory/global-envelope/PCC 的非支配比较。无唯一非支配候选时保留 Pareto set，不构造加权总分；IBI、三层 Spearman 与 lag-boundary 仅作 secondary。当前只冻结候选和规则，尚未建立独立确认阶段，也不授权读取 CRD research-test；是否建立确认阶段及其数据口径必须在未来另行修订。
+
+## 39. CRD S1C 现有 research-test 确认阶段（2026-08-09）
+
+现决定使用现有 research-test 建立 S1C 确认阶段，协议标识为 `crd-v1.1-s1c-research-20260809`。第 38 节“尚未激活”的状态至此结束，但其 candidate lock 和选择规则不变。由于该 split 已在旧模型阶段被观察且曾影响 CRD 研究方向，S1C 只能提供 development/research confirmation evidence，不是独立或无偏 held-out 证据。
+
+S1C 只评价 candidate lock `9a14db8be8af22e1ce1c5a332b4912ab5c13c7fb03cdf1894fc5c6ed6ff7f8cc` 中的 CRD_102/104/105 九个候选 checkpoint 与 CRD_001 三个 reference checkpoint，按 lock 顺序、使用完整 2310-window/8-subject research-test 各评价一次。索引级 split 审计确认 train/validation/test 为 `10141/2675/2310` windows、`32/7/8` 个 `samp_id`，三个 split pair 的 subject 与 segment overlap 均为 0。专用入口为 `scripts/eval_crd_s1c.py --confirm-research-test`；普通 `eval_crd.py` 仍不开放 test，固定隔离输出不得覆盖。
+
+必须等 12 项全部完成并审计后，才由预先实现的 `scripts/summarize_crd_s1c.py` 执行第 38 节冻结的资格门槛与五项 primary Pareto；不得依据部分 test 结果停止、替换 checkpoint、重训、删 seed、事后加权或让 secondary 指标推翻 primary 规则。完整数据、指标、失败、access receipt 与产物契约见附件第 19 节。

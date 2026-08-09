@@ -189,7 +189,14 @@ class CRDExperiment:
         summarize_task_metrics(metrics).to_csv(run_dir / "metrics_summary.csv", index=False)
         return run_dir
 
-    def _evaluate_model(self, model: torch.nn.Module, loader) -> pd.DataFrame:
+    def _evaluate_model(
+        self,
+        model: torch.nn.Module,
+        loader,
+        *,
+        evaluation_split: str = "validation",
+        include_test_only: bool = False,
+    ) -> pd.DataFrame:
         if self.device is None:
             raise RuntimeError("device 尚未初始化")
         predictions = collect_predictions(
@@ -202,19 +209,20 @@ class CRDExperiment:
         frame = evaluate_task_predictions(
             predictions,
             self.cfg,
-            include_test_only=False,
+            include_test_only=include_test_only,
             method=str(self.cfg.model.variant),
         )
-        frame.insert(0, "evaluation_split", "validation")
+        frame.insert(0, "evaluation_split", evaluation_split)
         return frame
 
     def evaluate_checkpoint(
         self,
         checkpoint_path: str | Path,
         *,
+        split: str = "val",
         metrics_output: str | Path | None = None,
     ) -> pd.DataFrame:
-        """只复评 validation；S0/S1 未授权读取 research-test。"""
+        """复评指定 split；research-test 授权必须由受控的公共入口完成。"""
 
         device = resolve_device(str(self.cfg.training.device))
         self.device = device
@@ -222,15 +230,38 @@ class CRDExperiment:
         checkpoint = torch.load(Path(checkpoint_path), map_location=device)
         _validate_checkpoint_config(checkpoint.get("config"), self.cfg)
         model.load_state_dict(checkpoint["model_state_dict"])
+        normalized_split = str(split).strip().lower()
+        if normalized_split == "val":
+            split_name = str(self.cfg.data.val_split)
+            max_windows = self.cfg.data.get("max_val_windows")
+            strategy = str(self.cfg.data.val_sample_strategy)
+            sample_seed = int(self.cfg.data.val_sample_seed)
+            evaluation_split = "validation"
+            include_test_only = False
+        elif normalized_split == "test":
+            split_name = str(self.cfg.data.test_split)
+            max_windows = self.cfg.data.get("max_test_windows")
+            strategy = str(self.cfg.data.test_sample_strategy)
+            sample_seed = int(self.cfg.data.test_sample_seed)
+            evaluation_split = "test"
+            include_test_only = True
+        else:
+            raise ValueError("split 必须是 val 或 test")
+
         window_data = build_window_data(
             self.cfg,
-            split=str(self.cfg.data.val_split),
-            max_windows=self.cfg.data.get("max_val_windows"),
-            sample_strategy=str(self.cfg.data.val_sample_strategy),
-            sample_seed=int(self.cfg.data.val_sample_seed),
+            split=split_name,
+            max_windows=max_windows,
+            sample_strategy=strategy,
+            sample_seed=sample_seed,
             shuffle=False,
         )
-        metrics = self._evaluate_model(model, window_data.loader)
+        metrics = self._evaluate_model(
+            model,
+            window_data.loader,
+            evaluation_split=evaluation_split,
+            include_test_only=include_test_only,
+        )
         if metrics_output is not None:
             output_path = Path(metrics_output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -259,7 +290,7 @@ def evaluate_crd_checkpoint(
         if metrics_output_path
         else checkpoint_path.parent / "validation_reeval_metrics.csv"
     )
-    CRDExperiment(cfg).evaluate_checkpoint(checkpoint_path, metrics_output=output_path)
+    CRDExperiment(cfg).evaluate_checkpoint(checkpoint_path, split="val", metrics_output=output_path)
     save_execution_manifest(
         output_path.with_name(f"{output_path.stem}_manifest.json"),
         task=CRDExperiment.task_name,

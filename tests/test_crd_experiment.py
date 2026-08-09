@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 import torch
+from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
 from resp_train.crd.config import (
@@ -133,3 +134,49 @@ def test_prediction_collection_converts_bfloat16_before_numpy() -> None:
         max_windows=1,
     )
     assert predictions["r_tho_hat"].dtype.name == "float32"
+
+
+def test_internal_crd_checkpoint_evaluation_uses_frozen_test_split(monkeypatch, tmp_path) -> None:
+    cfg = load_crd_config(
+        "configs/crd_v1/crd_101_b0_coarse.yaml",
+        overrides=["training.device=cpu", "training.show_progress=false"],
+    )
+    model = _ScaledIdentity()
+    checkpoint_path = tmp_path / "checkpoint_best_local_rr.pt"
+    torch.save(
+        {
+            "config": OmegaConf.to_container(cfg, resolve=True),
+            "model_state_dict": model.state_dict(),
+        },
+        checkpoint_path,
+    )
+    calls: dict[str, object] = {}
+
+    def fake_build_window_data(_cfg, **kwargs):
+        calls["window"] = kwargs
+        return SimpleNamespace(loader="test-loader")
+
+    def fake_evaluate_model(_model, loader, **kwargs):
+        calls["evaluation"] = {"loader": loader, **kwargs}
+        return pd.DataFrame([{"evaluation_split": "test"}])
+
+    monkeypatch.setattr("resp_train.crd.experiment.build_crd_model", lambda _cfg: _ScaledIdentity())
+    monkeypatch.setattr("resp_train.crd.experiment.build_window_data", fake_build_window_data)
+    experiment = CRDExperiment(cfg)
+    monkeypatch.setattr(experiment, "_evaluate_model", fake_evaluate_model)
+
+    result = experiment.evaluate_checkpoint(checkpoint_path, split="test")
+
+    assert result.loc[0, "evaluation_split"] == "test"
+    assert calls["window"] == {
+        "split": "test",
+        "max_windows": None,
+        "sample_strategy": "stratified_random",
+        "sample_seed": 20260612,
+        "shuffle": False,
+    }
+    assert calls["evaluation"] == {
+        "loader": "test-loader",
+        "evaluation_split": "test",
+        "include_test_only": True,
+    }

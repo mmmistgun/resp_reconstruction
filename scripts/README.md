@@ -17,7 +17,7 @@
 - 包络主指标：`envelope_trajectory_mae` 与 `global_envelope_modulation_error`；
   `target_stratified_envelope_spearman` 只按 train-frozen Low/Medium/High 分层补充报告。
 - research-test：现有 `test` 可在阶段性整理后重复观察，并可形成后续独立科研问题；它不是无偏 held-out 证据，不得用于重选既有 run 的 epoch/checkpoint。
-- 新 CRD-S0/S1 只读 train/validation；`eval_crd.py` 故意不开放 test，不能套用旧 THO research-test 命令。
+- CRD 训练与普通 `eval_crd.py` 仍只读 train/validation；S1C 只允许 candidate lock 中的 12 个 checkpoint 通过专用入口各读取一次现有 research-test。
 
 ## 数据与 split 审计
 
@@ -35,6 +35,15 @@ Split 独立性审计：
 ./.venv/bin/python scripts/audit_split_independence.py \
   --config configs/tho_research_v2.yaml \
   --output-dir runs/audits/split_independence_restart
+```
+
+CRD S1C 使用严格 CRD 配置 loader 的复现命令：
+
+```bash
+./.venv/bin/python scripts/audit_split_independence.py \
+  --config-kind crd \
+  --config configs/crd_v1/crd_105_direct_coarse.yaml \
+  --output-dir runs/crd_v1/crd_s1c_split_audit_20260809
 ```
 
 这些审计不是每个训练 run 的重复前置步骤。协议首次实现或数据/split 发生变化时执行并保存结果；普通 run 只保留加载、shape 与 finite 断言。
@@ -371,9 +380,9 @@ for variant in crd_102_b0_local_mamba crd_104_direct_hier_mamba; do
 done
 ```
 
-不要覆盖 epochs/batch/accumulation 或任何 `max_*_windows`，也不要读取 research-test。102/104 的原保留条件只作描述性参照；S1E 结果不会自动推翻当前保留的 CRD_105。
+S1E 运行当时不得覆盖 epochs/batch/accumulation、任何 `max_*_windows` 或读取 research-test。102/104 的原保留条件只作描述性参照；S1E 结果不会自动推翻当前保留的 CRD_105。后续 test 授权只来自下面另立的 S1C。
 
-六个 S1E run 已在 commit `f8fa658` 下完成并通过审计。102 相对 101 除 trajectory 恶化 3.4048% 外，在 RR、PCC、global envelope 与 IBI 上均大幅改善；104 相对 103 描述性满足原四项条件。相对冻结的 105，102 的 Local RR 改善 4.3138%、3/3 paired 改善、PCC 增加 0.018342且 trajectory 仅恶化 0.2882%；104 的 Local RR/PCC 也改善，但 trajectory 恶化 3.0375%。这些结果只用于下一版确认协议设计，当前不重选模型、不运行 research-test。
+六个 S1E run 已在 commit `f8fa658` 下完成并通过审计。102 相对 101 除 trajectory 恶化 3.4048% 外，在 RR、PCC、global envelope 与 IBI 上均大幅改善；104 相对 103 描述性满足原四项条件。相对冻结的 105，102 的 Local RR 改善 4.3138%、3/3 paired 改善、PCC 增加 0.018342且 trajectory 仅恶化 0.2882%；104 的 Local RR/PCC 也改善，但 trajectory 恶化 3.0375%。这些结果只用于下一版确认协议设计；S1E 本身不重选模型、不授权 research-test。
 
 ### CRD candidate lock
 
@@ -389,7 +398,32 @@ docs/experiments/crd_v1_candidate_lock_20260809.json
 ./.venv/bin/python scripts/verify_crd_candidate_lock.py
 ```
 
-选择规则固定为相对 CRD_105 的四项资格门槛后进行五项 primary Pareto；多于一个非支配候选时保留 Pareto set，不强制单赢家。当前尚未激活独立确认数据或 CRD research-test，不要运行任何确认评价命令。
+选择规则固定为相对 CRD_105 的四项资格门槛后进行五项 primary Pareto；多于一个非支配候选时保留 Pareto set，不强制单赢家。
+
+### CRD S1C research-test 确认
+
+现有 research-test 已为上述 12 个 frozen checkpoints 激活。它曾在旧模型阶段被观察，因此结果属于 development/research confirmation evidence，不是无偏 held-out。先完成 split 审计并验证 lock；随后严格按 lock 顺序运行：
+
+```bash
+./.venv/bin/python scripts/verify_crd_candidate_lock.py
+
+./.venv/bin/python scripts/verify_crd_candidate_lock.py --print-checkpoints | \
+while IFS= read -r checkpoint; do
+  ./.venv/bin/python scripts/eval_crd_s1c.py \
+    --checkpoint "${checkpoint}" \
+    --device cuda:0 \
+    --confirm-research-test \
+    || exit 1
+done
+```
+
+12 项全部无误后再运行冻结规则汇总器；缺任一项时它会拒绝输出：
+
+```bash
+./.venv/bin/python scripts/summarize_crd_s1c.py
+```
+
+运行前 Git 工作树必须干净。输出固定为 `runs/crd_v1/crd_s1c_research_confirmation/<variant>/seed_<seed>/`。入口会校验 lock 及关联产物、完整 2310 rows/8 samp IDs、split/method 和 eligible finite 值，并在读取 test 前排他写入 access receipt；已有任何正式产物或 receipt 时拒绝覆盖和重复评价。若中断后只留下 receipt，不要删除或自行重跑，先审计失败原因。汇总器会重算所有逐 sample summary、核对 12 份 manifest，再机械应用 eligibility/Pareto；不依据中间结果作决定。
 
 ## 固定呼吸带传统基线
 

@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from resp_train.config import load_config
+from resp_train.crd.config import load_crd_config
 from resp_train.data.factory import build_tho_data, build_window_data
 from resp_train.data.independence import audit_all_split_independence
 
@@ -46,6 +47,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="全量审计 THO train/val/test 的个体和片段独立性")
     parser.add_argument("--config", required=True, help="训练配置路径")
     parser.add_argument(
+        "--config-kind",
+        choices=("tho", "crd"),
+        default="tho",
+        help="配置契约；默认沿用 THO，CRD S1C 审计必须显式选择 crd",
+    )
+    parser.add_argument(
         "--set",
         dest="overrides",
         action="append",
@@ -55,7 +62,8 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, help="审计 CSV 输出目录")
     args = parser.parse_args()
 
-    cfg = load_config(args.config, overrides=args.overrides)
+    loader = load_crd_config if args.config_kind == "crd" else load_config
+    cfg = loader(args.config, overrides=args.overrides)
     split_rows = build_full_split_rows(cfg)
     report = audit_all_split_independence(split_rows)
 

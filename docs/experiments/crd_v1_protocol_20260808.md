@@ -2,14 +2,15 @@
 
 ## 1. 权威性、范围与科学边界
 
-本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35 节引用的规范性附件；发生冲突时以主协议为准。当前只激活：
+本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–39 节引用的规范性附件；发生冲突时以主协议为准。当前只激活：
 
 - CRD-S0：旧 B0/T4 在新训练协议下重训；
 - CRD-S1：decoder bridge、local Mamba、Direct frontend、可选 global Mamba 的顺序实验。
+- CRD-S1C：candidate lock 中 12 个 checkpoint 的现有 research-test 确认。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。AM、Morphology、gate、auxiliary、capacity/TCN control 和 S2 以后阶段不在本次实现或运行范围内，不能提前混入 S0/S1。
 
-本阶段由第一轮 research-test 启发，但不回头修改旧 checkpoint 或旧结论。数据、split、target、正式算子 `Pi=S(B(.))`、core loss、评价指标和 Local-RR checkpoint selector 全部沿用主协议。S0/S1 只读 train/validation；research-test 在新的锁定队列和协议修订前禁止读取。
+本阶段由第一轮 research-test 启发，但不回头修改旧 checkpoint 或旧结论。数据、split、target、正式算子 `Pi=S(B(.))`、core loss、评价指标和 Local-RR checkpoint selector 全部沿用主协议。S0/S1 训练只读 train/validation；除第 19 节已经锁定的 S1C 队列和专用入口外，CRD research-test 仍禁止读取。
 
 论文语言只允许称各分支为 mechanism-inspired representation；单通道 BCG 不支持“三个独立生理源已被识别”的可识别性主张。
 
@@ -557,3 +558,42 @@ IBI MedAE/coverage、Low/Medium/High envelope Spearman、IBI interpretable fract
 ### 18.3 独立确认阶段尚未激活
 
 未来若决定建立独立确认阶段，必须在读取任何确认数据前另行冻结：数据来源与 admission、是否沿用现有 split、sample/subject 统计单位、一次性评价命令、输出目录、缺失/非有限处理及结果表述边界。所有候选必须在相同样本、相同指标、相同顺序下评价一次，禁止根据中间结果停止、替换 checkpoint 或再训练。本节本身不授权读取 research-test，也不改变 CRD_105 作为当前 S1D 正式保留结果的状态。
+
+## 19. S1C 现有 research-test 确认阶段（2026-08-09）
+
+本节在第 18 节 candidate lock 提交 `05571bd` 后、读取任何 CRD test 结果前建立，取代第 18.3 节“尚未激活”的当前状态。S1C 协议标识固定为 `crd-v1.1-s1c-research-20260809`。确认数据选择为现有 research-test；该 split 已在旧 B0/T2/T4 等阶段被观察并允许影响后续研究，因此本阶段只能称为 **development/research confirmation evidence**，不能称为独立、全新或无偏 held-out 证据。
+
+### 19.1 数据与独立性边界
+
+S1C 沿用各冻结 resolved config 的 research v2 数据、admission、input/target、`test` split、test sampling seed 与全部 loss/metric 定义，不修改任何数据或指标口径。2026-08-09 在不读取波形值的索引级审计中，全量 admitted train/validation/research-test 分别为 `10141 / 2675 / 2310` 个窗口、`32 / 7 / 8` 个 `samp_id`；train–validation、train–test、validation–test 的 `samp_id` overlap 与 segment overlap 均为 0。复现命令固定为：
+
+```bash
+./.venv/bin/python scripts/audit_split_independence.py \
+  --config-kind crd \
+  --config configs/crd_v1/crd_105_direct_coarse.yaml \
+  --output-dir runs/crd_v1/crd_s1c_split_audit_20260809
+```
+
+该隔离只证明当前 split 的 subject/session 边界，不消除 research-test 已被历史观察造成的研究选择偏倚。
+
+### 19.2 冻结评价集合与顺序
+
+评价集合恰为 `docs/experiments/crd_v1_candidate_lock_20260809.json` 中按文件顺序排列的 12 个 Local-RR-selected checkpoints：CRD_102、104、105、001 各三个固定 seed。Lock 的 SHA-256 固定为 `9a14db8be8af22e1ce1c5a332b4912ab5c13c7fb03cdf1894fc5c6ed6ff7f8cc`；001 仍只作 reference，105 仍是资格锚点。任何 checkpoint/config/run manifest/validation summary 缺失、大小或 hash 不一致均停止，不允许替换 timestamp、seed、epoch、final checkpoint 或重训结果。
+
+所有 12 项必须使用同一完整 2310-window、8-`samp_id` test 集合并按 lock 顺序评价；不得根据中间结果提前停止或改变顺序。运行时 Git 工作树必须干净，commit 与依赖版本写入 receipt/manifest。普通 `scripts/eval_crd.py` 继续保持 validation-only；research-test 只可由 `scripts/eval_crd_s1c.py` 访问，且必须显式传入 `--confirm-research-test`。公共入口不提供 split、config、抽样上限或输出目录覆盖。
+
+### 19.3 指标、失败与产物契约
+
+每个 checkpoint 一次性生成逐 sample 五项 primary、IBI-MedAE/coverage、三层 envelope Spearman、interpretable/lag diagnostics，以及 research-test-only coherence/nDTW；seed 内仍为逐 sample direct mean，跨 seed 才做 arithmetic mean。Prediction/target 非有限、任何数值列出现 Inf、eligible primary/test-only 值缺失或非有限、行数/`samp_id` 数量/split/method 不符均立即失败；协议既有 target-ineligible NaN 继续按 eligibility 口径保留，不能删行或填补。
+
+固定输出目录为：
+
+```text
+runs/crd_v1/crd_s1c_research_confirmation/<variant>/seed_<seed>/
+```
+
+每项保存 `research_confirmation_access_receipt.json`、逐 sample metrics、summary 和 execution manifest。Access receipt 在首次读取该 checkpoint 的 test 数据前排他创建；任一正式文件或 receipt 已存在时拒绝覆盖和重复评价。若进程在 receipt 后中断，保留 receipt 并暂停，先审计失败原因和已暴露结果，再由显式协议修订决定是否技术性重跑，不得自行删除 receipt。
+
+### 19.4 冻结决策规则
+
+只有在 12 项全部完成、产物完整且无异常后，才由预先实现的 `scripts/summarize_crd_s1c.py` 重算全部逐 sample summary、核对 receipt/manifest，并应用第 18.1–18.2 节已经冻结的“相对 CRD_105 四项资格门槛 + 五项 primary Pareto”规则；缺任一项或已有汇总产物时拒绝执行。不得用部分结果作选择，也不得让 coherence、nDTW、IBI 或其他 secondary 覆盖资格门槛与 Pareto 结果；多个非支配候选时保留 Pareto set。Research-test 结果不得用于重选同一 run 的 epoch/checkpoint、删 seed、修改本阶段模型/超参数或追加模型；若结果形成新假设，必须建立明确标记 `research-test informed` 的后续阶段。
