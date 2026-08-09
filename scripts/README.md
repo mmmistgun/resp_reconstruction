@@ -407,6 +407,7 @@ docs/experiments/crd_v1_candidate_lock_20260809.json
 ```bash
 ./.venv/bin/python scripts/verify_crd_candidate_lock.py
 
+set -o pipefail
 ./.venv/bin/python scripts/verify_crd_candidate_lock.py --print-checkpoints | \
 while IFS= read -r checkpoint; do
   ./.venv/bin/python scripts/eval_crd_s1c.py \
