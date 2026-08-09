@@ -10,8 +10,8 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- 当前新增 CRD-v1.1 的 S0/S1；S1D 正式保留 CRD_105，post-result S1E 的 CRD_102/104 已完成。CRD_102/104/105 九个候选 checkpoint 与 CRD_001 三个 reference 已由 SHA-256 lock 冻结，新选择规则为相对 105 的资格门槛后做五项 primary Pareto。S1C 已激活现有 research-test，只允许上述 12 个 checkpoint 通过专用入口各评价一次；证据属于 development/research confirmation，不是无偏 held-out。规范附件由主协议第 35–39 节纳入。S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
-- CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。除 S1C 锁定队列和专用 `eval_crd_s1c.py` 外，不得新增或调用 CRD test 入口。
+- 当前新增 CRD-v1.1 的 S0/S1；S1D 历史上保留 CRD_105，post-result S1E 的 CRD_102/104 已完成。S1C 已对 SHA-256 lock 中 12 个 checkpoint 完成一次现有 research-test 确认：CRD_102 通过全部资格门槛并在五项 primary 上支配 105，成为唯一非支配候选和后续阶段当前结构锚点；104 未通过 Local-RR 与 trajectory 门槛。该证据属于 development/research confirmation，不是无偏 held-out。规范附件由主协议第 35–39 节纳入。S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
+- CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
 
@@ -21,8 +21,7 @@
 - Research-test：复评命令额外传入 `--split test --confirm-research-test`。该 split 可在阶段性模型整理后重复观察，也可形成后续独立研究问题，但不得用于重选已训练 run 的 epoch/checkpoint；所有结果均属于 development/research evidence，不表述为无偏 held-out 证据。
 - CRD 配置：`configs/crd_v1/` 下六个原 S0/S1 配置与一个 `crd_105_direct_coarse` 诊断配置；训练入口 `./.venv/bin/python scripts/train_crd.py --config configs/crd_v1/<variant>.yaml --set training.device=cuda:0`。
 - CRD validation 复评：`./.venv/bin/python scripts/eval_crd.py --checkpoint runs/<run>/checkpoint_best_local_rr.pt`；该入口故意不提供 test split。
-- CRD S1C research-test：`./.venv/bin/python scripts/eval_crd_s1c.py --checkpoint <locked-checkpoint> --device cuda:0 --confirm-research-test`；输出固定隔离且禁止覆盖。
-- CRD S1C 冻结汇总：12 项完整后运行 `./.venv/bin/python scripts/summarize_crd_s1c.py`；该入口会重算 summary 并机械应用 eligibility/Pareto。
+- CRD S1C research-test 与冻结汇总均已完成；入口和命令只作 provenance，不再重复运行。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。

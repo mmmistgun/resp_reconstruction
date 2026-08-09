@@ -4,7 +4,7 @@
 
 最后更新：2026-08-09
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1E、candidate lock 与选择规则均已冻结，当前激活 S1C 现有 research-test 确认队列，尚未读取 CRD test 结果
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C 现有 research-test 确认已完成，冻结规则选出 CRD_102 为唯一非支配候选；后续阶段尚未激活
 
 ## 1. 定位
 
@@ -1951,3 +1951,9 @@ S1E 结束后，CRD_102/104/105 各三个 Local-RR-selected checkpoints 已作�
 S1C 只评价 candidate lock `9a14db8be8af22e1ce1c5a332b4912ab5c13c7fb03cdf1894fc5c6ed6ff7f8cc` 中的 CRD_102/104/105 九个候选 checkpoint 与 CRD_001 三个 reference checkpoint，按 lock 顺序、使用完整 2310-window/8-subject research-test 各评价一次。索引级 split 审计确认 train/validation/test 为 `10141/2675/2310` windows、`32/7/8` 个 `samp_id`，三个 split pair 的 subject 与 segment overlap 均为 0。专用入口为 `scripts/eval_crd_s1c.py --confirm-research-test`；普通 `eval_crd.py` 仍不开放 test，固定隔离输出不得覆盖。
 
 必须等 12 项全部完成并审计后，才由预先实现的 `scripts/summarize_crd_s1c.py` 执行第 38 节冻结的资格门槛与五项 primary Pareto；不得依据部分 test 结果停止、替换 checkpoint、重训、删 seed、事后加权或让 secondary 指标推翻 primary 规则。完整数据、指标、失败、access receipt 与产物契约见附件第 19 节。
+
+S1C 随后在干净 commit `3b280013d898287613709c4dd5648f8b94e14c9d` 下完成。12 个 manifest 与 12 份逐 sample metrics 全部齐备，每份恰含 2310 行，总计 27720 行；protocol、candidate-lock hash、checkpoint 身份与 split 均一致，所有 manifest 均为 `git_dirty=false`，数值列无 Inf。冻结汇总产物位于 `runs/crd_v1/crd_s1c_research_confirmation/`。
+
+相对 CRD_105，CRD_102 的 test Local RR 改善 `6.8065%`、三个配对 seed 全部改善，signed PCC 增加 `0.012860`，trajectory 不仅未恶化反而改善 `1.1863%`，故四项资格门槛全部通过；其 Whole RR 与 global-envelope error 还分别改善 `6.0737% / 11.0571%`，因此在五项 primary 上严格 Pareto-dominate CRD_105。CRD_104 的 Local RR 仅改善 `0.2940%`，trajectory 恶化 `6.3707%`，同时未过 `0.5% / 1.5%` 两个门槛，不能进入 Pareto。冻结结果为 `eligible={102,105}`、唯一 Pareto 候选 `CRD_102`。
+
+该结果不回写 S1D 当时“保留 105”的历史结论，但在新 S1C 协议下将 CRD_102 更新为后续阶段的当前结构锚点。它也不表示 CRD_102 在所有模型和指标上全面最优：只读 reference CRD_001 的 Whole RR、IBI-MedAE 与 coherence 仍更好；102 相对 001 的五项 primary 中 Whole RR 恶化 `1.8155%`，其余 Local RR、trajectory、global-envelope、PCC 分别改善 `0.4404% / 2.1736% / 2.1565% / +0.020974`。这些都是已被历史观察的 research-test 上的 development/research evidence，不能表述为无偏泛化结论。S1C 队列至此关闭，不重复读取；S2、AM/Morphology/gate/auxiliary/control 仍未激活。

@@ -402,7 +402,7 @@ docs/experiments/crd_v1_candidate_lock_20260809.json
 
 ### CRD S1C research-test 确认
 
-现有 research-test 已为上述 12 个 frozen checkpoints 激活。它曾在旧模型阶段被观察，因此结果属于 development/research confirmation evidence，不是无偏 held-out。先完成 split 审计并验证 lock；随后严格按 lock 顺序运行：
+现有 research-test 已为上述 12 个 frozen checkpoints 完成一次评价。它曾在旧模型阶段被观察，因此结果属于 development/research confirmation evidence，不是无偏 held-out。以下冻结命令仅保留作 provenance，12 份 access receipt 已齐备，**不得再次运行**：
 
 ```bash
 ./.venv/bin/python scripts/verify_crd_candidate_lock.py
@@ -418,13 +418,13 @@ while IFS= read -r checkpoint; do
 done
 ```
 
-12 项全部无误后再运行冻结规则汇总器；缺任一项时它会拒绝输出：
+冻结规则汇总器也已运行，以下命令只作 provenance：
 
 ```bash
 ./.venv/bin/python scripts/summarize_crd_s1c.py
 ```
 
-运行前 Git 工作树必须干净。输出固定为 `runs/crd_v1/crd_s1c_research_confirmation/<variant>/seed_<seed>/`。入口会校验 lock 及关联产物、完整 2310 rows/8 samp IDs、split/method 和 eligible finite 值，并在读取 test 前排他写入 access receipt；已有任何正式产物或 receipt 时拒绝覆盖和重复评价。若中断后只留下 receipt，不要删除或自行重跑，先审计失败原因。汇总器会重算所有逐 sample summary、核对 12 份 manifest，再机械应用 eligibility/Pareto；不依据中间结果作决定。
+运行使用干净 commit `3b28001`。12 份 metrics 各 2310 行，总计 27720 行，manifest/lock/split/finite 检查全部通过。冻结结果为：102 通过全部 eligibility，104 未通过 Local-RR 与 trajectory 门槛；eligible set 为 `{102,105}`，102 在五项 primary 上严格支配 105，因而是唯一 non-dominated candidate。输出固定在 `runs/crd_v1/crd_s1c_research_confirmation/`。CRD_001 reference 的 Whole RR、IBI-MedAE 与 coherence 仍优于 102，不能把选择结果写成所有轴全面占优。S1C 队列现已关闭；下一阶段仍需另立 research-test-informed 协议。
 
 ## 固定呼吸带传统基线
 

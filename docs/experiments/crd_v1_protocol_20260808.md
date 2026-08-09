@@ -597,3 +597,34 @@ runs/crd_v1/crd_s1c_research_confirmation/<variant>/seed_<seed>/
 ### 19.4 冻结决策规则
 
 只有在 12 项全部完成、产物完整且无异常后，才由预先实现的 `scripts/summarize_crd_s1c.py` 重算全部逐 sample summary、核对 receipt/manifest，并应用第 18.1–18.2 节已经冻结的“相对 CRD_105 四项资格门槛 + 五项 primary Pareto”规则；缺任一项或已有汇总产物时拒绝执行。不得用部分结果作选择，也不得让 coherence、nDTW、IBI 或其他 secondary 覆盖资格门槛与 Pareto 结果；多个非支配候选时保留 Pareto set。Research-test 结果不得用于重选同一 run 的 epoch/checkpoint、删 seed、修改本阶段模型/超参数或追加模型；若结果形成新假设，必须建立明确标记 `research-test informed` 的后续阶段。
+
+### 19.5 完整结果与冻结选择
+
+S1C 于 2026-08-09 在 commit `3b280013d898287613709c4dd5648f8b94e14c9d`、`git_dirty=false` 下完成。12 个 checkpoint 均有 access receipt、逐 sample metrics、summary 和 manifest；每份 metrics 为 2310 行，总计 27720 行。冻结汇总器重新计算全部 summary 后通过一致性检查；12 份 manifest 的 protocol、candidate-lock SHA-256、checkpoint 身份、split 和代码 commit 一致，数值列无 Inf。
+
+五项 primary 的三 seed arithmetic mean ± sample SD 为：
+
+| 模型 | Whole RR ↓ | Local RR ↓ | Trajectory ↓ | Global envelope ↓ | Signed PCC ↑ |
+|---|---:|---:|---:|---:|---:|
+| CRD_102 | 0.703666 ± 0.021614 | 0.651590 ± 0.014033 | 0.141174 ± 0.001419 | 0.171800 ± 0.006681 | 0.878253 ± 0.001661 |
+| CRD_104 | 0.723770 ± 0.021364 | 0.697125 ± 0.014385 | 0.151971 ± 0.005300 | 0.175258 ± 0.008463 | 0.865519 ± 0.005781 |
+| CRD_105 | 0.749168 ± 0.023183 | 0.699180 ± 0.013363 | 0.142869 ± 0.000391 | 0.193158 ± 0.005621 | 0.865394 ± 0.002593 |
+| CRD_001 reference | 0.691119 ± 0.003755 | 0.654473 ± 0.002706 | 0.144311 ± 0.000693 | 0.175587 ± 0.002389 | 0.857280 ± 0.000250 |
+
+主要 secondary 的三 seed mean ± sample SD 如下；Low/Medium/High Spearman 一列为避免过宽，仅依次列出三层 seed mean，逐 seed 数值保留在 `s1c_seed_summary.csv`：
+
+| 模型 | IBI MedAE ↓ | IBI coverage ↑ | Low/Medium/High Spearman ↑ | IBI interpretable ↑ | Coherence ↑ | nDTW ↓ |
+|---|---:|---:|---:|---:|---:|---:|
+| CRD_102 | 0.098255 ± 0.002480 | 0.803502 ± 0.006224 | 0.428866 / 0.527289 / 0.735967 | 0.636508 ± 0.014803 | 0.552947 ± 0.011565 | 0.203844 ± 0.003749 |
+| CRD_104 | 0.100048 ± 0.001611 | 0.785600 ± 0.010875 | 0.419412 / 0.493308 / 0.678855 | 0.593651 ± 0.011699 | 0.548638 ± 0.003149 | 0.217054 ± 0.007018 |
+| CRD_105 | 0.113665 ± 0.001112 | 0.762800 ± 0.016781 | 0.437779 / 0.497358 / 0.712633 | 0.562626 ± 0.017231 | 0.542735 ± 0.011560 | 0.218460 ± 0.001143 |
+| CRD_001 reference | 0.094312 ± 0.000729 | 0.794697 ± 0.002100 | 0.400021 / 0.500339 / 0.725040 | 0.609812 ± 0.004379 | 0.589185 ± 0.002878 | 0.240900 ± 0.000896 |
+
+冻结规则得到：
+
+1. `CRD_102 vs CRD_105`：Local RR 相对改善 `6.8065%` 且 3/3 paired seed 改善；signed PCC 增加 `0.012860`；trajectory 改善 `1.1863%`。四项 eligibility 全部通过。Whole RR 与 global-envelope 另改善 `6.0737% / 11.0571%`，因此 102 在五项 primary 上严格支配 105。
+2. `CRD_104 vs CRD_105`：Local RR 仅改善 `0.2940%`，虽有 2/3 paired seed 改善且 PCC 增加 `0.000126`，但未达到 `0.5%`；trajectory 恶化 `6.3707%`，超过 `1.5%`。104 不具资格，secondary 不得推翻。
+3. Eligible set 为 `{CRD_102, CRD_105}`；唯一 non-dominated candidate 为 `CRD_102`。它成为后续 research-test-informed 阶段的当前结构锚点，S1D 保留 105 的旧结论不追溯改写。
+4. CRD_001 只作 reference 且不进入选择。102 相对 001 的 Whole RR 恶化 `1.8155%`，Local RR/trajectory/global-envelope 改善 `0.4404% / 2.1736% / 2.1565%`，PCC 增加 `0.020974`；001 的 IBI-MedAE 与 coherence 也更好。因此“102 被选中”不等价于所有任务轴全面优于纯时域 reference。
+
+完整机器结果为 `s1c_seed_summary.csv`、`s1c_variant_summary.csv`、`s1c_selection.json` 与 `s1c_selection_manifest.json`。本结果属于现有 research-test 上的 development/research confirmation evidence，不是无偏 held-out 结论；S1C 访问队列现已关闭，不得重复运行或用 test 结果重选 checkpoint。后续若以 CRD_102 继续设计 S2 或其他模块，必须另建明确标记 `research-test informed` 的协议。
