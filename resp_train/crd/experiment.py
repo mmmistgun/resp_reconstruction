@@ -55,6 +55,8 @@ class CRDExperiment:
 
         data = build_tho_data(self.cfg)
         data.audit_summary.to_csv(run_dir / "audit.csv", index=False)
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
         model = build_crd_model(self.cfg).to(device)
         loss_fn = RespirationTaskLoss(self.cfg).to(device)
         optimizer, partition = build_crd_optimizer(model, self.cfg)
@@ -217,6 +219,10 @@ class CRDExperiment:
         metrics = self._evaluate_model(model, data.val.loader)
         metrics.to_csv(run_dir / "metrics.csv", index=False)
         summarize_task_metrics(metrics).to_csv(run_dir / "metrics_summary.csv", index=False)
+        (run_dir / "runtime_summary.json").write_text(
+            json.dumps(_runtime_summary(device), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         return run_dir
 
     def _evaluate_model(
@@ -367,3 +373,28 @@ def _resolve_show_progress(cfg: DictConfig) -> bool | None:
             return False
         raise ValueError(f"training.show_progress 只能是 true/false/auto，当前为: {value}")
     return bool(value)
+
+
+def _runtime_summary(device: torch.device) -> dict[str, float | str | None]:
+    summary: dict[str, float | str | None] = {
+        "device": str(device),
+        "peak_allocated_mib": None,
+        "peak_reserved_mib": None,
+        "total_device_memory_mib": None,
+        "peak_reserved_fraction": None,
+    }
+    if device.type != "cuda":
+        return summary
+    torch.cuda.synchronize(device)
+    total_memory = float(torch.cuda.get_device_properties(device).total_memory) / float(1024**2)
+    peak_allocated = float(torch.cuda.max_memory_allocated(device)) / float(1024**2)
+    peak_reserved = float(torch.cuda.max_memory_reserved(device)) / float(1024**2)
+    summary.update(
+        {
+            "peak_allocated_mib": peak_allocated,
+            "peak_reserved_mib": peak_reserved,
+            "total_device_memory_mib": total_memory,
+            "peak_reserved_fraction": peak_reserved / total_memory,
+        }
+    )
+    return summary

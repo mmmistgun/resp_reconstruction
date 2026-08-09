@@ -120,8 +120,12 @@ def test_crd_experiment_writes_complete_nonresumable_lifecycle(
         "optimizer_parameter_groups.json",
         "metrics.csv",
         "metrics_summary.csv",
+        "runtime_summary.json",
     ):
         assert (run_dir / filename).exists()
+    runtime = pd.read_json(run_dir / "runtime_summary.json", typ="series")
+    assert runtime["device"] == "cpu"
+    assert pd.isna(runtime["peak_allocated_mib"])
 
 
 class _RegularizedScaledIdentity(_ScaledIdentity):

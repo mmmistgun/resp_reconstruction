@@ -511,7 +511,7 @@ for variant in \
 done
 ```
 
-每个 synthetic 必须报告 finite output/gradient；每个 acceptance 必须完成一次 optimizer update、validation 和完整 checkpoint lifecycle。尤其检查 204 的峰值显存。三项结果返回并审计、代码 commit 固定前，不启动 formal seeds。Energy 和 morphology 使用不同的 primary/guardrail，S2B 只在两类都 eligible 时条件开放；S2 全程禁止 research-test。
+每个 synthetic 必须报告 finite output/gradient；每个 acceptance 必须完成一次 optimizer update、validation 和完整 checkpoint lifecycle。每个 run 的 `runtime_summary.json` 会固化 peak allocated/reserved 及 reserved/总显存比例，尤其检查 204。三项结果返回并审计、代码 commit 固定前，不启动 formal seeds。Energy 和 morphology 使用不同的 primary/guardrail，S2B 只在两类都 eligible 时条件开放；S2 全程禁止 research-test。
 
 ## 固定呼吸带传统基线
 
@@ -644,6 +644,6 @@ F0 与 IEWT 不训练、无 seed：
 - `*_metrics_manifest.json`：checkpoint 复评的命令、split、配置与代码版本。
 - `train.log`：训练日志。
 
-CRD run 额外保存 `optimizer_parameter_groups.json`；其 `train_history.csv` 还记录 optimizer update、每 epoch 首末 LR。CRD checkpoint 的 `extra_state` 保存协议版本、update index/total updates、依赖版本与 `resume_supported=false`。
+CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json`；后者记录训练到最终 validation 复评期间的 CUDA peak allocated/reserved 和显存占比。`train_history.csv` 还记录 optimizer update、每 epoch 首末 LR。CRD checkpoint 的 `extra_state` 保存协议版本、update index/total updates、依赖版本与 `resume_supported=false`。
 
 不再生成或解释旧 `checkpoint.pt`、`checkpoint_best_rr.pt`、`checkpoint_best_task.pt`、`checkpoint_topN.pt`、`epoch_metrics.csv`、旧 target-feature cache 或旧指标 summary。
