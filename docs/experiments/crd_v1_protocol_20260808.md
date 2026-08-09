@@ -670,6 +670,8 @@ S1 已有的 frontend × global-stage 结构格为：
 
 工程门槛只解除三个 formal seeds 的运行阻塞，不形成效果证据。Formal 输出固定隔离到 `runs/crd_v1/crd_106_b0_hier_mamba/seed_<seed>/`；任何中断 run 不凭已有 best checkpoint 纳入比较。
 
+上述工程门槛已在干净 commit `8fa56f8ef7d8f4e40a644d9feb22e7cc80857e6b` 下通过。CUDA synthetic 的 model/core-loss/backward 全 finite，peak allocated `347.766 MiB`；独立 acceptance 位于 `/tmp/crd_106_b0_hier_mamba_batch128_acceptance/20260809_142221_810744`，严格使用 128/32 个 train/validation windows、1 epoch、1 optimizer update。两个 checkpoint 的 241 个 model-state tensors 全 finite，32 条 validation metrics 无 Inf、无 prediction degeneracy，manifest 记录固定依赖与 `git_dirty=false`。单 epoch loss/metrics 只用于完整生命周期验收，不进入效果比较；现解除 CRD_106 三 formal seeds 的工程阻塞。
+
 ### 20.4 冻结保留规则
 
 只比较 CRD_106 与冻结的 CRD_102 三个 validation-selected Local-RR checkpoints，按同 seed 配对。CRD_106 必须同时满足：

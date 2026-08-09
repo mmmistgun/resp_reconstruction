@@ -448,7 +448,7 @@ S1F 只补齐 `CRD_102 + CRD_104 同构 global/FiLM` 这一格，不开放其他
   --set outputs.run_root=/tmp/crd_106_b0_hier_mamba_batch128_acceptance
 ```
 
-两项均通过并完成产物审计后，才允许三个 formal seeds：
+两项已在干净 commit `8fa56f8` 下通过并完成产物审计；acceptance 路径为 `/tmp/crd_106_b0_hier_mamba_batch128_acceptance/20260809_142221_810744`。现允许三个 formal seeds：
 
 ```bash
 for seed in 20260811 20260812 20260813; do

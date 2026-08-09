@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- 当前新增 CRD-v1.1 的 S0/S1；S1D 历史上保留 CRD_105，post-result S1E 的 CRD_102/104 已完成。S1C 已对 SHA-256 lock 中 12 个 checkpoint 完成一次现有 research-test 确认：CRD_102 通过全部资格门槛并在五项 primary 上支配 105，成为唯一非支配候选。当前仅激活 research-test-informed S1F 的单一缺失格 `CRD_106=102+104同构global/FiLM`，只用 validation 决定未来 S2 BASE；规范附件由主协议第 35–40 节纳入。S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
+- 当前新增 CRD-v1.1 的 S0/S1；S1D 历史上保留 CRD_105，post-result S1E 的 CRD_102/104 已完成。S1C 已对 SHA-256 lock 中 12 个 checkpoint 完成一次现有 research-test 确认：CRD_102 通过全部资格门槛并在五项 primary 上支配 105，成为唯一非支配候选。当前仅激活 research-test-informed S1F 的单一缺失格 `CRD_106=102+104同构global/FiLM`；其 synthetic/physical-batch-128 acceptance 已通过，现开放三个 formal seeds，只用 validation 决定未来 S2 BASE。规范附件由主协议第 35–40 节纳入。S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口

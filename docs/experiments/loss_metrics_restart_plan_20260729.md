@@ -1963,3 +1963,5 @@ S1C 随后在干净 commit `3b280013d898287613709c4dd5648f8b94e14c9d` 下完成�
 S1C 选中的 CRD_102 使用 B0/PatchMixer frontend + local Mamba，而现有 global-stage 单因素比较 `104 vs 103` 只覆盖 Direct frontend。由于本阶段已出现明显的 frontend/Mamba 非单调交互，在进入机制启发表征 S2 前，仅允许新增一个 research-test-informed development variant：`CRD_106_B0_HIER_MAMBA = CRD_102 + CRD_104 的同构 1-Hz global Mamba/FiLM`，补齐 frontend × global-stage 的缺失格。
 
 S1F 不读取 research-test，不修改数据、loss、metrics、selector、训练预算或 seed；正式比较只用 validation。106 相对 102 必须同时达到 Local RR mean 改善 `≥0.5%`、`≥2/3` paired seeds 改善、PCC 下降 `≤0.005`、trajectory 恶化 `≤1.5%`。通过则未来 `S2 BASE=106`，否则 `S2 BASE=102`；无论结果如何均不再增加 S1F variant。完整结构、初始化、参数契约、工程门槛和输出边界见附件第 20 节。S2、AM/Morphology/gate/auxiliary/control 继续关闭。
+
+CRD_106 的 CUDA synthetic 与独立 physical-batch-128 acceptance 随后在干净 commit `8fa56f8` 下通过。Acceptance 严格完成 128/32 个 train/validation windows、1 optimizer update、两个 finite checkpoint 与 32 条 finite validation metrics，无 prediction degeneracy；该单 epoch 数值只作工程证据。现解除 106 三 formal seeds 的运行阻塞，仍不得读取 research-test。
