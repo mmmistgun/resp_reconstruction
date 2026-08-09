@@ -5,6 +5,7 @@ import math
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 from resp_train.crd.blocks import ResidualDWBlock
 from resp_train.crd.initialization import module_seed
@@ -246,6 +247,11 @@ class MorphologyRepresentation(nn.Module):
             denominator = self.prototype_count * (self.prototype_count - 1)
             return off_diagonal.square().sum() / float(denominator)
 
+    def _encode_chunk(self, chunk: torch.Tensor) -> torch.Tensor:
+        embedding = self.encoder(chunk)
+        scores = self._prototype_scores(embedding)
+        return self.fusion_norm(self.fusion(torch.cat((embedding, scores), dim=-1)))
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         windows = self.normalized_windows(x)
         batch_size = int(windows.shape[0])
@@ -254,10 +260,18 @@ class MorphologyRepresentation(nn.Module):
             stop = min(start + self.token_chunk_size, 1800)
             chunk = windows[:, :, start:stop, :]
             chunk = chunk.permute(0, 2, 1, 3).reshape(batch_size * (stop - start), 1, 151)
-            embedding = self.encoder(chunk).reshape(batch_size, stop - start, 96)
-            scores = self._prototype_scores(embedding)
-            fused = self.fusion_norm(self.fusion(torch.cat((embedding, scores), dim=-1)))
-            token_embeddings.append(fused)
+            if self.training and torch.is_grad_enabled():
+                # 非重入 checkpoint 支持输入不需要梯度而参数需要梯度；该分支没有 dropout，
+                # 因而无需保存 RNG state。它只重算中间激活，不改变 representation 数学定义。
+                fused = checkpoint(
+                    self._encode_chunk,
+                    chunk,
+                    use_reentrant=False,
+                    preserve_rng_state=False,
+                )
+            else:
+                fused = self._encode_chunk(chunk)
+            token_embeddings.append(fused.reshape(batch_size, stop - start, 96))
         latent = torch.cat(token_embeddings, dim=1).transpose(1, 2)
         if latent.shape[1:] != (96, 1800):
             raise RuntimeError(f"Morphology M latent 契约错误: {tuple(latent.shape)}")

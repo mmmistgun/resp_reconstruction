@@ -513,6 +513,27 @@ done
 
 每个 synthetic 必须报告 finite output/gradient；每个 acceptance 必须完成一次 optimizer update、validation 和完整 checkpoint lifecycle。每个 run 的 `runtime_summary.json` 会固化 peak allocated/reserved 及 reserved/总显存比例，尤其检查 204。三项结果返回并审计、代码 commit 固定前，不启动 formal seeds。Energy 和 morphology 使用不同的 primary/guardrail，S2B 只在两类都 eligible 时条件开放；S2 全程禁止 research-test。
 
+首轮结果中，202/203 已通过，peak reserved fraction 为 `62.18%/74.25%`；204 synthetic 通过但 batch-128 训练 OOM。204 现已加入不改变数学定义的 per-chunk activation checkpoint，保持 physical batch 128。只重跑 204：
+
+```bash
+./.venv/bin/python scripts/check_crd_variant.py \
+  --config configs/crd_v1/crd_204_base_morphology.yaml \
+  --device cuda:0 \
+  --batch-size 1
+
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_v1/crd_204_base_morphology.yaml \
+  --set protocol.run_role=acceptance \
+  --set data.max_train_windows=128 \
+  --set data.max_val_windows=32 \
+  --set training.epochs=1 \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --set outputs.run_root=/tmp/crd_204_base_morphology_checkpointed_batch128_acceptance
+```
+
+验收要求仍是完整 lifecycle、所有 output/gradient/checkpoint/metrics finite 且 `runtime_summary.json` 的 `peak_reserved_fraction≤0.80`。若仍失败，停止，不临时减小 batch 或 chunk。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

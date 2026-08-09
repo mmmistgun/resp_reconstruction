@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+import resp_train.crd.representations as representation_module
 from resp_train.crd.representations import (
     AnalyticAMRepresentation,
     LegacyEnergyRepresentation,
@@ -48,7 +49,7 @@ def test_analytic_am_has_frozen_bounded_initialization_and_float32_spectral_path
     assert torch.count_nonzero(output) == 0
 
 
-def test_morphology_window_normalization_chunking_and_prototypes_are_frozen() -> None:
+def test_morphology_window_normalization_chunking_and_prototypes_are_frozen(monkeypatch) -> None:
     branch = MorphologyRepresentation(20260811).eval()
     signal = torch.randn(1, 1, 18000)
     windows = branch.normalized_windows(signal)
@@ -61,10 +62,28 @@ def test_morphology_window_normalization_chunking_and_prototypes_are_frozen() ->
     assert branch.prototype_temperature == pytest.approx(0.10)
     assert branch.prototype_loss().item() < 1e-12
 
+    zero_output = branch(signal)
+    assert zero_output.shape == (1, 96, 1800)
+    assert torch.count_nonzero(zero_output) == 0
+
+    # 用非零 projection 验证 checkpoint 训练路径与普通前向数学等价，且输入本身无需梯度。
+    with torch.no_grad():
+        branch.projection.weight.normal_(mean=0.0, std=0.01)
+    reference = branch(signal).detach()
+    checkpoint_calls = 0
+    real_checkpoint = representation_module.checkpoint
+
+    def counted_checkpoint(function, *args, **kwargs):
+        nonlocal checkpoint_calls
+        checkpoint_calls += 1
+        return real_checkpoint(function, *args, **kwargs)
+
+    monkeypatch.setattr(representation_module, "checkpoint", counted_checkpoint)
+    branch.train()
     output = branch(signal)
-    assert output.shape == (1, 96, 1800)
-    assert torch.count_nonzero(output) == 0
-    objective = output.sum() + 1e-3 * branch.prototype_loss()
+    assert checkpoint_calls == 15
+    assert torch.allclose(output, reference, atol=1e-6, rtol=1e-5)
+    objective = output.square().mean() + 1e-3 * branch.prototype_loss()
     objective.backward()
     gradients = [parameter.grad for parameter in branch.parameters() if parameter.requires_grad]
     assert gradients

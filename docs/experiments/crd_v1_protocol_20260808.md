@@ -777,7 +777,7 @@ Analytic 计算严格沿用 Direct filterbank 的正频率定义：正频率为 
 
 #### Amplitude-normalized morphology `M`
 
-Morphology 输入使用固定整窗 zero-phase FFT bandpass `0.70<f≤8.0 Hz`。Reflect padding 左右各 75；`window=151`、`hop=10`，得到 1800 个 token。每个窗口先减 mean，再除以 `sqrt(mean(x^2)+1e-6)`，有意删除局部绝对幅度。为避免 physical batch 128 下物化全部中间特征，token 轴固定按 128 个窗口分块编码；分块不改变 token 顺序或数学定义。
+Morphology 输入使用固定整窗 zero-phase FFT bandpass `0.70<f≤8.0 Hz`。Reflect padding 左右各 75；`window=151`、`hop=10`，得到 1800 个 token。每个窗口先减 mean，再除以 `sqrt(mean(x^2)+1e-6)`，有意删除局部绝对幅度。为避免 physical batch 128 下物化全部中间特征，token 轴固定按 128 个窗口分块编码；分块不改变 token 顺序或数学定义。训练态对每个 chunk 使用 `use_reentrant=false / preserve_rng_state=false` 的 activation checkpoint，validation/evaluation 直接前向；Morphology encoder 内没有 dropout 或 batch-dependent normalization，因此该工程策略只在 backward 重算相同前向，不改变模型、loss、token 顺序或 optimizer update 口径。
 
 ```text
 Conv1d 1→32 k9 valid, GroupNorm(4,32), SiLU
@@ -806,6 +806,8 @@ S2A 只实现并在分别通过 synthetic/physical-batch-128 acceptance 后运�
 全部使用 80 epochs、physical batch 128、三个固定 seed、完整 train/validation、Local-RR checkpoint selector；不得读取 test。三个 variant 必须分别做工程 acceptance，尤其 204 必须验证 token chunking 的 output/gradient finite、峰值显存和完整 checkpoint lifecycle。任何一个分支的工程失败只阻塞该分支，不允许静默简化结构或缩小 formal batch。
 
 实现登记：三个配置分别为 `crd_202_base_legacy_energy.yaml / crd_203_base_analytic_am.yaml / crd_204_base_morphology.yaml`，trainable parameter 数固定为 `1,071,449 / 1,197,785 / 1,106,857`。实现定向协议测试与全量 CPU 回归已通过；102 shared trunk 逐 tensor 相同、三个 projection 全零、频谱 float32、morphology 128-token chunking、prototype no-decay 与 `5S→15S` ramp 均有测试覆盖。CUDA synthetic 与三个独立 physical-batch-128 acceptance 尚待执行，因此 formal 队列仍未开放。
+
+首轮 CUDA 工程结果随后显示：202/203 的 synthetic 与 physical-batch-128 acceptance 均通过，peak reserved 分别为 `9,910/11,832 MiB`，占 15,936 MiB 设备的 `62.18%/74.25%`；204 synthetic 通过，但 batch-128 训练在 morphology encoder 处 OOM，失败时 PyTorch 已分配约 `15.12 GiB`、仅 `55 MiB` 空闲，不能归因于明显的其他进程占用。由于 forward chunking 仍会为 backward 保留所有 chunk 的内部激活，正式实验前注册上述 per-chunk activation checkpoint 工程修订；它不减少 physical/effective batch，不改变科学比较因素。当前只允许重跑 204 synthetic 与独立 acceptance，204 通过且 peak reserved fraction `≤80%` 前 formal 队列继续关闭。
 
 ### 21.4 Energy representation 决策
 
