@@ -532,7 +532,28 @@ done
   --set outputs.run_root=/tmp/crd_204_base_morphology_checkpointed_batch128_acceptance
 ```
 
-验收要求仍是完整 lifecycle、所有 output/gradient/checkpoint/metrics finite 且 `runtime_summary.json` 的 `peak_reserved_fraction≤0.80`。若仍失败，停止，不临时减小 batch 或 chunk。
+验收要求仍是完整 lifecycle、output/gradient/checkpoint finite、所有 eligible primary metrics finite，且 `runtime_summary.json` 的 `peak_reserved_fraction≤0.80`；按 eligibility flag 显式未定义的指标不伪造有限值。若仍失败，停止，不临时减小 batch 或 chunk。
+
+204 checkpointed 重验已在干净 commit `a149913` 下通过，peak allocated/reserved 为 `8,636.81/10,406 MiB`、reserved fraction `65.30%`。三个 S2A variant 至此均完成工程验收；正式队列在本记录提交且工作树干净后开放。依次运行九个 formal runs：
+
+```bash
+for variant in \
+  crd_202_base_legacy_energy \
+  crd_203_base_analytic_am \
+  crd_204_base_morphology; do
+  for seed in 20260811 20260812 20260813; do
+    ./.venv/bin/python scripts/train_crd.py \
+      --config "configs/crd_v1/${variant}.yaml" \
+      --set training.seed="${seed}" \
+      --set training.device=cuda:0 \
+      --set training.show_progress=false \
+      --set outputs.run_root="runs/crd_v1/${variant}/seed_${seed}" \
+      || exit 1
+  done
+done
+```
+
+不得覆盖 epochs、batch、accumulation 或任何 `max_*_windows`，不得读取 research-test。九个 runs 完成后先做完整性与 checkpoint 集合审计，再按附件第 21.4–21.5 节分别判断 energy representation 与 morphology eligibility；在结果审计前不实现 S2B。
 
 ## 固定呼吸带传统基线
 

@@ -809,6 +809,8 @@ S2A 只实现并在分别通过 synthetic/physical-batch-128 acceptance 后运�
 
 首轮 CUDA 工程结果随后显示：202/203 的 synthetic 与 physical-batch-128 acceptance 均通过，peak reserved 分别为 `9,910/11,832 MiB`，占 15,936 MiB 设备的 `62.18%/74.25%`；204 synthetic 通过，但 batch-128 训练在 morphology encoder 处 OOM，失败时 PyTorch 已分配约 `15.12 GiB`、仅 `55 MiB` 空闲，不能归因于明显的其他进程占用。由于 forward chunking 仍会为 backward 保留所有 chunk 的内部激活，正式实验前注册上述 per-chunk activation checkpoint 工程修订；它不减少 physical/effective batch，不改变科学比较因素。当前只允许重跑 204 synthetic 与独立 acceptance，204 通过且 peak reserved fraction `≤80%` 前 formal 队列继续关闭。
 
+204 checkpointed 重验随后在干净 commit `a149913` 下通过：synthetic output/gradient finite；acceptance 严格完成 128/32 个 train/validation windows、1 optimizer update、两个 finite checkpoint、32 条 primary-finite validation metrics且 joint prediction degeneracy 为 0。Peak allocated/reserved 为 `8,636.81/10,406 MiB`，reserved fraction `65.30%`，低于 `80%` 工程线。IBI-MedAE 因该单 update 模型的 32 个样本均 `ibi_interpretable=false` 而按既有 eligibility 契约为空，不是被静默吞掉的非有限 prediction，也不作为单 epoch 工程阻塞。202/203 acceptance 来自干净 commit `258c1f3`，其后到 `a149913` 唯一运行时代码差异只在 morphology checkpoint 路径，不影响 202/203。至此三个 S2A variant 的工程验收均完成，允许在新的统一干净 commit 上启动九个 formal runs；仍不得读取 research-test 或开放 S2B。
+
 ### 21.4 Energy representation 决策
 
 E 与 A 各自相对 BASE，必须同时满足才称为 energy-eligible：
