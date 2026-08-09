@@ -7,6 +7,7 @@
 - CRD-S0：旧 B0/T4 在新训练协议下重训；
 - CRD-S1：decoder bridge、local Mamba、Direct frontend、可选 global Mamba 的顺序实验。
 - CRD-S1C：candidate lock 中 12 个 checkpoint 的现有 research-test 确认。
+- CRD-S1F：只补齐 CRD_102 的 B0 + local + global 缺失格。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。AM、Morphology、gate、auxiliary、capacity/TCN control 和 S2 以后阶段不在本次实现或运行范围内，不能提前混入 S0/S1。
 
@@ -279,7 +280,7 @@ u >= W:
 
 ## 12. 配置角色与正式 seed
 
-正式 seed 固定为 `20260811 / 20260812 / 20260813`，通过 `training.seed` 覆盖；`model.initialization_seed` 解析为同一值。六个原 S0/S1 配置与一个结果后诊断配置位于 `configs/crd_v1/`。
+正式 seed 固定为 `20260811 / 20260812 / 20260813`，通过 `training.seed` 覆盖；`model.initialization_seed` 解析为同一值。六个原 S0/S1 配置、一个结果后诊断配置和一个 S1F 配置位于 `configs/crd_v1/`。
 
 - `run_role=formal`：必须 80/128/1，所有 `max_*_windows=null`，结果可进入 S0/S1 validation 证据。
 - `run_role=acceptance`：固定 1 epoch、batch 128、accumulation 1、train/val windows 128/32、test null；只验收正式物理 batch、显存和生命周期，不形成科研结论。
@@ -628,3 +629,54 @@ S1C 于 2026-08-09 在 commit `3b280013d898287613709c4dd5648f8b94e14c9d`、`git_
 4. CRD_001 只作 reference 且不进入选择。102 相对 001 的 Whole RR 恶化 `1.8155%`，Local RR/trajectory/global-envelope 改善 `0.4404% / 2.1736% / 2.1565%`，PCC 增加 `0.020974`；001 的 IBI-MedAE 与 coherence 也更好。因此“102 被选中”不等价于所有任务轴全面优于纯时域 reference。
 
 完整机器结果为 `s1c_seed_summary.csv`、`s1c_variant_summary.csv`、`s1c_selection.json` 与 `s1c_selection_manifest.json`。本结果属于现有 research-test 上的 development/research confirmation evidence，不是无偏 held-out 结论；S1C 访问队列现已关闭，不得重复运行或用 test 结果重选 checkpoint。后续若以 CRD_102 继续设计 S2 或其他模块，必须另建明确标记 `research-test informed` 的协议。
+
+## 20. S1F：B0 frontend 下的 global-stage 缺失格（2026-08-09）
+
+本节在 S1C 已选择 CRD_102 后制定，protocol 固定为 `crd-v1.1-s1f-research-test-informed-20260809`。它属于由既有 research-test 结果触发的 development/validation closure，不是原 S1 的预注册确认，也不重新开放 S1C 或任何 CRD research-test。S2 仍未激活。
+
+### 20.1 唯一问题与必要性
+
+S1 已有的 frontend × global-stage 结构格为：
+
+| Frontend | Local only | Local + Global |
+|---|---|---|
+| B0/PatchMixer | CRD_102 | 缺失 |
+| Direct analytic | CRD_103 | CRD_104 |
+
+由于 S1/S1C 已观察到明显的非单调模块交互，不能用 `104 vs 103` 代替 global stage 在已选中 B0 frontend 上的效应。本节只补齐缺失格 `CRD_106_B0_HIER_MAMBA`，回答：
+
+> 在 CRD_102 的 B0/PatchMixer frontend 与 local Mamba trunk 不变时，增加同一 1-Hz global Mamba + FiLM 是否改善 validation Local RR，且不破坏 PCC/trajectory？
+
+不得在本节新增其他 frontend、宽度、block、decoder、loss、seed 或超参数实验。
+
+### 20.2 CRD_106 唯一结构与初始化
+
+配置固定为 `configs/crd_v1/crd_106_b0_hier_mamba.yaml`。CRD_106 与 CRD_102 完全共享：
+
+- `PatchTokenFrontend` 及 `patch_frontend` 子 seed；
+- 6 个 local BiMamba2 block 及 `local_trunk` 子 seed；
+- 两个 local refinement block、10-Hz coarse waveform head 与 Fourier interpolation；
+- 数据、split、target、`Pi`、core loss、metrics、Local-RR checkpoint selector、80 epochs、physical batch 128、optimizer/update/LR 语义和三个正式 seed。
+
+唯一增加项是在 local blocks 与 refinement 之间插入与 CRD_104 完全相同的 `GlobalContextStage`：`10 Hz → 0.45-Hz hard LPF → ::10 → Conv 96→128 → 4×BiMamba2(128) → Fourier 180→1800 → zero-init FiLM`，并复用 `global_trunk` 确定性子 seed。FiLM weight/bias 为零，因此初始化时 106 的 global residual 对任意 local latent 严格为 identity。冻结 trainable parameter count 为 `2,181,193`；除该 global stage 外，102/106 对应模块的初始 state 必须逐 tensor 相同，104/106 global-stage 初始 state 也必须逐 tensor 相同。
+
+### 20.3 工程门槛与正式队列
+
+正式训练前必须在同一提交的干净工作树完成：
+
+1. `check_crd_variant.py` 的 CUDA batch-1 model/core-loss/backward finite；
+2. 独立 physical-batch-128 acceptance：128 train windows、32 validation windows、1 epoch、1 optimizer update；
+3. output/gradient/checkpoint/metrics finite，参数数量、zero-init identity 和共享 state 测试通过。
+
+工程门槛只解除三个 formal seeds 的运行阻塞，不形成效果证据。Formal 输出固定隔离到 `runs/crd_v1/crd_106_b0_hier_mamba/seed_<seed>/`；任何中断 run 不凭已有 best checkpoint 纳入比较。
+
+### 20.4 冻结保留规则
+
+只比较 CRD_106 与冻结的 CRD_102 三个 validation-selected Local-RR checkpoints，按同 seed 配对。CRD_106 必须同时满足：
+
+1. Local RR seed mean 相对改善至少 `0.5%`；
+2. 至少 `2/3` paired seeds 的 Local RR 改善；
+3. lag-aware signed PCC seed mean 下降不超过 `0.005`；
+4. envelope trajectory MAE seed mean 相对恶化不超过 `1.5%`。
+
+相对变化、等号和 direct-mean/seed-mean 语义沿用第 18 节。四项全部通过则未来 S2 的 `BASE=CRD_106`，否则 `BASE=CRD_102`。IBI、coverage、三层 Spearman、global-envelope 与 lag diagnostics 只作 secondary，不能覆盖四项规则。结果不触发 research-test，不回改 S1C 选择，也不允许追加第二个 S1F variant；S1F 完成后才决定是否另立 S2 协议。

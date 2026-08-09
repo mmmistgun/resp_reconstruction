@@ -14,6 +14,7 @@ from resp_train.crd.model import CRD_VARIANTS
 CRD_PROTOCOL_VERSION = "crd-v1.1-s0-s1-20260808"
 CRD_DIAGNOSTIC_PROTOCOL_VERSION = "crd-v1.1-s1d-20260808"
 CRD_EXPLORATORY_PROTOCOL_VERSION = "crd-v1.1-s1e-20260809"
+CRD_S1F_PROTOCOL_VERSION = "crd-v1.1-s1f-research-test-informed-20260809"
 CRD_DIAGNOSTIC_VARIANTS = {
     "crd_103_direct_local_mamba",
     "crd_105_direct_coarse",
@@ -22,6 +23,7 @@ CRD_EXPLORATORY_VARIANTS = {
     "crd_102_b0_local_mamba",
     "crd_104_direct_hier_mamba",
 }
+CRD_S1F_VARIANTS = {"crd_106_b0_hier_mamba"}
 PINNED_DEPENDENCIES = {
     "mamba-ssm": "2.3.2.post1",
     "causal-conv1d": "1.6.2.post1",
@@ -121,6 +123,8 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         expected_protocol = CRD_DIAGNOSTIC_PROTOCOL_VERSION
     elif variant in CRD_EXPLORATORY_VARIANTS:
         expected_protocol = CRD_EXPLORATORY_PROTOCOL_VERSION
+    elif variant in CRD_S1F_VARIANTS:
+        expected_protocol = CRD_S1F_PROTOCOL_VERSION
     else:
         expected_protocol = CRD_PROTOCOL_VERSION
     frozen = {

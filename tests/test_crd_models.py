@@ -5,7 +5,7 @@ from torch import nn
 
 from resp_train.crd.blocks import BidirectionalMamba2Block, ResidualDWBlock
 from resp_train.crd.config import load_crd_config
-from resp_train.crd.model import build_crd_model
+from resp_train.crd.model import GlobalContextStage, build_crd_model
 from resp_train.models import list_models
 
 
@@ -109,6 +109,7 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
         "crd_103_direct_local_mamba": 1144165,
         "crd_104_direct_hier_mamba": 2256613,
         "crd_105_direct_coarse": 192781,
+        "crd_106_b0_hier_mamba": 2181193,
     }
     shared_decoder_state: dict[str, torch.Tensor] | None = None
     shared_local_state: dict[str, torch.Tensor] | None = None
@@ -123,6 +124,7 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_103_direct_local_mamba",
             "crd_104_direct_hier_mamba",
             "crd_105_direct_coarse",
+            "crd_106_b0_hier_mamba",
         }:
             current = {
                 **{f"refine.{key}": value for key, value in model.refinement.state_dict().items()},
@@ -137,6 +139,7 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_102_b0_local_mamba",
             "crd_103_direct_local_mamba",
             "crd_104_direct_hier_mamba",
+            "crd_106_b0_hier_mamba",
         }:
             current_local = model.local_blocks.state_dict()
             if shared_local_state is None:
@@ -155,7 +158,7 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             else:
                 assert current_direct.keys() == direct_frontend_state.keys()
                 assert all(torch.equal(current_direct[key], direct_frontend_state[key]) for key in current_direct)
-        if variant == "crd_104_direct_hier_mamba":
+        if variant in {"crd_104_direct_hier_mamba", "crd_106_b0_hier_mamba"}:
             assert torch.count_nonzero(model.global_stage.film.weight) == 0
             assert torch.count_nonzero(model.global_stage.film.bias) == 0
 
@@ -169,3 +172,34 @@ def test_crd_105_is_direct_coarse_without_mamba() -> None:
     assert output["waveform"].shape == (1, 1, 18000)
     assert output["waveform_10hz"].shape == (1, 1, 1800)
     assert torch.isfinite(output["waveform"]).all()
+
+
+def test_crd_106_is_exact_102_plus_104_global_stage() -> None:
+    model_102 = build_crd_model(load_crd_config("configs/crd_v1/crd_102_b0_local_mamba.yaml"))
+    model_104 = build_crd_model(load_crd_config("configs/crd_v1/crd_104_direct_hier_mamba.yaml"))
+    model_106 = build_crd_model(load_crd_config("configs/crd_v1/crd_106_b0_hier_mamba.yaml"))
+
+    for module_102, module_106 in (
+        (model_102.frontend, model_106.frontend),
+        (model_102.local_blocks, model_106.local_blocks),
+        (model_102.refinement, model_106.refinement),
+        (model_102.head, model_106.head),
+    ):
+        assert module_102.state_dict().keys() == module_106.state_dict().keys()
+        assert all(
+            torch.equal(module_102.state_dict()[name], module_106.state_dict()[name])
+            for name in module_102.state_dict()
+        )
+    assert model_104.global_stage.state_dict().keys() == model_106.global_stage.state_dict().keys()
+    assert all(
+        torch.equal(model_104.global_stage.state_dict()[name], model_106.global_stage.state_dict()[name])
+        for name in model_104.global_stage.state_dict()
+    )
+
+
+def test_global_context_stage_is_exact_identity_at_initialization() -> None:
+    stage = GlobalContextStage().eval()
+    stage.blocks = nn.ModuleList([nn.Identity() for _ in stage.blocks])
+    local = torch.randn(1, 96, 1800)
+
+    assert torch.equal(stage(local), local)

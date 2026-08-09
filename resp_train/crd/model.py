@@ -22,6 +22,7 @@ CRD_VARIANTS = (
     "crd_103_direct_local_mamba",
     "crd_104_direct_hier_mamba",
     "crd_105_direct_coarse",
+    "crd_106_b0_hier_mamba",
 )
 
 
@@ -141,8 +142,12 @@ class CRDCoarseModel(nn.Module):
             "crd_102_b0_local_mamba",
             "crd_103_direct_local_mamba",
             "crd_104_direct_hier_mamba",
+            "crd_106_b0_hier_mamba",
         }
-        uses_global = variant == "crd_104_direct_hier_mamba"
+        uses_global = variant in {
+            "crd_104_direct_hier_mamba",
+            "crd_106_b0_hier_mamba",
+        }
 
         with module_seed(initialization_seed, "direct_frontend" if uses_direct else "patch_frontend"):
             self.frontend: nn.Module = DirectAnalyticFrontend() if uses_direct else PatchTokenFrontend()

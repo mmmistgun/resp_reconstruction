@@ -4,7 +4,7 @@
 
 最后更新：2026-08-09
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C 现有 research-test 确认已完成，冻结规则选出 CRD_102 为唯一非支配候选；后续阶段尚未激活
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C 选出 CRD_102 为唯一非支配候选；当前仅激活 research-test-informed S1F 缺失格 CRD_106，S2 尚未激活
 
 ## 1. 定位
 
@@ -1957,3 +1957,9 @@ S1C 随后在干净 commit `3b280013d898287613709c4dd5648f8b94e14c9d` 下完成�
 相对 CRD_105，CRD_102 的 test Local RR 改善 `6.8065%`、三个配对 seed 全部改善，signed PCC 增加 `0.012860`，trajectory 不仅未恶化反而改善 `1.1863%`，故四项资格门槛全部通过；其 Whole RR 与 global-envelope error 还分别改善 `6.0737% / 11.0571%`，因此在五项 primary 上严格 Pareto-dominate CRD_105。CRD_104 的 Local RR 仅改善 `0.2940%`，trajectory 恶化 `6.3707%`，同时未过 `0.5% / 1.5%` 两个门槛，不能进入 Pareto。冻结结果为 `eligible={102,105}`、唯一 Pareto 候选 `CRD_102`。
 
 该结果不回写 S1D 当时“保留 105”的历史结论，但在新 S1C 协议下将 CRD_102 更新为后续阶段的当前结构锚点。它也不表示 CRD_102 在所有模型和指标上全面最优：只读 reference CRD_001 的 Whole RR、IBI-MedAE 与 coherence 仍更好；102 相对 001 的五项 primary 中 Whole RR 恶化 `1.8155%`，其余 Local RR、trajectory、global-envelope、PCC 分别改善 `0.4404% / 2.1736% / 2.1565% / +0.020974`。这些都是已被历史观察的 research-test 上的 development/research evidence，不能表述为无偏泛化结论。S1C 队列至此关闭，不重复读取；S2、AM/Morphology/gate/auxiliary/control 仍未激活。
+
+## 40. CRD S1F global-stage 缺失格（2026-08-09）
+
+S1C 选中的 CRD_102 使用 B0/PatchMixer frontend + local Mamba，而现有 global-stage 单因素比较 `104 vs 103` 只覆盖 Direct frontend。由于本阶段已出现明显的 frontend/Mamba 非单调交互，在进入机制启发表征 S2 前，仅允许新增一个 research-test-informed development variant：`CRD_106_B0_HIER_MAMBA = CRD_102 + CRD_104 的同构 1-Hz global Mamba/FiLM`，补齐 frontend × global-stage 的缺失格。
+
+S1F 不读取 research-test，不修改数据、loss、metrics、selector、训练预算或 seed；正式比较只用 validation。106 相对 102 必须同时达到 Local RR mean 改善 `≥0.5%`、`≥2/3` paired seeds 改善、PCC 下降 `≤0.005`、trajectory 恶化 `≤1.5%`。通过则未来 `S2 BASE=106`，否则 `S2 BASE=102`；无论结果如何均不再增加 S1F variant。完整结构、初始化、参数契约、工程门槛和输出边界见附件第 20 节。S2、AM/Morphology/gate/auxiliary/control 继续关闭。

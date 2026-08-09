@@ -130,7 +130,7 @@ T2、T3、T4 validation 均已完成。当前保留 T2/T4，并与 B0、F0、IEW
 
 ## CRD-v1.1 S0/S1
 
-六个原 S0/S1 配置与一个结果后诊断配置：
+六个原 S0/S1 配置、一个结果后诊断配置与一个 S1F 配置：
 
 ```text
 configs/crd_v1/crd_001_b0_retrain.yaml
@@ -140,6 +140,7 @@ configs/crd_v1/crd_102_b0_local_mamba.yaml
 configs/crd_v1/crd_103_direct_local_mamba.yaml
 configs/crd_v1/crd_104_direct_hier_mamba.yaml
 configs/crd_v1/crd_105_direct_coarse.yaml
+configs/crd_v1/crd_106_b0_hier_mamba.yaml
 ```
 
 先确认固定原生依赖：
@@ -425,6 +426,43 @@ done
 ```
 
 运行使用干净 commit `3b28001`。12 份 metrics 各 2310 行，总计 27720 行，manifest/lock/split/finite 检查全部通过。冻结结果为：102 通过全部 eligibility，104 未通过 Local-RR 与 trajectory 门槛；eligible set 为 `{102,105}`，102 在五项 primary 上严格支配 105，因而是唯一 non-dominated candidate。输出固定在 `runs/crd_v1/crd_s1c_research_confirmation/`。CRD_001 reference 的 Whole RR、IBI-MedAE 与 coherence 仍优于 102，不能把选择结果写成所有轴全面占优。S1C 队列现已关闭；下一阶段仍需另立 research-test-informed 协议。
+
+### CRD S1F：CRD_106 B0-Hier-Mamba
+
+S1F 只补齐 `CRD_102 + CRD_104 同构 global/FiLM` 这一格，不开放其他 S1/S2 模型，也不读取 research-test。提交后先执行 synthetic 与独立 physical-batch-128 acceptance：
+
+```bash
+./.venv/bin/python scripts/check_crd_variant.py \
+  --config configs/crd_v1/crd_106_b0_hier_mamba.yaml \
+  --device cuda:0 \
+  --batch-size 1
+
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_v1/crd_106_b0_hier_mamba.yaml \
+  --set protocol.run_role=acceptance \
+  --set data.max_train_windows=128 \
+  --set data.max_val_windows=32 \
+  --set training.epochs=1 \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --set outputs.run_root=/tmp/crd_106_b0_hier_mamba_batch128_acceptance
+```
+
+两项均通过并完成产物审计后，才允许三个 formal seeds：
+
+```bash
+for seed in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/train_crd.py \
+    --config configs/crd_v1/crd_106_b0_hier_mamba.yaml \
+    --set training.seed="${seed}" \
+    --set training.device=cuda:0 \
+    --set training.show_progress=false \
+    --set outputs.run_root="runs/crd_v1/crd_106_b0_hier_mamba/seed_${seed}" \
+    || exit 1
+done
+```
+
+Formal 结果只与冻结的 CRD_102 validation 三 seed 配对。四项保留条件为 Local RR mean 改善至少 0.5%、至少 2/3 paired seeds 改善、PCC 下降不超过 0.005、trajectory 恶化不超过 1.5%；通过则未来 S2 BASE=106，否则 BASE=102。无论结果如何均不再追加 S1F variant。
 
 ## 固定呼吸带传统基线
 

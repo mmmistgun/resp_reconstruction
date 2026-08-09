@@ -10,19 +10,23 @@ from resp_train.crd.config import (
     CRD_EXPLORATORY_PROTOCOL_VERSION,
     CRD_EXPLORATORY_VARIANTS,
     CRD_PROTOCOL_VERSION,
+    CRD_S1F_PROTOCOL_VERSION,
+    CRD_S1F_VARIANTS,
     load_crd_config,
 )
 
 
-def test_all_crd_s0_s1_and_diagnostic_configs_are_formal_and_frozen() -> None:
+def test_all_crd_configs_are_formal_and_frozen() -> None:
     paths = sorted(Path("configs/crd_v1").glob("*.yaml"))
-    assert len(paths) == 7
+    assert len(paths) == 8
     for path in paths:
         cfg = load_crd_config(path)
         if cfg.model.variant in CRD_DIAGNOSTIC_VARIANTS:
             expected_protocol = CRD_DIAGNOSTIC_PROTOCOL_VERSION
         elif cfg.model.variant in CRD_EXPLORATORY_VARIANTS:
             expected_protocol = CRD_EXPLORATORY_PROTOCOL_VERSION
+        elif cfg.model.variant in CRD_S1F_VARIANTS:
+            expected_protocol = CRD_S1F_PROTOCOL_VERSION
         else:
             expected_protocol = CRD_PROTOCOL_VERSION
         assert cfg.protocol.name == expected_protocol
