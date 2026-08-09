@@ -712,3 +712,157 @@ runs/crd_v1/crd_106_b0_hier_mamba/seed_20260813/20260809_153828_227713
 因此 106 **不满足四项全通过条件**，不保留为未来 BASE；按第 20.4 节冻结分支，`S2 BASE=CRD_102`。106 的 Whole RR 改善 `8.5536%`、Local RR 改善以及 coverage 增加属于任务交换背景，不能覆盖 trajectory guardrail；global-envelope 也恶化 `0.9844%`，Low/Medium/High Spearman 与 signed PCC 均下降。该结果说明 global stage 在 B0 frontend 下仍形成 RR–包络/PCC 权衡，而非无条件增益。
 
 S1F 至此关闭：不追加第二个 S1F variant、不读取 research-test、不回改 S1C；CRD_106 只保留为 validation development evidence。S2 仍需以 CRD_102 为冻结 BASE 另立 research-test-informed 协议后才能激活。
+
+## 21. S2：以 CRD_102 为 BASE 的表征分支实验（2026-08-09）
+
+本节在 S1F 关闭并冻结 `S2 BASE=CRD_102` 后、运行任何 S2 模型前制定。S2 属于 **research-test-informed development/validation** 阶段，不读取 research-test，不把当前 validation 上的选择表述为确认性统计推断。S2A protocol 固定为 `crd-v1.1-s2a-research-test-informed-20260809`；S2B protocol 固定为 `crd-v1.1-s2b-research-test-informed-20260809`。当前只激活 S2A 的实现与工程验收，S2B 必须等待 S2A 三分支结果按本节规则触发。
+
+### 21.1 BASE 身份与公共 trunk
+
+`CRD_201_BASE` 不是新配置或新训练，而是第 18 节 candidate lock 中 CRD_102 三个 checkpoint 的只读别名；checkpoint path/hash、seed、selected epoch、训练 commit/config/manifest/validation summary 均保持不变。不得重训 201 或用 CRD_102 的其他 timestamp/final checkpoint 替代。
+
+所有 S2 模型保留 CRD_102 的：
+
+```text
+PatchTokenFrontend → 6×Local BiMamba2 → 2×refinement
+→ 10-Hz coarse waveform head → Fourier ↑100 Hz → external Pi
+```
+
+新增 representation 必须在 `PatchTokenFrontend` 输出 `z_B ∈ R^(B×96×1800)` 后、进入 local Mamba 前静态注入。公共融合形式为：
+
+```text
+z0 = z_B + W_R z_R
+```
+
+组合分支为 `z0=z_B+W_X z_X+W_M z_M`。每个 `W` 都是独立 `1×1 Conv1d`，weight/bias 全零初始化；因此所有候选初始化时严格退化为 CRD_102 的 BASE latent。Patch frontend、local Mamba、refinement 和 head 使用与 102 相同的确定性子 seed，初始 state 必须逐 tensor 相同。S2 不启用 Direct frontend、global stage、gate、envelope/phase auxiliary head，也不修改 core loss、metrics 或 checkpoint selector。
+
+### 21.2 三种候选 representation 的唯一结构
+
+#### Legacy energy `E`
+
+Legacy E 是在 CRD trunk 上重建的固定 T4 bandenergy representation，不复用旧 T4 run 的可训练权重：
+
+```text
+STFT: n_fft=win_length=2000, hop=250, center=true,
+      pad_mode=reflect, Hann periodic=true,
+      normalized=false, onesided=true
+float32 log1p(abs(STFT))
+bands: [0.05,0.30], [0.10,0.70], [0.30,1.20],
+       [0.70,3.00], [3.00,8.00] Hz
+band bins direct mean → B×5×73
+Conv1d 5→16 k3 p1, GroupNorm(1,16), SiLU
+Conv1d 16→16 k3 p1, SiLU
+linear interpolate 73→1800, align_corners=false
+zero-init W_E: Conv1d 16→96 k1
+```
+
+两层 encoder Conv 固定 `bias=true`、Kaiming-normal weight/zero bias；GroupNorm weight/bias 为 1/0。STFT 与幅值数学强制关闭 autocast、使用 float32。该分支只称 legacy energy representation，使用 `legacy_energy_encoder` 与 `legacy_energy_projection` 子 seed。
+
+#### Analytic AM `A`
+
+AM 使用 8 个 Gaussian analytic filters，外部支持严格为 `0.70<f≤8.0 Hz`。中心 interval/init 固定为：`[0.75,1.10]/0.90`、`[1.10,1.50]/1.30`、`[1.50,2.10]/1.80`、`[2.10,2.80]/2.40`、`[2.80,3.70]/3.20`、`[3.70,4.80]/4.20`、`[4.80,6.30]/5.60`、`[6.30,8.00]/7.20`。带宽为 `sigma_k=c_k*rho_k`，`rho∈[0.08,0.30]`、初始化 `0.15`，center/rho 均用 bounded sigmoid 参数化。
+
+```text
+analytic magnitude log1p(absolute value)
+fixed float32 FFT projection 0.03–0.80 Hz → ::10
+Conv1d 8→48 k5 p2, GroupNorm(6,48), SiLU
+Conv1d 48→96 k1, GroupNorm(12,96), SiLU
+ResidualDWBlock(96,d=1/2/4)
+zero-init W_A: Conv1d 96→96 k1
+```
+
+FFT/filterbank/magnitude/LPF 强制 float32；其余神经编码允许 bf16 autocast。
+
+Analytic 计算严格沿用 Direct filterbank 的正频率定义：正频率为 `2*X*G`，DC/Nyquist/负频率为零，再 complex IFFT。两层 encoder Conv 固定 `bias=false`、Kaiming-normal，GroupNorm 为 1/0；ResidualDWBlock 沿用第 1 节定义。子 seed 固定为 `analytic_am_filterbank / analytic_am_encoder / analytic_am_projection`。
+
+#### Amplitude-normalized morphology `M`
+
+Morphology 输入使用固定整窗 zero-phase FFT bandpass `0.70<f≤8.0 Hz`。Reflect padding 左右各 75；`window=151`、`hop=10`，得到 1800 个 token。每个窗口先减 mean，再除以 `sqrt(mean(x^2)+1e-6)`，有意删除局部绝对幅度。为避免 physical batch 128 下物化全部中间特征，token 轴固定按 128 个窗口分块编码；分块不改变 token 顺序或数学定义。
+
+```text
+Conv1d 1→32 k9 valid, GroupNorm(4,32), SiLU
+Conv1d 32→32 k7 stride2 valid, GroupNorm(4,32), SiLU
+DepthwiseConv1d 32 k5 p2, SiLU
+Conv1d 32→64 k1, SiLU, AdaptiveAvgPool1d(1)
+Linear 64→96, LayerNorm(96)
+16 orthogonal-initialized prototypes, cosine softmax T=0.10
+concat 96-d embedding + 16 scores
+Linear 112→96, LayerNorm(96)
+zero-init W_M: Conv1d 96→96 k1
+```
+
+前四个 Conv 固定 `bias=false`、Kaiming-normal；GroupNorm/LayerNorm 为 1/0；两个 Linear 使用 PyTorch Kaiming-uniform/zero bias；prototype 用全局 seed 下的 orthogonal initialization。固定 bandpass、window normalization 和 prototype cosine/softmax 强制 float32。Prototype forward 时逐行 L2 normalize；`L_proto=sum_(i!=j)(p_i^T p_j)^2/[K(K-1)]`。Morphology 模型使用 `L_core + 1e-3*r(u)*L_proto`，其中 `r(u)` 沿用 optimizer update `5S→15S` 的冻结 ramp。子 seed 固定为 `morphology_encoder / morphology_prototypes / morphology_projection`。该候选测试的是 amplitude-normalized morphology + prototype package，不声称识别真实独立生理源。
+
+### 21.3 S2A：三个单分支候选
+
+S2A 只实现并在分别通过 synthetic/physical-batch-128 acceptance 后运行：
+
+| ID | 结构 | 新增正式 runs |
+|---|---|---:|
+| `CRD_202_BASE_LEGACY_ENERGY` | BASE + E | 3 |
+| `CRD_203_BASE_ANALYTIC_AM` | BASE + A | 3 |
+| `CRD_204_BASE_MORPHOLOGY` | BASE + M + prototype regularizer | 3 |
+
+全部使用 80 epochs、physical batch 128、三个固定 seed、完整 train/validation、Local-RR checkpoint selector；不得读取 test。三个 variant 必须分别做工程 acceptance，尤其 204 必须验证 token chunking 的 output/gradient finite、峰值显存和完整 checkpoint lifecycle。任何一个分支的工程失败只阻塞该分支，不允许静默简化结构或缩小 formal batch。
+
+### 21.4 Energy representation 决策
+
+E 与 A 各自相对 BASE，必须同时满足才称为 energy-eligible：
+
+1. envelope trajectory MAE seed mean 相对改善至少 `1.0%`；
+2. 至少 `2/3` paired seeds 的 trajectory 改善；
+3. Local RR seed mean 相对恶化不超过 `1.0%`；
+4. signed PCC seed mean 下降不超过 `0.003`；
+5. global-envelope error seed mean 相对恶化不超过 `1.5%`。
+
+选择 `X∈{E,A,none}` 的决策表：
+
+| E eligible | A eligible | X |
+|---|---|---|
+| 否 | 否 | none |
+| 是 | 否 | E |
+| 否 | 是 | A |
+| 是 | 是 | 先比较 A vs E |
+
+两者都 eligible 时，A 只有在相对 E 同时满足 trajectory 改善 `≥1.0%`、`≥2/3` paired seeds 改善、Local RR 恶化 `≤1.0%`、PCC 下降 `≤0.003`、global-envelope 恶化 `≤1.5%` 才取代 E；否则选结构更简单且已有历史解释的 E。Whole RR、IBI、coverage 与三层 Spearman 只作 secondary。
+
+### 21.5 Morphology 决策
+
+M 相对 BASE 必须同时满足：
+
+1. signed PCC seed mean 增加至少 `0.002`；
+2. 至少 `2/3` paired seeds 的 signed PCC 改善；
+3. Local RR seed mean 相对恶化不超过 `1.0%`；
+4. IBI coverage seed mean 下降不超过 `0.01`；
+5. trajectory MAE seed mean 相对恶化不超过 `1.5%`。
+
+IBI-MedAE、interpretable fraction、prototype usage/entropy 和主体分布必须报告，但不能覆盖上述门槛。Prototype 激活若跨全部 validation 长期坍缩为单一 prototype，只能作为失败解释，不能在观察结果后修改 `T`、K 或 loss 权重重跑本阶段。
+
+### 21.6 S2B：条件开放的组合与 capacity control
+
+只有 `X != none` 且 M eligible，才开放恰好一个静态组合及其参数匹配对照：
+
+| X | 静态组合 | Capacity control |
+|---|---|---|
+| E | `CRD_205_BASE_EM_STATIC` | `CRD_207_BASE_CAP_EM` |
+| A | `CRD_206_BASE_AM_STATIC` | `CRD_208_BASE_CAP_AM` |
+
+静态组合使用 BASE + selected energy + M，loss 为 `L_core+1e-3*r(u)*L_proto`。Capacity control 不读取 E/A/M representation，在 `z_B` 后加入 `CapacityResidualBlock(H)` stack：`GN(12,96)→Conv1x1 96→H→SiLU→Dropout(0.10)→Conv1x1 H→96→residual`，末层 zero-init。`N∈[1,8]`、`H∈{32,40,...,2048}`，只按完整 trainable parameter count 确定性穷举：最小相对参数差、再最小 MACs、再最小 N、再最小 H；要求与对应组合 `|delta params|≤2%`，否则构建失败。参数匹配不看 validation，MAC/VRAM/latency 只报告、不作为匹配目标。
+
+组合必须同时满足：
+
+1. 相对 BASE 的 Local RR mean 改善 `≥0.5%` 且 `≥2/3` paired seeds 改善；
+2. 相对自己的 capacity control 的 Local RR mean 改善 `≥0.25%` 且 `≥2/3` paired seeds 改善；
+3. 相对 BASE 的 PCC 下降 `≤0.003`、trajectory 恶化 `≤1.5%`、IBI coverage 下降 `≤0.01`。
+
+全部通过才允许未来 S3 gate stage；否则 S3 整体跳过。无论结果如何，不补跑未被 X 选择的另一组合/capacity pair。
+
+### 21.7 S2 关闭时的 BASE 选择
+
+- X 与 M 均失败：保留 CRD_102 BASE；
+- 仅 X eligible：选择 BASE+X；
+- 仅 M eligible：选择 BASE+M；
+- X/M 均 eligible 且组合通过：选择组合并开放 S3；
+- X/M 均 eligible 但组合失败：S3 关闭，只在 BASE+X 与 BASE+M 中选择。Local RR mean 相对差异 `≥0.25%` 时选较低者；否则依次比较 trajectory MAE、signed PCC、trainable params，选择 trajectory 更低、PCC 更高、参数更少者，不构造加权总分。
+
+所有选择只使用 validation-selected checkpoints。逐 seed、seed mean ± sample SD、paired window 与 paired `samp_id` descriptive differences 必须完整报告；不计算确认性 p-value/Holm/FWER。S2 结束前不得实现 gate/auxiliary/TCN/final ablation，不得访问 research-test。若未来需要强泛化结论，必须使用新的锁定 cohort 或外部数据。

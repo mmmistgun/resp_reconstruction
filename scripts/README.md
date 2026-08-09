@@ -464,6 +464,18 @@ done
 
 三个 formal runs 已在干净 commit `80e6350` 下完成并通过完整性审计。相对冻结 CRD_102，106 的 Local RR 改善 `2.2123%`、3/3 paired seeds 改善，PCC 下降 `0.003178` 仍在护栏内；但 trajectory 恶化 `5.0351%`，超过 `1.5%`。因此 106 不满足四项全通过条件，不保留；S1F 关闭并固定未来 `S2 BASE=102`，不追加 variant、不读取 research-test。Whole RR 改善 `8.5536%` 只作任务交换背景，不能覆盖停止规则。
 
+### CRD S2 表征分支
+
+S2 BASE 固定为 candidate lock 中的 CRD_102，别名 `CRD_201_BASE`，不重训。当前只激活以下三个 S2A variant 的实现与工程验收：
+
+```text
+CRD_202_BASE_LEGACY_ENERGY
+CRD_203_BASE_ANALYTIC_AM
+CRD_204_BASE_MORPHOLOGY
+```
+
+三者都在 BASE PatchTokenFrontend 后、local Mamba 前以 zero-init static residual 加入；不含 Direct/global/gate/auxiliary。Energy 和 morphology 使用不同的模块 primary/guardrail，S2B 只在两类都 eligible 时条件开放。具体配置名、参数数量和运行命令必须等实现测试与独立 physical-batch-128 acceptance 冻结后再写入；当前不要自行构造配置或启动训练。S2 全程禁止 research-test。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

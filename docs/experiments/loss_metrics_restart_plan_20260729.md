@@ -4,7 +4,7 @@
 
 最后更新：2026-08-09
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C 选出 CRD_102；S1F 的 CRD_106 因 trajectory guardrail 失败而关闭，未来 S2 BASE 冻结为 CRD_102，S2 尚未激活
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C/S1F 冻结 S2 BASE=CRD_102；当前激活 research-test-informed S2A 三个单分支的实现与工程验收，S2B 仍条件关闭
 
 ## 1. 定位
 
@@ -1967,3 +1967,9 @@ S1F 不读取 research-test，不修改数据、loss、metrics、selector、训�
 CRD_106 的 CUDA synthetic 与独立 physical-batch-128 acceptance 随后在干净 commit `8fa56f8` 下通过。Acceptance 严格完成 128/32 个 train/validation windows、1 optimizer update、两个 finite checkpoint 与 32 条 finite validation metrics，无 prediction degeneracy；该单 epoch 数值只作工程证据。现解除 106 三 formal seeds 的运行阻塞，仍不得读取 research-test。
 
 CRD_106 三 formal seeds 随后在干净 commit `80e6350` 下完成并通过完整性审计；Local-RR-selected epochs 为 `40/5/26`，每个 run 均完成 80 epochs、6400 updates、2675 条 validation metrics，checkpoint/history/metrics 全 finite。相对冻结 CRD_102，106 的 Local RR 改善 `2.2123%` 且 3/3 paired seeds 改善，PCC 下降 `0.003178` 仍在护栏内，但 trajectory 恶化 `5.0351%`，明显超过 `1.5%`。因此四项条件未全部通过，106 不保留，S1F 关闭并固定未来 `S2 BASE=CRD_102`；Whole RR 改善 `8.5536%` 等信号只记录为任务交换，不能推翻停止规则。S2 仍需另立协议后才可激活。
+
+## 41. CRD S2 表征分支阶段（2026-08-09）
+
+现以 candidate lock 中冻结的 CRD_102 三 checkpoint 作为只读 `CRD_201_BASE`，不重训 BASE。S2 明确放弃把 Direct frontend 当作基础分支：新增 legacy energy、analytic AM、amplitude-normalized morphology 都在 CRD_102 PatchTokenFrontend 输出后、local Mamba 前以 zero-init static residual 注入。当前只激活 S2A 的 `CRD_202_BASE_LEGACY_ENERGY / CRD_203_BASE_ANALYTIC_AM / CRD_204_BASE_MORPHOLOGY` 实现与独立工程验收；在代码、参数数量、shared-state/zero-init、CUDA finite 与 physical-batch-128 acceptance 通过前不得启动 formal runs。
+
+Energy 以 trajectory MAE 为模块 primary，并用 Local RR/PCC/global-envelope 护栏选择 `X∈{E,A,none}`；Morphology 以 signed PCC 为 primary，并用 Local RR/coverage/trajectory 护栏。只有 X 与 M 都 eligible 才开放一个对应静态组合和一个 deterministic parameter-matched control；组合通过 Local RR/容量/护栏后才允许未来 gate stage。S2 全程只读 train/validation，不计算确认性 p-value，不访问 research-test。唯一结构、token chunking、loss、决策表和条件分支见附件第 21 节；S2B、gate、auxiliary 和最终消融仍未激活。

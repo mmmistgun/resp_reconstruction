@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- 当前新增 CRD-v1.1 的 S0/S1；S1D/S1E/S1C 均已完成，S1C 选出 CRD_102。Research-test-informed S1F 的唯一缺失格 CRD_106 已完成：Local RR/PCC 条件通过，但 trajectory 恶化 5.0351% 触发 guardrail，因此 106 不保留、S1F 关闭，未来 S2 BASE 冻结为 CRD_102。规范附件由主协议第 35–40 节纳入。S2 以后、AM/Morphology/gate/auxiliary/control 尚未激活。
+- CRD-v1.1 S0/S1/S1C/S1F 已完成，S2 BASE 冻结为 candidate-lock 中的 CRD_102。当前仅激活 research-test-informed S2A 三个单分支 `202 BASE+legacy E / 203 BASE+analytic AM / 204 BASE+morphology` 的实现与工程验收；S2B 组合/capacity 必须由 S2A 结果按协议触发，gate/auxiliary/TCN/final ablation 继续关闭。规范附件由主协议第 35–41 节纳入。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
