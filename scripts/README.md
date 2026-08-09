@@ -462,7 +462,7 @@ for seed in 20260811 20260812 20260813; do
 done
 ```
 
-Formal 结果只与冻结的 CRD_102 validation 三 seed 配对。四项保留条件为 Local RR mean 改善至少 0.5%、至少 2/3 paired seeds 改善、PCC 下降不超过 0.005、trajectory 恶化不超过 1.5%；通过则未来 S2 BASE=106，否则 BASE=102。无论结果如何均不再追加 S1F variant。
+三个 formal runs 已在干净 commit `80e6350` 下完成并通过完整性审计。相对冻结 CRD_102，106 的 Local RR 改善 `2.2123%`、3/3 paired seeds 改善，PCC 下降 `0.003178` 仍在护栏内；但 trajectory 恶化 `5.0351%`，超过 `1.5%`。因此 106 不满足四项全通过条件，不保留；S1F 关闭并固定未来 `S2 BASE=102`，不追加 variant、不读取 research-test。Whole RR 改善 `8.5536%` 只作任务交换背景，不能覆盖停止规则。
 
 ## 固定呼吸带传统基线
 

@@ -682,3 +682,33 @@ S1 已有的 frontend × global-stage 结构格为：
 4. envelope trajectory MAE seed mean 相对恶化不超过 `1.5%`。
 
 相对变化、等号和 direct-mean/seed-mean 语义沿用第 18 节。四项全部通过则未来 S2 的 `BASE=CRD_106`，否则 `BASE=CRD_102`。IBI、coverage、三层 Spearman、global-envelope 与 lag diagnostics 只作 secondary，不能覆盖四项规则。结果不触发 research-test，不回改 S1C 选择，也不允许追加第二个 S1F variant；S1F 完成后才决定是否另立 S2 协议。
+
+### 20.5 S1F 完整结果与关闭决定
+
+CRD_106 三个 formal runs 已在 commit `80e635027062864a6db310d64ea07f223af5c443`、`git_dirty=false` 下完成：
+
+```text
+runs/crd_v1/crd_106_b0_hier_mamba/seed_20260811/20260809_142511_139526
+runs/crd_v1/crd_106_b0_hier_mamba/seed_20260812/20260809_154036_791769
+runs/crd_v1/crd_106_b0_hier_mamba/seed_20260813/20260809_153828_227713
+```
+
+三个 run 均为唯一完整 80-epoch lifecycle、6400 optimizer updates、完整 2675-row validation metrics；Local-RR-selected epochs 为 `40 / 5 / 26`。所有 train history、两个 checkpoint 的 241 个 model-state tensors 和数值 metrics 均无 Inf，prediction degeneracy 为 0，逐 sample metrics 重算 summary 完全一致。冻结的 CRD_102 candidate-lock 及其 48 个关联产物也重新通过 SHA-256 验证。
+
+三 seed arithmetic mean ± sample SD：
+
+| 模型 | Whole RR ↓ | Local RR ↓ | Trajectory ↓ | Global envelope ↓ | Signed PCC ↑ |
+|---|---:|---:|---:|---:|---:|
+| CRD_102 | 0.515775 ± 0.020060 | 0.556161 ± 0.009055 | 0.150150 ± 0.001296 | 0.187512 ± 0.002438 | 0.864672 ± 0.001376 |
+| CRD_106 | 0.471658 ± 0.017571 | 0.543858 ± 0.002918 | 0.157710 ± 0.007283 | 0.189358 ± 0.004906 | 0.861494 ± 0.000997 |
+
+冻结规则逐项结果：
+
+1. Local RR seed mean 改善 `2.2123%`，通过 `≥0.5%`；
+2. 三个 paired seeds 的 Local RR 差值均有利，`3/3`，通过；
+3. signed PCC 下降 `0.003178`，未超过 `0.005`，通过；
+4. trajectory MAE 恶化 `5.0351%`，超过 `1.5%`，失败。
+
+因此 106 **不满足四项全通过条件**，不保留为未来 BASE；按第 20.4 节冻结分支，`S2 BASE=CRD_102`。106 的 Whole RR 改善 `8.5536%`、Local RR 改善以及 coverage 增加属于任务交换背景，不能覆盖 trajectory guardrail；global-envelope 也恶化 `0.9844%`，Low/Medium/High Spearman 与 signed PCC 均下降。该结果说明 global stage 在 B0 frontend 下仍形成 RR–包络/PCC 权衡，而非无条件增益。
+
+S1F 至此关闭：不追加第二个 S1F variant、不读取 research-test、不回改 S1C；CRD_106 只保留为 validation development evidence。S2 仍需以 CRD_102 为冻结 BASE 另立 research-test-informed 协议后才能激活。

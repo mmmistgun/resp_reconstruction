@@ -4,7 +4,7 @@
 
 最后更新：2026-08-09
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C 选出 CRD_102 为唯一非支配候选；当前仅激活 research-test-informed S1F 缺失格 CRD_106，S2 尚未激活
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C 选出 CRD_102；S1F 的 CRD_106 因 trajectory guardrail 失败而关闭，未来 S2 BASE 冻结为 CRD_102，S2 尚未激活
 
 ## 1. 定位
 
@@ -1965,3 +1965,5 @@ S1C 选中的 CRD_102 使用 B0/PatchMixer frontend + local Mamba，而现有 gl
 S1F 不读取 research-test，不修改数据、loss、metrics、selector、训练预算或 seed；正式比较只用 validation。106 相对 102 必须同时达到 Local RR mean 改善 `≥0.5%`、`≥2/3` paired seeds 改善、PCC 下降 `≤0.005`、trajectory 恶化 `≤1.5%`。通过则未来 `S2 BASE=106`，否则 `S2 BASE=102`；无论结果如何均不再增加 S1F variant。完整结构、初始化、参数契约、工程门槛和输出边界见附件第 20 节。S2、AM/Morphology/gate/auxiliary/control 继续关闭。
 
 CRD_106 的 CUDA synthetic 与独立 physical-batch-128 acceptance 随后在干净 commit `8fa56f8` 下通过。Acceptance 严格完成 128/32 个 train/validation windows、1 optimizer update、两个 finite checkpoint 与 32 条 finite validation metrics，无 prediction degeneracy；该单 epoch 数值只作工程证据。现解除 106 三 formal seeds 的运行阻塞，仍不得读取 research-test。
+
+CRD_106 三 formal seeds 随后在干净 commit `80e6350` 下完成并通过完整性审计；Local-RR-selected epochs 为 `40/5/26`，每个 run 均完成 80 epochs、6400 updates、2675 条 validation metrics，checkpoint/history/metrics 全 finite。相对冻结 CRD_102，106 的 Local RR 改善 `2.2123%` 且 3/3 paired seeds 改善，PCC 下降 `0.003178` 仍在护栏内，但 trajectory 恶化 `5.0351%`，明显超过 `1.5%`。因此四项条件未全部通过，106 不保留，S1F 关闭并固定未来 `S2 BASE=CRD_102`；Whole RR 改善 `8.5536%` 等信号只记录为任务交换，不能推翻停止规则。S2 仍需另立协议后才可激活。
