@@ -805,6 +805,8 @@ S2A 只实现并在分别通过 synthetic/physical-batch-128 acceptance 后运�
 
 全部使用 80 epochs、physical batch 128、三个固定 seed、完整 train/validation、Local-RR checkpoint selector；不得读取 test。三个 variant 必须分别做工程 acceptance，尤其 204 必须验证 token chunking 的 output/gradient finite、峰值显存和完整 checkpoint lifecycle。任何一个分支的工程失败只阻塞该分支，不允许静默简化结构或缩小 formal batch。
 
+实现登记：三个配置分别为 `crd_202_base_legacy_energy.yaml / crd_203_base_analytic_am.yaml / crd_204_base_morphology.yaml`，trainable parameter 数固定为 `1,071,449 / 1,197,785 / 1,106,857`。实现定向协议测试与全量 CPU 回归已通过；102 shared trunk 逐 tensor 相同、三个 projection 全零、频谱 float32、morphology 128-token chunking、prototype no-decay 与 `5S→15S` ramp 均有测试覆盖。CUDA synthetic 与三个独立 physical-batch-128 acceptance 尚待执行，因此 formal 队列仍未开放。
+
 ### 21.4 Energy representation 决策
 
 E 与 A 各自相对 BASE，必须同时满足才称为 energy-eligible：

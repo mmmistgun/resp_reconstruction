@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from resp_train.crd.config import check_crd_dependencies, load_crd_config
 from resp_train.crd.model import build_crd_model
+from resp_train.crd.training import PROTOTYPE_REGULARIZER_WEIGHT
 from resp_train.losses.task import RespirationTaskLoss
 from resp_train.utils.run import resolve_device, set_seed
 
@@ -52,6 +53,10 @@ def main() -> None:
         sync = components["loss_sync_sum"] / components["loss_sync_count"].clamp_min(1)
         effort = components["loss_effort_sum"] / components["loss_effort_count"].clamp_min(1)
         loss = loss_fn.sync_weight * sync + loss_fn.effort_weight * effort
+        regularizers = model.regularization_terms() if hasattr(model, "regularization_terms") else {}
+        prototype_loss = regularizers.get("loss_proto")
+        if prototype_loss is not None:
+            loss = loss + PROTOTYPE_REGULARIZER_WEIGHT * prototype_loss
     loss.backward()
 
     waveform = output["waveform"]
@@ -69,6 +74,7 @@ def main() -> None:
         "device": str(device),
         "waveform_shape": list(waveform.shape),
         "loss": float(loss.detach().cpu()),
+        "prototype_loss": float(prototype_loss.detach().cpu()) if prototype_loss is not None else None,
         "sync_eligible": int(components["loss_sync_count"].item()),
         "effort_eligible": int(components["loss_effort_count"].item()),
         "all_output_and_gradients_finite": finite,

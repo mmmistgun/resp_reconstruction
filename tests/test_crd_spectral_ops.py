@@ -6,6 +6,7 @@ from resp_train.crd.spectral_ops import (
     DIRECT_BANDWIDTH_INITIAL,
     DIRECT_CENTER_INITIAL,
     GaussianAnalyticFilterbank,
+    fft_hard_bandpass,
     fft_hard_lowpass,
     fourier_interpolate,
 )
@@ -50,4 +51,22 @@ def test_hard_lowpass_removes_above_cutoff_component() -> None:
     filtered = fft_hard_lowpass((low + high)[None, None, :], sample_rate=10.0, cutoff_hz=0.45)
 
     assert torch.mean((filtered[0, 0] - low).square()) < 1e-10
+    assert filtered.dtype == torch.float32
+
+
+def test_hard_bandpass_honors_strict_lower_support() -> None:
+    length = 1000
+    time = torch.arange(length, dtype=torch.float32) / 100.0
+    lower_edge = torch.sin(2.0 * torch.pi * 0.7 * time)
+    passband = torch.sin(2.0 * torch.pi * 1.0 * time)
+    high = torch.sin(2.0 * torch.pi * 9.0 * time)
+    filtered = fft_hard_bandpass(
+        (lower_edge + passband + high)[None, None, :],
+        sample_rate=100.0,
+        low_hz=0.70,
+        high_hz=8.0,
+        include_low=False,
+    )
+
+    assert torch.mean((filtered[0, 0] - passband).square()) < 1e-9
     assert filtered.dtype == torch.float32

@@ -16,6 +16,9 @@ from resp_train.crd.blocks import CustomRMSNorm
 from resp_train.losses.task import RespirationTaskLoss
 
 
+PROTOTYPE_REGULARIZER_WEIGHT = 1e-3
+
+
 @dataclass(frozen=True)
 class ParameterPartition:
     decay: tuple[nn.Parameter, ...]
@@ -125,6 +128,22 @@ def crd_learning_rate(
     return minimum + 0.5 * (maximum - minimum) * (1.0 + math.cos(math.pi * progress))
 
 
+def structural_regularizer_ramp(update_index: int, *, updates_per_epoch: int) -> float:
+    """S2 morphology 正则的冻结 5S→15S optimizer-update ramp。"""
+
+    update = int(update_index)
+    steps = int(updates_per_epoch)
+    if update < 0 or steps <= 0:
+        raise ValueError("update_index 必须非负且 updates_per_epoch 必须为正")
+    start = 5 * steps
+    stop = 15 * steps
+    if update <= start:
+        return 0.0
+    if update >= stop:
+        return 1.0
+    return float(update - start) / float(stop - start)
+
+
 def train_crd_one_epoch(
     model: nn.Module,
     dataloader: Iterable[Mapping[str, Any]],
@@ -178,6 +197,9 @@ def train_crd_one_epoch(
 
     for raw_group in progress:
         prepared = [_prepare_batch(batch, resolved_device, non_blocking=non_blocking) for batch in raw_group]
+        group_batch_size = sum(int(sensor.shape[0]) for sensor, _, _ in prepared)
+        if group_batch_size <= 0:
+            raise ValueError("accumulation group 不得为空 batch")
         group_counts = {"loss_sync_count": 0, "loss_effort_count": 0}
         prepared_counts: list[dict[str, int]] = []
         for _, target, _ in prepared:
@@ -189,6 +211,8 @@ def train_crd_one_epoch(
                 group_counts[key] += micro_counts[key]
 
         optimizer.zero_grad(set_to_none=True)
+        group_regularizer: torch.Tensor | None = None
+        group_ramp: float | None = None
         for (sensor, target, sst), expected_counts in zip(prepared, prepared_counts):
             with torch.amp.autocast(
                 resolved_device.type,
@@ -208,8 +232,32 @@ def train_crd_one_epoch(
                     group_counts["loss_effort_count"],
                 )
                 objective = loss_fn.sync_weight * sync_term + loss_fn.effort_weight * effort_term
+                regularizers = _regularization_terms(model)
+                if regularizers:
+                    if set(regularizers) != {"loss_proto"}:
+                        raise RuntimeError(f"未知 CRD structural regularizer: {sorted(regularizers)}")
+                    if group_total is None:
+                        raise ValueError("structural regularizer 要求 dataloader 提供长度以确定 updates_per_epoch")
+                    prototype_loss = regularizers["loss_proto"]
+                    if prototype_loss.ndim != 0 or not bool(torch.isfinite(prototype_loss)):
+                        raise FloatingPointError("loss_proto 必须是有限标量")
+                    ramp = structural_regularizer_ramp(update_index, updates_per_epoch=group_total)
+                    microbatch_fraction = float(sensor.shape[0]) / float(group_batch_size)
+                    objective = objective + (
+                        PROTOTYPE_REGULARIZER_WEIGHT * ramp * microbatch_fraction * prototype_loss
+                    )
+                    if group_regularizer is None:
+                        group_regularizer = prototype_loss.detach()
+                        group_ramp = ramp
             objective.backward()
             meter.update(components)
+
+        if group_regularizer is not None and group_ramp is not None:
+            meter.record_regularizer(
+                prototype_loss=float(group_regularizer.cpu()),
+                ramp=group_ramp,
+                weight=PROTOTYPE_REGULARIZER_WEIGHT,
+            )
 
         torch.nn.utils.clip_grad_norm_(
             model.parameters(),
@@ -274,6 +322,16 @@ def _validate_component_counts(components: Mapping[str, torch.Tensor], expected_
             raise RuntimeError(f"{name} eligibility count 与 target-only 预计算不一致: {micro_count} != {expected}")
 
 
+def _regularization_terms(model: nn.Module) -> Mapping[str, torch.Tensor]:
+    provider = getattr(model, "regularization_terms", None)
+    if provider is None:
+        return {}
+    terms = provider()
+    if not isinstance(terms, Mapping):
+        raise TypeError("model.regularization_terms() 必须返回 mapping")
+    return terms
+
+
 def _should_show_progress(value: bool | None) -> bool:
     return sys.stderr.isatty() if value is None else bool(value)
 
@@ -293,6 +351,11 @@ class _ComponentMeter:
         self.optimizer_updates = 0
         self.first_learning_rate: float | None = None
         self.last_learning_rate: float | None = None
+        self.regularizer_updates = 0
+        self.prototype_loss_sum = 0.0
+        self.prototype_weighted_sum = 0.0
+        self.first_regularizer_ramp: float | None = None
+        self.last_regularizer_ramp: float | None = None
 
     def update(self, components: Mapping[str, torch.Tensor]) -> None:
         for name in ("loss_sync", "loss_effort"):
@@ -305,11 +368,22 @@ class _ComponentMeter:
         self.last_learning_rate = float(learning_rate)
         self.optimizer_updates += 1
 
+    def record_regularizer(self, *, prototype_loss: float, ramp: float, weight: float) -> None:
+        if self.first_regularizer_ramp is None:
+            self.first_regularizer_ramp = float(ramp)
+        self.last_regularizer_ramp = float(ramp)
+        self.prototype_loss_sum += float(prototype_loss)
+        self.prototype_weighted_sum += float(weight) * float(ramp) * float(prototype_loss)
+        self.regularizer_updates += 1
+
     def summary(self) -> dict[str, float]:
         sync = self.sums["loss_sync"] / self.counts["loss_sync"] if self.counts["loss_sync"] else 0.0
         effort = self.sums["loss_effort"] / self.counts["loss_effort"] if self.counts["loss_effort"] else 0.0
-        return {
-            "loss": self.sync_weight * sync + self.effort_weight * effort,
+        weighted_regularizer = (
+            self.prototype_weighted_sum / self.regularizer_updates if self.regularizer_updates else 0.0
+        )
+        summary = {
+            "loss": self.sync_weight * sync + self.effort_weight * effort + weighted_regularizer,
             "loss_sync": sync,
             "loss_effort": effort,
             "eligible_sync": float(self.counts["loss_sync"]),
@@ -318,3 +392,14 @@ class _ComponentMeter:
             "first_learning_rate": float(self.first_learning_rate or 0.0),
             "last_learning_rate": float(self.last_learning_rate or 0.0),
         }
+        if self.regularizer_updates:
+            summary.update(
+                {
+                    "loss_proto": self.prototype_loss_sum / self.regularizer_updates,
+                    "loss_proto_weighted": weighted_regularizer,
+                    "prototype_regularizer_weight": PROTOTYPE_REGULARIZER_WEIGHT,
+                    "regularizer_ramp_first": float(self.first_regularizer_ramp or 0.0),
+                    "regularizer_ramp_last": float(self.last_regularizer_ramp or 0.0),
+                }
+            )
+        return summary

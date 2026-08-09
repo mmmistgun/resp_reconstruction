@@ -128,9 +128,9 @@ done
 
 T2、T3、T4 validation 均已完成。当前保留 T2/T4，并与 B0、F0、IEWT 一起进入阶段性 research-test；B0/M1/T1/T3 和 loss 消融由各自 run manifest 与 Git 历史追溯。
 
-## CRD-v1.1 S0/S1
+## CRD-v1.1 S0/S1/S2A
 
-六个原 S0/S1 配置、一个结果后诊断配置与一个 S1F 配置：
+八个 S0/S1 配置与三个 S2A 表征配置：
 
 ```text
 configs/crd_v1/crd_001_b0_retrain.yaml
@@ -141,6 +141,9 @@ configs/crd_v1/crd_103_direct_local_mamba.yaml
 configs/crd_v1/crd_104_direct_hier_mamba.yaml
 configs/crd_v1/crd_105_direct_coarse.yaml
 configs/crd_v1/crd_106_b0_hier_mamba.yaml
+configs/crd_v1/crd_202_base_legacy_energy.yaml
+configs/crd_v1/crd_203_base_analytic_am.yaml
+configs/crd_v1/crd_204_base_morphology.yaml
 ```
 
 先确认固定原生依赖：
@@ -474,7 +477,41 @@ CRD_203_BASE_ANALYTIC_AM
 CRD_204_BASE_MORPHOLOGY
 ```
 
-三者都在 BASE PatchTokenFrontend 后、local Mamba 前以 zero-init static residual 加入；不含 Direct/global/gate/auxiliary。Energy 和 morphology 使用不同的模块 primary/guardrail，S2B 只在两类都 eligible 时条件开放。具体配置名、参数数量和运行命令必须等实现测试与独立 physical-batch-128 acceptance 冻结后再写入；当前不要自行构造配置或启动训练。S2 全程禁止 research-test。
+三者都在 BASE PatchTokenFrontend 后、local Mamba 前以 zero-init static residual 加入；不含 Direct/global/gate/auxiliary。当前冻结的配置与 trainable parameter 数为：
+
+| Variant | 配置 | Trainable params |
+|---|---|---:|
+| `CRD_202_BASE_LEGACY_ENERGY` | `configs/crd_v1/crd_202_base_legacy_energy.yaml` | 1,071,449 |
+| `CRD_203_BASE_ANALYTIC_AM` | `configs/crd_v1/crd_203_base_analytic_am.yaml` | 1,197,785 |
+| `CRD_204_BASE_MORPHOLOGY` | `configs/crd_v1/crd_204_base_morphology.yaml` | 1,106,857 |
+
+先逐一运行 synthetic forward/backward，再运行彼此独立的 physical-batch-128 acceptance：
+
+```bash
+for variant in \
+  crd_202_base_legacy_energy \
+  crd_203_base_analytic_am \
+  crd_204_base_morphology; do
+  ./.venv/bin/python scripts/check_crd_variant.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --device cuda:0 \
+    --batch-size 1 \
+    || exit 1
+
+  ./.venv/bin/python scripts/train_crd.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --set protocol.run_role=acceptance \
+    --set data.max_train_windows=128 \
+    --set data.max_val_windows=32 \
+    --set training.epochs=1 \
+    --set training.device=cuda:0 \
+    --set training.show_progress=false \
+    --set outputs.run_root="/tmp/${variant}_batch128_acceptance" \
+    || exit 1
+done
+```
+
+每个 synthetic 必须报告 finite output/gradient；每个 acceptance 必须完成一次 optimizer update、validation 和完整 checkpoint lifecycle。尤其检查 204 的峰值显存。三项结果返回并审计、代码 commit 固定前，不启动 formal seeds。Energy 和 morphology 使用不同的 primary/guardrail，S2B 只在两类都 eligible 时条件开放；S2 全程禁止 research-test。
 
 ## 固定呼吸带传统基线
 

@@ -15,6 +15,7 @@ CRD_PROTOCOL_VERSION = "crd-v1.1-s0-s1-20260808"
 CRD_DIAGNOSTIC_PROTOCOL_VERSION = "crd-v1.1-s1d-20260808"
 CRD_EXPLORATORY_PROTOCOL_VERSION = "crd-v1.1-s1e-20260809"
 CRD_S1F_PROTOCOL_VERSION = "crd-v1.1-s1f-research-test-informed-20260809"
+CRD_S2A_PROTOCOL_VERSION = "crd-v1.1-s2a-research-test-informed-20260809"
 CRD_DIAGNOSTIC_VARIANTS = {
     "crd_103_direct_local_mamba",
     "crd_105_direct_coarse",
@@ -24,6 +25,11 @@ CRD_EXPLORATORY_VARIANTS = {
     "crd_104_direct_hier_mamba",
 }
 CRD_S1F_VARIANTS = {"crd_106_b0_hier_mamba"}
+CRD_S2A_VARIANTS = {
+    "crd_202_base_legacy_energy",
+    "crd_203_base_analytic_am",
+    "crd_204_base_morphology",
+}
 PINNED_DEPENDENCIES = {
     "mamba-ssm": "2.3.2.post1",
     "causal-conv1d": "1.6.2.post1",
@@ -118,13 +124,15 @@ def _validate_crd_config(cfg: DictConfig) -> None:
     variant = str(cfg.model.variant).lower()
     if variant not in CRD_VARIANTS:
         raise ValueError(f"未知 CRD variant={variant!r}；可选 {list(CRD_VARIANTS)}")
-    expected_stage = "s0" if variant.startswith("crd_00") else "s1"
+    expected_stage = "s2" if variant in CRD_S2A_VARIANTS else ("s0" if variant.startswith("crd_00") else "s1")
     if variant in CRD_DIAGNOSTIC_VARIANTS:
         expected_protocol = CRD_DIAGNOSTIC_PROTOCOL_VERSION
     elif variant in CRD_EXPLORATORY_VARIANTS:
         expected_protocol = CRD_EXPLORATORY_PROTOCOL_VERSION
     elif variant in CRD_S1F_VARIANTS:
         expected_protocol = CRD_S1F_PROTOCOL_VERSION
+    elif variant in CRD_S2A_VARIANTS:
+        expected_protocol = CRD_S2A_PROTOCOL_VERSION
     else:
         expected_protocol = CRD_PROTOCOL_VERSION
     frozen = {

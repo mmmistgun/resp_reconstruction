@@ -9,6 +9,11 @@ from torch import nn
 from resp_train.crd.blocks import BidirectionalMamba2Block, CoarseWaveformHead, ResidualDWBlock
 from resp_train.crd.frontends import DirectAnalyticFrontend, PatchTokenFrontend
 from resp_train.crd.initialization import module_seed
+from resp_train.crd.representations import (
+    AnalyticAMRepresentation,
+    LegacyEnergyRepresentation,
+    MorphologyRepresentation,
+)
 from resp_train.crd.spectral_ops import fft_hard_lowpass, fourier_interpolate
 from resp_train.models.stft_branch import TimeStftDual1D
 from resp_train.models.timeseries import PatchMixer1D
@@ -23,7 +28,16 @@ CRD_VARIANTS = (
     "crd_104_direct_hier_mamba",
     "crd_105_direct_coarse",
     "crd_106_b0_hier_mamba",
+    "crd_202_base_legacy_energy",
+    "crd_203_base_analytic_am",
+    "crd_204_base_morphology",
 )
+
+CRD_S2A_VARIANTS = {
+    "crd_202_base_legacy_energy",
+    "crd_203_base_analytic_am",
+    "crd_204_base_morphology",
+}
 
 
 def _validate_input(x: torch.Tensor) -> None:
@@ -125,7 +139,7 @@ class GlobalContextStage(nn.Module):
 
 
 class CRDCoarseModel(nn.Module):
-    """S1 共享 trunk；variant 只控制预注册的 frontend/local/global 因素。"""
+    """S1/S2 共享 trunk；variant 只控制协议预注册的静态因素。"""
 
     def __init__(self, variant: str, initialization_seed: int) -> None:
         super().__init__()
@@ -143,6 +157,7 @@ class CRDCoarseModel(nn.Module):
             "crd_103_direct_local_mamba",
             "crd_104_direct_hier_mamba",
             "crd_106_b0_hier_mamba",
+            *CRD_S2A_VARIANTS,
         }
         uses_global = variant in {
             "crd_104_direct_hier_mamba",
@@ -151,6 +166,14 @@ class CRDCoarseModel(nn.Module):
 
         with module_seed(initialization_seed, "direct_frontend" if uses_direct else "patch_frontend"):
             self.frontend: nn.Module = DirectAnalyticFrontend() if uses_direct else PatchTokenFrontend()
+        if variant == "crd_202_base_legacy_energy":
+            self.representation: nn.Module | None = LegacyEnergyRepresentation(initialization_seed)
+        elif variant == "crd_203_base_analytic_am":
+            self.representation = AnalyticAMRepresentation(initialization_seed)
+        elif variant == "crd_204_base_morphology":
+            self.representation = MorphologyRepresentation(initialization_seed)
+        else:
+            self.representation = None
         if uses_local:
             with module_seed(initialization_seed, "local_trunk"):
                 self.local_blocks = nn.ModuleList([BidirectionalMamba2Block(96) for _ in range(6)])
@@ -174,6 +197,13 @@ class CRDCoarseModel(nn.Module):
         latent = self.frontend(x)
         if latent.shape[1:] != (96, 1800):
             raise RuntimeError(f"CRD frontend 输出契约错误: {tuple(latent.shape)}")
+        if self.representation is not None:
+            representation = self.representation(x)
+            if representation.shape != latent.shape:
+                raise RuntimeError(
+                    f"CRD representation 输出契约错误: {tuple(representation.shape)} != {tuple(latent.shape)}"
+                )
+            latent = latent + representation
         if self.local_blocks:
             tokens = latent.transpose(1, 2)
             for block in self.local_blocks:
@@ -185,6 +215,11 @@ class CRDCoarseModel(nn.Module):
         waveform_10hz = self.head(latent)
         waveform = fourier_interpolate(waveform_10hz, target_length=18000)
         return {"waveform": waveform, "waveform_10hz": waveform_10hz}
+
+    def regularization_terms(self) -> dict[str, torch.Tensor]:
+        if isinstance(self.representation, MorphologyRepresentation):
+            return {"loss_proto": self.representation.prototype_loss()}
+        return {}
 
 
 def build_crd_model(cfg: Any) -> nn.Module:

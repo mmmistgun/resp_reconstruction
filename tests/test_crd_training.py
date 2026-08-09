@@ -10,6 +10,7 @@ from resp_train.crd.config import load_crd_config
 from resp_train.crd.training import (
     crd_learning_rate,
     partition_weight_decay_parameters,
+    structural_regularizer_ramp,
     train_crd_one_epoch,
 )
 from resp_train.losses.task import RespirationTaskLoss
@@ -28,6 +29,12 @@ def test_step_exact_learning_rate_hits_frozen_endpoints() -> None:
     assert crd_learning_rate(99, **kwargs) == pytest.approx(3e-5)
 
 
+def test_structural_regularizer_ramp_uses_optimizer_updates_per_epoch() -> None:
+    assert structural_regularizer_ramp(400, updates_per_epoch=80) == 0.0
+    assert structural_regularizer_ramp(800, updates_per_epoch=80) == pytest.approx(0.5)
+    assert structural_regularizer_ramp(1200, updates_per_epoch=80) == 1.0
+
+
 class _PartitionProbe(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -35,6 +42,7 @@ class _PartitionProbe(nn.Module):
         self.norm = CustomRMSNorm(2)
         self.center_logits = nn.Parameter(torch.zeros(2))
         self.A_log = nn.Parameter(torch.zeros(2))
+        self.P = nn.Parameter(torch.zeros(2))
 
 
 class RMSNorm(nn.Module):
@@ -55,6 +63,7 @@ def test_adamw_partition_has_explicit_no_decay_parameters() -> None:
         "norm.weight",
         "center_logits",
         "A_log",
+        "P",
         "mamba_norm.weight",
     }
 
@@ -78,6 +87,15 @@ class _ScalarModel(nn.Module):
 
     def forward(self, x: torch.Tensor, **_: object) -> torch.Tensor:
         return x * self.weight
+
+
+class _RegularizedScalarModel(_ScalarModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.P = nn.Parameter(torch.tensor(2.0))
+
+    def regularization_terms(self):
+        return {"loss_proto": self.P.square()}
 
 
 class _EligibleProbeLoss(nn.Module):
@@ -134,6 +152,38 @@ def test_eligible_aware_accumulation_uses_whole_group_denominators() -> None:
     assert next_update == 1
     assert summary["eligible_sync"] == 2
     assert summary["eligible_effort"] == 1
+
+
+def test_prototype_regularizer_is_added_once_per_accumulation_group() -> None:
+    loader = DataLoader(_ThreeSampleDataset(), batch_size=2, shuffle=False)
+    model = _RegularizedScalarModel()
+    loss = _EligibleProbeLoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+    summary, next_update = train_crd_one_epoch(
+        model,
+        loader,
+        loss,  # type: ignore[arg-type]
+        optimizer,
+        device="cpu",
+        accumulation_steps=2,
+        update_index=10,
+        total_updates=20,
+        max_learning_rate=0.1,
+        min_learning_rate=0.1,
+        warmup_fraction=0.05,
+        grad_clip_norm=100.0,
+        use_amp=False,
+        show_progress=False,
+    )
+
+    assert next_update == 11
+    assert model.P.item() == pytest.approx(1.9998)
+    assert summary["loss_proto"] == pytest.approx(4.0)
+    assert summary["loss_proto_weighted"] == pytest.approx(0.002)
+    assert summary["regularizer_ramp_first"] == pytest.approx(0.5)
+    assert summary["regularizer_ramp_last"] == pytest.approx(0.5)
+    assert summary["loss"] == pytest.approx(4.502)
 
 
 def test_core_loss_target_only_counts_match_differentiable_sums() -> None:

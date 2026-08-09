@@ -13,6 +13,7 @@ from resp_train.crd.config import (
     CRD_EXPLORATORY_PROTOCOL_VERSION,
     CRD_PROTOCOL_VERSION,
     CRD_S1F_PROTOCOL_VERSION,
+    CRD_S2A_PROTOCOL_VERSION,
     load_crd_config,
 )
 from resp_train.crd.experiment import CRDExperiment
@@ -59,6 +60,7 @@ class _ScaledIdentity(torch.nn.Module):
         ("configs/crd_v1/crd_105_direct_coarse.yaml", CRD_DIAGNOSTIC_PROTOCOL_VERSION),
         ("configs/crd_v1/crd_102_b0_local_mamba.yaml", CRD_EXPLORATORY_PROTOCOL_VERSION),
         ("configs/crd_v1/crd_106_b0_hier_mamba.yaml", CRD_S1F_PROTOCOL_VERSION),
+        ("configs/crd_v1/crd_202_base_legacy_energy.yaml", CRD_S2A_PROTOCOL_VERSION),
     ],
 )
 def test_crd_experiment_writes_complete_nonresumable_lifecycle(
@@ -120,6 +122,54 @@ def test_crd_experiment_writes_complete_nonresumable_lifecycle(
         "metrics_summary.csv",
     ):
         assert (run_dir / filename).exists()
+
+
+class _RegularizedScaledIdentity(_ScaledIdentity):
+    def __init__(self) -> None:
+        super().__init__()
+        self.P = torch.nn.Parameter(torch.tensor([1.0, 0.0]))
+
+    def regularization_terms(self):
+        return {"loss_proto": self.P.square().sum()}
+
+
+def test_morphology_lifecycle_records_frozen_prototype_regularizer(monkeypatch, tmp_path) -> None:
+    cfg = load_crd_config(
+        "configs/crd_v1/crd_204_base_morphology.yaml",
+        overrides=[
+            "protocol.run_role=smoke",
+            "data.max_train_windows=1",
+            "data.max_val_windows=1",
+            "training.epochs=1",
+            "training.batch_size=1",
+            "training.device=cpu",
+            "training.show_progress=false",
+            f"outputs.run_root={tmp_path.as_posix()}",
+        ],
+    )
+    dataset = _IdentityDataset()
+    loader = DataLoader(dataset, batch_size=1, shuffle=False)
+    bundle = SimpleNamespace(loader=loader, dataset=dataset)
+    data = SimpleNamespace(
+        train=bundle,
+        val=bundle,
+        audit_summary=pd.DataFrame([{"split": "val", "n_windows": 1}]),
+    )
+    monkeypatch.setattr("resp_train.crd.experiment.build_tho_data", lambda _cfg: data)
+    monkeypatch.setattr("resp_train.crd.experiment.build_crd_model", lambda _cfg: _RegularizedScaledIdentity())
+
+    run_dir = CRDExperiment(cfg).train()
+    history = pd.read_csv(run_dir / "train_history.csv")
+    assert history.loc[0, "train_loss_proto"] == pytest.approx(1.0)
+    assert history.loc[0, "train_loss_proto_weighted"] == pytest.approx(0.0)
+    assert history.loc[0, "regularizer_ramp_first"] == pytest.approx(0.0)
+    checkpoint = torch.load(run_dir / "checkpoint_final.pt", map_location="cpu")
+    assert checkpoint["extra_state"]["structural_regularizer"] == {
+        "name": "prototype_orthogonality",
+        "weight": 1e-3,
+        "ramp": "optimizer_update_5S_to_15S",
+        "updates_per_epoch": 1,
+    }
 
 
 class _BFloatOutput(torch.nn.Module):

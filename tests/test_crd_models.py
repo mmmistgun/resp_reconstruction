@@ -110,6 +110,9 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
         "crd_104_direct_hier_mamba": 2256613,
         "crd_105_direct_coarse": 192781,
         "crd_106_b0_hier_mamba": 2181193,
+        "crd_202_base_legacy_energy": 1071449,
+        "crd_203_base_analytic_am": 1197785,
+        "crd_204_base_morphology": 1106857,
     }
     shared_decoder_state: dict[str, torch.Tensor] | None = None
     shared_local_state: dict[str, torch.Tensor] | None = None
@@ -125,6 +128,9 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_104_direct_hier_mamba",
             "crd_105_direct_coarse",
             "crd_106_b0_hier_mamba",
+            "crd_202_base_legacy_energy",
+            "crd_203_base_analytic_am",
+            "crd_204_base_morphology",
         }:
             current = {
                 **{f"refine.{key}": value for key, value in model.refinement.state_dict().items()},
@@ -140,6 +146,9 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_103_direct_local_mamba",
             "crd_104_direct_hier_mamba",
             "crd_106_b0_hier_mamba",
+            "crd_202_base_legacy_energy",
+            "crd_203_base_analytic_am",
+            "crd_204_base_morphology",
         }:
             current_local = model.local_blocks.state_dict()
             if shared_local_state is None:
@@ -203,3 +212,32 @@ def test_global_context_stage_is_exact_identity_at_initialization() -> None:
     local = torch.randn(1, 96, 1800)
 
     assert torch.equal(stage(local), local)
+
+
+def test_s2a_variants_preserve_exact_102_trunk_and_use_zero_static_injection() -> None:
+    base = build_crd_model(load_crd_config("configs/crd_v1/crd_102_b0_local_mamba.yaml"))
+    for variant in (
+        "crd_202_base_legacy_energy",
+        "crd_203_base_analytic_am",
+        "crd_204_base_morphology",
+    ):
+        candidate = build_crd_model(load_crd_config(f"configs/crd_v1/{variant}.yaml"))
+        for base_module, candidate_module in (
+            (base.frontend, candidate.frontend),
+            (base.local_blocks, candidate.local_blocks),
+            (base.refinement, candidate.refinement),
+            (base.head, candidate.head),
+        ):
+            assert base_module.state_dict().keys() == candidate_module.state_dict().keys()
+            assert all(
+                torch.equal(base_module.state_dict()[name], candidate_module.state_dict()[name])
+                for name in base_module.state_dict()
+            )
+        assert candidate.global_stage is None
+        assert candidate.representation is not None
+        assert torch.count_nonzero(candidate.representation.projection.weight) == 0
+        assert torch.count_nonzero(candidate.representation.projection.bias) == 0
+        if variant == "crd_204_base_morphology":
+            assert set(candidate.regularization_terms()) == {"loss_proto"}
+        else:
+            assert candidate.regularization_terms() == {}

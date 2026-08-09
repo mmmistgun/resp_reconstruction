@@ -12,6 +12,7 @@ from omegaconf import DictConfig, OmegaConf
 from resp_train.crd.config import crd_dependency_versions, load_crd_config
 from resp_train.crd.model import build_crd_model
 from resp_train.crd.training import (
+    PROTOTYPE_REGULARIZER_WEIGHT,
     build_crd_optimizer,
     optimizer_updates_per_epoch,
     train_crd_one_epoch,
@@ -24,9 +25,9 @@ from resp_train.utils.run import create_run_dir, resolve_device, save_config, sa
 
 
 class CRDExperiment:
-    """冻结的 CRD-v1.1 S0/S1 训练与 validation checkpoint 流程。"""
+    """冻结的 CRD-v1.1 S0/S1/S2 训练与 validation checkpoint 流程。"""
 
-    task_name = "crd_v1_s0_s1"
+    task_name = "crd_v1"
 
     def __init__(self, cfg: DictConfig):
         self.cfg = cfg
@@ -130,6 +131,16 @@ class CRDExperiment:
                 "val_core_loss": val_core_loss,
                 "val_local_rr_mae": val_local_rr,
             }
+            if "loss_proto" in train_summary:
+                record.update(
+                    {
+                        "train_loss_proto": float(train_summary["loss_proto"]),
+                        "train_loss_proto_weighted": float(train_summary["loss_proto_weighted"]),
+                        "prototype_regularizer_weight": float(train_summary["prototype_regularizer_weight"]),
+                        "regularizer_ramp_first": float(train_summary["regularizer_ramp_first"]),
+                        "regularizer_ramp_last": float(train_summary["regularizer_ramp_last"]),
+                    }
+                )
             history.append(record)
             pd.DataFrame(history).to_csv(run_dir / "train_history.csv", index=False)
             logger.info(
@@ -149,6 +160,13 @@ class CRDExperiment:
                 "resume_supported": False,
                 "dependency_versions": crd_dependency_versions(),
             }
+            if "loss_proto" in train_summary:
+                checkpoint_extra["structural_regularizer"] = {
+                    "name": "prototype_orthogonality",
+                    "weight": PROTOTYPE_REGULARIZER_WEIGHT,
+                    "ramp": "optimizer_update_5S_to_15S",
+                    "updates_per_epoch": updates_per_epoch,
+                }
             if val_local_rr < best_local_rr:
                 best_local_rr = val_local_rr
                 best_epoch = epoch
@@ -179,6 +197,18 @@ class CRDExperiment:
                 "total_updates": total_updates,
                 "resume_supported": False,
                 "dependency_versions": crd_dependency_versions(),
+                **(
+                    {
+                        "structural_regularizer": {
+                            "name": "prototype_orthogonality",
+                            "weight": PROTOTYPE_REGULARIZER_WEIGHT,
+                            "ramp": "optimizer_update_5S_to_15S",
+                            "updates_per_epoch": updates_per_epoch,
+                        }
+                    }
+                    if "train_loss_proto" in history[-1]
+                    else {}
+                ),
             },
         )
 

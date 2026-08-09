@@ -19,7 +19,7 @@
 - 训练：`./.venv/bin/python scripts/train_tho.py --config configs/tho_research_v2.yaml --set training.device=cuda:0`
 - 复评：`./.venv/bin/python scripts/eval_tho.py --checkpoint runs/<run>/checkpoint_best_local_rr.pt --split val`
 - Research-test：复评命令额外传入 `--split test --confirm-research-test`。该 split 可在阶段性模型整理后重复观察，也可形成后续独立研究问题，但不得用于重选已训练 run 的 epoch/checkpoint；所有结果均属于 development/research evidence，不表述为无偏 held-out 证据。
-- CRD 配置：`configs/crd_v1/` 下六个原 S0/S1 配置、`crd_105_direct_coarse` 诊断配置与当前唯一激活的 `crd_106_b0_hier_mamba` S1F 配置；训练入口 `./.venv/bin/python scripts/train_crd.py --config configs/crd_v1/<variant>.yaml --set training.device=cuda:0`。
+- CRD 配置：`configs/crd_v1/` 下保留八个 S0/S1 配置，并新增当前激活的 `crd_202_base_legacy_energy / crd_203_base_analytic_am / crd_204_base_morphology` 三个 S2A 配置；训练入口 `./.venv/bin/python scripts/train_crd.py --config configs/crd_v1/<variant>.yaml --set training.device=cuda:0`。
 - CRD validation 复评：`./.venv/bin/python scripts/eval_crd.py --checkpoint runs/<run>/checkpoint_best_local_rr.pt`；该入口故意不提供 test split。
 - CRD S1C research-test 与冻结汇总均已完成；入口和命令只作 provenance，不再重复运行。
 - 数据审计：`scripts/audit_tho_dataset.py`
@@ -36,7 +36,7 @@
 
 ## 当前验证
 
-- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py`
+- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py`
 - 全量当前测试：`./.venv/bin/python -m pytest tests`
 - GPU 正式运行必须在沙盒外执行；CPU smoke 只用于实现验收，不形成科研结论。
 

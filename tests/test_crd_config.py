@@ -12,13 +12,15 @@ from resp_train.crd.config import (
     CRD_PROTOCOL_VERSION,
     CRD_S1F_PROTOCOL_VERSION,
     CRD_S1F_VARIANTS,
+    CRD_S2A_PROTOCOL_VERSION,
+    CRD_S2A_VARIANTS,
     load_crd_config,
 )
 
 
 def test_all_crd_configs_are_formal_and_frozen() -> None:
     paths = sorted(Path("configs/crd_v1").glob("*.yaml"))
-    assert len(paths) == 8
+    assert len(paths) == 11
     for path in paths:
         cfg = load_crd_config(path)
         if cfg.model.variant in CRD_DIAGNOSTIC_VARIANTS:
@@ -27,6 +29,8 @@ def test_all_crd_configs_are_formal_and_frozen() -> None:
             expected_protocol = CRD_EXPLORATORY_PROTOCOL_VERSION
         elif cfg.model.variant in CRD_S1F_VARIANTS:
             expected_protocol = CRD_S1F_PROTOCOL_VERSION
+        elif cfg.model.variant in CRD_S2A_VARIANTS:
+            expected_protocol = CRD_S2A_PROTOCOL_VERSION
         else:
             expected_protocol = CRD_PROTOCOL_VERSION
         assert cfg.protocol.name == expected_protocol
@@ -35,6 +39,7 @@ def test_all_crd_configs_are_formal_and_frozen() -> None:
         assert cfg.training.batch_size == 128
         assert cfg.training.gradient_accumulation_steps == 1
         assert cfg.model.initialization_seed == cfg.training.seed
+        assert cfg.protocol.stage == ("s2" if cfg.model.variant in CRD_S2A_VARIANTS else cfg.protocol.stage)
 
 
 def test_formal_config_rejects_unregistered_batch_change() -> None:
