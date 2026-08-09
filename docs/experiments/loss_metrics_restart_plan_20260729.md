@@ -1935,3 +1935,5 @@ CRD_103 三 formal seeds 随后在 commit `ed9d68e` 下完成并通过完整性�
 S1E 只描述 `102 vs 101` 的 Local Mamba 补偿效应与 `104 vs 103` 的 Global Mamba 边际效应，并将二者与 CRD_001/105 做全指标背景比较。原 0.5%/2-of-3/PCC/trajectory 条件只作描述性参照，不重新选择模型；CRD_105 的当前保留状态不因 S1E 自动改变。S1E 不修改数据、split、target、loss、metrics、selector 或 seed，禁止读取 research-test。完整比较口径、工程门槛、产物身份与未来证据边界由附件第 17 节冻结。
 
 CRD_102/104 的 CUDA synthetic 与独立 physical-batch-128 acceptance 已在 commit `d60b050` 的干净工作树下通过。两者均以 128 个 train windows 形成一次 update，并完成 32 条 validation metrics 与完整 checkpoint 生命周期；所有 tensors/metrics finite、无 prediction degeneracy。该结果仅解除六个 S1E 完整 run 的工程阻塞，不形成效果证据。
+
+六个 S1E full-budget run 随后在 commit `f8fa658` 下完成并通过完整性审计。102 相对 101 强烈改善 RR、PCC、global envelope 与 IBI，但 trajectory 恶化 3.4048%；104 相对 103 描述性满足原四项条件，显示 Global Mamba + FiLM 对失败的 103 存在补偿。相对已冻结的 105，102 的 Local RR 改善 4.3138%、3/3 paired 改善、PCC 增加 0.018342且 trajectory 仅恶化 0.2882%，形成强探索性候选；104 同样改善 RR/PCC/global envelope，但 trajectory 恶化 3.0375%。这证明原顺序 gate 会漏掉非单调模块交互，但不允许在观察后回改 S1D 结论：105 仍是本轮正式保留结果，102/104 只进入下一版确认协议的候选背景，不授权 CRD research-test。

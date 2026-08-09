@@ -491,3 +491,40 @@ runs/crd_v1/crd_104_direct_hier_mamba/seed_<seed>/
 ```
 
 所有 S1E run 仍严格禁止读取 research-test；任何中断或重复 run 必须按完整 lifecycle 审计后再决定是否纳入，不能仅凭存在 best checkpoint 进入汇总。
+
+### 17.3 S1E 完整结果
+
+CRD_102/104 各三个完整 run 均在 commit `f8fa658443b2bc2a2414f142b2a78c746000daca`、`git_dirty=false` 下完成。六个 run 均为 S1E full-budget `80×128×1`、6400 updates、2675 个 validation samples；history、best/final checkpoint model/optimizer tensors 与逐 sample metrics finite，无 prediction degeneracy，best checkpoint 与严格最低 Local RR epoch 一致。
+
+| Variant | Seed | Run | Best epoch | Local RR | signed PCC | trajectory |
+|---|---:|---|---:|---:|---:|---:|
+| 102 | 20260811 | `runs/crd_v1/crd_102_b0_local_mamba/seed_20260811/20260809_022128_909818` | 13 | 0.552821 | 0.865598 | 0.149786 |
+| 102 | 20260812 | `runs/crd_v1/crd_102_b0_local_mamba/seed_20260812/20260809_032737_110644` | 11 | 0.566412 | 0.863090 | 0.149075 |
+| 102 | 20260813 | `runs/crd_v1/crd_102_b0_local_mamba/seed_20260813/20260809_043403_554605` | 13 | 0.549251 | 0.865328 | 0.151588 |
+| 104 | 20260811 | `runs/crd_v1/crd_104_direct_hier_mamba/seed_20260811/20260809_054023_270736` | 4 | 0.548550 | 0.854263 | 0.150472 |
+| 104 | 20260812 | `runs/crd_v1/crd_104_direct_hier_mamba/seed_20260812/20260809_065353_484711` | 72 | 0.554025 | 0.849170 | 0.156327 |
+| 104 | 20260813 | `runs/crd_v1/crd_104_direct_hier_mamba/seed_20260813/20260809_080732_234579` | 58 | 0.561292 | 0.851580 | 0.155999 |
+
+三 seed mean ± sample SD：
+
+| 指标 | CRD_102 | CRD_104 | 冻结 S1D CRD_105 |
+|---|---:|---:|---:|
+| Whole RR MAE | 0.515775 ± 0.020060 | 0.466760 ± 0.015423 | 0.520911 ± 0.020652 |
+| Local RR MAE | 0.556161 ± 0.009055 | 0.554622 ± 0.006392 | 0.581234 ± 0.015801 |
+| trajectory MAE | 0.150150 ± 0.001296 | 0.154266 ± 0.003290 | 0.149718 ± 0.000264 |
+| global envelope error | 0.187512 ± 0.002438 | 0.207204 ± 0.020511 | 0.236005 ± 0.012477 |
+| lag-aware signed PCC | 0.864672 ± 0.001376 | 0.851671 ± 0.002548 | 0.846330 ± 0.002268 |
+| IBI MedAE | 0.080181 ± 0.001384 | 0.078182 ± 0.002194 | 0.082121 ± 0.002772 |
+| IBI coverage | 0.839027 ± 0.006859 | 0.843683 ± 0.003255 | 0.826697 ± 0.003483 |
+| Low envelope Spearman | 0.400923 ± 0.030012 | 0.363911 ± 0.051695 | 0.400853 ± 0.029150 |
+| Medium envelope Spearman | 0.568066 ± 0.019583 | 0.525940 ± 0.008351 | 0.542727 ± 0.022539 |
+| High envelope Spearman | 0.742683 ± 0.006310 | 0.718028 ± 0.010620 | 0.718366 ± 0.006680 |
+
+冻结问题的描述性结论：
+
+1. `102 vs 101`：Whole/Local RR 分别改善 9.4864%/10.9269%，Local RR 为 3/3 paired 改善，global envelope 改善 10.1719%，signed PCC 增加 0.076843，IBI MedAE/coverage 与 Low/Medium Spearman 也改善；但 trajectory MAE 恶化 3.4048%，故若机械套用旧条件，会因 trajectory 单项失败。这说明 Local Mamba 对失败 Patch frontend package 存在强补偿，而不是简单延续 101 的退化。
+2. `104 vs 103`：Whole/Local RR 改善 12.1535%/5.2329%，Local RR 为 3/3 paired 改善，trajectory 改善 2.0895%，signed PCC 仅下降 0.001120，四项旧条件均通过；global envelope 恶化 3.8164%，但 IBI coverage、三层 Spearman 与 interpretable fraction 改善。Global Mamba + FiLM 对 103 存在明显补偿/交互效应。
+3. 相对 CRD_001，102 的 Whole/Local/trajectory/global-envelope 分别改善 3.5395%/12.0650%/4.5124%/19.3456%，PCC 增加 0.024385；104 分别改善 12.7063%/12.3083%/1.8946%/10.8753%，PCC 增加 0.011384。两者 IBI coverage 仍分别低 0.009229/0.004574。
+4. 相对冻结的 CRD_105，102 的 Whole/Local/global-envelope 分别改善 0.9860%/4.3138%/20.5477%，PCC 增加 0.018342，trajectory 仅恶化 0.2882%，且 Local RR 为 3/3 paired 改善；它描述性满足四项旧条件。104 的 Whole/Local/global-envelope 分别改善 10.3955%/4.5785%/12.2036%，PCC 增加 0.005342，但 trajectory 恶化 3.0375%，描述性不满足旧 trajectory 条件。
+
+S1E 暴露了明显的非单调结构交互：101 或 103 单步失败并不意味着其后继 102 或 104 也必然失败。尽管 102 尤其形成强探索性候选，本节在观察结果前已冻结为不重选模型，因此 CRD_105 仍是 S1D 的正式保留结果；102/104 只能用于设计下一版预先冻结的多候选确认协议，不能在本节事后升级为保留模型，也不能据此读取 research-test。

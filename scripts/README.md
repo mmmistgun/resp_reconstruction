@@ -373,6 +373,8 @@ done
 
 不要覆盖 epochs/batch/accumulation 或任何 `max_*_windows`，也不要读取 research-test。102/104 的原保留条件只作描述性参照；S1E 结果不会自动推翻当前保留的 CRD_105。
 
+六个 S1E run 已在 commit `f8fa658` 下完成并通过审计。102 相对 101 除 trajectory 恶化 3.4048% 外，在 RR、PCC、global envelope 与 IBI 上均大幅改善；104 相对 103 描述性满足原四项条件。相对冻结的 105，102 的 Local RR 改善 4.3138%、3/3 paired 改善、PCC 增加 0.018342且 trajectory 仅恶化 0.2882%；104 的 Local RR/PCC 也改善，但 trajectory 恶化 3.0375%。这些结果只用于下一版确认协议设计，当前不重选模型、不运行 research-test。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的
