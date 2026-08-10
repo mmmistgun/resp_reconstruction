@@ -1989,3 +1989,5 @@ S2A 三分支实现与 CPU 协议回归现已完成：配置为 `crd_202_base_le
 研究者在获知 S2A 三个单因素均失败后，明确要求继续检验多因素非线性补偿。现新增 result-informed exploratory S2B-R，而不伪装成第 41 节条件自然触发：同时实现 `CRD_205 BASE+E+M / CRD_206 BASE+A+M` 与各自确定性参数匹配 control `CRD_207/208`。四项初始化均退化为 CRD_102，沿用数据、core loss、metrics、Local-RR selector、80 epochs、physical batch 128 和三个 seed；只读 train/validation，不访问 research-test。
 
 每个组合必须同时优于 BASE、自己的 capacity control 与冻结的最佳 constituent，并守住 PCC/trajectory/coverage；另报告 `combo−energy−morphology+BASE` factorial interaction descriptives。完整结构、参数匹配、显存策略、门槛和停止规则见附件第 22 节。当前只激活实现、测试与四项独立工程验收；S3 gate 仍未定义或实现。
+
+205/206/207/208 的 CUDA synthetic 与独立 physical-batch-128 acceptance 已在统一干净 commit `0e541f8` 下通过；peak reserved fraction 分别为 `67.37%/67.15%/65.41%/71.46%`，完整 checkpoint lifecycle、eligible primary finite 与 prediction-degeneracy 审计通过。现允许四项各三个 formal seeds；仍不得读取 research-test、改动 batch/预算或实现 S3。

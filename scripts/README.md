@@ -632,7 +632,29 @@ for variant in \
 done
 ```
 
-每项要求完整 lifecycle、eligible primary finite、joint prediction nondegenerate 且 `peak_reserved_fraction≤0.80`。若某项 OOM 或越线，停止，不临时减 batch/结构。四项审计并提交前不启动 12 个 formal runs；S3 gate 仍未实现，S2B-R 全程禁止 research-test。
+每项要求完整 lifecycle、eligible primary finite、joint prediction nondegenerate 且 `peak_reserved_fraction≤0.80`。若某项 OOM 或越线，停止，不临时减 batch/结构。S3 gate 仍未实现，S2B-R 全程禁止 research-test。
+
+四项已在统一干净 commit `0e541f8` 下通过；peak reserved fraction 为 `67.37%/67.15%/65.41%/71.46%`。当前允许 12 个 formal runs：
+
+```bash
+for variant in \
+  crd_205_base_em_static \
+  crd_206_base_am_static \
+  crd_207_base_cap_em \
+  crd_208_base_cap_am; do
+  for seed in 20260811 20260812 20260813; do
+    ./.venv/bin/python scripts/train_crd.py \
+      --config "configs/crd_v1/${variant}.yaml" \
+      --set training.seed="${seed}" \
+      --set training.device=cuda:0 \
+      --set training.show_progress=false \
+      --set outputs.run_root="runs/crd_v1/${variant}/seed_${seed}" \
+      || exit 1
+  done
+done
+```
+
+不得覆盖 epochs、batch、accumulation 或任何 `max_*_windows`，不得读取 research-test。12 项完成后先审计 checkpoint/metrics 集合，再应用附件第 22.3 节的 BASE/control/best-constituent 三重门槛与 factorial interaction 描述；结果冻结前不实现 S3。
 
 ## 固定呼吸带传统基线
 

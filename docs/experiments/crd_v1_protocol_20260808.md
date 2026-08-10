@@ -837,6 +837,8 @@ Capacity control 不读取 E/A/M。每个 block 固定为 `GN(12,96)→Conv1x1 9
 
 四项分别完成 synthetic forward/backward 与独立 physical-batch-128 acceptance；每项要求完整 checkpoint lifecycle、eligible primary finite、joint prediction nondegenerate、peak reserved fraction `≤80%`。工程失败只阻塞该 variant，不允许临时改小 formal batch或改结构。通过后每项使用 80 epochs、physical batch 128、accumulation 1、三个固定 seed、完整 train/validation、Local-RR checkpoint selector；不得修改 loss、metrics、seed、预算或访问 research-test。
 
+四项工程验收随后在统一干净 commit `0e541f8` 下通过。205/206/207/208 的 synthetic output/gradient 均 finite；每个 acceptance 均完成 128/32 个 train/validation windows、1 optimizer update、两个 finite checkpoint、32 条 eligible-primary-finite validation metrics且 joint prediction degeneracy 为 0。Peak allocated 为 `8,645.69/8,637.92/8,935.42/9,911.20 MiB`，peak reserved fraction 为 `67.37%/67.15%/65.41%/71.46%`，均低于 `80%`；205/206 正确记录 prototype regularizer provenance/P no-decay，206 的 filter logits 也处于 no-decay。至此允许四项在新的统一干净 commit 上各运行三个 formal seeds；单 epoch acceptance 数值不作效果比较。
+
 ### 22.3 组合资格与交互证据
 
 每个组合必须同时通过：
