@@ -14,6 +14,7 @@ from resp_train.crd.config import (
     CRD_PROTOCOL_VERSION,
     CRD_S1F_PROTOCOL_VERSION,
     CRD_S2A_PROTOCOL_VERSION,
+    CRD_S2BR_PROTOCOL_VERSION,
     load_crd_config,
 )
 from resp_train.crd.experiment import CRDExperiment
@@ -61,6 +62,8 @@ class _ScaledIdentity(torch.nn.Module):
         ("configs/crd_v1/crd_102_b0_local_mamba.yaml", CRD_EXPLORATORY_PROTOCOL_VERSION),
         ("configs/crd_v1/crd_106_b0_hier_mamba.yaml", CRD_S1F_PROTOCOL_VERSION),
         ("configs/crd_v1/crd_202_base_legacy_energy.yaml", CRD_S2A_PROTOCOL_VERSION),
+        ("configs/crd_v1/crd_205_base_em_static.yaml", CRD_S2BR_PROTOCOL_VERSION),
+        ("configs/crd_v1/crd_207_base_cap_em.yaml", CRD_S2BR_PROTOCOL_VERSION),
     ],
 )
 def test_crd_experiment_writes_complete_nonresumable_lifecycle(

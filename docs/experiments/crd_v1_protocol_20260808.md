@@ -5,8 +5,8 @@
 本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–41 节引用的规范性附件；发生冲突时以主协议为准。当前状态为：
 
 - CRD-S0/S1/S1C/S1F：已完成并冻结，S2 BASE 为 candidate-lock 中的 CRD_102；
-- CRD-S2A：202/203/204 九个 formal runs、prototype 描述与冻结 summary 已完成，三个表征分支关闭；
-- S2B/S3 关闭，当前没有激活新的 CRD 实验。
+- CRD-S2A：202/203/204 九个 formal runs、prototype 描述与冻结 summary 已完成，三个单分支关闭；
+- CRD-S2B-R：结果知情双因素交互的实现与工程验收已激活；S3 关闭。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节；gate、auxiliary、capacity/TCN control、S2B/S3 和最终消融仍未激活。
 
@@ -813,6 +813,42 @@ S2A 只实现并在分别通过 synthetic/physical-batch-128 acceptance 后运�
 九个 S2A formal runs 随后在统一干净 commit `41ed41d` 下完成。每个 run 均为 80 epochs/6400 updates、2675 条 validation metrics、两个 finite checkpoint且 joint prediction degeneracy 为 0；selected epochs 为 202=`10/18/12`、203=`22/11/12`、204=`8/11/12`，三结构 peak reserved fraction 分别为 `63.85%/75.91%/65.33%`。冻结门槛已确定：E 的 trajectory 相对改善为 `-1.6232%` 且 paired seed `0/3`，故不 eligible；A 的 trajectory 相对改善 `-6.9786%`、paired seed `0/3`、PCC absolute drop `0.007549`，故不 eligible，得到 `X=none`。M 的 PCC absolute increase 为 `-0.006737` 且 paired seed `0/3`、Local RR 相对恶化 `2.6374%`、IBI coverage absolute drop `0.010307`，故不 eligible。按 21.6–21.7，S2B/S3 不开放并保留 CRD_102。该结论不等待也不允许被 prototype 描述覆盖；S2A 只剩按 21.5 补齐 204 三 seed 的 validation prototype usage/entropy 与 samp 分布，再生成不可覆盖的完整 summary。
 
 204 prototype 描述随后在干净 commit `3c3598c` 下对三个 validation-selected checkpoint 完成，每项均覆盖 2675 windows/7 samp IDs，checkpoint/hash/identity 与逐 window、逐 samp 重算审计通过。三个 seed 的 hard-usage normalized entropy 为 `0.5131/0.5731/0.6254`，soft-usage entropy 为 `0.9021/0.8809/0.9540`，mean token entropy 为 `0.8044/0.7778/0.8652`；全局 dominant hard fraction 为 `37.26%/47.50%/34.06%`，逐 samp 最大 dominant fraction 为 `67.92%/68.97%/64.15%`。因此没有跨全部 validation 的单 prototype 坍缩，但 hard assignment 明显稀疏且 seed 间 prototype ID 不可直接对齐；这种“有使用、无任务收益”只解释 M 失败，不能重开门槛。冻结产物位于 `runs/crd_v1/crd_s2a_validation_summary/`，manifest 记录干净 commit `3c3598c`、9 个完整 checkpoint、`X=none / M ineligible / S2B=false / retain CRD_102`。至此 S2A 正式关闭，相关入口禁止重复运行。
+
+## 22. S2B-R：结果知情的双因素交互补救（2026-08-10）
+
+本节在观察并冻结 S2A 的 `X=none / M ineligible` 后，由研究者明确要求检验“单因素失败但多因素非线性补偿成功”的可能性。因此它**不是**第 21.6 节原条件自然触发的 S2B，而是新增的 result-informed exploratory stage，协议名固定为 `crd-v1.1-s2br-result-informed-20260810`。既有 S2A decision 不改写；本阶段只使用 train/validation，不读取 research-test，不计算确认性 p-value，也不把成功结果表述为预注册确认性证据。
+
+### 22.1 四个唯一候选
+
+由于 S2A 未选出 X，不能结果后只挑 E 或 A；S2B-R 同时运行两组组合及各自的 capacity control：
+
+| ID | 结构 | Trainable params |
+|---|---|---:|
+| `CRD_205_BASE_EM_STATIC` | BASE + exact E + exact M | 1,109,561 |
+| `CRD_206_BASE_AM_STATIC` | BASE + exact A + exact M | 1,235,897 |
+| `CRD_207_BASE_CAP_EM` | BASE + EM-matched capacity stack | 1,109,257 |
+| `CRD_208_BASE_CAP_AM` | BASE + AM-matched capacity stack | 1,235,785 |
+
+205/206 在 PatchTokenFrontend 后、local Mamba 前分别执行 `z0=z_B+W_E z_E+W_M z_M` 与 `z0=z_B+W_A z_A+W_M z_M`。E/A/M 的结构、参数、子 seed、zero-init projection 与 S2A 202/203/204 逐 tensor 相同；BASE trunk 也与 102 相同。205/206 沿用 `L_core+1e-3*r(u)*L_proto`，207/208 只使用 core loss。206 训练态对完整 A 分支使用 `use_reentrant=false / preserve_rng_state=true` activation checkpoint，以保持 A 内 dropout 重算一致；M 继续使用第 21.2 节的 per-chunk checkpoint。两项都只改变 backward 存储/重算，不改变模型数学定义。
+
+Capacity control 不读取 E/A/M。每个 block 固定为 `GN(12,96)→Conv1x1 96→H(bias=false)→SiLU→Dropout(0.10)→Conv1x1 H→96(bias=true)→residual`；GN 为 1/0，首层 Kaiming-normal，末层 weight/bias 全零。穷举 `N∈[1,8]`、`H∈{32,40,...,2048}`，依次最小化完整模型相对参数差、MACs、N、H，并要求参数差 `≤2%`。冻结结果为：207 使用 `N=2,H=104`，比 205 少 304 参数（`0.027398%`）；208 使用 `N=4,H=216`，比 206 少 112 参数（`0.009062%`）。所有候选初始化时严格退化为 BASE latent。
+
+### 22.2 工程与正式训练
+
+四项分别完成 synthetic forward/backward 与独立 physical-batch-128 acceptance；每项要求完整 checkpoint lifecycle、eligible primary finite、joint prediction nondegenerate、peak reserved fraction `≤80%`。工程失败只阻塞该 variant，不允许临时改小 formal batch或改结构。通过后每项使用 80 epochs、physical batch 128、accumulation 1、三个固定 seed、完整 train/validation、Local-RR checkpoint selector；不得修改 loss、metrics、seed、预算或访问 research-test。
+
+### 22.3 组合资格与交互证据
+
+每个组合必须同时通过：
+
+1. 相对 CRD_102 BASE，Local RR seed mean 改善 `≥0.5%` 且 `≥2/3` paired seeds 改善；
+2. 相对自己的 capacity control，Local RR 改善 `≥0.25%` 且 `≥2/3` paired seeds 改善；
+3. 相对 BASE 与两个 constituent singles 中 Local RR 更低者，Local RR 改善 `≥0.25%` 且 `≥2/3` paired seeds 改善。冻结 comparator 为 205 对 CRD_202，206 对 CRD_102；
+4. 相对 BASE 的 signed PCC drop `≤0.003`、trajectory worsening `≤1.5%`、IBI coverage drop `≤0.01`。
+
+此外必须按 seed、paired window 与 paired samp ID 报告 `combo − energy − morphology + BASE` factorial interaction contrast；该描述用于判断补偿方向，但不能覆盖四项全通过门槛。Whole RR、IBI-MedAE、global envelope、三层 Spearman、参数、MAC/VRAM/latency 只作 secondary。
+
+若仅一个组合通过，选择该组合并允许另立 S3 协议；若两者都通过，A+M 只有在相对 E+M 同时达到 Local RR 改善 `≥0.25%`、`≥2/3` paired seeds 改善以及相同 PCC/trajectory/coverage 护栏时才取代参数更少的 E+M。若都失败，保留 CRD_102，S3 继续关闭。S3 的 gate 结构当前仍未定义、未实现，不能与本阶段代码混入。
 
 ### 21.4 Energy representation 决策
 

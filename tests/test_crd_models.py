@@ -3,6 +3,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+import resp_train.crd.model as crd_model_module
 from resp_train.crd.blocks import BidirectionalMamba2Block, ResidualDWBlock
 from resp_train.crd.config import load_crd_config
 from resp_train.crd.model import GlobalContextStage, build_crd_model
@@ -19,6 +20,11 @@ class _FakeMamba(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x * self.scale
+
+
+class _ZeroFrontend(nn.Module):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.zeros(x.shape[0], 96, 1800, device=x.device, dtype=x.dtype)
 
 
 def test_residual_dw_block_is_exact_identity_at_initialization() -> None:
@@ -113,6 +119,10 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
         "crd_202_base_legacy_energy": 1071449,
         "crd_203_base_analytic_am": 1197785,
         "crd_204_base_morphology": 1106857,
+        "crd_205_base_em_static": 1109561,
+        "crd_206_base_am_static": 1235897,
+        "crd_207_base_cap_em": 1109257,
+        "crd_208_base_cap_am": 1235785,
     }
     shared_decoder_state: dict[str, torch.Tensor] | None = None
     shared_local_state: dict[str, torch.Tensor] | None = None
@@ -131,6 +141,10 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_202_base_legacy_energy",
             "crd_203_base_analytic_am",
             "crd_204_base_morphology",
+            "crd_205_base_em_static",
+            "crd_206_base_am_static",
+            "crd_207_base_cap_em",
+            "crd_208_base_cap_am",
         }:
             current = {
                 **{f"refine.{key}": value for key, value in model.refinement.state_dict().items()},
@@ -149,6 +163,10 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_202_base_legacy_energy",
             "crd_203_base_analytic_am",
             "crd_204_base_morphology",
+            "crd_205_base_em_static",
+            "crd_206_base_am_static",
+            "crd_207_base_cap_em",
+            "crd_208_base_cap_am",
         }:
             current_local = model.local_blocks.state_dict()
             if shared_local_state is None:
@@ -241,3 +259,95 @@ def test_s2a_variants_preserve_exact_102_trunk_and_use_zero_static_injection() -
             assert set(candidate.regularization_terms()) == {"loss_proto"}
         else:
             assert candidate.regularization_terms() == {}
+
+
+def test_s2br_combinations_reuse_single_branch_states_and_controls_are_identity() -> None:
+    base = build_crd_model(load_crd_config("configs/crd_v1/crd_102_b0_local_mamba.yaml"))
+    energy = build_crd_model(load_crd_config("configs/crd_v1/crd_202_base_legacy_energy.yaml"))
+    analytic = build_crd_model(load_crd_config("configs/crd_v1/crd_203_base_analytic_am.yaml"))
+    morphology = build_crd_model(load_crd_config("configs/crd_v1/crd_204_base_morphology.yaml"))
+    em = build_crd_model(load_crd_config("configs/crd_v1/crd_205_base_em_static.yaml"))
+    am = build_crd_model(load_crd_config("configs/crd_v1/crd_206_base_am_static.yaml"))
+
+    for reference, candidate in (
+        (energy.representation, em.representation),
+        (morphology.representation, em.additional_representation),
+        (analytic.representation, am.representation),
+        (morphology.representation, am.additional_representation),
+    ):
+        assert reference.state_dict().keys() == candidate.state_dict().keys()
+        assert all(
+            torch.equal(reference.state_dict()[name], candidate.state_dict()[name])
+            for name in reference.state_dict()
+        )
+    assert set(em.regularization_terms()) == {"loss_proto"}
+    assert set(am.regularization_terms()) == {"loss_proto"}
+    assert em.checkpoint_primary_representation is False
+    assert am.checkpoint_primary_representation is True
+    for combination in (em, am):
+        assert combination.frontend.state_dict().keys() == base.frontend.state_dict().keys()
+        assert all(
+            torch.equal(combination.frontend.state_dict()[name], base.frontend.state_dict()[name])
+            for name in base.frontend.state_dict()
+        )
+        assert torch.count_nonzero(combination.representation.projection.weight) == 0
+        assert torch.count_nonzero(combination.additional_representation.projection.weight) == 0
+
+    expected_matches = {
+        "crd_207_base_cap_em": ("crd_205_base_em_static", 2, 104, 1109257, -304),
+        "crd_208_base_cap_am": ("crd_206_base_am_static", 4, 216, 1235785, -112),
+    }
+    latent = torch.randn(2, 96, 31)
+    for variant, expected in expected_matches.items():
+        control = build_crd_model(load_crd_config(f"configs/crd_v1/{variant}.yaml")).eval()
+        for base_module, control_module in (
+            (base.frontend, control.frontend),
+            (base.local_blocks, control.local_blocks),
+            (base.refinement, control.refinement),
+            (base.head, control.head),
+        ):
+            assert base_module.state_dict().keys() == control_module.state_dict().keys()
+            assert all(
+                torch.equal(base_module.state_dict()[name], control_module.state_dict()[name])
+                for name in base_module.state_dict()
+            )
+        match = control.capacity_match
+        assert (
+            match.target_variant,
+            match.block_count,
+            match.hidden_channels,
+            match.control_parameter_count,
+            match.parameter_difference,
+        ) == expected
+        assert match.relative_parameter_difference <= 0.02
+        assert torch.equal(control.capacity_control(latent), latent)
+        assert control.regularization_terms() == {}
+
+
+def test_s2br_am_checkpoint_path_preserves_parameter_gradients(monkeypatch) -> None:
+    model = build_crd_model(load_crd_config("configs/crd_v1/crd_206_base_am_static.yaml"))
+    model.frontend = _ZeroFrontend()
+    model.local_blocks = nn.ModuleList()
+    model.refinement = nn.Identity()
+    model.head = nn.Conv1d(96, 1, kernel_size=1, bias=False)
+    nn.init.ones_(model.head.weight)
+    calls = 0
+    real_checkpoint = crd_model_module.checkpoint
+
+    def counted_checkpoint(function, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_checkpoint(function, *args, **kwargs)
+
+    monkeypatch.setattr(crd_model_module, "checkpoint", counted_checkpoint)
+    model.train()
+    output = model(torch.randn(1, 1, 18000))
+    objective = output["waveform_10hz"].sum() + 1e-3 * model.regularization_terms()["loss_proto"]
+    objective.backward()
+
+    assert calls == 1
+    parameters = [
+        *model.representation.parameters(),
+        *model.additional_representation.parameters(),
+    ]
+    assert all(parameter.grad is not None and torch.isfinite(parameter.grad).all() for parameter in parameters)

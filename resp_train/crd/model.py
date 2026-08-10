@@ -5,8 +5,10 @@ from typing import Any
 
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 from resp_train.crd.blocks import BidirectionalMamba2Block, CoarseWaveformHead, ResidualDWBlock
+from resp_train.crd.capacity import CapacityResidualStack, select_capacity_match
 from resp_train.crd.frontends import DirectAnalyticFrontend, PatchTokenFrontend
 from resp_train.crd.initialization import module_seed
 from resp_train.crd.representations import (
@@ -31,12 +33,23 @@ CRD_VARIANTS = (
     "crd_202_base_legacy_energy",
     "crd_203_base_analytic_am",
     "crd_204_base_morphology",
+    "crd_205_base_em_static",
+    "crd_206_base_am_static",
+    "crd_207_base_cap_em",
+    "crd_208_base_cap_am",
 )
 
 CRD_S2A_VARIANTS = {
     "crd_202_base_legacy_energy",
     "crd_203_base_analytic_am",
     "crd_204_base_morphology",
+}
+
+CRD_S2BR_VARIANTS = {
+    "crd_205_base_em_static",
+    "crd_206_base_am_static",
+    "crd_207_base_cap_em",
+    "crd_208_base_cap_am",
 }
 
 
@@ -158,6 +171,7 @@ class CRDCoarseModel(nn.Module):
             "crd_104_direct_hier_mamba",
             "crd_106_b0_hier_mamba",
             *CRD_S2A_VARIANTS,
+            *CRD_S2BR_VARIANTS,
         }
         uses_global = variant in {
             "crd_104_direct_hier_mamba",
@@ -172,8 +186,30 @@ class CRDCoarseModel(nn.Module):
             self.representation = AnalyticAMRepresentation(initialization_seed)
         elif variant == "crd_204_base_morphology":
             self.representation = MorphologyRepresentation(initialization_seed)
+        elif variant == "crd_205_base_em_static":
+            self.representation = LegacyEnergyRepresentation(initialization_seed)
+        elif variant == "crd_206_base_am_static":
+            self.representation = AnalyticAMRepresentation(initialization_seed)
         else:
             self.representation = None
+        if variant in {"crd_205_base_em_static", "crd_206_base_am_static"}:
+            self.additional_representation: nn.Module | None = MorphologyRepresentation(initialization_seed)
+        else:
+            self.additional_representation = None
+        self.checkpoint_primary_representation = variant == "crd_206_base_am_static"
+        if variant in {"crd_207_base_cap_em", "crd_208_base_cap_am"}:
+            target_variant = (
+                "crd_205_base_em_static" if variant == "crd_207_base_cap_em" else "crd_206_base_am_static"
+            )
+            self.capacity_match = select_capacity_match(target_variant)
+            with module_seed(initialization_seed, f"capacity_control_{target_variant}"):
+                self.capacity_control: CapacityResidualStack | None = CapacityResidualStack(
+                    block_count=self.capacity_match.block_count,
+                    hidden_channels=self.capacity_match.hidden_channels,
+                )
+        else:
+            self.capacity_match = None
+            self.capacity_control = None
         if uses_local:
             with module_seed(initialization_seed, "local_trunk"):
                 self.local_blocks = nn.ModuleList([BidirectionalMamba2Block(96) for _ in range(6)])
@@ -198,12 +234,30 @@ class CRDCoarseModel(nn.Module):
         if latent.shape[1:] != (96, 1800):
             raise RuntimeError(f"CRD frontend 输出契约错误: {tuple(latent.shape)}")
         if self.representation is not None:
-            representation = self.representation(x)
+            if self.checkpoint_primary_representation and self.training and torch.is_grad_enabled():
+                # Analytic-AM 含 dropout，重算时必须恢复 RNG state 才保持同一 stochastic forward。
+                representation = checkpoint(
+                    self.representation,
+                    x,
+                    use_reentrant=False,
+                    preserve_rng_state=True,
+                )
+            else:
+                representation = self.representation(x)
             if representation.shape != latent.shape:
                 raise RuntimeError(
                     f"CRD representation 输出契约错误: {tuple(representation.shape)} != {tuple(latent.shape)}"
                 )
             latent = latent + representation
+        if self.additional_representation is not None:
+            additional = self.additional_representation(x)
+            if additional.shape != latent.shape:
+                raise RuntimeError(
+                    f"CRD additional representation 输出契约错误: {tuple(additional.shape)} != {tuple(latent.shape)}"
+                )
+            latent = latent + additional
+        if self.capacity_control is not None:
+            latent = self.capacity_control(latent)
         if self.local_blocks:
             tokens = latent.transpose(1, 2)
             for block in self.local_blocks:
@@ -219,6 +273,8 @@ class CRDCoarseModel(nn.Module):
     def regularization_terms(self) -> dict[str, torch.Tensor]:
         if isinstance(self.representation, MorphologyRepresentation):
             return {"loss_proto": self.representation.prototype_loss()}
+        if isinstance(self.additional_representation, MorphologyRepresentation):
+            return {"loss_proto": self.additional_representation.prototype_loss()}
         return {}
 
 

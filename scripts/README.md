@@ -128,9 +128,9 @@ done
 
 T2、T3、T4 validation 均已完成。当前保留 T2/T4，并与 B0、F0、IEWT 一起进入阶段性 research-test；B0/M1/T1/T3 和 loss 消融由各自 run manifest 与 Git 历史追溯。
 
-## CRD-v1.1 S0/S1/S2A
+## CRD-v1.1 S0/S1/S2A/S2B-R
 
-八个 S0/S1 配置与三个 S2A 表征配置：
+八个 S0/S1、三个 S2A 与四个 S2B-R 配置：
 
 ```text
 configs/crd_v1/crd_001_b0_retrain.yaml
@@ -144,6 +144,10 @@ configs/crd_v1/crd_106_b0_hier_mamba.yaml
 configs/crd_v1/crd_202_base_legacy_energy.yaml
 configs/crd_v1/crd_203_base_analytic_am.yaml
 configs/crd_v1/crd_204_base_morphology.yaml
+configs/crd_v1/crd_205_base_em_static.yaml
+configs/crd_v1/crd_206_base_am_static.yaml
+configs/crd_v1/crd_207_base_cap_em.yaml
+configs/crd_v1/crd_208_base_cap_am.yaml
 ```
 
 先确认固定原生依赖：
@@ -589,6 +593,46 @@ runs/crd_v1/crd_s2a_validation_summary/s2a_summary_manifest.json
 ```
 
 Decision 固定为 `X=none / M ineligible / S2B=false / S3=false / retain CRD_102`。S2A 已关闭，以上 prototype/summary 命令只保留 provenance，不得重复执行或用 research-test 重选。
+
+### CRD S2B-R 双因素交互补救
+
+研究者在获知 S2A 结果后明确要求探索单因素失败、多因素非线性补偿，因此新增的 S2B-R 是 result-informed exploratory stage，不改写上面的 S2A decision，也不是原 S2B 条件自然触发。四个模型为：
+
+| Variant | 结构 | Params | Capacity match |
+|---|---|---:|---|
+| `crd_205_base_em_static` | BASE + E + M | 1,109,561 | — |
+| `crd_206_base_am_static` | BASE + A + M | 1,235,897 | — |
+| `crd_207_base_cap_em` | BASE + capacity control | 1,109,257 | `N=2,H=104`，差 `-304` |
+| `crd_208_base_cap_am` | BASE + capacity control | 1,235,785 | `N=4,H=216`，差 `-112` |
+
+当前只执行四项 synthetic 与独立 physical-batch-128 acceptance：
+
+```bash
+for variant in \
+  crd_205_base_em_static \
+  crd_206_base_am_static \
+  crd_207_base_cap_em \
+  crd_208_base_cap_am; do
+  ./.venv/bin/python scripts/check_crd_variant.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --device cuda:0 \
+    --batch-size 1 \
+    || exit 1
+
+  ./.venv/bin/python scripts/train_crd.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --set protocol.run_role=acceptance \
+    --set data.max_train_windows=128 \
+    --set data.max_val_windows=32 \
+    --set training.epochs=1 \
+    --set training.device=cuda:0 \
+    --set training.show_progress=false \
+    --set outputs.run_root="/tmp/${variant}_batch128_acceptance" \
+    || exit 1
+done
+```
+
+每项要求完整 lifecycle、eligible primary finite、joint prediction nondegenerate 且 `peak_reserved_fraction≤0.80`。若某项 OOM 或越线，停止，不临时减 batch/结构。四项审计并提交前不启动 12 个 formal runs；S3 gate 仍未实现，S2B-R 全程禁止 research-test。
 
 ## 固定呼吸带传统基线
 
