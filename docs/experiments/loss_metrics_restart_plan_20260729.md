@@ -4,7 +4,7 @@
 
 最后更新：2026-08-10
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C/S1F 冻结 S2 BASE=CRD_102；当前激活 research-test-informed S2A 三个单分支的实现与工程验收，S2B 仍条件关闭
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A 已关闭，S2A 三表征均失败并保留 CRD_102，S2B/S3 未开放，当前没有激活新的 CRD 实验
 
 ## 1. 定位
 
@@ -1981,3 +1981,5 @@ S2A 三分支实现与 CPU 协议回归现已完成：配置为 `crd_202_base_le
 204 重验已在干净 commit `a149913` 下完成，peak allocated/reserved 为 `8,636.81/10,406 MiB`，reserved fraction `65.30%`；完整 checkpoint lifecycle、32 条 primary-finite validation metrics和 prediction-degeneracy 检查通过。单 update acceptance 的 IBI-MedAE 因全部样本不满足 interpretable eligibility 而为空，此状态由 flag/count 显式保留，不改变工程通过结论。结合 202/203 的 `62.18%/74.25%` 峰值与完整性审计，S2A 三分支现均允许在统一的新干净 commit 上运行三个固定 seed；S2B 与 research-test 继续关闭。
 
 九个 S2A formal runs 已在统一干净 commit `41ed41d` 下完成并通过 80 epochs/6400 updates、checkpoint、2675-window validation、finite 与显存审计。冻结规则给出 E trajectory 改善 `-1.6232%`/paired `0/3`，A trajectory 改善 `-6.9786%`/paired `0/3` 且 PCC drop `0.007549`，所以 `X=none`；M 的 PCC increase `-0.006737`/paired `0/3`、Local RR 恶化 `2.6374%`、coverage drop `0.010307`，所以 M 不 eligible。S2B/S3 关闭并保留 CRD_102。当前只补齐不参与选择的 204 validation prototype usage/entropy 与 samp 分布，再固化 S2A summary；不得据此重开 eligibility 或读取 research-test。
+
+204 三 seed validation prototype 描述与冻结 S2A summary 已在干净 commit `3c3598c` 下完成。Hard-usage entropy 为 `0.5131/0.5731/0.6254`，soft-usage entropy 为 `0.9021/0.8809/0.9540`，全局 dominant hard fraction 最高 `47.50%`、逐 samp 最高 `68.97%`，没有全局单 prototype 坍缩；但该结构没有带来预注册的 PCC/Local-RR/coverage 收益。最终不可覆盖 decision 为 `X=none / M ineligible / S2B=false / S3=false / retain CRD_102`，产物固定在 `runs/crd_v1/crd_s2a_validation_summary/`。S2A 至此关闭，prototype 与 summary 入口不再重复运行。

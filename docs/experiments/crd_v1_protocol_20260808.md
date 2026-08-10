@@ -5,8 +5,8 @@
 本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–41 节引用的规范性附件；发生冲突时以主协议为准。当前状态为：
 
 - CRD-S0/S1/S1C/S1F：已完成并冻结，S2 BASE 为 candidate-lock 中的 CRD_102；
-- CRD-S2A：202/203/204 九个 formal runs 已完成，冻结门槛已关闭三个表征分支；
-- 当前只激活 204 validation prototype usage/entropy 描述性收尾与 S2A summary；S2B/S3 关闭。
+- CRD-S2A：202/203/204 九个 formal runs、prototype 描述与冻结 summary 已完成，三个表征分支关闭；
+- S2B/S3 关闭，当前没有激活新的 CRD 实验。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节；gate、auxiliary、capacity/TCN control、S2B/S3 和最终消融仍未激活。
 
@@ -811,6 +811,8 @@ S2A 只实现并在分别通过 synthetic/physical-batch-128 acceptance 后运�
 204 checkpointed 重验随后在干净 commit `a149913` 下通过：synthetic output/gradient finite；acceptance 严格完成 128/32 个 train/validation windows、1 optimizer update、两个 finite checkpoint、32 条 primary-finite validation metrics且 joint prediction degeneracy 为 0。Peak allocated/reserved 为 `8,636.81/10,406 MiB`，reserved fraction `65.30%`，低于 `80%` 工程线。IBI-MedAE 因该单 update 模型的 32 个样本均 `ibi_interpretable=false` 而按既有 eligibility 契约为空，不是被静默吞掉的非有限 prediction，也不作为单 epoch 工程阻塞。202/203 acceptance 来自干净 commit `258c1f3`，其后到 `a149913` 唯一运行时代码差异只在 morphology checkpoint 路径，不影响 202/203。至此三个 S2A variant 的工程验收均完成，允许在新的统一干净 commit 上启动九个 formal runs；仍不得读取 research-test 或开放 S2B。
 
 九个 S2A formal runs 随后在统一干净 commit `41ed41d` 下完成。每个 run 均为 80 epochs/6400 updates、2675 条 validation metrics、两个 finite checkpoint且 joint prediction degeneracy 为 0；selected epochs 为 202=`10/18/12`、203=`22/11/12`、204=`8/11/12`，三结构 peak reserved fraction 分别为 `63.85%/75.91%/65.33%`。冻结门槛已确定：E 的 trajectory 相对改善为 `-1.6232%` 且 paired seed `0/3`，故不 eligible；A 的 trajectory 相对改善 `-6.9786%`、paired seed `0/3`、PCC absolute drop `0.007549`，故不 eligible，得到 `X=none`。M 的 PCC absolute increase 为 `-0.006737` 且 paired seed `0/3`、Local RR 相对恶化 `2.6374%`、IBI coverage absolute drop `0.010307`，故不 eligible。按 21.6–21.7，S2B/S3 不开放并保留 CRD_102。该结论不等待也不允许被 prototype 描述覆盖；S2A 只剩按 21.5 补齐 204 三 seed 的 validation prototype usage/entropy 与 samp 分布，再生成不可覆盖的完整 summary。
+
+204 prototype 描述随后在干净 commit `3c3598c` 下对三个 validation-selected checkpoint 完成，每项均覆盖 2675 windows/7 samp IDs，checkpoint/hash/identity 与逐 window、逐 samp 重算审计通过。三个 seed 的 hard-usage normalized entropy 为 `0.5131/0.5731/0.6254`，soft-usage entropy 为 `0.9021/0.8809/0.9540`，mean token entropy 为 `0.8044/0.7778/0.8652`；全局 dominant hard fraction 为 `37.26%/47.50%/34.06%`，逐 samp 最大 dominant fraction 为 `67.92%/68.97%/64.15%`。因此没有跨全部 validation 的单 prototype 坍缩，但 hard assignment 明显稀疏且 seed 间 prototype ID 不可直接对齐；这种“有使用、无任务收益”只解释 M 失败，不能重开门槛。冻结产物位于 `runs/crd_v1/crd_s2a_validation_summary/`，manifest 记录干净 commit `3c3598c`、9 个完整 checkpoint、`X=none / M ineligible / S2B=false / retain CRD_102`。至此 S2A 正式关闭，相关入口禁止重复运行。
 
 ### 21.4 Energy representation 决策
 

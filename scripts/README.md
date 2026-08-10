@@ -577,6 +577,19 @@ done
 
 汇总入口会重新审计 BASE lock、九个 formal runs、逐 sample identity/metrics summary、checkpoint finite/hash、prototype manifest/hash，并输出 seed mean±sample SD、paired window/samp 描述、prototype usage/entropy 与最终 decision；已有输出拒绝覆盖。
 
+上述三项 prototype 描述与冻结汇总已在干净 commit `3c3598c` 下完成。Prototype 未发生全局单类坍缩：三个 seed 的 global dominant hard fraction 为 `37.26%/47.50%/34.06%`，soft-usage entropy 为 `0.9021/0.8809/0.9540`；但这不能覆盖 M 已失败的 PCC、Local-RR 与 coverage 门槛。最终产物：
+
+```text
+runs/crd_v1/crd_s2a_validation_summary/s2a_decision.json
+runs/crd_v1/crd_s2a_validation_summary/s2a_seed_summary.csv
+runs/crd_v1/crd_s2a_validation_summary/s2a_variant_summary.csv
+runs/crd_v1/crd_s2a_validation_summary/s2a_paired_descriptives.csv
+runs/crd_v1/crd_s2a_validation_summary/s2a_prototype_seed_summary.csv
+runs/crd_v1/crd_s2a_validation_summary/s2a_summary_manifest.json
+```
+
+Decision 固定为 `X=none / M ineligible / S2B=false / S3=false / retain CRD_102`。S2A 已关闭，以上 prototype/summary 命令只保留 provenance，不得重复执行或用 research-test 重选。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的
