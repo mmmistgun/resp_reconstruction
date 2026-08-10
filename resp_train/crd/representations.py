@@ -252,6 +252,24 @@ class MorphologyRepresentation(nn.Module):
         scores = self._prototype_scores(embedding)
         return self.fusion_norm(self.fusion(torch.cat((embedding, scores), dim=-1)))
 
+    def prototype_scores(self, x: torch.Tensor) -> torch.Tensor:
+        """返回 validation 解释性审计所需的逐 token soft prototype scores。"""
+
+        windows = self.normalized_windows(x)
+        batch_size = int(windows.shape[0])
+        score_chunks = []
+        for start in range(0, 1800, self.token_chunk_size):
+            stop = min(start + self.token_chunk_size, 1800)
+            chunk = windows[:, :, start:stop, :]
+            chunk = chunk.permute(0, 2, 1, 3).reshape(batch_size * (stop - start), 1, 151)
+            embedding = self.encoder(chunk)
+            scores = self._prototype_scores(embedding)
+            score_chunks.append(scores.reshape(batch_size, stop - start, self.prototype_count))
+        result = torch.cat(score_chunks, dim=1)
+        if result.shape[1:] != (1800, self.prototype_count):
+            raise RuntimeError(f"Morphology prototype score 契约错误: {tuple(result.shape)}")
+        return result.float()
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         windows = self.normalized_windows(x)
         batch_size = int(windows.shape[0])

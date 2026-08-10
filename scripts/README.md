@@ -555,6 +555,28 @@ done
 
 不得覆盖 epochs、batch、accumulation 或任何 `max_*_windows`，不得读取 research-test。九个 runs 完成后先做完整性与 checkpoint 集合审计，再按附件第 21.4–21.5 节分别判断 energy representation 与 morphology eligibility；在结果审计前不实现 S2B。
 
+九个 formal runs 已在统一干净 commit `41ed41d` 下完成并通过完整性审计。Selected epochs 为 202=`10/18/12`、203=`22/11/12`、204=`8/11/12`。冻结门槛得到 `X=none` 且 M 不 eligible，因此 S2B/S3 关闭并保留 CRD_102；prototype 描述不能推翻该结果。为满足第 21.5 节的完整报告要求，只读三个 204 validation-selected checkpoints：
+
+```bash
+for checkpoint in \
+  runs/crd_v1/crd_204_base_morphology/seed_20260811/20260809_224710_306894/checkpoint_best_local_rr.pt \
+  runs/crd_v1/crd_204_base_morphology/seed_20260812/20260810_011253_712445/checkpoint_best_local_rr.pt \
+  runs/crd_v1/crd_204_base_morphology/seed_20260813/20260810_033710_435683/checkpoint_best_local_rr.pt; do
+  ./.venv/bin/python scripts/eval_crd_morphology_prototypes.py \
+    --checkpoint "${checkpoint}" \
+    --device cuda:0 \
+    || exit 1
+done
+```
+
+三项完成后，在干净工作树运行冻结汇总：
+
+```bash
+./.venv/bin/python scripts/summarize_crd_s2a.py
+```
+
+汇总入口会重新审计 BASE lock、九个 formal runs、逐 sample identity/metrics summary、checkpoint finite/hash、prototype manifest/hash，并输出 seed mean±sample SD、paired window/samp 描述、prototype usage/entropy 与最终 decision；已有输出拒绝覆盖。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

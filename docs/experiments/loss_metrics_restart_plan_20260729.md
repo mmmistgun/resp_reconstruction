@@ -2,7 +2,7 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-09
+最后更新：2026-08-10
 
 状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S1C/S1F 冻结 S2 BASE=CRD_102；当前激活 research-test-informed S2A 三个单分支的实现与工程验收，S2B 仍条件关闭
 
@@ -1979,3 +1979,5 @@ S2A 三分支实现与 CPU 协议回归现已完成：配置为 `crd_202_base_le
 首轮 CUDA 验收中，202/203 已通过 physical batch 128，peak reserved fraction 为 `62.18%/74.25%`；204 synthetic 通过但 batch-128 训练真实 OOM。为避免改变预注册的 physical/effective batch 与优化口径，现于任何 formal run 前登记 204 morphology 每 128-token chunk 的非重入 activation checkpoint：该 encoder 没有 dropout 或 batch-dependent normalization，只在 backward 重算相同前向，不改变模型参数、loss 或输出定义。只重跑 204 工程验收；若仍 OOM 或 peak reserved fraction 超过 `80%`，不得静默减小 batch，须停止并另行决定是否关闭 204 或修订整个 S2A 执行协议。
 
 204 重验已在干净 commit `a149913` 下完成，peak allocated/reserved 为 `8,636.81/10,406 MiB`，reserved fraction `65.30%`；完整 checkpoint lifecycle、32 条 primary-finite validation metrics和 prediction-degeneracy 检查通过。单 update acceptance 的 IBI-MedAE 因全部样本不满足 interpretable eligibility 而为空，此状态由 flag/count 显式保留，不改变工程通过结论。结合 202/203 的 `62.18%/74.25%` 峰值与完整性审计，S2A 三分支现均允许在统一的新干净 commit 上运行三个固定 seed；S2B 与 research-test 继续关闭。
+
+九个 S2A formal runs 已在统一干净 commit `41ed41d` 下完成并通过 80 epochs/6400 updates、checkpoint、2675-window validation、finite 与显存审计。冻结规则给出 E trajectory 改善 `-1.6232%`/paired `0/3`，A trajectory 改善 `-6.9786%`/paired `0/3` 且 PCC drop `0.007549`，所以 `X=none`；M 的 PCC increase `-0.006737`/paired `0/3`、Local RR 恶化 `2.6374%`、coverage drop `0.010307`，所以 M 不 eligible。S2B/S3 关闭并保留 CRD_102。当前只补齐不参与选择的 204 validation prototype usage/entropy 与 samp 分布，再固化 S2A summary；不得据此重开 eligibility 或读取 research-test。

@@ -61,6 +61,11 @@ def test_morphology_window_normalization_chunking_and_prototypes_are_frozen(monk
     assert branch.prototype_count == 16
     assert branch.prototype_temperature == pytest.approx(0.10)
     assert branch.prototype_loss().item() < 1e-12
+    scores = branch.prototype_scores(signal)
+    assert scores.shape == (1, 1800, 16)
+    assert scores.dtype == torch.float32
+    assert torch.isfinite(scores).all()
+    assert torch.allclose(scores.sum(dim=-1), torch.ones(1, 1800), atol=1e-6)
 
     zero_output = branch(signal)
     assert zero_output.shape == (1, 96, 1800)
