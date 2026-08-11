@@ -843,6 +843,32 @@ done
 
 固定输出为 `runs/crd_v1/crd_c2_validation_summary/`，目录存在时拒绝覆盖。唯一 summary 已从干净 commit `6e893a3` 生成，decision 为 `decoder_capacity_supported_100hz_placement_not_supported`：C201/C202 相对 CRD_102 均通过 basic gate，但 C202 相对 C201 的 Local RR 为 `-0.1141%`，未达到 `+0.25%` placement gate；最终选择 `crd_c201_decoder_10hz_cap` 并保留 CRD_102 Mamba backbone。以上测试与 summary 命令只保留 provenance，不得重复运行；research-test、TCN+decoder 与其他 decoder 继续关闭。
 
+### CRD-TF v1 synthetic calibration 与 fixed cache
+
+当前只开放 P1；规范见 `docs/experiments/crd_tf_v1_protocol_20260812.md`。先在包含实现与协议的干净 commit 上运行 synthetic-only calibration：
+
+```bash
+./.venv/bin/python scripts/calibrate_crd_tf_v1.py
+```
+
+命令会把不可覆盖的 `calibration.json` 写入 `runs/crd_tf_v1/calibration/<calibration_identity_sha256>/`；identity 同时包含数学 spec 与 calibration/feature 实现文件 hash。只有四项全部 `passed=true` 才能构建 cache：
+
+```bash
+./.venv/bin/python scripts/build_crd_tf_v1_cache.py \
+  --calibration runs/crd_tf_v1/calibration/<calibration_identity_sha256>/calibration.json
+```
+
+Cache 固定写入 `runs/crd_tf_v1/cache/<transform_sha256>/`，只包含 10141 train + 2675 validation 的 M/W/S 和 L input spectrum，预计约 4 GiB；不读取 target、不生成 test cache。两项均可能耗时，默认由用户执行。当前不得运行 P2 模型、GPU acceptance 或 formal training。
+
+仅调试代码路径时可在 dirty tree 生成明确标记为 incomplete 的 partial cache，但它不能进入任何训练：
+
+```bash
+./.venv/bin/python scripts/build_crd_tf_v1_cache.py \
+  --calibration <passed-calibration.json> \
+  --max-windows-per-split 1 \
+  --allow-dirty-smoke
+```
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

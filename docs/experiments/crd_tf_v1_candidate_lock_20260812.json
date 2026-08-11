@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "lock_name": "TF000_C201_ANCHOR",
+  "protocol": "crd-tf-v1-research-informed-20260812",
+  "created_date": "2026-08-12",
+  "source_protocol": "crd-v1.1-controls-research-informed-20260811",
+  "source_training_commit": "4ec737164e20461ab8b3f3595cb1813a38ff1ddd",
+  "variant": "crd_c201_decoder_10hz_cap",
+  "checkpoint_role": "checkpoint_best_local_rr",
+  "research_test_used_for_c201_selection": false,
+  "evidence_role": "research-test-informed validation-development anchor",
+  "source_selection": {
+    "path": "runs/crd_v1/crd_c2_validation_summary/c2_selection.json",
+    "sha256": "8ec28a7bc34a768829d7a36fc55478d01b08032f9a85774c520d4c921568f253",
+    "manifest_path": "runs/crd_v1/crd_c2_validation_summary/c2_selection_manifest.json",
+    "manifest_sha256": "f8db084314b796d77f993ad36166f3201f20aebbe1e6c5924c13ee88292bf0b7",
+    "outcome": "decoder_capacity_supported_100hz_placement_not_supported"
+  },
+  "seeds": [
+    {
+      "seed": 20260811,
+      "selected_epoch": 10,
+      "run_dir": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260811/20260811_162853_343330",
+      "files": {
+        "checkpoint_best_local_rr.pt": {
+          "size_bytes": 13050641,
+          "sha256": "1224860fb67ff2ac9843104caf7b7a820ccfe484b1ad97b808601ee8078f8d9f"
+        },
+        "config.yaml": {
+          "size_bytes": 2296,
+          "sha256": "3d70b254dd41fd54eb36e1940d5b0b6bd1c1a2813efd28521b2a9106f7d9f6a9"
+        },
+        "run_manifest.json": {
+          "size_bytes": 720,
+          "sha256": "1198c6880dd43c8378e163ed525f0cb64757abc6d94340783ae651275b18b488"
+        },
+        "metrics_summary.csv": {
+          "size_bytes": 2223,
+          "sha256": "b4393a541f2add601b78c31d6ed9cdf705ad5e85869700c934e97337c464d87b"
+        }
+      }
+    },
+    {
+      "seed": 20260812,
+      "selected_epoch": 11,
+      "run_dir": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260812/20260811_173454_537310",
+      "files": {
+        "checkpoint_best_local_rr.pt": {
+          "size_bytes": 13050641,
+          "sha256": "0b18f786b518e7011b1f602960bdb2b6e1e3aadf6829f83f291876e7f93feecb"
+        },
+        "config.yaml": {
+          "size_bytes": 2296,
+          "sha256": "08270f5b177c51b8a72dc63d10b0357e95c9e08dabb5f6e4b15163ead46450a5"
+        },
+        "run_manifest.json": {
+          "size_bytes": 720,
+          "sha256": "f71697d7f9acec641d9f72ad27145bb00453f2527f8e4be7f9f08de59055f8fc"
+        },
+        "metrics_summary.csv": {
+          "size_bytes": 2222,
+          "sha256": "ffa8e4bc71db41c8d863a40b4d068364352349940e0f600dde11584b46a1451a"
+        }
+      }
+    },
+    {
+      "seed": 20260813,
+      "selected_epoch": 13,
+      "run_dir": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260813/20260811_184113_013380",
+      "files": {
+        "checkpoint_best_local_rr.pt": {
+          "size_bytes": 13050641,
+          "sha256": "113b2b47ddce1e4097f4bb012b12e30345a12f216f442b711a886af11b8115fa"
+        },
+        "config.yaml": {
+          "size_bytes": 2296,
+          "sha256": "a9ad3458bba2992afc07d17f9ee65918595dd8b87ae428a50a634e9ea38041ef"
+        },
+        "run_manifest.json": {
+          "size_bytes": 720,
+          "sha256": "da02616957ebc188dd33226bca557aa504435692d69f83bf4a6342d1f49dd453"
+        },
+        "metrics_summary.csv": {
+          "size_bytes": 2222,
+          "sha256": "efaf2116a9209475432ca4465a9a40d0725fd2a4dd767303af97d08bd848764b"
+        }
+      }
+    }
+  ]
+}

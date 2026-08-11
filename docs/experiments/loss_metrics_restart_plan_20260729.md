@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-11
+最后更新：2026-08-12
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与第 45 节 C0/C1/C2 控制线均已关闭；C2 选择 CRD_102 Mamba backbone + C201 10-Hz nonlinear capacity decoder，100-Hz placement 无独立证据；S3、research-test 与组合实验不激活
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与第 45 节 C0/C1/C2 控制线均已关闭；C2 选择 CRD_102 Mamba backbone + C201 10-Hz nonlinear capacity decoder，100-Hz placement 无独立证据；第 46 节 CRD-TF v1 仅开放 P0 协议/锚点冻结与 P1 固定输入缓存实现，正式训练、Fusion 与 research-test 均未开放
 
 ## 1. 定位
 
@@ -2035,3 +2035,17 @@ C2 六个 formal runs 随后在统一干净 commit `4ec737164e20461ab8b3f3595cb1
 C202 三项 residual diagnostics 随后从统一干净 commit `3ef5cf0c18d000159aad18a5c751be680f275d8d` 生成。每项覆盖 2675 windows/7 `samp_id`，checkpoint hash/epoch、finite 与 research-test=false 审计通过；三个 seed 的带外能量比例 mean 为 `3.1199%/18.7155%/10.6439%`，只作 `Pi` 前数值解释。现只激活 `scripts/summarize_crd_c2.py` 的一次性冻结汇总，重审六个 runs/三项 diagnostics 并应用两项 basic gate 与 C202-vs-C201 placement gate；固定输出不得覆盖。Summary decision 登记前不新增 decoder 或访问 research-test。
 
 C2 冻结 summary 随后从干净 commit `6e893a300cf683e6e0de8be7998799cabafaf32a` 生成。C201 相对 CRD_102 的 Local RR 改善 `0.6978%`、paired `2/3`、PCC drop `0.001155`、trajectory worsening `0.7648%`，基本资格通过；C202 的对应结果为 `0.5845% / 3/3 / 0.001090 / 0.7657%`，也通过基本资格。但 C202 相对同参数 C201 的 Local RR 改善为 `-0.1141%`，未达到 `+0.25%` placement 门槛，因此 decision 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 `crd_c201_decoder_10hz_cap`，并保留 CRD_102 Mamba backbone。该结论只支持 decoder capacity 的小幅 validation-development 收益，不支持 100-Hz placement 或带宽恢复。C0/C1/C2 控制线全部关闭；summary/formal/diagnostic 不得重跑，research-test、TCN+decoder、其他 decoder 与自动后续实验继续关闭。若继续，须以 C201 另建 candidate lock 和新协议。
+
+## 46. CRD-TF v1 固定时频表示与交互阶段（2026-08-12）
+
+现以 C2 选择的 `crd_c201_decoder_10hz_cap` 三个既有 validation-selected checkpoint 建立 `TF000_C201_ANCHOR`，形成 `docs/experiments/crd_tf_v1_candidate_lock_20260812.json`，lock SHA-256 为 `c8d4823500e6096fcacb8d2e8787f7b3422160813eabe31adf01b1f1f75cc139`；checkpoint/config/manifest/metrics-summary 的路径、大小和 SHA-256 已逐项复核。由此建立 research-test-informed 的 CRD-TF v1 新阶段。设计来源为 `docs/temp/时频融合_2026_08_12__0022.md`；规范性协议固定在 `docs/experiments/crd_tf_v1_protocol_20260812.md`，该附件由本节纳入当前唯一实验协议，冲突时以本文为准。
+
+新阶段保持数据、admission、train/validation split、target、正式 `Pi`、`L_sync + 0.25 L_effort`、五项 primary、Local-RR selector 和三个 seed 不变，只研究输入 BCG 的四类表示：multi-resolution STFT、analytic Morlet CWT、learnable analytic carrier-modulation filterbank 与固定 WSST ridge。M/W/S 允许只从 train/validation 输入预计算不可覆盖 cache；L 最终特征保持可学习，只允许复用固定 input spectrum。任何 cache 均不得读取 target 或 research-test。
+
+当前只开放 P0 的 C201 candidate lock/精确数学冻结，以及 P1 的 synthetic/input-only calibration、固定 cache 实现与审计；不授权长时间 cache 生成、GPU acceptance 或正式训练。Stage-1 预注册为 12 个 representation arms 加 `CTRL1/2/3`，共 15 个新 variant、45 个 formal runs；single 结果不得关闭 pair/triple。若统一 physical batch 从 `128×1` 回退到 `64×2` 或 `32×4`，必须新增同 batch 的 C201 三 seed control，总规模变为 48 runs。
+
+对 54 个既有完整 CRD formal histories 的回顾显示 selected epoch median 为 13、`43/54` 不晚于 25，但最大为 72；patience 20/30 的回放分别会错过 4/2 个历史全局 Local-RR 最佳。因此本 Stage-1 继续固定 80 epochs、关闭 early stopping、保留 Local-RR best checkpoint，不同时引入新的停止变量。Optimizer/LR 默认沿用 80×128×1、AdamW、`3e-4→3e-5`、5% warmup + exact cosine；梯度累计只作为全矩阵统一显存 fallback，不允许按 variant 临时改变。
+
+P2 模型、P3 CUDA/physical-batch acceptance、P4 三 seed formal、P5 冻结汇总与 P6 gated/cross-attention Fusion 均继续关闭。只有附件第 12 节验收项全部完成、精确参数/缓存/batch/命令写回、工作树在统一干净 commit，且用户明确确认长时间 GPU 队列后，才可由本节后续修订开放 P4。P5 即使形成候选也不自动开放 research-test；强泛化证据需新的锁定 cohort、外部数据或 prospective holdout。
+
+用户随后接受默认 `runs/crd_tf_v1/cache/` 与新增 `CTRL3` 后的 45-run 设计。P1 已实现 M/W/S 固定表示、L learnable modulation/固定 input-spectrum cache、synthetic calibration、只允许 train/validation 的不可覆盖 cache builder 和定向测试；`10 passed`，M/L 轻量 synthetic 检查通过。完整 W/S calibration 与约 4 GiB 全量 cache 尚未运行；入口要求干净工作树，运行完成且结果写回前 P2–P6 状态不变。
