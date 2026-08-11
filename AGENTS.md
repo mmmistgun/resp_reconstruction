@@ -37,6 +37,7 @@
 - 数据、split、subject/session 隔离、target 或核心指标口径发生变化前，先说明影响面与旧结论状态。
 - 正式实验需保留 resolved config、数据/sample seed、训练 seed、命令、代码版本、checkpoint 和逐 sample metrics。
 - 不默认启动正式训练、长时间 GPU 任务或大规模搜索；先完成实现、定向单测和 smoke，由用户确认正式运行。
+- 凡可能长时间运行或持续占用计算资源的任务，包括结构测试、全量回归、CPU/GPU smoke、acceptance、benchmark、训练和后台服务，默认均由用户执行；Codex 只提供命令、预期产物与验收口径，并根据用户返回结果继续分析。只有用户在当次任务中明确授权代跑时，Codex 才可执行。
 - 修改 loss/metrics/checkpoint 后必须同步协议文档，并运行对应测试。
 - 非有限 prediction 不能被静默丢弃；数据泄漏、标签错位、shape 或 split 风险优先报告。
 
