@@ -9,7 +9,7 @@
 - CRD-S2B-R：12 个 formal runs 与冻结汇总已完成，两个组合均不 eligible，保留 CRD_102；S3 关闭。
 - CRD_102 failure diagnostic：指标分层与结果知情 metadata follow-up 均已完成，主要失败区域已定位但不作因果主张；当前无自动激活的新模型阶段。
 - CRD_102 matched observability：21 个 exact-state primary pairs 与 28 个 same-samp sensitivity pairs 已完成，结果为 mixed observability/model-tracking；当前无自动激活的新实验。
-- CRD_102 C0/C1/C2 控制线已由主协议第 45 节另立于 `docs/experiments/crd_v1_controls_protocol_20260811.md`；C0 已冻结为 `roundtrip_negligible=true` 并关闭，C1 TCN 的 CPU/CUDA synthetic 与 batch-128 acceptance 已通过，formal 三 seed 已开放但尚未运行，C2 仍关闭。
+- CRD_102 C0/C1/C2 控制线已由主协议第 45 节另立于 `docs/experiments/crd_v1_controls_protocol_20260811.md`；C0 已冻结为 `roundtrip_negligible=true` 并关闭，C1 TCN 三 formal runs 已完成，当前只激活冻结汇总，C2 仍关闭。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节，唯一激活过的双因素组合与 capacity control 来自第 22 节；gate、auxiliary、TCN control、S3 和最终消融仍未激活。
 

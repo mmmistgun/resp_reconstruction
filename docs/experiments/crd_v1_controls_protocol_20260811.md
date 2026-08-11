@@ -7,7 +7,7 @@
 控制线协议族固定为 `crd-v1.1-controls-research-informed-20260811`，证据属性为 **research-test-informed development/validation controls**。当前状态为：
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
-- `C1`：parameter-matched full-context TCN 的实现、CPU/CUDA synthetic 与独立 physical-batch-128 acceptance 已完成，formal 三 seed 队列已开放但尚未运行；
+- `C1`：parameter-matched full-context TCN 的工程验收与三个 formal runs 已完成，当前只激活冻结汇总和完整性审计；
 - `C2`：结构、比较问题和开放条件已冻结，但实现、工程验收和正式训练仍关闭；C2 只能在 C1 冻结结果由主协议登记后激活。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
@@ -188,6 +188,16 @@ C1 只形成候选/控制证据，不在本协议内替换 CRD_102 锚点。Whol
 独立 acceptance 位于 `/tmp/crd_c101_b0_local_tcn_batch128_acceptance/20260811_142949_605712`，严格使用 128/32 个 train/validation windows、1 epoch、1 optimizer update。Best/final checkpoint 均为 epoch 1、update `1/1`；各含 108 个 finite model tensors 和 324 个 finite optimizer tensors。32 条 validation metrics 的五项 primary 全部 finite、joint prediction degeneracy 为 0；peak allocated/reserved 为 `10018.08/10664.00 MiB`，reserved fraction `66.9161%`，低于 80% 工程线。单 epoch loss/Local RR/PCC 等数值不进入模型效果解释。
 
 至此 C1 三个 formal seeds 的工程阻塞解除。Formal 必须在包含本登记的统一新干净 commit 上顺序或独立 GPU 并行运行，输出到 `runs/crd_v1/crd_c101_b0_local_tcn/seed_<seed>/`；任何中断 run 不凭 best checkpoint 纳入比较。C2 仍等待 C1 三 seed 完整性审计和冻结 decision，不得实现。
+
+三个 formal runs 随后在统一干净 commit `930212ac66cb95697b659fc7504259cfa3cf71c2` 下完成，唯一 run 路径为：
+
+```text
+runs/crd_v1/crd_c101_b0_local_tcn/seed_20260811/20260811_143659_197397
+runs/crd_v1/crd_c101_b0_local_tcn/seed_20260812/20260811_151742_317768
+runs/crd_v1/crd_c101_b0_local_tcn/seed_20260813/20260811_143716_511886
+```
+
+三个 run 均完成 80 epochs/6400 updates、2675 条 validation metrics、best/final checkpoint 与 peak-reserved 审计；selected epochs 为 `25/26/12`。当前只允许预先实现的 `scripts/summarize_crd_c1.py` 在新干净 commit 上执行一次冻结汇总，重算逐 sample summary、paired window/`samp_id`、failure-strata descriptives 与第 4.2 节 decision；输出固定为 `runs/crd_v1/crd_c1_validation_summary/` 且禁止覆盖。冻结 summary 完成前不得实现 C2。
 
 ## 5. C2：10-Hz capacity 与 learned 100-Hz placement
 

@@ -747,7 +747,7 @@ C0 只读取完整 validation target，执行 `Pi(target) → ::10 → Fourier 1
 
 Acceptance 已在干净 commit `529de74` 下完成：恰有一次 optimizer update、两个 finite checkpoint、32 条 primary-finite validation metrics、无 prediction degeneracy，peak reserved fraction 为 `66.9161%`。上述 synthetic/acceptance 命令现只保留 provenance，不得覆盖重跑。
 
-工程结果登记后，三个 formal seeds 已开放。长时间 GPU 训练由研究者运行：
+工程结果登记后，三个 formal seeds 已由研究者在统一干净 commit `930212a` 完成；以下命令只保留 provenance：
 
 ```bash
 for seed in 20260811 20260812 20260813; do
@@ -760,7 +760,14 @@ for seed in 20260811 20260812 20260813; do
 done
 ```
 
-不得覆盖 epochs、batch、accumulation、数据上限、loss、metrics 或 selector。三个 runs 全部完成并通过 lifecycle/finite/identity 审计后，才能应用附件第 4.2 节冻结门槛；C2 在 C1 decision 登记前继续关闭。
+不得覆盖 epochs、batch、accumulation、数据上限、loss、metrics 或 selector。当前只允许先运行定向测试，再从新干净 commit 生成一次冻结 summary：
+
+```bash
+./.venv/bin/python -m pytest tests/test_crd_c1_selection.py
+./.venv/bin/python scripts/summarize_crd_c1.py
+```
+
+固定输出为 `runs/crd_v1/crd_c1_validation_summary/`，目录存在时拒绝覆盖。该入口重审 lifecycle/finite/identity、重算逐 sample summary，并生成 paired window/`samp_id` 与 failure-strata descriptives；C2 在 C1 decision 登记前继续关闭。
 
 ## 固定呼吸带传统基线
 
