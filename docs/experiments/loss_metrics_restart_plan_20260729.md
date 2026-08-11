@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic 与 C0 decoder round-trip 已关闭；保留 CRD_102，S3 不激活；第 45 节 C1 TCN 实现与 CPU 定向验收已完成，CUDA synthetic/batch-128 acceptance 待执行，formal 队列仍关闭
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic 与 C0 decoder round-trip 已关闭；保留 CRD_102，S3 不激活；第 45 节 C1 TCN 工程验收已完成，formal 三 seed 队列开放但尚未运行，C2 关闭
 
 ## 1. 定位
 
@@ -2019,3 +2019,5 @@ S2B-R 与后续 CRD_102 failure/matched-observability diagnostics 关闭后，�
 C0 随后在干净 commit `5de0c0f459c46e6021034d63bf3d4efbd8a39ac0` 下完成。2675 条逐 sample primary 全部 finite、无 prediction degeneracy；全局最大绝对误差/RMSE 为 `5.538454e-7 / 8.217932e-8`，首末 15 秒 RMSE 均小于 `9e-8`，Whole/Local RR、trajectory、global-envelope 误差均约 `1e-8`，signed PCC 为 `0.9999999999994397`，全部预注册门槛通过并冻结为 `roundtrip_negligible=true`。该结果不支持把 learned 100-Hz decoder 表述为恢复正式呼吸带的采样损失；未来 C2 只能检验 nonlinear capacity/placement。C0 入口关闭且不得重复执行，现开放 C1 parameter-matched full-context TCN 的实现、测试、CUDA synthetic 与独立 physical-batch-128 acceptance；在工程结果由本节登记前，C1 formal 三 seed 与全部 C2 代码继续关闭。
 
 C1 唯一实现随后完成：`crd_c101_b0_local_tcn` 只将 CRD_102 的六个 Local BiMamba2 替换为十个 `C=96/H=488`、dilation `1…512` 的 residual TCN blocks；感受野为 4093 tokens，总参数 `1,062,001`，相对 CRD_102 少 `0.6310%`。同 seed frontend/refinement/head state、TCN zero-init identity、参数/感受野与配置身份测试通过，CPU synthetic batch-1 的 model/core-loss/backward finite。该结果仍不解除 formal 队列；下一步只允许在当前实现提交后的同一干净 commit 执行 CUDA bf16 synthetic 与独立 physical-batch-128 acceptance，C2 继续关闭。
+
+C1 CUDA synthetic 与独立 physical-batch-128 acceptance 随后在干净 commit `529de747cfee17675432fad1a969570703df1791` 下通过。Synthetic batch-1 的 output/input/全部 parameter gradients finite，peak allocated `92.88 MiB`。Acceptance 严格完成 128/32 个 train/validation windows、1 optimizer update；best/final checkpoint 的 108 个 model tensors 与 324 个 optimizer tensors全部 finite，32 条 validation primary 全部 finite、无 prediction degeneracy，peak allocated/reserved 为 `10018.08/10664.00 MiB`，reserved fraction `66.9161%`。单 epoch数值不形成效果证据。现解除 C1 三 formal seeds 工程阻塞；正式 run 必须来自包含本登记的统一新干净 commit。C2 仍关闭，等待 C1 三 seed 冻结 decision。

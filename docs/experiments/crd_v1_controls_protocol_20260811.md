@@ -7,7 +7,7 @@
 控制线协议族固定为 `crd-v1.1-controls-research-informed-20260811`，证据属性为 **research-test-informed development/validation controls**。当前状态为：
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
-- `C1`：parameter-matched full-context TCN 的实现与 CPU 定向验收已完成；CUDA synthetic 与独立 physical-batch-128 acceptance 待执行，formal 三 seed 队列仍关闭；
+- `C1`：parameter-matched full-context TCN 的实现、CPU/CUDA synthetic 与独立 physical-batch-128 acceptance 已完成，formal 三 seed 队列已开放但尚未运行；
 - `C2`：结构、比较问题和开放条件已冻结，但实现、工程验收和正式训练仍关闭；C2 只能在 C1 冻结结果由主协议登记后激活。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
@@ -182,6 +182,12 @@ C1 只形成候选/控制证据，不在本协议内替换 CRD_102 锚点。Whol
 4. peak reserved fraction `≤80%`。
 
 任一失败均保持 C1 formal 队列关闭，不允许临时改变 H、block、dilation、batch 或 AMP。两项 CUDA 工程结果由主协议登记后才可开放三个 formal seeds。
+
+上述工程门槛已在干净 commit `529de747cfee17675432fad1a969570703df1791` 下通过。CUDA bf16 synthetic batch-1 的 waveform shape 为 `[1,1,18000]`，loss `0.347592`，sync/effort eligibility 均为 1，output/input/全部 parameter gradients finite，peak allocated `92.88 MiB`。
+
+独立 acceptance 位于 `/tmp/crd_c101_b0_local_tcn_batch128_acceptance/20260811_142949_605712`，严格使用 128/32 个 train/validation windows、1 epoch、1 optimizer update。Best/final checkpoint 均为 epoch 1、update `1/1`；各含 108 个 finite model tensors 和 324 个 finite optimizer tensors。32 条 validation metrics 的五项 primary 全部 finite、joint prediction degeneracy 为 0；peak allocated/reserved 为 `10018.08/10664.00 MiB`，reserved fraction `66.9161%`，低于 80% 工程线。单 epoch loss/Local RR/PCC 等数值不进入模型效果解释。
+
+至此 C1 三个 formal seeds 的工程阻塞解除。Formal 必须在包含本登记的统一新干净 commit 上顺序或独立 GPU 并行运行，输出到 `runs/crd_v1/crd_c101_b0_local_tcn/seed_<seed>/`；任何中断 run 不凭 best checkpoint 纳入比较。C2 仍等待 C1 三 seed 完整性审计和冻结 decision，不得实现。
 
 ## 5. C2：10-Hz capacity 与 learned 100-Hz placement
 

@@ -745,7 +745,22 @@ C0 只读取完整 validation target，执行 `Pi(target) → ::10 → Fourier 1
   --set outputs.run_root=/tmp/crd_c101_b0_local_tcn_batch128_acceptance
 ```
 
-Acceptance 必须恰有一次 optimizer update、两个 finite checkpoint、32 条 primary-finite validation metrics、无 prediction degeneracy且 peak reserved fraction `≤80%`。结果登记进主协议前，不得运行三个 formal seeds 或实现 C2。
+Acceptance 已在干净 commit `529de74` 下完成：恰有一次 optimizer update、两个 finite checkpoint、32 条 primary-finite validation metrics、无 prediction degeneracy，peak reserved fraction 为 `66.9161%`。上述 synthetic/acceptance 命令现只保留 provenance，不得覆盖重跑。
+
+工程结果登记后，三个 formal seeds 已开放。长时间 GPU 训练由研究者运行：
+
+```bash
+for seed in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/train_crd.py \
+    --config configs/crd_v1/crd_c101_b0_local_tcn.yaml \
+    --set training.seed="${seed}" \
+    --set training.device=cuda:0 \
+    --set outputs.run_root="runs/crd_v1/crd_c101_b0_local_tcn/seed_${seed}" \
+    || exit 1
+done
+```
+
+不得覆盖 epochs、batch、accumulation、数据上限、loss、metrics 或 selector。三个 runs 全部完成并通过 lifecycle/finite/identity 审计后，才能应用附件第 4.2 节冻结门槛；C2 在 C1 decision 登记前继续关闭。
 
 ## 固定呼吸带传统基线
 
