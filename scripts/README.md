@@ -696,14 +696,14 @@ runs/crd_v1/crd_s2br_validation_summary/s2br_summary_manifest.json
 
 ### CRD_102 matched observability
 
-该入口按附件第 24 节冻结规则选择 high-modulation failure/control pairs，只读取匹配窗口的 rawish/fixed-band/target 波形并计算 CPU proxy metrics，不执行模型 inference：
+该入口按附件第 24 节冻结规则选择 high-modulation failure/control pairs，只读取匹配窗口的 rawish/fixed-band/target 波形并计算 CPU proxy metrics，不执行模型 inference。以下命令现只保留 provenance：
 
 ```bash
 ./.venv/bin/python -m pytest tests/test_crd_matched_observability.py
 ./.venv/bin/python scripts/summarize_crd102_matched_observability.py
 ```
 
-默认输出为 `runs/crd_v1/crd_102_matched_observability_diagnostic/`；目录存在时停止，不得覆盖。结果只区分输入可观测性关联与模型特异跟踪关联，不构成因果证据或新候选选择。
+唯一结果从干净 commit `c951325` 输出到 `runs/crd_v1/crd_102_matched_observability_diagnostic/`。21 个 exact-state primary pairs 中 rawish proxy 的 Local-RR/PCC case-worse 为 `16/21、13/21`，fixed-band 为 `17/21、16/21`，decision 为 `mixed_observability_and_model_tracking`；28 个 same-samp sensitivity pairs 也不支持纯输入受限结论。该阶段已关闭，入口不得重复运行，结果不构成因果证据或新候选选择。
 
 ## 固定呼吸带传统基线
 

@@ -8,7 +8,7 @@
 - CRD-S2A：202/203/204 九个 formal runs、prototype 描述与冻结 summary 已完成，三个单分支关闭；
 - CRD-S2B-R：12 个 formal runs 与冻结汇总已完成，两个组合均不 eligible，保留 CRD_102；S3 关闭。
 - CRD_102 failure diagnostic：指标分层与结果知情 metadata follow-up 均已完成，主要失败区域已定位但不作因果主张；当前无自动激活的新模型阶段。
-- CRD_102 matched observability：high-modulation 连续失败与同条件成功窗口的匹配/代理波形口径已冻结，等待生成一次性产物。
+- CRD_102 matched observability：21 个 exact-state primary pairs 与 28 个 same-samp sensitivity pairs 已完成，结果为 mixed observability/model-tracking；当前无自动激活的新实验。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节，唯一激活过的双因素组合与 capacity control 来自第 22 节；gate、auxiliary、TCN control、S3 和最终消融仍未激活。
 
@@ -897,6 +897,20 @@ Metadata follow-up 从干净 commit `7a1b29b` 生成，固定 index hash 与第�
 Case 固定为：Local-RR persistent failure 的多窗口 episode（至少 2 windows）中，central admitted window 为 high target-modulation；偶数长度取较早的中央窗。Control 固定为 high modulation、Local-RR 非 persistent、core failure count=0，并与同 samp 的任一 Local-RR failure window 在起始时间上至少相隔 180 s。Primary 要求同 samp、同 coupling state；sensitivity 只要求同 samp。两者分别在全体 high-modulation windows 的 IQR 上，对 target modulation、waveform confidence、motion ratio 计算等权 normalized L1 cost，caliper 固定 `≤2.0`；用 Hungarian assignment 最大化一对一匹配并最小化总 cost，时间距离只作 `1e-9` tie-break。Primary 少于 12 pairs 则停止，不能放宽规则。
 
 每个 scheme 报告 CRD_102 三 seed mean、rawish proxy、fixed-band proxy 的八项任务指标 case/control paired difference 与 case-worse fraction；coherence 和 dominant-frequency error 另表。Primary 中，对每个 proxy 分别要求 Local-RR case-worse fraction 与 signed-PCC case-worse fraction均 `≥2/3` 才记 observability-failure signature：两 proxy 都命中为 `input_observability_associated`，都不命中为 `model_specific_tracking_associated`，仅一个命中为 mixed。该标签是配对关联证据而非可识别因果结论；不会重选 checkpoint、触发训练或访问 research-test。输出目录固定为 `runs/crd_v1/crd_102_matched_observability_diagnostic/`，存在时禁止覆盖。
+
+### 24.1 冻结结果与解释
+
+实现从干净 commit `48d8929` 冻结；首次执行在写出任何结果前因 decision 把 eligible IBI-MedAE 的 3 pairs 错纳入 primary pair-count 一致性检查而主动停止，未创建输出目录。修正只将 pair-count 审计限定到预先冻结的 Local-RR/PCC 两个 primary，commit `c951325` 通过全量 350 项测试后生成唯一结果。Manifest 固定 candidate-lock、metadata/index hashes、`research_test_used=false / model_inference_used=false`。
+
+42 个 high-modulation multi-window case episodes 中，primary 得到 21 个同 samp/同 state pairs，覆盖 samp `952/1308/1378`；sensitivity 得到 28 个同 samp pairs，覆盖 `952/956/961/1308/1378`。Primary cases/controls 的 target modulation mean 为 `1.3384/1.2246`、waveform confidence `0.5158/0.5423`、motion ratio `0.8598/0.8780`，mean normalized L1 cost `0.9176`。因此 caliper 内仍有较小 modulation/confidence residual imbalance，且 14/21 primary pairs 来自 samp 952；primary 不能视作总体无混杂估计。
+
+Primary 中 CRD_102 case/control Local-RR 为 `3.1827/0.7554 bpm`，21/21 cases 更差；PCC 为 `0.6979/0.7717`，16/21 更差。Rawish direct proxy 的 Local-RR 为 `5.1172/3.1014 bpm`、16/21 更差，但 PCC `0.5316/0.5546` 只有 13/21 更差，未达到 `2/3`；fixed-band proxy 的 Local-RR 为 `4.7234/2.4671 bpm`、17/21 更差，PCC `0.5369/0.5779`、16/21 更差，两项通过。故冻结 decision 为 `mixed_observability_and_model_tracking`，而非纯输入受限或纯模型失效。
+
+配对内部，CRD Local-RR delta 与 rawish/fixed-band delta 的 Spearman 为 `0.4857/0.5740`，支持一部分 shared input-observability signature；两个 proxy 的 Local-RR/PCC delta 彼此相关 `0.8740/0.9182`。但 CRD PCC delta 与 rawish/fixed-band 仅 `0.2195/0.2130`，说明模型自身的相位/跟踪行为仍占明显部分。21 pairs 中 16 个在两个 proxy 上 Local-RR 都更差，12 个在两个 proxy 的 Local-RR/PCC 上同时更差；另有 4 个两个 proxy 的 Local-RR 都不更差，直接反对单一“输入完全不可观测”解释。
+
+Primary broad-band coherence 没有稳定分离：rawish case/control mean `0.3887/0.3987`、case-worse `10/21`，fixed-band 为 `0.3791/0.4004`、`11/21`。Dominant-frequency absolute error 的 case mean 明显更大（rawish `3.77/0.98 bpm`，fixed `3.91/0.84 bpm`），但只在 `10/21`、`11/21` pairs 更差，反映少数大偏差与大量 ties/异质性。Same-samp sensitivity 中 rawish Local-RR/PCC case-worse 为 `17/28`、`16/28`，fixed-band 为 `18/28`、`20/28`，没有 proxy 同时通过两门槛；所以 primary 的输入可观测性成分对 state matching 和样本构成敏感。
+
+最终判断：high-modulation failure episodes 至少包含两个亚型——proxy 同时恶化的输入可观测性关联亚型，以及 proxy 尚可但 CRD 仍失败的模型特异跟踪亚型。不能用一个全局新模块处理二者，也不能据此修改 admission 或标签。下一步若继续，应只对冻结 pairs 做三个 CRD_102 checkpoint 的 inference-only waveform/error decomposition，预先按 proxy-limited 与 proxy-available 亚型分层；未另立协议前不运行。
 
 ### 21.4 Energy representation 决策
 

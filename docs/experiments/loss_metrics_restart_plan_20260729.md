@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 与 CRD_102 failure diagnostic 已关闭；保留 CRD_102，S3 不激活；当前只激活 high-modulation 连续 failure episode 的 validation-only matched observability diagnostic
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic 与 matched observability diagnostic 已关闭；保留 CRD_102，S3 不激活，当前没有自动开放的新实验
 
 ## 1. 定位
 
@@ -2005,3 +2005,5 @@ S2B-R 关闭后不立即增加结构，而先对 candidate-lock 中 CRD_102 三�
 ## 44. CRD_102 high-modulation matched observability（2026-08-11）
 
 现先执行 high-modulation 连续 failure episode 与同 samp/状态/相近 target-modulation、waveform-confidence、motion 的成功窗口配对。使用 rawish direct/fixed-band 两种输入 proxy 复用冻结任务指标，并补充 band coherence/dominant-frequency error；不运行模型、不训练、不读 research-test。完整 case/control、Hungarian/caliper、primary/sensitivity 和停止规则见附件第 24 节。当前只允许实现、测试并从干净 commit 生成一次性产物，不据结果自动启动新结构。
+
+唯一产物从干净 commit `c951325` 生成：21 个 exact-state primary pairs 覆盖 3 个 samp，28 个 same-samp sensitivity pairs 覆盖 5 个 samp。Primary 中 rawish proxy 的 Local-RR/PCC case-worse 为 `16/21、13/21`，fixed-band 为 `17/21、16/21`，只有 fixed-band 同时通过 `2/3`，冻结 outcome 为 `mixed_observability_and_model_tracking`。两个 proxy 的 Local-RR delta 与 CRD delta 中度相关，但 CRD PCC delta 与 proxy 仅约 `0.21`；且 sensitivity 中两个 proxy 都未同时通过门槛。结果支持输入可观测性与模型特异跟踪两个亚型共存，不支持单一全局结构或数据过滤方案。Matched observability 至此关闭；若继续，仅可另立 inference-only waveform decomposition 协议。
