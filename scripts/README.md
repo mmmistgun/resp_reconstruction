@@ -834,14 +834,14 @@ done
 
 固定输出为 `runs/crd_v1/crd_c2_decoder_diagnostics/crd_c202_decoder_100hz/seed_<seed>/`。三项均已从干净 commit `3ef5cf0` 完成，带外能量比例 seed mean 为 `3.1199%/18.7155%/10.6439%`；以上 diagnostic 命令只保留 provenance，不得重复运行。
 
-当前先运行冻结门槛测试，再生成一次 C2 summary：
+冻结门槛测试与 C2 summary 使用以下命令完成：
 
 ```bash
 ./.venv/bin/python -m pytest tests/test_crd_c2_selection.py
 ./.venv/bin/python scripts/summarize_crd_c2.py
 ```
 
-固定输出为 `runs/crd_v1/crd_c2_validation_summary/`，目录存在时拒绝覆盖。Summary 重审六个 formal runs、三项 residual diagnostics、candidate lock、paired/failure-strata，并应用附件第 5.2 节门槛；完成前不得访问 research-test 或新增 decoder。
+固定输出为 `runs/crd_v1/crd_c2_validation_summary/`，目录存在时拒绝覆盖。唯一 summary 已从干净 commit `6e893a3` 生成，decision 为 `decoder_capacity_supported_100hz_placement_not_supported`：C201/C202 相对 CRD_102 均通过 basic gate，但 C202 相对 C201 的 Local RR 为 `-0.1141%`，未达到 `+0.25%` placement gate；最终选择 `crd_c201_decoder_10hz_cap` 并保留 CRD_102 Mamba backbone。以上测试与 summary 命令只保留 provenance，不得重复运行；research-test、TCN+decoder 与其他 decoder 继续关闭。
 
 ## 固定呼吸带传统基线
 

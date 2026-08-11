@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic、C0 decoder round-trip 与 C1 TCN control 已关闭；保留 CRD_102，S3 不激活；第 45 节 C2 六个 formal runs 与 residual 描述已完成，当前只激活一次性冻结 summary
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与第 45 节 C0/C1/C2 控制线均已关闭；C2 选择 CRD_102 Mamba backbone + C201 10-Hz nonlinear capacity decoder，100-Hz placement 无独立证据；S3、research-test 与组合实验不激活
 
 ## 1. 定位
 
@@ -2033,3 +2033,5 @@ C2 两项 CUDA synthetic 与独立 physical-batch-128 acceptance 随后在统一
 C2 六个 formal runs 随后在统一干净 commit `4ec737164e20461ab8b3f3595cb1813a38ff1ddd` 下完成。每项均为 80 epochs/6400 updates、2675 条 validation metrics；C201/C202 selected epochs 均为 `10/11/13`，checkpoint/optimizer、primary finite、prediction-degeneracy 与显存初审通过。冻结 summary 前只激活 `scripts/eval_crd_c202_residual_spectrum.py`：对三个 C202 selected checkpoints 各完整读取一次 validation，按附件第 5.3 节冻结口径报告 `Pi` 前 residual 的带内/带外能量比例。该描述不参与 gate、不读取 research-test且固定输出不可覆盖；三项齐备前不生成 C2 selection 或新增 decoder。
 
 C202 三项 residual diagnostics 随后从统一干净 commit `3ef5cf0c18d000159aad18a5c751be680f275d8d` 生成。每项覆盖 2675 windows/7 `samp_id`，checkpoint hash/epoch、finite 与 research-test=false 审计通过；三个 seed 的带外能量比例 mean 为 `3.1199%/18.7155%/10.6439%`，只作 `Pi` 前数值解释。现只激活 `scripts/summarize_crd_c2.py` 的一次性冻结汇总，重审六个 runs/三项 diagnostics 并应用两项 basic gate 与 C202-vs-C201 placement gate；固定输出不得覆盖。Summary decision 登记前不新增 decoder 或访问 research-test。
+
+C2 冻结 summary 随后从干净 commit `6e893a300cf683e6e0de8be7998799cabafaf32a` 生成。C201 相对 CRD_102 的 Local RR 改善 `0.6978%`、paired `2/3`、PCC drop `0.001155`、trajectory worsening `0.7648%`，基本资格通过；C202 的对应结果为 `0.5845% / 3/3 / 0.001090 / 0.7657%`，也通过基本资格。但 C202 相对同参数 C201 的 Local RR 改善为 `-0.1141%`，未达到 `+0.25%` placement 门槛，因此 decision 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 `crd_c201_decoder_10hz_cap`，并保留 CRD_102 Mamba backbone。该结论只支持 decoder capacity 的小幅 validation-development 收益，不支持 100-Hz placement 或带宽恢复。C0/C1/C2 控制线全部关闭；summary/formal/diagnostic 不得重跑，research-test、TCN+decoder、其他 decoder 与自动后续实验继续关闭。若继续，须以 C201 另建 candidate lock 和新协议。

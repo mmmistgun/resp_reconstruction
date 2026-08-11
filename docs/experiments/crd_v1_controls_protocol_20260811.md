@@ -8,7 +8,7 @@
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
 - `C1`：parameter-matched full-context TCN 的工程验收、三个 formal runs 与冻结汇总均已完成，结果为 `mamba_retained_control_failure / retain CRD_102`，阶段关闭；
-- `C2`：10-Hz capacity/100-Hz placement 两个候选的六个 formal runs与 C202 三项 residual 频谱描述已完成，当前只激活一次性冻结 summary。
+- `C2`：10-Hz capacity/100-Hz placement 两个候选的六个 formal runs、C202 三项 residual 频谱描述与冻结汇总均已完成；选择 `crd_c201_decoder_10hz_cap`，控制线关闭。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
 
@@ -336,6 +336,35 @@ Residual 频谱唯一口径为：整窗 residual 先去 mean，使用 `rfft(norm
 三项 residual diagnostics 随后从统一干净 commit `3ef5cf0c18d000159aad18a5c751be680f275d8d` 生成。每项均为完整 2675 windows/7 `samp_id`，checkpoint path/hash、seed、selected epoch、finite 与 research-test=false 审计通过。Seed `20260811/12/13` 的带外能量比例 direct mean 为 `0.031199 / 0.187155 / 0.106439`，显示 C202 residual 有一部分能量会被正式 `Pi` 丢弃且 seed 间差异较大；该结果只作解释，不参与选择。
 
 当前只允许在包含冻结门槛实现的新干净 commit 上运行 `scripts/summarize_crd_c2.py` 一次。汇总器必须重审六个 formal lifecycles、三个 residual diagnostics、candidate lock、逐 sample summary、paired window/`samp_id` 与 failure-strata，并应用第 5.2 节两项基本资格及 C202-vs-C201 placement gate。固定输出为 `runs/crd_v1/crd_c2_validation_summary/`，存在时拒绝覆盖；summary 完成前不登记最终 decoder。
+
+### 5.4 冻结结果与控制线关闭（2026-08-11）
+
+一次性冻结 summary 已从干净 commit `6e893a300cf683e6e0de8be7998799cabafaf32a` 生成。Manifest 重审了六个完整 formal runs、三个 residual diagnostics、candidate lock 与训练 commit `4ec737164e20461ab8b3f3595cb1813a38ff1ddd`，并固定 `research_test_used=false / confirmatory_p_values_used=false`。三臂 validation seed-mean ± seed-SD 为：
+
+| variant | Whole RR | Local RR | trajectory | global envelope | signed PCC |
+|---|---:|---:|---:|---:|---:|
+| CRD_102 | 0.515775 ± 0.020060 | 0.556161 ± 0.009055 | 0.150150 ± 0.001296 | 0.187512 ± 0.002438 | 0.864672 ± 0.001376 |
+| C201 10-Hz capacity | 0.510907 ± 0.013032 | 0.552281 ± 0.002761 | 0.151298 ± 0.002580 | 0.181563 ± 0.003961 | 0.863517 ± 0.001264 |
+| C202 100-Hz placement | 0.508326 ± 0.016046 | 0.552911 ± 0.006344 | 0.151300 ± 0.002545 | 0.181886 ± 0.003616 | 0.863582 ± 0.001212 |
+
+C201 相对 CRD_102 的 Local RR 改善 `0.6978%`、paired seeds `2/3`、PCC drop `0.001155`、trajectory worsening `0.7648%`，四项基本资格均通过。C202 相对 CRD_102 的对应结果为 `0.5845% / 3/3 / 0.001090 / 0.7657%`，也通过基本资格。
+
+但 C202 相对同参数 C201 的 Local RR 改善为 `-0.1141%`，未达到预注册的 `+0.25%`；尽管 paired seeds 为 `2/3`、PCC 未下降且 trajectory 仅恶化 `0.00087%`，placement gate 仍失败。三个 C202 residual diagnostics 的带外能量比例 seed mean 跨 seed 汇总为 `10.8264% ± 7.7994%`，只说明 `Pi` 前 residual 的频谱分布且不参与选择。
+
+因此 decision 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 `crd_c201_decoder_10hz_cap` 作为本控制线的 validation-development decoder candidate，并保留 CRD_102 的 Mamba backbone。该结果支持“小幅增加 nonlinear decoder capacity”，不支持“100-Hz placement 有独立价值”或“恢复 10-Hz 采样损失”。C0/C1/C2 至此全部关闭；summary、diagnostic 与 formal 入口只保留 provenance，不得重复执行。Research-test、TCN+decoder、其他 decoder 变体和自动后续结构实验均不开放；若继续，须以 C201 新建 candidate lock，并在新协议中预先定义独立证据来源。
+
+冻结 summary 文件 SHA-256：
+
+```text
+3f530b1f70bf83018247a68471e9abca7a5f5f3f566eb4d9d1ad3ef39df29861  c2_failure_strata_summary.csv
+ea8b3fba295a90ea793c5c07c95944ddcfd1db42a6f50ff7d14128ddc8e389a4  c2_paired_samp_descriptives.csv
+6a332b4b8dbd2557cb4bf3583597b103fed8c9325347001190fe3487bff18f3f  c2_paired_window_descriptives.csv
+aff219d997e89b7b9d12c2da67b0dc700cd3d6dcd8c0d75015aee2333a338a8f  c2_residual_seed_summary.csv
+ab59dde0548ae53477fa379b1dd3c37415f032d190c8b3ba2448bc25e4b7c47f  c2_seed_summary.csv
+8ec28a7bc34a768829d7a36fc55478d01b08032f9a85774c520d4c921568f253  c2_selection.json
+f8db084314b796d77f993ad36166f3201f20aebbe1e6c5924c13ee88292bf0b7  c2_selection_manifest.json
+a62a1916363f40c78b69f9c7a6925b33860eecc1fb113232e92d61a27a5e4fc6  c2_variant_summary.csv
+```
 
 ## 6. 失败分层、停止条件与未来证据
 
