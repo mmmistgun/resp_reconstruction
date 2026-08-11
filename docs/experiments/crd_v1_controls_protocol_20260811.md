@@ -8,7 +8,7 @@
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
 - `C1`：parameter-matched full-context TCN 的工程验收、三个 formal runs 与冻结汇总均已完成，结果为 `mamba_retained_control_failure / retain CRD_102`，阶段关闭；
-- `C2`：10-Hz capacity/100-Hz placement 两个候选的 CPU/CUDA 定向验收与独立 physical-batch-128 acceptance 已完成，formal 三 seed 队列已开放但尚未运行。
+- `C2`：10-Hz capacity/100-Hz placement 两个候选的六个 formal runs 已完成，当前只激活 C202 三个 selected checkpoints 的 validation residual 频谱描述；冻结 summary 等待该描述齐备。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
 
@@ -312,6 +312,26 @@ configs/crd_v1/crd_c202_decoder_100hz.yaml
 两项均严格完成 128/32 个 train/validation windows、1 epoch、1 optimizer update；best/final checkpoint 与 optimizer state 全 finite，32 条 validation metrics 的五项 primary 全部 finite、joint prediction degeneracy 为 0。C201 peak allocated/reserved 为 `8480.77/9936.00 MiB`、reserved fraction `62.3479%`；C202 为 `8907.78/9192.00 MiB`、`57.6794%`，均低于 80% 工程线。单 epoch loss/metrics 不进入效果解释。
 
 至此 C201/C202 各三个 formal seeds 的工程阻塞解除。Formal 必须来自包含本登记的统一新干净 commit，输出分别固定到 `runs/crd_v1/crd_c201_decoder_10hz_cap/seed_<seed>/` 与 `runs/crd_v1/crd_c202_decoder_100hz/seed_<seed>/`。任何中断 run 不凭 best checkpoint 纳入比较；在六个完整 run 与冻结 summary 完成前，不追加 temporal decoder、TCN+decoder 或 research-test。
+
+六个 formal runs 随后在统一干净 commit `4ec737164e20461ab8b3f3595cb1813a38ff1ddd` 下完成。C201 唯一 run 为：
+
+```text
+runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260811/20260811_162853_343330
+runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260812/20260811_173454_537310
+runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260813/20260811_184113_013380
+```
+
+C202 唯一 run 为：
+
+```text
+runs/crd_v1/crd_c202_decoder_100hz/seed_20260811/20260811_163019_812824
+runs/crd_v1/crd_c202_decoder_100hz/seed_20260812/20260811_173925_328791
+runs/crd_v1/crd_c202_decoder_100hz/seed_20260813/20260811_184846_178964
+```
+
+六项均完成 80 epochs/6400 updates、2675 条 validation metrics、best/final checkpoint 与显存初审；C201/C202 selected epochs 均为 `10/11/13`。在执行冻结 summary 前，必须按第 5.1 节对三个 C202 selected checkpoints 各运行一次 `scripts/eval_crd_c202_residual_spectrum.py`，完整读取 validation 并报告 `Pi` 前 residual 的 non-DC 总能量、0.05–0.70 Hz 带内能量和 `>0.70 Hz` 带外能量比例。该描述不参与 gate，不得读取 research-test，固定输出到 `runs/crd_v1/crd_c2_decoder_diagnostics/crd_c202_decoder_100hz/seed_<seed>/` 且禁止覆盖。
+
+Residual 频谱唯一口径为：整窗 residual 先去 mean，使用 `rfft(norm="forward")`；总能量为全部 `f>0` bins 的平方幅值和，带内为 `0.05≤f≤0.70 Hz`，带外为 `f>0.70 Hz`，分别除以 non-DC 总能量。任一窗口 residual 非有限或总能量为 0 时立即失败。三个诊断齐备前不生成 C2 selection，也不实现其他 decoder。
 
 ## 6. 失败分层、停止条件与未来证据
 

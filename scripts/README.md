@@ -801,7 +801,7 @@ done
 
 两项 acceptance 已在统一干净 commit `0e2d058` 下通过；C201/C202 peak reserved fraction 为 `62.3479%/57.6794%`，checkpoint/optimizer 与 32 条 primary metrics 全 finite、无 prediction degeneracy。上述 synthetic/acceptance 命令现只保留 provenance，不得覆盖重跑。
 
-工程结果登记后，六个 formal runs 已开放。长时间 GPU 训练由研究者运行：
+工程结果登记后，六个 formal runs 已由研究者在统一干净 commit `4ec7371` 完成；以下命令只保留 provenance：
 
 ```bash
 for variant in crd_c201_decoder_10hz_cap crd_c202_decoder_100hz; do
@@ -816,7 +816,23 @@ for variant in crd_c201_decoder_10hz_cap crd_c202_decoder_100hz; do
 done
 ```
 
-不得覆盖 epochs、batch、accumulation、数据上限、loss、metrics 或 selector。六个 runs 全部完成并通过 lifecycle/finite/identity 审计后，才能应用附件第 5.2 节的基本资格与 C202-vs-C201 placement 门槛；不得访问 research-test。
+不得覆盖 epochs、batch、accumulation、数据上限、loss、metrics 或 selector。冻结 summary 前先运行 residual diagnostic 的定向测试，然后按固定 checkpoint 顺序执行三项 validation inference：
+
+```bash
+./.venv/bin/python -m pytest tests/test_crd_decoder_diagnostics.py
+
+for checkpoint in \
+  runs/crd_v1/crd_c202_decoder_100hz/seed_20260811/20260811_163019_812824/checkpoint_best_local_rr.pt \
+  runs/crd_v1/crd_c202_decoder_100hz/seed_20260812/20260811_173925_328791/checkpoint_best_local_rr.pt \
+  runs/crd_v1/crd_c202_decoder_100hz/seed_20260813/20260811_184846_178964/checkpoint_best_local_rr.pt; do
+  ./.venv/bin/python scripts/eval_crd_c202_residual_spectrum.py \
+    --checkpoint "${checkpoint}" \
+    --device cuda:0 \
+    || exit 1
+done
+```
+
+固定输出为 `runs/crd_v1/crd_c2_decoder_diagnostics/crd_c202_decoder_100hz/seed_<seed>/`。输出存在时不得覆盖；三项齐备前不得生成 selection、访问 research-test 或新增 decoder。
 
 ## 固定呼吸带传统基线
 
