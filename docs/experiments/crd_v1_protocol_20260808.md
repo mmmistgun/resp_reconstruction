@@ -11,7 +11,7 @@
 - CRD_102 matched observability：21 个 exact-state primary pairs 与 28 个 same-samp sensitivity pairs 已完成，结果为 mixed observability/model-tracking；当前无自动激活的新实验。
 - CRD_102 C0/C1/C2 控制线已由主协议第 45 节另立于 `docs/experiments/crd_v1_controls_protocol_20260811.md` 并全部关闭；C0 冻结为 `roundtrip_negligible=true`，C1 TCN 因 trajectory 护栏失败而保留 Mamba backbone，C2 选择 `crd_c201_decoder_10hz_cap`，100-Hz placement 无独立证据。
 
-`docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节，唯一激活过的双因素组合与 capacity control 来自第 22 节；gate、auxiliary、TCN control、S3 和最终消融仍未激活。
+`docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节，唯一激活过的双因素组合与 capacity control 来自第 22 节；C1 的 parameter-matched TCN control 已由主协议第 45 节完成并关闭，gate、auxiliary、TCN+decoder 组合、S3 和最终消融仍未激活。
 
 本阶段由第一轮 research-test 启发，但不回头修改旧 checkpoint 或旧结论。数据、split、target、正式算子 `Pi=S(B(.))`、core loss、评价指标和 Local-RR checkpoint selector 全部沿用主协议。S0/S1/S2 训练只读 train/validation；除第 19 节已经完成并关闭的 S1C 队列外，CRD research-test 仍禁止读取。
 
