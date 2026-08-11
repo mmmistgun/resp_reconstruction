@@ -685,6 +685,15 @@ runs/crd_v1/crd_s2br_validation_summary/s2br_summary_manifest.json
 
 默认输出为 `runs/crd_v1/crd_102_failure_diagnostic/`。目录已存在时入口会停止，不得删除或覆盖后重跑；worst-decile/persistent failure、固定分层、association 和签名口径见协议附件第 23 节。所有结果都是 validation-only exploratory diagnostic，不能重选 CRD_102 checkpoint 或自动触发新模型阶段。
 
+若第一层满足协议中的 metadata follow-up 条件，从新的干净 commit 运行：
+
+```bash
+./.venv/bin/python -m pytest tests/test_crd_failure_metadata.py
+./.venv/bin/python scripts/summarize_crd102_failure_metadata.py
+```
+
+默认输出为 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`，只连接冻结 validation consensus 与 dataset index；不会读取波形、重新 eval 或访问 research-test。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

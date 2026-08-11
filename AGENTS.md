@@ -24,7 +24,7 @@
 - CRD S1C research-test 与冻结汇总均已完成；入口和命令只作 provenance，不再重复运行。
 - CRD S2A prototype 与冻结汇总均已完成；`scripts/eval_crd_morphology_prototypes.py`、`scripts/summarize_crd_s2a.py` 及其命令只作 provenance，不再重复运行。
 - CRD S2B-R 正式训练与冻结汇总均已完成；`scripts/summarize_crd_s2br.py` 及其命令只作 provenance，不再重复运行，冻结产物位于 `runs/crd_v1/crd_s2br_validation_summary/`。
-- CRD_102 failure diagnostic：`./.venv/bin/python scripts/summarize_crd102_failures.py`；只允许在干净 commit 上读取 candidate-lock 固定的三个 validation `metrics.csv`，输出目录已存在时必须停止。
+- CRD_102 failure diagnostic：第一层 `./.venv/bin/python scripts/summarize_crd102_failures.py`；其结果知情 metadata follow-up 为 `./.venv/bin/python scripts/summarize_crd102_failure_metadata.py`。两层都只允许在干净 commit 上读取 candidate-lock 固定 validation 产物/冻结 index，输出目录已存在时必须停止。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。
@@ -39,7 +39,7 @@
 
 ## 当前验证
 
-- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_capacity.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py tests/test_crd_s2_selection.py tests/test_crd_s2br_selection.py tests/test_crd_failure_diagnostics.py`
+- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_capacity.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py tests/test_crd_s2_selection.py tests/test_crd_s2br_selection.py tests/test_crd_failure_diagnostics.py tests/test_crd_failure_metadata.py`
 - 全量当前测试：`./.venv/bin/python -m pytest tests`
 - GPU 正式运行必须在沙盒外执行；CPU smoke 只用于实现验收，不形成科研结论。
 

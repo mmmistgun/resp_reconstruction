@@ -1997,3 +1997,5 @@ S2A 三分支实现与 CPU 协议回归现已完成：配置为 `crd_202_base_le
 ## 43. CRD_102 validation 失败诊断（2026-08-11）
 
 S2B-R 关闭后不立即增加结构，而先对 candidate-lock 中 CRD_102 三个冻结 validation checkpoint 做一次结果知情但不参与选择的探索性诊断。逐 seed 使用 eligible-window worst decile，并以至少 `2/3` seeds 命中定义 persistent failure；固定分层为 samp、coupling state、target modulation stratum、IBI interpretable 一致性和 lag-boundary 一致性，同时报告跨 seed agreement、error-aligned metric associations 与失败签名。完整边界与输出见附件第 23 节。该入口不重推理、不重选 checkpoint、不读取 research-test，签名不作因果解释；当前只允许在干净 commit 上生成一次性冻结产物。
+
+若第一层观察到 target-modulation 关联和相邻 row 聚集，再按附件第 23 节冻结字段启动一次结果知情 metadata follow-up：只连接既有 validation consensus 与冻结 dataset index，检查质量/confidence 元数据和重叠窗口 failure episodes，不新增模型或选择门槛。该层与第一层分目录保存且同样禁止覆盖。

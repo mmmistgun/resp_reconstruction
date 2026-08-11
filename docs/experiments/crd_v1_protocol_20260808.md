@@ -871,6 +871,10 @@ Factorial interaction 的 seed-mean contrast 表明非线性补偿方向确实�
 
 另固定输出：三 seed 指标 Spearman/绝对差/worst-decile Jaccard、error-aligned 指标间 Spearman（无 p-value）、Local-RR 跨 seed SD 的 top decile、全部 persistent failure windows、signature 汇总、threshold/audit/manifest。输出目录为 `runs/crd_v1/crd_102_failure_diagnostic/`，已存在时禁止覆盖；结果只用于确定下一轮应优先调查的数据/任务失效区域，不能重开 S2B-R、S3 或覆盖 CRD_102 选择。
 
+第一层结果生成后若同时出现明显 target-modulation 关联与相邻 row 聚集，允许一次 result-informed metadata follow-up，协议名固定为 `crd-v1.1-crd102-failure-metadata-20260811`。该层只把第一层冻结 consensus 逐 `dataset_row_id` 一对一连接到三个 CRD_102 resolved config 共同指向的冻结 `dataset_index.csv`；必须校验 index hash、`split=val`、samp/coupling identity 和 180 s 窗长。连续元数据固定为 valid/motion/reliable ratios、六类 confidence score、alignment lag/drift 与 finite ratio；分类元数据固定为六类 confidence level、alignment method/reference-assisted 和 allowed losses，不结果后增删字段。
+
+Metadata follow-up 只报告元数据与 error-aligned outcome 的 Spearman、persistent Local-RR/multimetric-core 两种失败组的 mean/median contrast、原有分类 level 的分层结果，以及连续失败片段。连续片段固定为同一 samp 内相邻失败窗口 `window_start_s` 间隔不超过冻结 30 s step；分别对 persistent Local-RR 与 core failure count `≥2` 汇总 episode 数、singleton 比例、最长窗口数/跨度。重叠窗口不能当独立事件，所有 association/contrast/episode 仍是探索性描述，无 p-value、无因果主张。单独输出到 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`，不得改写第一层 bundle。
+
 ### 21.4 Energy representation 决策
 
 E 与 A 各自相对 BASE，必须同时满足才称为 energy-eligible：
