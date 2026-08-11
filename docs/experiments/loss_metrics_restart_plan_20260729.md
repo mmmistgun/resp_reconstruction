@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic、C0 decoder round-trip 与 C1 TCN control 已关闭；保留 CRD_102，S3 不激活；第 45 节 C2 六个 formal runs 已完成，当前只激活 C202 selected-checkpoint residual 频谱描述，冻结 summary 待执行
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic、C0 decoder round-trip 与 C1 TCN control 已关闭；保留 CRD_102，S3 不激活；第 45 节 C2 六个 formal runs 与 residual 描述已完成，当前只激活一次性冻结 summary
 
 ## 1. 定位
 
@@ -2031,3 +2031,5 @@ C2 唯一实现随后完成：`crd_c201_decoder_10hz_cap / crd_c202_decoder_100h
 C2 两项 CUDA synthetic 与独立 physical-batch-128 acceptance 随后在统一干净 commit `0e2d05824a50426e3ff0443a6875829422a6160d` 下通过。C201/C202 synthetic output/input/全部 parameter gradients finite，peak allocated 为 `349.17/349.21 MiB`。两项 acceptance 均完成 128/32 个 train/validation windows、1 optimizer update，checkpoint/optimizer 与 32 条 primary metrics 全 finite、无 prediction degeneracy；peak reserved fraction 为 `62.3479%/57.6794%`。单 epoch数值不形成效果证据。现解除 C201/C202 各三个 formal seeds 的工程阻塞；正式 run 必须来自包含本登记的统一新干净 commit。TCN+decoder、其他 decoder 变体和 research-test 继续关闭。
 
 C2 六个 formal runs 随后在统一干净 commit `4ec737164e20461ab8b3f3595cb1813a38ff1ddd` 下完成。每项均为 80 epochs/6400 updates、2675 条 validation metrics；C201/C202 selected epochs 均为 `10/11/13`，checkpoint/optimizer、primary finite、prediction-degeneracy 与显存初审通过。冻结 summary 前只激活 `scripts/eval_crd_c202_residual_spectrum.py`：对三个 C202 selected checkpoints 各完整读取一次 validation，按附件第 5.3 节冻结口径报告 `Pi` 前 residual 的带内/带外能量比例。该描述不参与 gate、不读取 research-test且固定输出不可覆盖；三项齐备前不生成 C2 selection 或新增 decoder。
+
+C202 三项 residual diagnostics 随后从统一干净 commit `3ef5cf0c18d000159aad18a5c751be680f275d8d` 生成。每项覆盖 2675 windows/7 `samp_id`，checkpoint hash/epoch、finite 与 research-test=false 审计通过；三个 seed 的带外能量比例 mean 为 `3.1199%/18.7155%/10.6439%`，只作 `Pi` 前数值解释。现只激活 `scripts/summarize_crd_c2.py` 的一次性冻结汇总，重审六个 runs/三项 diagnostics 并应用两项 basic gate 与 C202-vs-C201 placement gate；固定输出不得覆盖。Summary decision 登记前不新增 decoder 或访问 research-test。

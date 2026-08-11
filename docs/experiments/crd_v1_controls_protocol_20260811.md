@@ -8,7 +8,7 @@
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
 - `C1`：parameter-matched full-context TCN 的工程验收、三个 formal runs 与冻结汇总均已完成，结果为 `mamba_retained_control_failure / retain CRD_102`，阶段关闭；
-- `C2`：10-Hz capacity/100-Hz placement 两个候选的六个 formal runs 已完成，当前只激活 C202 三个 selected checkpoints 的 validation residual 频谱描述；冻结 summary 等待该描述齐备。
+- `C2`：10-Hz capacity/100-Hz placement 两个候选的六个 formal runs与 C202 三项 residual 频谱描述已完成，当前只激活一次性冻结 summary。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
 
@@ -332,6 +332,10 @@ runs/crd_v1/crd_c202_decoder_100hz/seed_20260813/20260811_184846_178964
 六项均完成 80 epochs/6400 updates、2675 条 validation metrics、best/final checkpoint 与显存初审；C201/C202 selected epochs 均为 `10/11/13`。在执行冻结 summary 前，必须按第 5.1 节对三个 C202 selected checkpoints 各运行一次 `scripts/eval_crd_c202_residual_spectrum.py`，完整读取 validation 并报告 `Pi` 前 residual 的 non-DC 总能量、0.05–0.70 Hz 带内能量和 `>0.70 Hz` 带外能量比例。该描述不参与 gate，不得读取 research-test，固定输出到 `runs/crd_v1/crd_c2_decoder_diagnostics/crd_c202_decoder_100hz/seed_<seed>/` 且禁止覆盖。
 
 Residual 频谱唯一口径为：整窗 residual 先去 mean，使用 `rfft(norm="forward")`；总能量为全部 `f>0` bins 的平方幅值和，带内为 `0.05≤f≤0.70 Hz`，带外为 `f>0.70 Hz`，分别除以 non-DC 总能量。任一窗口 residual 非有限或总能量为 0 时立即失败。三个诊断齐备前不生成 C2 selection，也不实现其他 decoder。
+
+三项 residual diagnostics 随后从统一干净 commit `3ef5cf0c18d000159aad18a5c751be680f275d8d` 生成。每项均为完整 2675 windows/7 `samp_id`，checkpoint path/hash、seed、selected epoch、finite 与 research-test=false 审计通过。Seed `20260811/12/13` 的带外能量比例 direct mean 为 `0.031199 / 0.187155 / 0.106439`，显示 C202 residual 有一部分能量会被正式 `Pi` 丢弃且 seed 间差异较大；该结果只作解释，不参与选择。
+
+当前只允许在包含冻结门槛实现的新干净 commit 上运行 `scripts/summarize_crd_c2.py` 一次。汇总器必须重审六个 formal lifecycles、三个 residual diagnostics、candidate lock、逐 sample summary、paired window/`samp_id` 与 failure-strata，并应用第 5.2 节两项基本资格及 C202-vs-C201 placement gate。固定输出为 `runs/crd_v1/crd_c2_validation_summary/`，存在时拒绝覆盖；summary 完成前不登记最终 decoder。
 
 ## 6. 失败分层、停止条件与未来证据
 

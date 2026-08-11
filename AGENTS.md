@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics、C0 decoder round-trip 与 C1 TCN control 已完成。C0 冻结为 `roundtrip_negligible=true`；C1 因 trajectory 恶化 `2.5468%` 未通过全门槛，固定为 `mamba_retained_control_failure / retain CRD_102`。主协议第 45 节 C2 六个 formal runs 已完成，当前只激活 C202 三个 selected checkpoints 的 validation residual 频谱描述，冻结 summary 等待三项齐备；TCN+decoder 仍关闭。S3、gate/auxiliary/final ablation 继续关闭。规范附件由主协议第 35–45 节纳入。
+- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics、C0 decoder round-trip 与 C1 TCN control 已完成。C0 冻结为 `roundtrip_negligible=true`；C1 固定为 `mamba_retained_control_failure / retain CRD_102`。主协议第 45 节 C2 六个 formal runs 与 C202 三项 residual 频谱描述已完成，当前只激活一次性冻结 summary；TCN+decoder 仍关闭。S3、gate/auxiliary/final ablation 继续关闭。规范附件由主协议第 35–45 节纳入。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -28,7 +28,7 @@
 - CRD_102 matched observability 已完成；`scripts/summarize_crd102_matched_observability.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_102_matched_observability_diagnostic/`。
 - CRD_102 C0 decoder round-trip 已完成并冻结；`scripts/audit_crd102_decoder_roundtrip.py` 只保留 provenance，不得重复运行，固定产物位于 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`。
 - CRD C1 formal 与冻结汇总已完成；`scripts/summarize_crd_c1.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。
-- CRD C2 六个 formal runs 已完成；当前只允许在干净工作树调用 `scripts/eval_crd_c202_residual_spectrum.py` 各一次读取三个 C202 selected checkpoints。固定输出存在时不得覆盖或重跑；三项完成前不得生成 selection。
+- CRD C2 六个 formal runs 与 C202 residual diagnostics 已完成；diagnostic 入口只保留 provenance。当前只允许在干净工作树调用 `scripts/summarize_crd_c2.py` 一次，固定输出到 `runs/crd_v1/crd_c2_validation_summary/`，存在时不得覆盖或重跑。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。
@@ -44,7 +44,7 @@
 
 ## 当前验证
 
-- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_capacity.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py tests/test_crd_s2_selection.py tests/test_crd_s2br_selection.py tests/test_crd_failure_diagnostics.py tests/test_crd_failure_metadata.py tests/test_crd_matched_observability.py tests/test_crd_decoder_roundtrip.py tests/test_crd_c1_selection.py tests/test_crd_decoder_diagnostics.py`
+- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_capacity.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py tests/test_crd_s2_selection.py tests/test_crd_s2br_selection.py tests/test_crd_failure_diagnostics.py tests/test_crd_failure_metadata.py tests/test_crd_matched_observability.py tests/test_crd_decoder_roundtrip.py tests/test_crd_c1_selection.py tests/test_crd_decoder_diagnostics.py tests/test_crd_c2_selection.py`
 - 全量当前测试：`./.venv/bin/python -m pytest tests`
 - GPU 正式运行必须在沙盒外执行；CPU smoke 只用于实现验收，不形成科研结论。
 

@@ -832,7 +832,16 @@ for checkpoint in \
 done
 ```
 
-固定输出为 `runs/crd_v1/crd_c2_decoder_diagnostics/crd_c202_decoder_100hz/seed_<seed>/`。输出存在时不得覆盖；三项齐备前不得生成 selection、访问 research-test 或新增 decoder。
+固定输出为 `runs/crd_v1/crd_c2_decoder_diagnostics/crd_c202_decoder_100hz/seed_<seed>/`。三项均已从干净 commit `3ef5cf0` 完成，带外能量比例 seed mean 为 `3.1199%/18.7155%/10.6439%`；以上 diagnostic 命令只保留 provenance，不得重复运行。
+
+当前先运行冻结门槛测试，再生成一次 C2 summary：
+
+```bash
+./.venv/bin/python -m pytest tests/test_crd_c2_selection.py
+./.venv/bin/python scripts/summarize_crd_c2.py
+```
+
+固定输出为 `runs/crd_v1/crd_c2_validation_summary/`，目录存在时拒绝覆盖。Summary 重审六个 formal runs、三项 residual diagnostics、candidate lock、paired/failure-strata，并应用附件第 5.2 节门槛；完成前不得访问 research-test 或新增 decoder。
 
 ## 固定呼吸带传统基线
 
