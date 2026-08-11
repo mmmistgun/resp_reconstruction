@@ -705,6 +705,22 @@ runs/crd_v1/crd_s2br_validation_summary/s2br_summary_manifest.json
 
 唯一结果从干净 commit `c951325` 输出到 `runs/crd_v1/crd_102_matched_observability_diagnostic/`。21 个 exact-state primary pairs 中 rawish proxy 的 Local-RR/PCC case-worse 为 `16/21、13/21`，fixed-band 为 `17/21、16/21`，decision 为 `mixed_observability_and_model_tracking`；28 个 same-samp sensitivity pairs 也不支持纯输入受限结论。该阶段已关闭，入口不得重复运行，结果不构成因果证据或新候选选择。
 
+### CRD_102 C0 decoder round-trip
+
+C0 只读取完整 validation target，执行 `Pi(target) → ::10 → Fourier 1800→18000 → Pi`；不运行模型、不读取 checkpoint tensor、不训练，也不访问 research-test。先运行定向测试：
+
+```bash
+./.venv/bin/python -m pytest tests/test_crd_decoder_roundtrip.py
+```
+
+实现与协议提交后，只允许在干净工作树执行一次：
+
+```bash
+./.venv/bin/python scripts/audit_crd102_decoder_roundtrip.py
+```
+
+固定输出为 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`；目录存在时入口拒绝覆盖。正式结果登记进主协议前，C1 TCN 与 C2 decoder 均不得实现或运行。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

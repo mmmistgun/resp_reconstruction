@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic 与 matched observability diagnostic 已关闭；保留 CRD_102，S3 不激活，当前没有自动开放的新实验
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic 与 matched observability diagnostic 已关闭；保留 CRD_102，S3 不激活；第 45 节另立控制线，当前只激活无训练 C0 decoder round-trip validation 审计
 
 ## 1. 定位
 
@@ -2007,3 +2007,11 @@ S2B-R 关闭后不立即增加结构，而先对 candidate-lock 中 CRD_102 三�
 现先执行 high-modulation 连续 failure episode 与同 samp/状态/相近 target-modulation、waveform-confidence、motion 的成功窗口配对。使用 rawish direct/fixed-band 两种输入 proxy 复用冻结任务指标，并补充 band coherence/dominant-frequency error；不运行模型、不训练、不读 research-test。完整 case/control、Hungarian/caliper、primary/sensitivity 和停止规则见附件第 24 节。当前只允许实现、测试并从干净 commit 生成一次性产物，不据结果自动启动新结构。
 
 唯一产物从干净 commit `c951325` 生成：21 个 exact-state primary pairs 覆盖 3 个 samp，28 个 same-samp sensitivity pairs 覆盖 5 个 samp。Primary 中 rawish proxy 的 Local-RR/PCC case-worse 为 `16/21、13/21`，fixed-band 为 `17/21、16/21`，只有 fixed-band 同时通过 `2/3`，冻结 outcome 为 `mixed_observability_and_model_tracking`。两个 proxy 的 Local-RR delta 与 CRD delta 中度相关，但 CRD PCC delta 与 proxy 仅约 `0.21`；且 sensitivity 中两个 proxy 都未同时通过门槛。结果支持输入可观测性与模型特异跟踪两个亚型共存，不支持单一全局结构或数据过滤方案。Matched observability 至此关闭；若继续，仅可另立 inference-only waveform decomposition 协议。
+
+## 45. CRD_102 锚点控制线 C0/C1/C2（2026-08-11）
+
+S2B-R 与后续 CRD_102 failure/matched-observability diagnostics 关闭后，不续接已关闭且未定义的 S3/S4/S5。现以 candidate lock 中冻结的 CRD_102 三个 Local-RR-selected checkpoint 为只读锚点，另立 `crd-v1.1-controls-research-informed-20260811` 控制线，依次回答：当前 10-Hz/Fourier decoder 是否在正式呼吸带内近似无损、Local BiMamba2 是否能被参数匹配 full-context TCN 替代、以及 learned 100-Hz nonlinear decoder 是否优于同参数的 10-Hz decoder-capacity control。完整数学、结构、门槛、产物和停止规则冻结在 `docs/experiments/crd_v1_controls_protocol_20260811.md`；该附件由本节纳入当前唯一实验协议，冲突时以本文为准。
+
+控制线属于既有 research-test 与多轮 validation 结果知情后的 development/validation controls，不形成确认性统计推断。数据、split、target、正式 `Pi`、core loss、metrics、Local-RR selector、三个 seed 和 80×128×1 训练语义保持不变；S1C research-test 队列继续关闭。C1/C2 即使分别通过，也不得在本协议内自动组合。
+
+当前只激活 C0：对完整 2675-window/7-`samp_id` validation target 执行 `Pi(target) → ::10 → Fourier 1800→18000 → Pi`，生成不可覆盖的逐 sample metrics、数值审计、decision 和 manifest；不运行模型、不读取 checkpoint tensor、不训练。C0 正式结果必须在干净 commit 下完成并由本节登记后，才可激活 C1 的实现。C1/C2 目前只冻结未来定义，禁止提前实现、验收或运行。
