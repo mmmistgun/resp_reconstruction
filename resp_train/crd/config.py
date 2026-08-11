@@ -19,6 +19,7 @@ CRD_S2A_PROTOCOL_VERSION = "crd-v1.1-s2a-research-test-informed-20260809"
 CRD_S2BR_PROTOCOL_VERSION = "crd-v1.1-s2br-result-informed-20260810"
 CRD_102_FAILURE_DIAGNOSTIC_PROTOCOL_VERSION = "crd-v1.1-crd102-failure-diagnostic-20260811"
 CRD_102_FAILURE_METADATA_PROTOCOL_VERSION = "crd-v1.1-crd102-failure-metadata-20260811"
+CRD_102_MATCHED_OBSERVABILITY_PROTOCOL_VERSION = "crd-v1.1-crd102-matched-observability-20260811"
 CRD_DIAGNOSTIC_VARIANTS = {
     "crd_103_direct_local_mamba",
     "crd_105_direct_coarse",

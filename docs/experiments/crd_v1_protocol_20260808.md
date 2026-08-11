@@ -2,12 +2,13 @@
 
 ## 1. 权威性、范围与科学边界
 
-本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–43 节引用的规范性附件；发生冲突时以主协议为准。当前状态为：
+本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–44 节引用的规范性附件；发生冲突时以主协议为准。当前状态为：
 
 - CRD-S0/S1/S1C/S1F：已完成并冻结，S2 BASE 为 candidate-lock 中的 CRD_102；
 - CRD-S2A：202/203/204 九个 formal runs、prototype 描述与冻结 summary 已完成，三个单分支关闭；
 - CRD-S2B-R：12 个 formal runs 与冻结汇总已完成，两个组合均不 eligible，保留 CRD_102；S3 关闭。
 - CRD_102 failure diagnostic：指标分层与结果知情 metadata follow-up 均已完成，主要失败区域已定位但不作因果主张；当前无自动激活的新模型阶段。
+- CRD_102 matched observability：high-modulation 连续失败与同条件成功窗口的匹配/代理波形口径已冻结，等待生成一次性产物。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节，唯一激活过的双因素组合与 capacity control 来自第 22 节；gate、auxiliary、TCN control、S3 和最终消融仍未激活。
 
@@ -888,6 +889,14 @@ IBI 在全部三 seed 均 interpretable 的窗口占 `69.61%`，全部不 interp
 Metadata follow-up 从干净 commit `7a1b29b` 生成，固定 index hash 与第一层 manifest/consensus hash 均记录。除 target modulation 外，与 Local-RR 最强的元数据关联是 waveform/rate/supervision confidence（Spearman `-0.5487/-0.5465/-0.5231`），其次是 transient-motion ratio（`+0.4811`）。Persistent Local-RR failures 的 waveform confidence mean/median 为 `0.5609/0.5327`，其余窗口为 `0.6978/0.6774`；motion ratio 为 `0.8294/0.8722` 对 `0.6651/0.7500`。Hard-valid 与 training-finite 均恒为 1，state-alignment-valid 近 1 且与 Local-RR 仅 `-0.0357`，说明这不是一般性非有限或 admission 失败。Confidence 与 modulation/samp composition 相关，以上差异仍不能解释为独立因果效应。
 
 262 个 Local-RR persistent failure windows 合并为 97 个重叠窗口 episodes，其中 40 个 singleton；即 `222/262=84.73%` 的失败窗口处于多窗口连续片段，最长 9 windows/420 s。352 个 multimetric-core windows 合并为 142 个 episodes、69 个 singleton，`283/352=80.40%` 位于连续片段，最长 13 windows/540 s。失败因此更像高动态/较低置信度的连续时间段，而非均匀散布的独立窗口。最终诊断优先级固定为：先调查 high-modulation 连续 episode 的输入—目标可观测性与局部速率跟踪，再处理低-modulation rank 指标的适用性；不据此自动增加结构、重选 checkpoint 或启用 research-test。
+
+## 24. CRD_102 high-modulation 配对可观测性诊断（2026-08-11）
+
+本节是第 23.1 节结果触发的 validation-only exploratory follow-up，协议名固定为 `crd-v1.1-crd102-matched-observability-20260811`。它不重新运行 CRD_102，也不读取模型 prediction：输入仅为冻结 metadata consensus、dataset index，以及匹配窗口的 `bcg_rawish_wideband_state_aligned_segment_soft_z`、`bcg_resp_band_state_aligned_segment_soft_z` 与 `tho_waveform_segment_soft_z`。两个 BCG 信号分别作为 rawish direct proxy 与既有 F0 fixed-band proxy，复用冻结任务算子/metrics；另在 canonical `0.05–0.7 Hz` 信号上报告 Welch dominant-frequency error 与 `nperseg=2048/noverlap=1024` magnitude-squared coherence。Proxy 只回答输入中是否存在可恢复呼吸信息，不是新候选模型。
+
+Case 固定为：Local-RR persistent failure 的多窗口 episode（至少 2 windows）中，central admitted window 为 high target-modulation；偶数长度取较早的中央窗。Control 固定为 high modulation、Local-RR 非 persistent、core failure count=0，并与同 samp 的任一 Local-RR failure window 在起始时间上至少相隔 180 s。Primary 要求同 samp、同 coupling state；sensitivity 只要求同 samp。两者分别在全体 high-modulation windows 的 IQR 上，对 target modulation、waveform confidence、motion ratio 计算等权 normalized L1 cost，caliper 固定 `≤2.0`；用 Hungarian assignment 最大化一对一匹配并最小化总 cost，时间距离只作 `1e-9` tie-break。Primary 少于 12 pairs 则停止，不能放宽规则。
+
+每个 scheme 报告 CRD_102 三 seed mean、rawish proxy、fixed-band proxy 的八项任务指标 case/control paired difference 与 case-worse fraction；coherence 和 dominant-frequency error 另表。Primary 中，对每个 proxy 分别要求 Local-RR case-worse fraction 与 signed-PCC case-worse fraction均 `≥2/3` 才记 observability-failure signature：两 proxy 都命中为 `input_observability_associated`，都不命中为 `model_specific_tracking_associated`，仅一个命中为 mixed。该标签是配对关联证据而非可识别因果结论；不会重选 checkpoint、触发训练或访问 research-test。输出目录固定为 `runs/crd_v1/crd_102_matched_observability_diagnostic/`，存在时禁止覆盖。
 
 ### 21.4 Energy representation 决策
 

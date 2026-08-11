@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 与 CRD_102 failure diagnostic 已完成；诊断将主要失败区域定位为高 target-modulation、较低 waveform/rate confidence 且时间成段的 validation 窗口，但这些是相关性/失败签名，不是因果机制。保留 candidate-lock 中的 CRD_102，S3、gate/auxiliary/TCN/final ablation 继续关闭；当前没有自动激活的新模型阶段。规范附件由主协议第 35–43 节纳入。
+- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 与 CRD_102 failure diagnostic 已完成；当前只激活 high-modulation 连续 failure episode 与同 samp/状态/相近质量成功窗口的 validation-only 配对可观测性诊断。该诊断只读取冻结 rawish/fixed-band/target 波形，不做模型 inference、训练或 checkpoint 选择，不读取 research-test。S3、gate/auxiliary/TCN/final ablation 继续关闭。规范附件由主协议第 35–44 节纳入。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -25,6 +25,7 @@
 - CRD S2A prototype 与冻结汇总均已完成；`scripts/eval_crd_morphology_prototypes.py`、`scripts/summarize_crd_s2a.py` 及其命令只作 provenance，不再重复运行。
 - CRD S2B-R 正式训练与冻结汇总均已完成；`scripts/summarize_crd_s2br.py` 及其命令只作 provenance，不再重复运行，冻结产物位于 `runs/crd_v1/crd_s2br_validation_summary/`。
 - CRD_102 failure diagnostic 两层均已完成；`scripts/summarize_crd102_failures.py` 与 `scripts/summarize_crd102_failure_metadata.py` 只保留 provenance，不得重复运行。冻结产物位于 `runs/crd_v1/crd_102_failure_diagnostic/` 与 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`。
+- CRD_102 matched observability：`./.venv/bin/python scripts/summarize_crd102_matched_observability.py`；只允许在干净 commit 上生成一次，输出目录已存在时必须停止。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。
@@ -39,7 +40,7 @@
 
 ## 当前验证
 
-- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_capacity.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py tests/test_crd_s2_selection.py tests/test_crd_s2br_selection.py tests/test_crd_failure_diagnostics.py tests/test_crd_failure_metadata.py`
+- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_capacity.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py tests/test_crd_s2_selection.py tests/test_crd_s2br_selection.py tests/test_crd_failure_diagnostics.py tests/test_crd_failure_metadata.py tests/test_crd_matched_observability.py`
 - 全量当前测试：`./.venv/bin/python -m pytest tests`
 - GPU 正式运行必须在沙盒外执行；CPU smoke 只用于实现验收，不形成科研结论。
 

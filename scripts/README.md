@@ -694,6 +694,17 @@ runs/crd_v1/crd_s2br_validation_summary/s2br_summary_manifest.json
 
 第二层已从干净 commit `7a1b29b` 输出到 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`，只连接冻结 validation consensus 与 dataset index；没有读取波形、重新 eval 或访问 research-test。核心结果为：high modulation 占 Local-RR/multimetric persistent failures 的 `70.61%/91.76%`，三 seed Local-RR 难例高度一致，且 `84.73%/80.40%` 的相应失败窗口位于多窗口连续片段。两层均已关闭，所有入口不得用于重选 checkpoint 或自动触发新模型阶段。
 
+### CRD_102 matched observability
+
+该入口按附件第 24 节冻结规则选择 high-modulation failure/control pairs，只读取匹配窗口的 rawish/fixed-band/target 波形并计算 CPU proxy metrics，不执行模型 inference：
+
+```bash
+./.venv/bin/python -m pytest tests/test_crd_matched_observability.py
+./.venv/bin/python scripts/summarize_crd102_matched_observability.py
+```
+
+默认输出为 `runs/crd_v1/crd_102_matched_observability_diagnostic/`；目录存在时停止，不得覆盖。结果只区分输入可观测性关联与模型特异跟踪关联，不构成因果证据或新候选选择。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的
