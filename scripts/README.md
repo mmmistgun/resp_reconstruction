@@ -605,7 +605,7 @@ Decision 固定为 `X=none / M ineligible / S2B=false / S3=false / retain CRD_10
 | `crd_207_base_cap_em` | BASE + capacity control | 1,109,257 | `N=2,H=104`，差 `-304` |
 | `crd_208_base_cap_am` | BASE + capacity control | 1,235,785 | `N=4,H=216`，差 `-112` |
 
-当前只执行四项 synthetic 与独立 physical-batch-128 acceptance：
+以下四项 synthetic 与独立 physical-batch-128 acceptance 命令现只保留 provenance：
 
 ```bash
 for variant in \
@@ -634,7 +634,7 @@ done
 
 每项要求完整 lifecycle、eligible primary finite、joint prediction nondegenerate 且 `peak_reserved_fraction≤0.80`。若某项 OOM 或越线，停止，不临时减 batch/结构。S3 gate 仍未实现，S2B-R 全程禁止 research-test。
 
-四项已在统一干净 commit `0e541f8` 下通过；peak reserved fraction 为 `67.37%/67.15%/65.41%/71.46%`。当前允许 12 个 formal runs：
+四项已在统一干净 commit `0e541f8` 下通过；peak reserved fraction 为 `67.37%/67.15%/65.41%/71.46%`。以下 12 个 formal runs 命令现只保留 provenance，不得重复运行：
 
 ```bash
 for variant in \
@@ -654,7 +654,25 @@ for variant in \
 done
 ```
 
-不得覆盖 epochs、batch、accumulation 或任何 `max_*_windows`，不得读取 research-test。12 项完成后先审计 checkpoint/metrics 集合，再应用附件第 22.3 节的 BASE/control/best-constituent 三重门槛与 factorial interaction 描述；结果冻结前不实现 S3。
+12 项已在统一干净 training commit `c2bcfb0` 下完成；selected epochs 为 205=`8/11/12`、206=`19/11/9`、207=`13/11/12`、208=`10/18/15`。冻结汇总命令如下，现只保留 provenance：
+
+```bash
+./.venv/bin/python scripts/summarize_crd_s2br.py
+```
+
+产物位于：
+
+```text
+runs/crd_v1/crd_s2br_validation_summary/s2br_decision.json
+runs/crd_v1/crd_s2br_validation_summary/s2br_seed_summary.csv
+runs/crd_v1/crd_s2br_validation_summary/s2br_variant_summary.csv
+runs/crd_v1/crd_s2br_validation_summary/s2br_paired_descriptives.csv
+runs/crd_v1/crd_s2br_validation_summary/s2br_factorial_seed_summary.csv
+runs/crd_v1/crd_s2br_validation_summary/s2br_factorial_paired_descriptives.csv
+runs/crd_v1/crd_s2br_validation_summary/s2br_summary_manifest.json
+```
+
+两个组合的 BASE/control/best-constituent Local RR 门槛均失败：205 的相对改善为 `-1.0387%/-0.9260%/-2.5769%`，206 为 `-1.0295%/-1.4515%/-1.0295%`。Factorial descriptives 显示非线性补偿方向存在，但绝对组合效果不足；decision 固定为 `passing_combinations=[] / retain CRD_102 / S3=false`。S2B-R 已关闭，以上训练与汇总入口不得重复执行或用于读取 research-test 后重选。
 
 ## 固定呼吸带传统基线
 

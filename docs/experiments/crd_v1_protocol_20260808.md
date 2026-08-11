@@ -2,13 +2,13 @@
 
 ## 1. 权威性、范围与科学边界
 
-本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–41 节引用的规范性附件；发生冲突时以主协议为准。当前状态为：
+本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–42 节引用的规范性附件；发生冲突时以主协议为准。当前状态为：
 
 - CRD-S0/S1/S1C/S1F：已完成并冻结，S2 BASE 为 candidate-lock 中的 CRD_102；
 - CRD-S2A：202/203/204 九个 formal runs、prototype 描述与冻结 summary 已完成，三个单分支关闭；
-- CRD-S2B-R：结果知情双因素交互的实现与工程验收已激活；S3 关闭。
+- CRD-S2B-R：12 个 formal runs 与冻结汇总已完成，两个组合均不 eligible，保留 CRD_102；S3 关闭。
 
-`docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节；gate、auxiliary、capacity/TCN control、S2B/S3 和最终消融仍未激活。
+`docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节，唯一激活过的双因素组合与 capacity control 来自第 22 节；gate、auxiliary、TCN control、S3 和最终消融仍未激活。
 
 本阶段由第一轮 research-test 启发，但不回头修改旧 checkpoint 或旧结论。数据、split、target、正式算子 `Pi=S(B(.))`、core loss、评价指标和 Local-RR checkpoint selector 全部沿用主协议。S0/S1/S2 训练只读 train/validation；除第 19 节已经完成并关闭的 S1C 队列外，CRD research-test 仍禁止读取。
 
@@ -851,6 +851,14 @@ Capacity control 不读取 E/A/M。每个 block 固定为 `GN(12,96)→Conv1x1 9
 此外必须按 seed、paired window 与 paired samp ID 报告 `combo − energy − morphology + BASE` factorial interaction contrast；该描述用于判断补偿方向，但不能覆盖四项全通过门槛。Whole RR、IBI-MedAE、global envelope、三层 Spearman、参数、MAC/VRAM/latency 只作 secondary。
 
 若仅一个组合通过，选择该组合并允许另立 S3 协议；若两者都通过，A+M 只有在相对 E+M 同时达到 Local RR 改善 `≥0.25%`、`≥2/3` paired seeds 改善以及相同 PCC/trajectory/coverage 护栏时才取代参数更少的 E+M。若都失败，保留 CRD_102，S3 继续关闭。S3 的 gate 结构当前仍未定义、未实现，不能与本阶段代码混入。
+
+### 22.4 冻结结果与停止决定（2026-08-11）
+
+12 个 formal runs 已在统一干净 training commit `c2bcfb0` 下完成。每项均为 80 epochs/6400 updates、2675 条 validation metrics、两个 finite checkpoint，eligible primary 全部 finite 且 joint prediction degeneracy 为 0；205/206/207/208 的 selected epochs 分别为 `8/11/12`、`19/11/9`、`13/11/12`、`10/18/15`，formal peak reserved fraction 分别为 `67.44%/67.20%/67.04%/71.47%`。冻结汇总在干净 commit `7eb26e6` 下生成，manifest 固定 12 个完整 checkpoint 与 training commit，未读取 research-test。
+
+两个组合均不 eligible。205 相对 BASE、control 207、最佳 constituent 202 的 Local RR 相对改善分别为 `-1.0387%/-0.9260%/-2.5769%`，paired seed 改善数为 `1/3、1/3、0/3`；相对 BASE 的 PCC drop 为 `0.005295`、trajectory worsening 为 `-0.3834%`、coverage drop 为 `0.010579`，仅 trajectory 护栏通过。206 相对 BASE、control 208、最佳 constituent BASE 的 Local RR 相对改善分别为 `-1.0295%/-1.4515%/-1.0295%`，三项 paired seed 改善数均为 `1/3`；PCC drop 为 `0.011947`、trajectory worsening 为 `4.7290%`、coverage drop 为 `0.007237`，仅 coverage 护栏通过。
+
+Factorial interaction 的 seed-mean contrast 表明非线性补偿方向确实存在：205 的 Local RR/trajectory/PCC/coverage interaction 为 `-0.000552/-0.003398/+0.001168/+0.000236`，206 为 `-0.010117/-0.003762/+0.002339/+0.012108`；但 Local RR 方向并不跨三个 seed 稳定，且两组合的绝对表现仍落后 BASE 与各自 capacity control。该证据支持“存在模块补偿效应”，不支持“组合已形成可选模型”。最终 decision 固定为 `passing_combinations=[] / retain CRD_102 / S3=false`；产物位于 `runs/crd_v1/crd_s2br_validation_summary/`，S2B-R 至此关闭，汇总入口不得重复用于重选。
 
 ### 21.4 Energy representation 决策
 
