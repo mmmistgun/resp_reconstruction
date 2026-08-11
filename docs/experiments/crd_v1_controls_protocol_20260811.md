@@ -8,7 +8,7 @@
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
 - `C1`：parameter-matched full-context TCN 的工程验收、三个 formal runs 与冻结汇总均已完成，结果为 `mamba_retained_control_failure / retain CRD_102`，阶段关闭；
-- `C2`：10-Hz capacity/100-Hz placement 两个候选的实现与 CPU 定向回归已完成；CUDA synthetic 与独立 physical-batch-128 acceptance 待执行，formal 队列仍关闭。
+- `C2`：10-Hz capacity/100-Hz placement 两个候选的 CPU/CUDA 定向验收与独立 physical-batch-128 acceptance 已完成，formal 三 seed 队列已开放但尚未运行。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
 
@@ -299,6 +299,19 @@ configs/crd_v1/crd_c202_decoder_100hz.yaml
 4. 各自 peak reserved fraction `≤80%`。
 
 任一 variant 工程失败只阻塞该 variant，不允许改变 residual、插值位置、batch 或 AMP。两个候选均通过并由主协议登记前，不开放任何 C2 formal seed。
+
+上述工程门槛已在统一干净 commit `0e2d05824a50426e3ff0443a6875829422a6160d` 下通过。C201/C202 CUDA bf16 synthetic batch-1 的 waveform shape 均为 `[1,1,18000]`，loss 均为 `1.245275`，sync/effort eligibility 均为 1，output/input/全部 parameter gradients finite；peak allocated 分别为 `349.17/349.21 MiB`。
+
+独立 acceptance 路径为：
+
+```text
+/tmp/crd_c201_decoder_10hz_cap_batch128_acceptance/20260811_162428_134016
+/tmp/crd_c202_decoder_100hz_batch128_acceptance/20260811_162522_128723
+```
+
+两项均严格完成 128/32 个 train/validation windows、1 epoch、1 optimizer update；best/final checkpoint 与 optimizer state 全 finite，32 条 validation metrics 的五项 primary 全部 finite、joint prediction degeneracy 为 0。C201 peak allocated/reserved 为 `8480.77/9936.00 MiB`、reserved fraction `62.3479%`；C202 为 `8907.78/9192.00 MiB`、`57.6794%`，均低于 80% 工程线。单 epoch loss/metrics 不进入效果解释。
+
+至此 C201/C202 各三个 formal seeds 的工程阻塞解除。Formal 必须来自包含本登记的统一新干净 commit，输出分别固定到 `runs/crd_v1/crd_c201_decoder_10hz_cap/seed_<seed>/` 与 `runs/crd_v1/crd_c202_decoder_100hz/seed_<seed>/`。任何中断 run 不凭 best checkpoint 纳入比较；在六个完整 run 与冻结 summary 完成前，不追加 temporal decoder、TCN+decoder 或 research-test。
 
 ## 6. 失败分层、停止条件与未来证据
 

@@ -799,7 +799,24 @@ for variant in crd_c201_decoder_10hz_cap crd_c202_decoder_100hz; do
 done
 ```
 
-每项必须恰有一次 update、两个 checkpoint/optimizer finite、32 条 primary-finite validation metrics、无 prediction degeneracy且 peak reserved fraction `≤80%`。工程结果登记前不得运行 formal seeds、实现 TCN+decoder 或访问 research-test。
+两项 acceptance 已在统一干净 commit `0e2d058` 下通过；C201/C202 peak reserved fraction 为 `62.3479%/57.6794%`，checkpoint/optimizer 与 32 条 primary metrics 全 finite、无 prediction degeneracy。上述 synthetic/acceptance 命令现只保留 provenance，不得覆盖重跑。
+
+工程结果登记后，六个 formal runs 已开放。长时间 GPU 训练由研究者运行：
+
+```bash
+for variant in crd_c201_decoder_10hz_cap crd_c202_decoder_100hz; do
+  for seed in 20260811 20260812 20260813; do
+    ./.venv/bin/python scripts/train_crd.py \
+      --config "configs/crd_v1/${variant}.yaml" \
+      --set training.seed="${seed}" \
+      --set training.device=cuda:0 \
+      --set outputs.run_root="runs/crd_v1/${variant}/seed_${seed}" \
+      || exit 1
+  done
+done
+```
+
+不得覆盖 epochs、batch、accumulation、数据上限、loss、metrics 或 selector。六个 runs 全部完成并通过 lifecycle/finite/identity 审计后，才能应用附件第 5.2 节的基本资格与 C202-vs-C201 placement 门槛；不得访问 research-test。
 
 ## 固定呼吸带传统基线
 
