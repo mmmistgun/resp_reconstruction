@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 已关闭；S2B-R 观察到非线性补偿方向但两个组合均未通过冻结门槛，保留 CRD_102，S3 不激活
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 已关闭；保留 CRD_102，S3 不激活；当前仅激活 CRD_102 三个冻结 validation checkpoint 的探索性误差分层与失败模式诊断
 
 ## 1. 定位
 
@@ -1993,3 +1993,7 @@ S2A 三分支实现与 CPU 协议回归现已完成：配置为 `crd_202_base_le
 205/206/207/208 的 CUDA synthetic 与独立 physical-batch-128 acceptance 已在统一干净 commit `0e541f8` 下通过；peak reserved fraction 分别为 `67.37%/67.15%/65.41%/71.46%`，完整 checkpoint lifecycle、eligible primary finite 与 prediction-degeneracy 审计通过。现允许四项各三个 formal seeds；仍不得读取 research-test、改动 batch/预算或实现 S3。
 
 12 个 S2B-R formal runs 已在统一干净 commit `c2bcfb0` 下完成并通过 80 epochs/6400 updates、checkpoint、2675-window validation、finite、degeneracy 与显存审计。205 相对 BASE/control/best constituent 的 Local RR 改善为 `-1.0387%/-0.9260%/-2.5769%`，paired seeds 为 `1/3、1/3、0/3`，且 PCC/coverage 护栏失败；206 的三项 Local RR 改善为 `-1.0295%/-1.4515%/-1.0295%`，paired seeds 均为 `1/3`，且 PCC/trajectory 护栏失败。因此两个组合均不 eligible。Factorial contrast 在 seed mean 上显示 205/206 的 Local RR interaction 为 `-0.000552/-0.010117`、trajectory 为 `-0.003398/-0.003762`、PCC 为 `+0.001168/+0.002339`，说明非线性补偿方向存在但不足以转化为优于 BASE/容量对照的绝对收益。冻结产物位于 `runs/crd_v1/crd_s2br_validation_summary/`，最终保留 CRD_102、S3 不激活，S2B-R 关闭且未读取 research-test。
+
+## 43. CRD_102 validation 失败诊断（2026-08-11）
+
+S2B-R 关闭后不立即增加结构，而先对 candidate-lock 中 CRD_102 三个冻结 validation checkpoint 做一次结果知情但不参与选择的探索性诊断。逐 seed 使用 eligible-window worst decile，并以至少 `2/3` seeds 命中定义 persistent failure；固定分层为 samp、coupling state、target modulation stratum、IBI interpretable 一致性和 lag-boundary 一致性，同时报告跨 seed agreement、error-aligned metric associations 与失败签名。完整边界与输出见附件第 23 节。该入口不重推理、不重选 checkpoint、不读取 research-test，签名不作因果解释；当前只允许在干净 commit 上生成一次性冻结产物。

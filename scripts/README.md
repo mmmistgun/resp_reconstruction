@@ -674,6 +674,17 @@ runs/crd_v1/crd_s2br_validation_summary/s2br_summary_manifest.json
 
 两个组合的 BASE/control/best-constituent Local RR 门槛均失败：205 的相对改善为 `-1.0387%/-0.9260%/-2.5769%`，206 为 `-1.0295%/-1.4515%/-1.0295%`。Factorial descriptives 显示非线性补偿方向存在，但绝对组合效果不足；decision 固定为 `passing_combinations=[] / retain CRD_102 / S3=false`。S2B-R 已关闭，以上训练与汇总入口不得重复执行或用于读取 research-test 后重选。
 
+### CRD_102 validation 误差分层与失败模式
+
+该诊断只读取 candidate-lock 中 CRD_102 三个冻结 run 的既有 validation `metrics.csv`，不需要 GPU、不重新 eval、不访问 research-test。先运行测试，再从干净 commit 生成一次性产物：
+
+```bash
+./.venv/bin/python -m pytest tests/test_crd_failure_diagnostics.py
+./.venv/bin/python scripts/summarize_crd102_failures.py
+```
+
+默认输出为 `runs/crd_v1/crd_102_failure_diagnostic/`。目录已存在时入口会停止，不得删除或覆盖后重跑；worst-decile/persistent failure、固定分层、association 和签名口径见协议附件第 23 节。所有结果都是 validation-only exploratory diagnostic，不能重选 CRD_102 checkpoint 或自动触发新模型阶段。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

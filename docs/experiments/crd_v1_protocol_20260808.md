@@ -2,11 +2,12 @@
 
 ## 1. 权威性、范围与科学边界
 
-本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–42 节引用的规范性附件；发生冲突时以主协议为准。当前状态为：
+本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 35–43 节引用的规范性附件；发生冲突时以主协议为准。当前状态为：
 
 - CRD-S0/S1/S1C/S1F：已完成并冻结，S2 BASE 为 candidate-lock 中的 CRD_102；
 - CRD-S2A：202/203/204 九个 formal runs、prototype 描述与冻结 summary 已完成，三个单分支关闭；
 - CRD-S2B-R：12 个 formal runs 与冻结汇总已完成，两个组合均不 eligible，保留 CRD_102；S3 关闭。
+- CRD_102 failure diagnostic：仅对 candidate-lock 中三个冻结 validation checkpoint 做探索性分层与失败签名，口径已冻结、等待生成一次性产物。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节，唯一激活过的双因素组合与 capacity control 来自第 22 节；gate、auxiliary、TCN control、S3 和最终消融仍未激活。
 
@@ -859,6 +860,16 @@ Capacity control 不读取 E/A/M。每个 block 固定为 `GN(12,96)→Conv1x1 9
 两个组合均不 eligible。205 相对 BASE、control 207、最佳 constituent 202 的 Local RR 相对改善分别为 `-1.0387%/-0.9260%/-2.5769%`，paired seed 改善数为 `1/3、1/3、0/3`；相对 BASE 的 PCC drop 为 `0.005295`、trajectory worsening 为 `-0.3834%`、coverage drop 为 `0.010579`，仅 trajectory 护栏通过。206 相对 BASE、control 208、最佳 constituent BASE 的 Local RR 相对改善分别为 `-1.0295%/-1.4515%/-1.0295%`，三项 paired seed 改善数均为 `1/3`；PCC drop 为 `0.011947`、trajectory worsening 为 `4.7290%`、coverage drop 为 `0.007237`，仅 coverage 护栏通过。
 
 Factorial interaction 的 seed-mean contrast 表明非线性补偿方向确实存在：205 的 Local RR/trajectory/PCC/coverage interaction 为 `-0.000552/-0.003398/+0.001168/+0.000236`，206 为 `-0.010117/-0.003762/+0.002339/+0.012108`；但 Local RR 方向并不跨三个 seed 稳定，且两组合的绝对表现仍落后 BASE 与各自 capacity control。该证据支持“存在模块补偿效应”，不支持“组合已形成可选模型”。最终 decision 固定为 `passing_combinations=[] / retain CRD_102 / S3=false`；产物位于 `runs/crd_v1/crd_s2br_validation_summary/`，S2B-R 至此关闭，汇总入口不得重复用于重选。
+
+## 23. CRD_102 validation 误差分层与失败模式诊断（2026-08-11）
+
+本节在 S2B-R 关闭并保留 CRD_102 后建立，协议名固定为 `crd-v1.1-crd102-failure-diagnostic-20260811`。输入只能是 candidate-lock 固定的 CRD_102 三个 `checkpoint_best_local_rr.pt` 所属 run 的既有 validation `metrics.csv`；逐 seed 必须为 2675 windows/7 samp IDs，checkpoint、summary、逐行 identity 与 target/static 字段必须通过审计。该诊断不重新推理、训练或选择 checkpoint，不访问 research-test，不改变数据、split、target、loss、metrics 或聚合口径，也不计算确认性 p-value。
+
+诊断同时保留 window、seed 和 samp/coupling 分层，不能把 2675 个相关 windows 当作 2675 个独立受试者。固定分层轴为 `samp_id`、`coupling_state_id`、冻结的 `envelope_target_stratum`、三 seed IBI interpretable 一致性以及 lag-boundary 一致性。连续 `target_envelope_modulation` 只用于描述与 Spearman association，不根据结果重新切阈值。每个分层报告 window 数/占比、覆盖的 samp 数、八项任务指标的 mean/median、持续失败率、IBI interpretable 与 `|best_lag|=0.30 s` 比例；另保留逐 seed 分层结果，防止 seed-ensemble mean 掩盖不稳定性。
+
+固定失败判据如下：对 whole/local RR、trajectory、global modulation、signed PCC、IBI-MedAE、IBI coverage 与 envelope Spearman，在每个 seed 的 eligible windows 内分别取不利方向 worst decile（minimize 指标 `≥q90`，maximize 指标 `≤q10`，边界 ties 全保留）；同一 window 在至少 `2/3` seeds 命中才称该指标 persistent failure。Core failure count 只计 whole/local RR、trajectory、global modulation 与 signed PCC，避免缺失 IBI eligibility 改变分母。签名只描述 `rate/envelope/alignment/rank/beat` 指标共现：alignment 还包括至少 `2/3` seeds 到达 `|best_lag|=0.30 s`，beat 还包括至多 `1/3` seeds IBI interpretable。该签名不是生理或模型内部原因的因果识别。
+
+另固定输出：三 seed 指标 Spearman/绝对差/worst-decile Jaccard、error-aligned 指标间 Spearman（无 p-value）、Local-RR 跨 seed SD 的 top decile、全部 persistent failure windows、signature 汇总、threshold/audit/manifest。输出目录为 `runs/crd_v1/crd_102_failure_diagnostic/`，已存在时禁止覆盖；结果只用于确定下一轮应优先调查的数据/任务失效区域，不能重开 S2B-R、S3 或覆盖 CRD_102 选择。
 
 ### 21.4 Energy representation 决策
 
