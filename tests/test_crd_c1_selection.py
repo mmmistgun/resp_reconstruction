@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from resp_train.crd.c1_selection import C1_VARIANT, REPORT_METRICS, apply_c1_decision
+from resp_train.crd.c1_selection import C1_VARIANT, SEED_SUMMARY_METRICS, apply_c1_decision
 from resp_train.crd.config import FORMAL_SEEDS
 from resp_train.crd.s2_selection import BASE_VARIANT
 
@@ -32,7 +32,9 @@ def _seed_summary(
                 "ibi_coverage": 0.83,
                 "target_stratified_envelope_spearman": 0.5,
             }
-            rows.append({"variant": variant, "seed": seed, **{f"{key}_mean": values[key] for key in REPORT_METRICS}})
+            rows.append(
+                {"variant": variant, "seed": seed, **{f"{key}_mean": values[key] for key in SEED_SUMMARY_METRICS}}
+            )
     return pd.DataFrame(rows)
 
 
@@ -57,4 +59,3 @@ def test_c1_quality_near_is_not_promoted_without_efficiency_benchmark() -> None:
     assert decision["quality_near_guardrails"] is True
     assert decision["outcome"] == "quality_near_requires_efficiency_benchmark"
     assert decision["efficiency_benchmark_required"] is True
-

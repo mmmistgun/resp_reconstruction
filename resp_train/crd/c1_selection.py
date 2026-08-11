@@ -51,6 +51,7 @@ REPORT_METRICS = (
     "ibi_coverage",
     "target_stratified_envelope_spearman",
 )
+SEED_SUMMARY_METRICS = REPORT_METRICS[:-1]
 PRIMARY_METRICS = (
     "whole_rr_abs_error_bpm",
     "local_rr_mae_bpm",
@@ -63,7 +64,7 @@ PRIMARY_METRICS = (
 def apply_c1_decision(seed_summary: pd.DataFrame) -> dict[str, Any]:
     """应用 C1 第 4.2 节冻结的 quality-superior/near 门槛。"""
 
-    required = {"variant", "seed", *(f"{metric}_mean" for metric in REPORT_METRICS)}
+    required = {"variant", "seed", *(f"{metric}_mean" for metric in SEED_SUMMARY_METRICS)}
     if not required.issubset(seed_summary.columns):
         raise ValueError(f"C1 seed summary 缺少字段: {sorted(required - set(seed_summary.columns))}")
     rows = seed_summary.copy()
@@ -369,7 +370,7 @@ def _variant_summary(seed_summary: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for variant, group in seed_summary.groupby("variant", sort=True):
         row: dict[str, Any] = {"variant": variant, "seed_count": int(len(group))}
-        for metric in REPORT_METRICS:
+        for metric in SEED_SUMMARY_METRICS:
             column = f"{metric}_mean"
             values = pd.to_numeric(group[column], errors="coerce").to_numpy(dtype=np.float64)
             finite = values[np.isfinite(values)]
@@ -496,4 +497,3 @@ def _assert_clean_repository() -> None:
         raise RuntimeError(f"无法检查 Git 工作树: {status.stderr.strip()}")
     if status.stdout.strip():
         raise RuntimeError("C1 冻结汇总要求干净 Git 工作树")
-
