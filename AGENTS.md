@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与 C0 decoder round-trip 已完成。C0 冻结为 `roundtrip_negligible=true`，因此 100-Hz decoder 不得表述为恢复正式呼吸带采样损失。保留 CRD_102；主协议第 45 节 C1 parameter-matched full-context TCN 的三个 formal runs 已完成，当前只激活一次性冻结汇总；C2 仍关闭。S3、gate/auxiliary/final ablation 继续关闭。规范附件由主协议第 35–45 节纳入。
+- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics、C0 decoder round-trip 与 C1 TCN control 已完成。C0 冻结为 `roundtrip_negligible=true`；C1 因 trajectory 恶化 `2.5468%` 未通过全门槛，固定为 `mamba_retained_control_failure / retain CRD_102`。主协议第 45 节当前只激活 C2 的 10-Hz capacity/100-Hz placement 两个候选实现、测试、CUDA synthetic 与独立 batch-128 acceptance；formal 与 TCN+decoder 仍关闭。S3、gate/auxiliary/final ablation 继续关闭。规范附件由主协议第 35–45 节纳入。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -27,7 +27,7 @@
 - CRD_102 failure diagnostic 两层均已完成；`scripts/summarize_crd102_failures.py` 与 `scripts/summarize_crd102_failure_metadata.py` 只保留 provenance，不得重复运行。冻结产物位于 `runs/crd_v1/crd_102_failure_diagnostic/` 与 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`。
 - CRD_102 matched observability 已完成；`scripts/summarize_crd102_matched_observability.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_102_matched_observability_diagnostic/`。
 - CRD_102 C0 decoder round-trip 已完成并冻结；`scripts/audit_crd102_decoder_roundtrip.py` 只保留 provenance，不得重复运行，固定产物位于 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`。
-- CRD C1 三 formal runs 已完成；`scripts/summarize_crd_c1.py` 当前只允许在实现提交后的干净工作树执行一次，输出固定到 `runs/crd_v1/crd_c1_validation_summary/`，目录存在时不得覆盖或重跑。
+- CRD C1 formal 与冻结汇总已完成；`scripts/summarize_crd_c1.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。

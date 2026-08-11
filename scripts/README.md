@@ -767,7 +767,7 @@ done
 ./.venv/bin/python scripts/summarize_crd_c1.py
 ```
 
-固定输出为 `runs/crd_v1/crd_c1_validation_summary/`，目录存在时拒绝覆盖。该入口重审 lifecycle/finite/identity、重算逐 sample summary，并生成 paired window/`samp_id` 与 failure-strata descriptives；C2 在 C1 decision 登记前继续关闭。
+固定输出为 `runs/crd_v1/crd_c1_validation_summary/`，目录存在时拒绝覆盖。唯一 summary 已从干净 commit `f0ac01b` 生成，decision 为 `mamba_retained_control_failure / retain CRD_102`：Local RR 改善 `3.8241%`、paired `3/3`、PCC drop `0.003797` 均通过，但 trajectory 恶化 `2.5468%` 超过 `1.5%`。C1 已关闭，以上 summary 命令只保留 provenance；当前只开放 C2 两个 decoder controls 的实现与工程验收。
 
 ## 固定呼吸带传统基线
 

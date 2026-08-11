@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic 与 C0 decoder round-trip 已关闭；保留 CRD_102，S3 不激活；第 45 节 C1 TCN 三 formal runs 已完成，当前只激活冻结汇总，C2 关闭
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic、C0 decoder round-trip 与 C1 TCN control 已关闭；保留 CRD_102，S3 不激活；第 45 节当前只激活 C2 decoder controls 的实现与工程验收，formal 队列关闭
 
 ## 1. 定位
 
@@ -2023,3 +2023,5 @@ C1 唯一实现随后完成：`crd_c101_b0_local_tcn` 只将 CRD_102 的六个 L
 C1 CUDA synthetic 与独立 physical-batch-128 acceptance 随后在干净 commit `529de747cfee17675432fad1a969570703df1791` 下通过。Synthetic batch-1 的 output/input/全部 parameter gradients finite，peak allocated `92.88 MiB`。Acceptance 严格完成 128/32 个 train/validation windows、1 optimizer update；best/final checkpoint 的 108 个 model tensors 与 324 个 optimizer tensors全部 finite，32 条 validation primary 全部 finite、无 prediction degeneracy，peak allocated/reserved 为 `10018.08/10664.00 MiB`，reserved fraction `66.9161%`。单 epoch数值不形成效果证据。现解除 C1 三 formal seeds 工程阻塞；正式 run 必须来自包含本登记的统一新干净 commit。C2 仍关闭，等待 C1 三 seed 冻结 decision。
 
 C1 三 formal runs 随后在统一干净 commit `930212ac66cb95697b659fc7504259cfa3cf71c2` 下完成。每个 run 均为 80 epochs/6400 updates、2675 条 validation metrics，selected epochs 为 `25/26/12`；checkpoint/optimizer、primary finite、prediction-degeneracy 与显存初审通过。现只激活 `scripts/summarize_crd_c1.py` 的一次性冻结汇总，在完整 lifecycle 重审后应用附件第 4.2 节 quality-superior/near 规则并生成 paired/failure-strata 描述。固定输出不得覆盖；summary decision 登记前 C2 继续关闭。
+
+C1 冻结 summary 随后从干净 commit `f0ac01b` 生成。TCN 相对 CRD_102 的 Local RR 改善 `3.8241%` 且 `3/3` paired seeds 改善，PCC drop `0.003797` 在护栏内，但 trajectory worsening `2.5468%` 超过 `1.5%`，因此 quality-superior 与 quality-near 均失败，decision 固定为 `mamba_retained_control_failure / retain CRD_102`。TCN 的 Whole RR 改善 `9.7621%`，failure-strata 中 Local RR 收益集中于既有 persistent/high-modulation/matched-case 难例，但非 persistent windows 略恶化且 high-modulation trajectory 明显退化；这些只解释任务交换，不能覆盖总体 gate。冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`，C1 关闭且 summary 不得重复运行。现按附件第 5 节开放 C2 的两个 decoder candidates 实现、测试、CUDA synthetic 与独立 batch-128 acceptance；C2 formal、TCN+decoder 与 research-test 继续关闭。

@@ -7,8 +7,8 @@
 控制线协议族固定为 `crd-v1.1-controls-research-informed-20260811`，证据属性为 **research-test-informed development/validation controls**。当前状态为：
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
-- `C1`：parameter-matched full-context TCN 的工程验收与三个 formal runs 已完成，当前只激活冻结汇总和完整性审计；
-- `C2`：结构、比较问题和开放条件已冻结，但实现、工程验收和正式训练仍关闭；C2 只能在 C1 冻结结果由主协议登记后激活。
+- `C1`：parameter-matched full-context TCN 的工程验收、三个 formal runs 与冻结汇总均已完成，结果为 `mamba_retained_control_failure / retain CRD_102`，阶段关闭；
+- `C2`：10-Hz capacity/100-Hz placement 两个候选的实现、测试、CUDA synthetic 与独立 physical-batch-128 acceptance 已激活，formal 队列仍关闭。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
 
@@ -198,6 +198,42 @@ runs/crd_v1/crd_c101_b0_local_tcn/seed_20260813/20260811_143716_511886
 ```
 
 三个 run 均完成 80 epochs/6400 updates、2675 条 validation metrics、best/final checkpoint 与 peak-reserved 审计；selected epochs 为 `25/26/12`。当前只允许预先实现的 `scripts/summarize_crd_c1.py` 在新干净 commit 上执行一次冻结汇总，重算逐 sample summary、paired window/`samp_id`、failure-strata descriptives 与第 4.2 节 decision；输出固定为 `runs/crd_v1/crd_c1_validation_summary/` 且禁止覆盖。冻结 summary 完成前不得实现 C2。
+
+### 4.4 冻结结果与 C2 开放（2026-08-11）
+
+冻结汇总器首次执行在创建输出目录前因把逐 sample 分层 Spearman 误当作 seed-summary 字段而停止，没有生成部分 decision 或结果产物；修正仅将 seed-level 汇总限定到现有七项 summary，未改变第 4.2 节模型门槛。修正后唯一 summary 从干净 commit `f0ac01b9f265fcc6f7737fb873c64285bca6f2da` 生成，重新审计 training commit、三个 lifecycle、checkpoint/optimizer、逐 sample metrics、candidate lock 与 failure-diagnostic identities，未读取 research-test。
+
+三 seed arithmetic mean ± sample SD：
+
+| 模型 | Whole RR ↓ | Local RR ↓ | Trajectory ↓ | Global envelope ↓ | Signed PCC ↑ | IBI MedAE ↓ | IBI coverage ↑ |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| CRD_102 | 0.515775 ± 0.020060 | 0.556161 ± 0.009055 | 0.150150 ± 0.001296 | 0.187512 ± 0.002438 | 0.864672 ± 0.001376 | 0.080181 ± 0.001384 | 0.839027 ± 0.006859 |
+| C1 TCN | 0.465425 ± 0.014293 | 0.534893 ± 0.008805 | 0.153974 ± 0.001321 | 0.194656 ± 0.003877 | 0.860875 ± 0.002674 | 0.084177 ± 0.000604 | 0.835631 ± 0.005103 |
+
+冻结门槛逐项结果：
+
+1. Local RR 改善 `3.8241%`，通过 `≥0.5%`；
+2. paired Local RR 为 `3/3` seeds 改善，通过；
+3. signed PCC absolute drop `0.003797`，通过 `≤0.005`；
+4. trajectory worsening `2.5468%`，失败 `≤1.5%`。
+
+因此 `quality_superior=false`；quality-near 同样因 trajectory 护栏失败，不需要 efficiency benchmark，冻结 outcome 为 `mamba_retained_control_failure / retain CRD_102`。Whole RR 改善 `9.7621%` 与 Local RR 收益属于任务交换背景，不能覆盖 trajectory；global-envelope/IBI-MedAE/coverage 也分别退化 `3.8098%/4.9836%/0.003396 absolute`。
+
+Failure-strata descriptives 显示，TCN 的 Local RR 改善集中在既有 persistent Local-RR failure、high-modulation failure 和 exact-state matched cases；相应 candidate-minus-base mean 约为 `-0.3468/-0.4703/-0.5933 bpm`，而非 persistent windows 为 `+0.0141 bpm`。这支持“full-context TCN 对既有难例存在局部补偿”的描述，不构成因果主张，也不推翻总体 gate；trajectory 在 high-modulation 层恶化约 `+0.00945`。
+
+冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。Selection/manifest/seed-summary/variant-summary/paired-window/paired-samp/failure-strata SHA-256 依次为：
+
+```text
+ba320e81a1533c974a3f4b68e73ba41d097957d6702b9a7be1d6540deecc7e0f
+4c31f561f59eb0f57bd38dace89134b082698a49ceff270a0a86634096b979f4
+c1e652481093ace32c79d27775f36fa233279c5a224de6e3708f8651c02f25d7
+25c7f8a46f9bcd6371cc1a82ba1348a16e1e1861dfe7013f4f3d3da8b05c1cc1
+7ecc6fadfd62ef73bb37c8a5388c35e6c9dd23f4ab476685fc183300dd3aa3c4
+4b8fa45e3e47c202bd0867f4f6f94a55aeea7bd4e5bda52d35adef54e1c4b01a
+7e0344eba1fa41a02b6b7f9e9a28a3fe09cbd448177779c9777e19019f79d15c
+```
+
+C1 至此关闭，summary 入口不得重复运行或用于改变门槛。按预注册顺序，现只开放 C2 两个候选的实现与工程验收；C2 继续固定使用 CRD_102 Mamba backbone，不得把 C1 TCN 与 decoder 组合。
 
 ## 5. C2：10-Hz capacity 与 learned 100-Hz placement
 
