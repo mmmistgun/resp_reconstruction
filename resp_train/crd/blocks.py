@@ -56,6 +56,50 @@ class ResidualDWBlock(nn.Module):
         return x + self.project(residual)
 
 
+class LocalTCNBlock(nn.Module):
+    """C1 参数匹配 full-context TCN 的唯一 residual block。"""
+
+    def __init__(self, *, channels: int = 96, hidden_channels: int = 488, dilation: int) -> None:
+        super().__init__()
+        channels = int(channels)
+        hidden_channels = int(hidden_channels)
+        dilation = int(dilation)
+        if channels != 96 or hidden_channels != 488 or dilation <= 0:
+            raise ValueError("C1 LocalTCNBlock 固定 C=96、H=488 且 dilation>0")
+        self.channels = channels
+        self.hidden_channels = hidden_channels
+        self.dilation = dilation
+        self.norm = nn.GroupNorm(12, channels, eps=1e-5, affine=True)
+        self.depthwise = nn.Conv1d(
+            channels,
+            channels,
+            kernel_size=5,
+            padding=2 * dilation,
+            dilation=dilation,
+            groups=channels,
+            bias=False,
+        )
+        self.expand = nn.Conv1d(channels, hidden_channels, kernel_size=1, bias=False)
+        self.dropout = nn.Dropout(0.10)
+        self.project = nn.Conv1d(hidden_channels, channels, kernel_size=1, bias=True)
+        self.activation = nn.SiLU()
+        _kaiming(self.depthwise)
+        _kaiming(self.expand)
+        nn.init.ones_(self.norm.weight)
+        nn.init.zeros_(self.norm.bias)
+        nn.init.zeros_(self.project.weight)
+        nn.init.zeros_(self.project.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim != 3 or x.shape[1] != self.channels:
+            raise ValueError(f"C1 LocalTCNBlock 期望 (B,{self.channels},T)，实际 {tuple(x.shape)}")
+        residual = self.norm(x)
+        residual = self.activation(self.depthwise(residual))
+        residual = self.activation(self.expand(residual))
+        residual = self.dropout(residual)
+        return x + self.project(residual)
+
+
 class CustomRMSNorm(nn.Module):
     """不依赖 PyTorch RMSNorm 版本语义的外部 RMSNorm。"""
 

@@ -7,7 +7,7 @@
 控制线协议族固定为 `crd-v1.1-controls-research-informed-20260811`，证据属性为 **research-test-informed development/validation controls**。当前状态为：
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
-- `C1`：parameter-matched full-context TCN 的实现、测试、CUDA synthetic 与独立 physical-batch-128 acceptance 已激活，formal 三 seed 队列仍关闭；
+- `C1`：parameter-matched full-context TCN 的实现与 CPU 定向验收已完成；CUDA synthetic 与独立 physical-batch-128 acceptance 待执行，formal 三 seed 队列仍关闭；
 - `C2`：结构、比较问题和开放条件已冻结，但实现、工程验收和正式训练仍关闭；C2 只能在 C1 冻结结果由主协议登记后激活。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
@@ -167,6 +167,21 @@ depthwise/首个 pointwise 使用 Kaiming-normal，末层 weight/bias 为 0，Gr
 - 否则为 **Mamba-retained control failure**。
 
 C1 只形成候选/控制证据，不在本协议内替换 CRD_102 锚点。Whole RR、global envelope、IBI、三层 Spearman 与 failure-strata descriptives 为 secondary，不能覆盖质量门槛。
+
+### 4.3 实现登记与当前工程门槛
+
+实现配置固定为 `configs/crd_v1/crd_c101_b0_local_tcn.yaml`，输出根为 `runs/crd_v1/crd_c101_b0_local_tcn`。模型注册表只新增该一个 C1 variant；没有 C2、TCN+decoder、global TCN 或 width/depth 超参数入口。
+
+结构测试已确认总参数 `1,062,001`、TCN trunk 参数 `944,640`、dilation/感受野、十个 block 初始化 identity，以及 CRD_102 frontend/refinement/head 的同 seed state 逐 tensor 相同。配置、模型、训练与实验定向回归通过；CPU synthetic batch-1 的 model/core-loss/backward finite、waveform shape `[1,1,18000]`、sync/effort eligibility 均为 1。CPU 结果只证明实现链路，不解除正式队列。
+
+下一步必须在该实现提交后的同一干净 commit、目标 GPU 上依次完成：
+
+1. `check_crd_variant.py` CUDA bf16 batch-1 output/input/全部 parameter gradients finite；
+2. 独立 acceptance：128 train / 32 validation / 1 epoch / 1 optimizer update；
+3. 两个 checkpoint、optimizer state、逐 sample primary metrics finite且 prediction nondegenerate；
+4. peak reserved fraction `≤80%`。
+
+任一失败均保持 C1 formal 队列关闭，不允许临时改变 H、block、dilation、batch 或 AMP。两项 CUDA 工程结果由主协议登记后才可开放三个 formal seeds。
 
 ## 5. C2：10-Hz capacity 与 learned 100-Hz placement
 

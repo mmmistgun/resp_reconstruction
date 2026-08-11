@@ -8,7 +8,7 @@ from typing import Any
 
 from omegaconf import DictConfig, OmegaConf
 
-from resp_train.crd.model import CRD_VARIANTS
+from resp_train.crd.model import CRD_CONTROL_VARIANTS, CRD_VARIANTS
 
 
 CRD_PROTOCOL_VERSION = "crd-v1.1-s0-s1-20260808"
@@ -135,13 +135,17 @@ def _validate_crd_config(cfg: DictConfig) -> None:
     variant = str(cfg.model.variant).lower()
     if variant not in CRD_VARIANTS:
         raise ValueError(f"未知 CRD variant={variant!r}；可选 {list(CRD_VARIANTS)}")
-    if variant in CRD_S2A_VARIANTS:
+    if variant in CRD_CONTROL_VARIANTS:
+        expected_stage = "c1"
+    elif variant in CRD_S2A_VARIANTS:
         expected_stage = "s2"
     elif variant in CRD_S2BR_VARIANTS:
         expected_stage = "s2br"
     else:
         expected_stage = "s0" if variant.startswith("crd_00") else "s1"
-    if variant in CRD_DIAGNOSTIC_VARIANTS:
+    if variant in CRD_CONTROL_VARIANTS:
+        expected_protocol = CRD_CONTROLS_PROTOCOL_VERSION
+    elif variant in CRD_DIAGNOSTIC_VARIANTS:
         expected_protocol = CRD_DIAGNOSTIC_PROTOCOL_VERSION
     elif variant in CRD_EXPLORATORY_VARIANTS:
         expected_protocol = CRD_EXPLORATORY_PROTOCOL_VERSION

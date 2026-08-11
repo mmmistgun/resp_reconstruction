@@ -721,6 +721,32 @@ C0 只读取完整 validation target，执行 `Pi(target) → ::10 → Fourier 1
 
 固定输出为 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`；全局最大绝对误差/RMSE 为 `5.538454e-7 / 8.217932e-8`，五项 primary 全部通过冻结门槛，decision 为 `roundtrip_negligible=true`。C0 已关闭，以上命令只保留 provenance，不得重复运行。当前只开放 C1 TCN 的实现与工程验收；formal 三 seed 和 C2 仍关闭。
 
+### CRD C1 parameter-matched full-context TCN
+
+唯一候选 `crd_c101_b0_local_tcn` 已完成实现与 CPU 定向验收。实现提交后，先在目标 GPU 执行 synthetic：
+
+```bash
+./.venv/bin/python scripts/check_crd_variant.py \
+  --config configs/crd_v1/crd_c101_b0_local_tcn.yaml \
+  --device cuda:0
+```
+
+通过后运行独立 physical-batch-128 acceptance：
+
+```bash
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_v1/crd_c101_b0_local_tcn.yaml \
+  --set protocol.run_role=acceptance \
+  --set training.epochs=1 \
+  --set training.device=cuda:0 \
+  --set training.show_progress=false \
+  --set data.max_train_windows=128 \
+  --set data.max_val_windows=32 \
+  --set outputs.run_root=/tmp/crd_c101_b0_local_tcn_batch128_acceptance
+```
+
+Acceptance 必须恰有一次 optimizer update、两个 finite checkpoint、32 条 primary-finite validation metrics、无 prediction degeneracy且 peak reserved fraction `≤80%`。结果登记进主协议前，不得运行三个 formal seeds 或实现 C2。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

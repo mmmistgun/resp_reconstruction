@@ -123,6 +123,7 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
         "crd_206_base_am_static": 1235897,
         "crd_207_base_cap_em": 1109257,
         "crd_208_base_cap_am": 1235785,
+        "crd_c101_b0_local_tcn": 1062001,
     }
     shared_decoder_state: dict[str, torch.Tensor] | None = None
     shared_local_state: dict[str, torch.Tensor] | None = None
@@ -145,6 +146,7 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_206_base_am_static",
             "crd_207_base_cap_em",
             "crd_208_base_cap_am",
+            "crd_c101_b0_local_tcn",
         }:
             current = {
                 **{f"refine.{key}": value for key, value in model.refinement.state_dict().items()},
@@ -222,6 +224,38 @@ def test_crd_106_is_exact_102_plus_104_global_stage() -> None:
         torch.equal(model_104.global_stage.state_dict()[name], model_106.global_stage.state_dict()[name])
         for name in model_104.global_stage.state_dict()
     )
+
+
+def test_c1_tcn_is_parameter_matched_full_context_and_preserves_shared_state() -> None:
+    base = build_crd_model(load_crd_config("configs/crd_v1/crd_102_b0_local_mamba.yaml"))
+    control = build_crd_model(load_crd_config("configs/crd_v1/crd_c101_b0_local_tcn.yaml"))
+
+    for base_module, control_module in (
+        (base.frontend, control.frontend),
+        (base.refinement, control.refinement),
+        (base.head, control.head),
+    ):
+        assert base_module.state_dict().keys() == control_module.state_dict().keys()
+        assert all(
+            torch.equal(base_module.state_dict()[name], control_module.state_dict()[name])
+            for name in base_module.state_dict()
+        )
+
+    assert len(control.local_blocks) == 0
+    assert [block.dilation for block in control.local_tcn_blocks] == [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    receptive_field = 1 + 4 * sum(block.dilation for block in control.local_tcn_blocks)
+    assert receptive_field == 4093
+    tcn_parameters = sum(parameter.numel() for parameter in control.local_tcn_blocks.parameters())
+    mamba_parameters = sum(parameter.numel() for parameter in base.local_blocks.parameters())
+    assert tcn_parameters == 944640
+    assert mamba_parameters == 951384
+    assert abs(tcn_parameters - mamba_parameters) / mamba_parameters <= 0.02
+
+    latent = torch.randn(2, 96, 1800)
+    output = latent
+    for block in control.local_tcn_blocks:
+        output = block(output)
+    assert torch.equal(output, latent)
 
 
 def test_global_context_stage_is_exact_identity_at_initialization() -> None:

@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
-from resp_train.crd.blocks import BidirectionalMamba2Block, CoarseWaveformHead, ResidualDWBlock
+from resp_train.crd.blocks import BidirectionalMamba2Block, CoarseWaveformHead, LocalTCNBlock, ResidualDWBlock
 from resp_train.crd.capacity import CapacityResidualStack, select_capacity_match
 from resp_train.crd.frontends import DirectAnalyticFrontend, PatchTokenFrontend
 from resp_train.crd.initialization import module_seed
@@ -37,6 +37,7 @@ CRD_VARIANTS = (
     "crd_206_base_am_static",
     "crd_207_base_cap_em",
     "crd_208_base_cap_am",
+    "crd_c101_b0_local_tcn",
 )
 
 CRD_S2A_VARIANTS = {
@@ -51,6 +52,9 @@ CRD_S2BR_VARIANTS = {
     "crd_207_base_cap_em",
     "crd_208_base_cap_am",
 }
+
+CRD_CONTROL_VARIANTS = {"crd_c101_b0_local_tcn"}
+LOCAL_TCN_DILATIONS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
 
 
 def _validate_input(x: torch.Tensor) -> None:
@@ -177,6 +181,7 @@ class CRDCoarseModel(nn.Module):
             "crd_104_direct_hier_mamba",
             "crd_106_b0_hier_mamba",
         }
+        uses_local_tcn = variant in CRD_CONTROL_VARIANTS
 
         with module_seed(initialization_seed, "direct_frontend" if uses_direct else "patch_frontend"):
             self.frontend: nn.Module = DirectAnalyticFrontend() if uses_direct else PatchTokenFrontend()
@@ -215,6 +220,13 @@ class CRDCoarseModel(nn.Module):
                 self.local_blocks = nn.ModuleList([BidirectionalMamba2Block(96) for _ in range(6)])
         else:
             self.local_blocks = nn.ModuleList()
+        if uses_local_tcn:
+            with module_seed(initialization_seed, "tcn_trunk"):
+                self.local_tcn_blocks = nn.ModuleList(
+                    [LocalTCNBlock(dilation=dilation) for dilation in LOCAL_TCN_DILATIONS]
+                )
+        else:
+            self.local_tcn_blocks = nn.ModuleList()
         if uses_global:
             with module_seed(initialization_seed, "global_trunk"):
                 self.global_stage: GlobalContextStage | None = GlobalContextStage()
@@ -263,6 +275,8 @@ class CRDCoarseModel(nn.Module):
             for block in self.local_blocks:
                 tokens = block(tokens)
             latent = tokens.transpose(1, 2)
+        for block in self.local_tcn_blocks:
+            latent = block(latent)
         if self.global_stage is not None:
             latent = self.global_stage(latent)
         latent = self.refinement(latent)
