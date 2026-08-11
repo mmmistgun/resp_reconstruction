@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 已完成；S2B-R 的 `205 BASE+E+M / 206 BASE+A+M` 均未通过冻结的绝对收益与容量对照门槛，保留 candidate-lock 中的 CRD_102，S3 不激活。当前只激活 CRD_102 三个冻结 validation checkpoint 的探索性误差分层/失败模式诊断，不训练、不重选 checkpoint、不读取 research-test，诊断签名不得表述为因果机制。gate/auxiliary/TCN/final ablation 继续关闭。规范附件由主协议第 35–43 节纳入。
+- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 与 CRD_102 failure diagnostic 已完成；诊断将主要失败区域定位为高 target-modulation、较低 waveform/rate confidence 且时间成段的 validation 窗口，但这些是相关性/失败签名，不是因果机制。保留 candidate-lock 中的 CRD_102，S3、gate/auxiliary/TCN/final ablation 继续关闭；当前没有自动激活的新模型阶段。规范附件由主协议第 35–43 节纳入。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -24,7 +24,7 @@
 - CRD S1C research-test 与冻结汇总均已完成；入口和命令只作 provenance，不再重复运行。
 - CRD S2A prototype 与冻结汇总均已完成；`scripts/eval_crd_morphology_prototypes.py`、`scripts/summarize_crd_s2a.py` 及其命令只作 provenance，不再重复运行。
 - CRD S2B-R 正式训练与冻结汇总均已完成；`scripts/summarize_crd_s2br.py` 及其命令只作 provenance，不再重复运行，冻结产物位于 `runs/crd_v1/crd_s2br_validation_summary/`。
-- CRD_102 failure diagnostic：第一层 `./.venv/bin/python scripts/summarize_crd102_failures.py`；其结果知情 metadata follow-up 为 `./.venv/bin/python scripts/summarize_crd102_failure_metadata.py`。两层都只允许在干净 commit 上读取 candidate-lock 固定 validation 产物/冻结 index，输出目录已存在时必须停止。
+- CRD_102 failure diagnostic 两层均已完成；`scripts/summarize_crd102_failures.py` 与 `scripts/summarize_crd102_failure_metadata.py` 只保留 provenance，不得重复运行。冻结产物位于 `runs/crd_v1/crd_102_failure_diagnostic/` 与 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。

@@ -7,7 +7,7 @@
 - CRD-S0/S1/S1C/S1F：已完成并冻结，S2 BASE 为 candidate-lock 中的 CRD_102；
 - CRD-S2A：202/203/204 九个 formal runs、prototype 描述与冻结 summary 已完成，三个单分支关闭；
 - CRD-S2B-R：12 个 formal runs 与冻结汇总已完成，两个组合均不 eligible，保留 CRD_102；S3 关闭。
-- CRD_102 failure diagnostic：仅对 candidate-lock 中三个冻结 validation checkpoint 做探索性分层与失败签名，口径已冻结、等待生成一次性产物。
+- CRD_102 failure diagnostic：指标分层与结果知情 metadata follow-up 均已完成，主要失败区域已定位但不作因果主张；当前无自动激活的新模型阶段。
 
 `docs/temp/` 中的讨论稿只保留设计历史，不是运行依据。唯一激活过的 AM/Morphology 定义来自第 21 节，唯一激活过的双因素组合与 capacity control 来自第 22 节；gate、auxiliary、TCN control、S3 和最终消融仍未激活。
 
@@ -874,6 +874,20 @@ Factorial interaction 的 seed-mean contrast 表明非线性补偿方向确实�
 第一层结果生成后若同时出现明显 target-modulation 关联与相邻 row 聚集，允许一次 result-informed metadata follow-up，协议名固定为 `crd-v1.1-crd102-failure-metadata-20260811`。该层只把第一层冻结 consensus 逐 `dataset_row_id` 一对一连接到三个 CRD_102 resolved config 共同指向的冻结 `dataset_index.csv`；必须校验 index hash、`split=val`、samp/coupling identity 和 180 s 窗长。连续元数据固定为 valid/motion/reliable ratios、六类 confidence score、alignment lag/drift 与 finite ratio；分类元数据固定为六类 confidence level、alignment method/reference-assisted 和 allowed losses，不结果后增删字段。
 
 Metadata follow-up 只报告元数据与 error-aligned outcome 的 Spearman、persistent Local-RR/multimetric-core 两种失败组的 mean/median contrast、原有分类 level 的分层结果，以及连续失败片段。连续片段固定为同一 samp 内相邻失败窗口 `window_start_s` 间隔不超过冻结 30 s step；分别对 persistent Local-RR 与 core failure count `≥2` 汇总 episode 数、singleton 比例、最长窗口数/跨度。重叠窗口不能当独立事件，所有 association/contrast/episode 仍是探索性描述，无 p-value、无因果主张。单独输出到 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`，不得改写第一层 bundle。
+
+### 23.1 冻结结果与失败模式判断
+
+第一层从干净 commit `81fab55` 生成，三个 checkpoint/hash 与三份 `metrics.csv` hash、2675 validation windows/7 samp IDs/17 coupling states、跨 seed identity/target 字段均审计通过。Local-RR 三 seed 排名 Spearman 平均 `0.9668`、worst-decile Jaccard 平均 `0.7710`，所以主要难例具有很强 seed 重复性，并非某一个初始化偶发失效；不过 Local-RR error 与跨 seed SD 的 Spearman 为 `0.7881`，说明难例的误差幅度也更易受 seed 影响。
+
+高 target-modulation 是最集中的任务区域：high stratum 的 Local-RR mean 为 `1.2137 bpm`，而 medium/low 为 `0.3990/0.1329 bpm`；persistent Local-RR failure 为 `185/887=20.86%`，占全部 `262` 个 Local-RR persistent failures 的 `70.61%`。Core count `≥2` 在 high/medium/low 为 `323/887=36.41%`、`24/652=3.68%`、`5/1136=0.44%`，即 high stratum 占 `323/352=91.76%`。Target modulation 与 trajectory/local-RR/PCC-error 的 Spearman 分别为 `0.9143/0.7687/0.7842`。相反，256 个 persistent envelope-rank failures 中约 205 个落在 low stratum，表明低动态区主要暴露 rank metric/近常量轨迹困难，与高动态区的 rate/tracking/coverage 失败不是同一种签名。
+
+样本整体排名受 modulation 构成明显混杂：按未校正整体 mean，samp 1308/952 的 Local-RR 为 `1.1788/1.0039 bpm`；但只看 high stratum 且 `n≥20` 时，956/1378/972 为 `2.6232/2.1595/2.0003 bpm`，反而高于 1308/952 的 `1.2906/1.0701 bpm`。因此不能把整体 samp 排名直接解释为 subject effect。Coupling state 12/18/8 的表面最差值只基于 `n=8/3/5`，同样不足以驱动结构选择。
+
+IBI 在全部三 seed 均 interpretable 的窗口占 `69.61%`，全部不 interpretable 占 `25.94%`；后者 Local-RR mean `1.3756 bpm`，高于 all-interpretable 的 `0.2275 bpm`。至少 `2/3` seeds 命中 `|best_lag|=0.30 s` 的窗口占 `15.25%`，但其 Local-RR mean `0.5497 bpm` 与非持续边界的 `0.5573 bpm` 近似，因此 lag-boundary 不是当前 Local-RR 主失败轴。
+
+Metadata follow-up 从干净 commit `7a1b29b` 生成，固定 index hash 与第一层 manifest/consensus hash 均记录。除 target modulation 外，与 Local-RR 最强的元数据关联是 waveform/rate/supervision confidence（Spearman `-0.5487/-0.5465/-0.5231`），其次是 transient-motion ratio（`+0.4811`）。Persistent Local-RR failures 的 waveform confidence mean/median 为 `0.5609/0.5327`，其余窗口为 `0.6978/0.6774`；motion ratio 为 `0.8294/0.8722` 对 `0.6651/0.7500`。Hard-valid 与 training-finite 均恒为 1，state-alignment-valid 近 1 且与 Local-RR 仅 `-0.0357`，说明这不是一般性非有限或 admission 失败。Confidence 与 modulation/samp composition 相关，以上差异仍不能解释为独立因果效应。
+
+262 个 Local-RR persistent failure windows 合并为 97 个重叠窗口 episodes，其中 40 个 singleton；即 `222/262=84.73%` 的失败窗口处于多窗口连续片段，最长 9 windows/420 s。352 个 multimetric-core windows 合并为 142 个 episodes、69 个 singleton，`283/352=80.40%` 位于连续片段，最长 13 windows/540 s。失败因此更像高动态/较低置信度的连续时间段，而非均匀散布的独立窗口。最终诊断优先级固定为：先调查 high-modulation 连续 episode 的输入—目标可观测性与局部速率跟踪，再处理低-modulation rank 指标的适用性；不据此自动增加结构、重选 checkpoint 或启用 research-test。
 
 ### 21.4 Energy representation 决策
 

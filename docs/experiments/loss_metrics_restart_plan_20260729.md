@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 已关闭；保留 CRD_102，S3 不激活；当前仅激活 CRD_102 三个冻结 validation checkpoint 的探索性误差分层与失败模式诊断
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R 与 CRD_102 failure diagnostic 已关闭；保留 CRD_102，S3 不激活，当前没有自动开放的新模型阶段
 
 ## 1. 定位
 
@@ -1999,3 +1999,5 @@ S2A 三分支实现与 CPU 协议回归现已完成：配置为 `crd_202_base_le
 S2B-R 关闭后不立即增加结构，而先对 candidate-lock 中 CRD_102 三个冻结 validation checkpoint 做一次结果知情但不参与选择的探索性诊断。逐 seed 使用 eligible-window worst decile，并以至少 `2/3` seeds 命中定义 persistent failure；固定分层为 samp、coupling state、target modulation stratum、IBI interpretable 一致性和 lag-boundary 一致性，同时报告跨 seed agreement、error-aligned metric associations 与失败签名。完整边界与输出见附件第 23 节。该入口不重推理、不重选 checkpoint、不读取 research-test，签名不作因果解释；当前只允许在干净 commit 上生成一次性冻结产物。
 
 若第一层观察到 target-modulation 关联和相邻 row 聚集，再按附件第 23 节冻结字段启动一次结果知情 metadata follow-up：只连接既有 validation consensus 与冻结 dataset index，检查质量/confidence 元数据和重叠窗口 failure episodes，不新增模型或选择门槛。该层与第一层分目录保存且同样禁止覆盖。
+
+两层诊断已分别从干净 commit `81fab55/7a1b29b` 生成并通过 checkpoint/metrics/index/hash 与 validation-only 审计。High target-modulation 占 Local-RR persistent failures 的 `185/262=70.61%`、multimetric-core failures 的 `323/352=91.76%`；Local-RR 三 seed 排名 Spearman/Jaccard 为 `0.9668/0.7710`，说明难例高度可重复。Waveform/rate confidence 与 Local-RR 的 Spearman 为 `-0.5487/-0.5465`，motion ratio 为 `+0.4811`，但这些关联受 modulation/samp composition 混杂，不作因果解释。Local-RR 与 multimetric failure windows 中 `84.73%/80.40%` 位于多窗口连续 episodes，最长 `420/540 s`。诊断因此把下一研究问题收敛为 high-modulation 连续片段的可观测性/局部跟踪，以及独立的 low-modulation rank-metric 适用性；不自动启动 S3 或新结构。

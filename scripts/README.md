@@ -676,23 +676,23 @@ runs/crd_v1/crd_s2br_validation_summary/s2br_summary_manifest.json
 
 ### CRD_102 validation 误差分层与失败模式
 
-该诊断只读取 candidate-lock 中 CRD_102 三个冻结 run 的既有 validation `metrics.csv`，不需要 GPU、不重新 eval、不访问 research-test。先运行测试，再从干净 commit 生成一次性产物：
+该诊断只读取 candidate-lock 中 CRD_102 三个冻结 run 的既有 validation `metrics.csv`，不需要 GPU、不重新 eval、不访问 research-test。以下命令现只保留 provenance，不得重复运行：
 
 ```bash
 ./.venv/bin/python -m pytest tests/test_crd_failure_diagnostics.py
 ./.venv/bin/python scripts/summarize_crd102_failures.py
 ```
 
-默认输出为 `runs/crd_v1/crd_102_failure_diagnostic/`。目录已存在时入口会停止，不得删除或覆盖后重跑；worst-decile/persistent failure、固定分层、association 和签名口径见协议附件第 23 节。所有结果都是 validation-only exploratory diagnostic，不能重选 CRD_102 checkpoint 或自动触发新模型阶段。
+第一层已从干净 commit `81fab55` 输出到 `runs/crd_v1/crd_102_failure_diagnostic/`；worst-decile/persistent failure、固定分层、association 和签名口径见协议附件第 23 节。
 
-若第一层满足协议中的 metadata follow-up 条件，从新的干净 commit 运行：
+第一层满足 metadata follow-up 条件后，以下命令已从新的干净 commit 运行，现只保留 provenance：
 
 ```bash
 ./.venv/bin/python -m pytest tests/test_crd_failure_metadata.py
 ./.venv/bin/python scripts/summarize_crd102_failure_metadata.py
 ```
 
-默认输出为 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`，只连接冻结 validation consensus 与 dataset index；不会读取波形、重新 eval 或访问 research-test。
+第二层已从干净 commit `7a1b29b` 输出到 `runs/crd_v1/crd_102_failure_metadata_diagnostic/`，只连接冻结 validation consensus 与 dataset index；没有读取波形、重新 eval 或访问 research-test。核心结果为：high modulation 占 Local-RR/multimetric persistent failures 的 `70.61%/91.76%`，三 seed Local-RR 难例高度一致，且 `84.73%/80.40%` 的相应失败窗口位于多窗口连续片段。两层均已关闭，所有入口不得用于重选 checkpoint 或自动触发新模型阶段。
 
 ## 固定呼吸带传统基线
 

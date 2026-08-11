@@ -262,7 +262,11 @@ def _metadata_associations(frame: pd.DataFrame) -> pd.DataFrame:
         left = pd.to_numeric(frame[metadata], errors="coerce")
         for outcome, right in outcomes.items():
             pair = pd.DataFrame({"metadata": left, "outcome": right}).dropna()
-            rho = float(pair["metadata"].corr(pair["outcome"], method="spearman")) if len(pair) >= 2 else math.nan
+            rho = (
+                float(pair["metadata"].corr(pair["outcome"], method="spearman"))
+                if len(pair) >= 2 and pair["metadata"].nunique() >= 2 and pair["outcome"].nunique() >= 2
+                else math.nan
+            )
             rows.append(
                 {
                     "metadata": metadata,

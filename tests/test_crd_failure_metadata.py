@@ -92,6 +92,10 @@ def test_build_metadata_diagnostics_links_and_groups_episodes() -> None:
         "state_alignment_is_reference_assisted",
         "allowed_losses",
     }
+    constant_index = _index()
+    constant_index["hard_valid_ratio"] = 1.0
+    constant = build_metadata_diagnostics(_consensus(), constant_index)["associations"]
+    assert constant.loc[constant["metadata"].eq("hard_valid_ratio"), "spearman_rho"].isna().all()
 
 
 def test_build_metadata_diagnostics_rejects_identity_mismatch() -> None:
