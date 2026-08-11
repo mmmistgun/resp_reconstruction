@@ -606,7 +606,11 @@ def apply_observability_decision(summary: pd.DataFrame) -> dict[str, Any]:
     if missing:
         raise ValueError(f"observability decision summary 缺少字段: {missing}")
     primary = summary.loc[summary["match_scheme"].eq("exact_state_primary")]
-    pair_counts = set(primary["pair_n"].astype(int))
+    decision_primary = primary.loc[
+        primary["method"].isin((RAWISH_METHOD, FIXED_BAND_METHOD))
+        & primary["metric"].isin(("local_rr_mae_bpm", "lag_aware_signed_pcc"))
+    ]
+    pair_counts = set(decision_primary["pair_n"].astype(int))
     if len(pair_counts) != 1 or next(iter(pair_counts)) < MIN_PRIMARY_PAIRS:
         raise RuntimeError(f"observability decision primary pair 数异常: {sorted(pair_counts)}")
     proxy_checks: dict[str, Any] = {}

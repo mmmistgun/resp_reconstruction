@@ -78,6 +78,15 @@ def test_observability_decision_uses_both_proxy_primary_metrics() -> None:
                 },
             ]
         )
+    rows.append(
+        {
+            "match_scheme": "exact_state_primary",
+            "method": RAWISH_METHOD,
+            "metric": "ibi_medae_sec",
+            "pair_n": 3,
+            "case_worse_fraction": 1.0,
+        }
+    )
     decision = apply_observability_decision(pd.DataFrame(rows))
     assert decision["diagnostic_outcome"] == "input_observability_associated"
     assert decision["primary_pair_count"] == 21
