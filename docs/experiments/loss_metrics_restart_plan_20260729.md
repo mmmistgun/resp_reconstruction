@@ -4,7 +4,7 @@
 
 最后更新：2026-08-11
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic、C0 decoder round-trip 与 C1 TCN control 已关闭；保留 CRD_102，S3 不激活；第 45 节当前只激活 C2 decoder controls 的实现与工程验收，formal 队列关闭
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure diagnostic、matched observability diagnostic、C0 decoder round-trip 与 C1 TCN control 已关闭；保留 CRD_102，S3 不激活；第 45 节 C2 decoder controls 实现与 CPU 定向回归已完成，CUDA synthetic/batch-128 acceptance 待执行，formal 队列关闭
 
 ## 1. 定位
 
@@ -2025,3 +2025,5 @@ C1 CUDA synthetic 与独立 physical-batch-128 acceptance 随后在干净 commit
 C1 三 formal runs 随后在统一干净 commit `930212ac66cb95697b659fc7504259cfa3cf71c2` 下完成。每个 run 均为 80 epochs/6400 updates、2675 条 validation metrics，selected epochs 为 `25/26/12`；checkpoint/optimizer、primary finite、prediction-degeneracy 与显存初审通过。现只激活 `scripts/summarize_crd_c1.py` 的一次性冻结汇总，在完整 lifecycle 重审后应用附件第 4.2 节 quality-superior/near 规则并生成 paired/failure-strata 描述。固定输出不得覆盖；summary decision 登记前 C2 继续关闭。
 
 C1 冻结 summary 随后从干净 commit `f0ac01b` 生成。TCN 相对 CRD_102 的 Local RR 改善 `3.8241%` 且 `3/3` paired seeds 改善，PCC drop `0.003797` 在护栏内，但 trajectory worsening `2.5468%` 超过 `1.5%`，因此 quality-superior 与 quality-near 均失败，decision 固定为 `mamba_retained_control_failure / retain CRD_102`。TCN 的 Whole RR 改善 `9.7621%`，failure-strata 中 Local RR 收益集中于既有 persistent/high-modulation/matched-case 难例，但非 persistent windows 略恶化且 high-modulation trajectory 明显退化；这些只解释任务交换，不能覆盖总体 gate。冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`，C1 关闭且 summary 不得重复运行。现按附件第 5 节开放 C2 的两个 decoder candidates 实现、测试、CUDA synthetic 与独立 batch-128 acceptance；C2 formal、TCN+decoder 与 research-test 继续关闭。
+
+C2 唯一实现随后完成：`crd_c201_decoder_10hz_cap / crd_c202_decoder_100hz` 均保留 CRD_102 的完整 Mamba trunk 与 coarse head，只增加同一个 1,057-parameter zero-init pointwise nonlinear residual，分别在 10 Hz feature 上作用后 Fourier 上采样，或先将 32-channel feature Fourier 上采样至 100 Hz 后作用。两个候选总参数均为 `1,069,802`，共享模块和 residual 初始 state 逐 tensor相同，初始化 waveform 与 CRD_102 逐点相同；旧 variant forward/state 未改变。CPU 结构与全仓回归通过；官方 Mamba fast path 按依赖契约不支持 CPU synthetic，故下一步只允许在当前实现提交后的干净 commit 分别执行 CUDA synthetic 与独立 physical-batch-128 acceptance。C2 formal、TCN+decoder 与 research-test 继续关闭。

@@ -8,7 +8,7 @@
 
 - `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
 - `C1`：parameter-matched full-context TCN 的工程验收、三个 formal runs 与冻结汇总均已完成，结果为 `mamba_retained_control_failure / retain CRD_102`，阶段关闭；
-- `C2`：10-Hz capacity/100-Hz placement 两个候选的实现、测试、CUDA synthetic 与独立 physical-batch-128 acceptance 已激活，formal 队列仍关闭。
+- `C2`：10-Hz capacity/100-Hz placement 两个候选的实现与 CPU 定向回归已完成；CUDA synthetic 与独立 physical-batch-128 acceptance 待执行，formal 队列仍关闭。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
 
@@ -279,6 +279,26 @@ C201/C202 各新增三个 formal seeds。两者各自相对 CRD_102 的基本资
 | 任意 | 通过 | 通过 | 100-Hz nonlinear placement 有额外开发证据 |
 | 未通过 | 未通过 | — | 保留原 10-Hz scalar + Fourier decoder |
 | 未通过 | 通过 | 未通过 | 只称 C202 decoder package 有效，不归因于 100 Hz |
+
+### 5.3 实现登记与当前工程门槛
+
+实现配置固定为：
+
+```text
+configs/crd_v1/crd_c201_decoder_10hz_cap.yaml
+configs/crd_v1/crd_c202_decoder_100hz.yaml
+```
+
+两个候选总参数均为 `1,069,802`，恰比 CRD_102 增加 `1,057`。实现只把现有 `CoarseWaveformHead` 的最终 32-channel feature 暴露给同一个 `DecoderResidual`；旧 variant 继续调用原 `head(latent)`，state dict 与 forward 数学不变。C201/C202 的 frontend、六个 Local BiMamba2、refinement 和 coarse head 与 CRD_102 同 seed 逐 tensor 相同，两个 residual state 也逐 tensor相同；zero-init 下两个候选 waveform 与 CRD_102 逐点完全相同。
+
+配置、参数、共享 state、zero-init identity、旧模型 forward 兼容和训练/experiment 定向测试必须全部通过。官方 Mamba fast path 不支持 CPU forward，因此 C2 不以 CPU synthetic 作为工程门槛；CPU 单元测试通过后，必须在同一干净 commit、目标 GPU 分别完成：
+
+1. CUDA bf16 batch-1 output/input/全部 parameter gradients finite；
+2. 各自独立 128 train / 32 validation / 1 epoch / 1 update acceptance；
+3. 两个 checkpoint与 optimizer state finite，五项 primary finite，prediction nondegenerate；
+4. 各自 peak reserved fraction `≤80%`。
+
+任一 variant 工程失败只阻塞该 variant，不允许改变 residual、插值位置、batch 或 AMP。两个候选均通过并由主协议登记前，不开放任何 C2 formal seed。
 
 ## 6. 失败分层、停止条件与未来证据
 

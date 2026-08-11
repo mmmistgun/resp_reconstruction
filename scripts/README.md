@@ -769,6 +769,38 @@ done
 
 固定输出为 `runs/crd_v1/crd_c1_validation_summary/`，目录存在时拒绝覆盖。唯一 summary 已从干净 commit `f0ac01b` 生成，decision 为 `mamba_retained_control_failure / retain CRD_102`：Local RR 改善 `3.8241%`、paired `3/3`、PCC drop `0.003797` 均通过，但 trajectory 恶化 `2.5468%` 超过 `1.5%`。C1 已关闭，以上 summary 命令只保留 provenance；当前只开放 C2 两个 decoder controls 的实现与工程验收。
 
+### CRD C2 decoder capacity/placement controls
+
+两个候选为 `crd_c201_decoder_10hz_cap` 与 `crd_c202_decoder_100hz`。实现提交后分别执行 CUDA synthetic：
+
+```bash
+for variant in crd_c201_decoder_10hz_cap crd_c202_decoder_100hz; do
+  ./.venv/bin/python scripts/check_crd_variant.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --device cuda:0 \
+    || exit 1
+done
+```
+
+两项均通过后，分别运行独立 physical-batch-128 acceptance：
+
+```bash
+for variant in crd_c201_decoder_10hz_cap crd_c202_decoder_100hz; do
+  ./.venv/bin/python scripts/train_crd.py \
+    --config "configs/crd_v1/${variant}.yaml" \
+    --set protocol.run_role=acceptance \
+    --set training.epochs=1 \
+    --set training.device=cuda:0 \
+    --set training.show_progress=false \
+    --set data.max_train_windows=128 \
+    --set data.max_val_windows=32 \
+    --set outputs.run_root="/tmp/${variant}_batch128_acceptance" \
+    || exit 1
+done
+```
+
+每项必须恰有一次 update、两个 checkpoint/optimizer finite、32 条 primary-finite validation metrics、无 prediction degeneracy且 peak reserved fraction `≤80%`。工程结果登记前不得运行 formal seeds、实现 TCN+decoder 或访问 research-test。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

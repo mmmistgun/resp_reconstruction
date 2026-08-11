@@ -195,9 +195,31 @@ class CoarseWaveformHead(nn.Module):
         nn.init.normal_(self.output.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.output.bias)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def features(self, x: torch.Tensor) -> torch.Tensor:
+        """返回最终 32-channel feature，供 C2 严格匹配 decoder placement。"""
+
         x = self.norm(x)
         x = self.activation(self.conv(x))
         x = self.activation(self.depthwise(x))
-        x = self.activation(self.reduce(x))
-        return self.output(x)
+        return self.activation(self.reduce(x))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.output(self.features(x))
+
+
+class DecoderResidual(nn.Module):
+    """C2 10/100-Hz 两候选共享的 1,057-parameter nonlinear residual。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.expand = nn.Conv1d(32, 32, kernel_size=1, bias=False)
+        self.output = nn.Conv1d(32, 1, kernel_size=1, bias=True)
+        self.activation = nn.SiLU()
+        _kaiming(self.expand)
+        nn.init.zeros_(self.output.weight)
+        nn.init.zeros_(self.output.bias)
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if features.ndim != 3 or features.shape[1] != 32:
+            raise ValueError(f"C2 DecoderResidual 期望 (B,32,T)，实际 {tuple(features.shape)}")
+        return self.output(self.activation(self.expand(features)))

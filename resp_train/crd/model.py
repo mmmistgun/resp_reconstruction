@@ -7,7 +7,13 @@ import torch
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
-from resp_train.crd.blocks import BidirectionalMamba2Block, CoarseWaveformHead, LocalTCNBlock, ResidualDWBlock
+from resp_train.crd.blocks import (
+    BidirectionalMamba2Block,
+    CoarseWaveformHead,
+    DecoderResidual,
+    LocalTCNBlock,
+    ResidualDWBlock,
+)
 from resp_train.crd.capacity import CapacityResidualStack, select_capacity_match
 from resp_train.crd.frontends import DirectAnalyticFrontend, PatchTokenFrontend
 from resp_train.crd.initialization import module_seed
@@ -38,6 +44,8 @@ CRD_VARIANTS = (
     "crd_207_base_cap_em",
     "crd_208_base_cap_am",
     "crd_c101_b0_local_tcn",
+    "crd_c201_decoder_10hz_cap",
+    "crd_c202_decoder_100hz",
 )
 
 CRD_S2A_VARIANTS = {
@@ -53,7 +61,9 @@ CRD_S2BR_VARIANTS = {
     "crd_208_base_cap_am",
 }
 
-CRD_CONTROL_VARIANTS = {"crd_c101_b0_local_tcn"}
+CRD_C1_VARIANTS = {"crd_c101_b0_local_tcn"}
+CRD_C2_VARIANTS = {"crd_c201_decoder_10hz_cap", "crd_c202_decoder_100hz"}
+CRD_CONTROL_VARIANTS = CRD_C1_VARIANTS | CRD_C2_VARIANTS
 LOCAL_TCN_DILATIONS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
 
 
@@ -176,12 +186,14 @@ class CRDCoarseModel(nn.Module):
             "crd_106_b0_hier_mamba",
             *CRD_S2A_VARIANTS,
             *CRD_S2BR_VARIANTS,
+            *CRD_C2_VARIANTS,
         }
         uses_global = variant in {
             "crd_104_direct_hier_mamba",
             "crd_106_b0_hier_mamba",
         }
-        uses_local_tcn = variant in CRD_CONTROL_VARIANTS
+        uses_local_tcn = variant in CRD_C1_VARIANTS
+        uses_decoder_residual = variant in CRD_C2_VARIANTS
 
         with module_seed(initialization_seed, "direct_frontend" if uses_direct else "patch_frontend"):
             self.frontend: nn.Module = DirectAnalyticFrontend() if uses_direct else PatchTokenFrontend()
@@ -239,6 +251,11 @@ class CRDCoarseModel(nn.Module):
             )
         with module_seed(initialization_seed, "coarse_head"):
             self.head = CoarseWaveformHead()
+        if uses_decoder_residual:
+            with module_seed(initialization_seed, "decoder_residual"):
+                self.decoder_residual: DecoderResidual | None = DecoderResidual()
+        else:
+            self.decoder_residual = None
 
     def forward(self, x: torch.Tensor, **_: Any) -> dict[str, torch.Tensor]:
         _validate_input(x)
@@ -280,9 +297,30 @@ class CRDCoarseModel(nn.Module):
         if self.global_stage is not None:
             latent = self.global_stage(latent)
         latent = self.refinement(latent)
-        waveform_10hz = self.head(latent)
-        waveform = fourier_interpolate(waveform_10hz, target_length=18000)
-        return {"waveform": waveform, "waveform_10hz": waveform_10hz}
+        if self.variant not in CRD_C2_VARIANTS:
+            waveform_10hz = self.head(latent)
+            waveform = fourier_interpolate(waveform_10hz, target_length=18000)
+            return {"waveform": waveform, "waveform_10hz": waveform_10hz}
+        head_features = self.head.features(latent)
+        waveform_10hz_base = self.head.output(head_features)
+        if self.variant == "crd_c201_decoder_10hz_cap":
+            if self.decoder_residual is None:
+                raise RuntimeError("C201 缺少 decoder residual")
+            waveform_10hz = waveform_10hz_base + self.decoder_residual(head_features)
+            waveform = fourier_interpolate(waveform_10hz, target_length=18000)
+            return {"waveform": waveform, "waveform_10hz": waveform_10hz}
+        if self.variant == "crd_c202_decoder_100hz":
+            if self.decoder_residual is None:
+                raise RuntimeError("C202 缺少 decoder residual")
+            features_100hz = fourier_interpolate(head_features, target_length=18000)
+            residual_100hz = self.decoder_residual(features_100hz)
+            waveform = fourier_interpolate(waveform_10hz_base, target_length=18000) + residual_100hz
+            return {
+                "waveform": waveform,
+                "waveform_10hz": waveform_10hz_base,
+                "decoder_residual_100hz": residual_100hz,
+            }
+        raise RuntimeError(f"未实现的 C2 decoder variant: {self.variant}")
 
     def regularization_terms(self) -> dict[str, torch.Tensor]:
         if isinstance(self.representation, MorphologyRepresentation):

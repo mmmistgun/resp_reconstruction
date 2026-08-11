@@ -124,6 +124,8 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
         "crd_207_base_cap_em": 1109257,
         "crd_208_base_cap_am": 1235785,
         "crd_c101_b0_local_tcn": 1062001,
+        "crd_c201_decoder_10hz_cap": 1069802,
+        "crd_c202_decoder_100hz": 1069802,
     }
     shared_decoder_state: dict[str, torch.Tensor] | None = None
     shared_local_state: dict[str, torch.Tensor] | None = None
@@ -147,6 +149,8 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_207_base_cap_em",
             "crd_208_base_cap_am",
             "crd_c101_b0_local_tcn",
+            "crd_c201_decoder_10hz_cap",
+            "crd_c202_decoder_100hz",
         }:
             current = {
                 **{f"refine.{key}": value for key, value in model.refinement.state_dict().items()},
@@ -169,6 +173,8 @@ def test_crd_variant_trainable_parameter_counts_are_frozen() -> None:
             "crd_206_base_am_static",
             "crd_207_base_cap_em",
             "crd_208_base_cap_am",
+            "crd_c201_decoder_10hz_cap",
+            "crd_c202_decoder_100hz",
         }:
             current_local = model.local_blocks.state_dict()
             if shared_local_state is None:
@@ -256,6 +262,48 @@ def test_c1_tcn_is_parameter_matched_full_context_and_preserves_shared_state() -
     for block in control.local_tcn_blocks:
         output = block(output)
     assert torch.equal(output, latent)
+
+
+def test_c2_decoders_are_equal_parameter_exact_base_at_initialization() -> None:
+    base = build_crd_model(load_crd_config("configs/crd_v1/crd_102_b0_local_mamba.yaml")).eval()
+    decoder_10hz = build_crd_model(load_crd_config("configs/crd_v1/crd_c201_decoder_10hz_cap.yaml")).eval()
+    decoder_100hz = build_crd_model(load_crd_config("configs/crd_v1/crd_c202_decoder_100hz.yaml")).eval()
+
+    for candidate in (decoder_10hz, decoder_100hz):
+        for base_module, candidate_module in (
+            (base.frontend, candidate.frontend),
+            (base.local_blocks, candidate.local_blocks),
+            (base.refinement, candidate.refinement),
+            (base.head, candidate.head),
+        ):
+            assert base_module.state_dict().keys() == candidate_module.state_dict().keys()
+            assert all(
+                torch.equal(base_module.state_dict()[name], candidate_module.state_dict()[name])
+                for name in base_module.state_dict()
+            )
+        assert candidate.decoder_residual is not None
+        assert sum(parameter.numel() for parameter in candidate.decoder_residual.parameters()) == 1057
+        assert torch.count_nonzero(candidate.decoder_residual.output.weight) == 0
+        assert torch.count_nonzero(candidate.decoder_residual.output.bias) == 0
+
+    assert decoder_10hz.decoder_residual.state_dict().keys() == decoder_100hz.decoder_residual.state_dict().keys()
+    assert all(
+        torch.equal(decoder_10hz.decoder_residual.state_dict()[name], decoder_100hz.decoder_residual.state_dict()[name])
+        for name in decoder_10hz.decoder_residual.state_dict()
+    )
+    for model in (base, decoder_10hz, decoder_100hz):
+        model.local_blocks = nn.ModuleList([nn.Identity() for _ in model.local_blocks])
+    signal = torch.randn(1, 1, 18000)
+    with torch.no_grad():
+        base_output = base(signal)
+        output_10hz = decoder_10hz(signal)
+        output_100hz = decoder_100hz(signal)
+    assert torch.equal(output_10hz["waveform"], base_output["waveform"])
+    assert torch.equal(output_100hz["waveform"], base_output["waveform"])
+    assert torch.equal(output_10hz["waveform_10hz"], base_output["waveform_10hz"])
+    assert torch.equal(output_100hz["waveform_10hz"], base_output["waveform_10hz"])
+    assert output_100hz["decoder_residual_100hz"].shape == (1, 1, 18000)
+    assert torch.count_nonzero(output_100hz["decoder_residual_100hz"]) == 0
 
 
 def test_global_context_stage_is_exact_identity_at_initialization() -> None:

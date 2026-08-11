@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics、C0 decoder round-trip 与 C1 TCN control 已完成。C0 冻结为 `roundtrip_negligible=true`；C1 因 trajectory 恶化 `2.5468%` 未通过全门槛，固定为 `mamba_retained_control_failure / retain CRD_102`。主协议第 45 节当前只激活 C2 的 10-Hz capacity/100-Hz placement 两个候选实现、测试、CUDA synthetic 与独立 batch-128 acceptance；formal 与 TCN+decoder 仍关闭。S3、gate/auxiliary/final ablation 继续关闭。规范附件由主协议第 35–45 节纳入。
+- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics、C0 decoder round-trip 与 C1 TCN control 已完成。C0 冻结为 `roundtrip_negligible=true`；C1 因 trajectory 恶化 `2.5468%` 未通过全门槛，固定为 `mamba_retained_control_failure / retain CRD_102`。主协议第 45 节 C2 的 10-Hz capacity/100-Hz placement 两个候选实现与 CPU 定向回归已完成，当前等待同一干净 commit 下的 CUDA synthetic 与各自独立 batch-128 acceptance；formal 与 TCN+decoder 仍关闭。S3、gate/auxiliary/final ablation 继续关闭。规范附件由主协议第 35–45 节纳入。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -19,7 +19,7 @@
 - 训练：`./.venv/bin/python scripts/train_tho.py --config configs/tho_research_v2.yaml --set training.device=cuda:0`
 - 复评：`./.venv/bin/python scripts/eval_tho.py --checkpoint runs/<run>/checkpoint_best_local_rr.pt --split val`
 - Research-test：复评命令额外传入 `--split test --confirm-research-test`。该 split 可在阶段性模型整理后重复观察，也可形成后续独立研究问题，但不得用于重选已训练 run 的 epoch/checkpoint；所有结果均属于 development/research evidence，不表述为无偏 held-out 证据。
-- CRD 配置：`configs/crd_v1/` 下保留八个 S0/S1、三个 S2A、四个 S2B-R 配置，并新增唯一 C1 候选 `crd_c101_b0_local_tcn.yaml`；训练入口 `./.venv/bin/python scripts/train_crd.py --config configs/crd_v1/<variant>.yaml --set training.device=cuda:0`。C1 formal 三 seed 已开放；C2 不得实现。
+- CRD 配置：`configs/crd_v1/` 下保留八个 S0/S1、三个 S2A、四个 S2B-R、一个已关闭 C1 配置，并新增 C2 的 `crd_c201_decoder_10hz_cap / crd_c202_decoder_100hz`；训练入口 `./.venv/bin/python scripts/train_crd.py --config configs/crd_v1/<variant>.yaml --set training.device=cuda:0`。C2 当前只允许 synthetic/acceptance，不得启动 formal seeds。
 - CRD validation 复评：`./.venv/bin/python scripts/eval_crd.py --checkpoint runs/<run>/checkpoint_best_local_rr.pt`；该入口故意不提供 test split。
 - CRD S1C research-test 与冻结汇总均已完成；入口和命令只作 provenance，不再重复运行。
 - CRD S2A prototype 与冻结汇总均已完成；`scripts/eval_crd_morphology_prototypes.py`、`scripts/summarize_crd_s2a.py` 及其命令只作 provenance，不再重复运行。
