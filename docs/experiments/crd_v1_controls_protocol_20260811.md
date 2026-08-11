@@ -4,11 +4,11 @@
 
 本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 45 节引用的规范性附件；发生冲突时以主协议为准。该控制线在 CRD-v1.1 S2B-R 和后续 CRD_102 failure/matched-observability diagnostics 已冻结后另立，不续接已经关闭的 S3/S4/S5 命名，也不回写 S1/S2 或诊断阶段的历史结论。
 
-控制线协议族固定为 `crd-v1.1-controls-research-informed-20260811`，证据属性为 **research-test-informed development/validation controls**。当前只激活：
+控制线协议族固定为 `crd-v1.1-controls-research-informed-20260811`，证据属性为 **research-test-informed development/validation controls**。当前状态为：
 
-- `C0`：无训练的 10-Hz/Fourier decoder round-trip 审计实现与一次正式 validation 审计；
-- `C1/C2`：结构、比较问题和开放条件预先冻结，但实现、工程验收和正式训练仍关闭；
-- `C1` 只能在 C0 正式产物由主协议登记后激活；`C2` 只能在 C1 冻结结果由主协议登记后激活。
+- `C0`：无训练的 10-Hz/Fourier decoder round-trip 正式 validation 审计已完成并冻结；
+- `C1`：parameter-matched full-context TCN 的实现、测试、CUDA synthetic 与独立 physical-batch-128 acceptance 已激活，formal 三 seed 队列仍关闭；
+- `C2`：结构、比较问题和开放条件已冻结，但实现、工程验收和正式训练仍关闭；C2 只能在 C1 冻结结果由主协议登记后激活。
 
 本控制线不读取 CRD research-test，不重新调用已关闭的 S1C 队列，不新增 gate、auxiliary、AM/Morphology、global stage、TCN+decoder 组合或 final ablation。即使 C1 与 C2 的候选分别通过，也不得在本协议内自动组合；非单调交互必须由未来另立协议验证。
 
@@ -94,6 +94,24 @@ decoder_roundtrip_manifest.json
 7. 所有五项 primary 数值 finite，joint prediction degeneracy fraction 为 0。
 
 若通过，后续 C2 只能称为 **nonlinear decoder capacity/placement control**，不得称为 10-Hz 采样带宽恢复。若失败，C2 继续关闭，必须先检查 Fourier/边界/数值语义并修订协议；不得根据失败结果临时改用另一上采样器。无论 C0 结果如何，C1 的 backbone 问题在登记 C0 后均可另行激活。
+
+### 3.5 冻结结果与 C1 开放（2026-08-11）
+
+C0 已在干净 commit `5de0c0f459c46e6021034d63bf3d4efbd8a39ac0` 下对完整 2675-window/7-`samp_id` validation 执行一次。Manifest 记录 `research_test_used=false / model_inference_used=false / checkpoint_tensor_read=false`，candidate-lock 与 dataset-index SHA-256 均通过冻结 identity。全部五项 primary finite，joint prediction degeneracy fraction 为 0。
+
+数值结果为：全局 `max_abs_error=5.538454e-7`、RMSE `8.217932e-8`，首/末 15 秒 RMSE 为 `8.158691e-8 / 8.785890e-8`；Whole RR、Local RR、trajectory、global-envelope direct mean 为 `4.754389e-8 / 3.314116e-8 / 4.133708e-8 / 3.691569e-8`，signed PCC 为 `0.9999999999994397`。第 3.4 节全部判定通过，冻结为 `roundtrip_negligible=true`。
+
+固定产物位于 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`，decision/manifest/metrics/summary/numerical-audit SHA-256 依次为：
+
+```text
+bece7bf979ce53c73352e3b22fafff0d14840b157f86b8dcbbbcfc52be25a0a8
+7f4ed5ac479598957aa44c62ef52ed6e6481571c7d711d28a49be2b4cdba18a3
+c3fd06deaf9deb691ae66ca8deb80963beed7dce3dca0ac9a612c7387ecdb075
+46aaa0f5b8398be89d0194700a2d7d8298b9a71a516f420c41107fa940db1c9a
+f2447a7f755a8a42d1f404df85f573df5666faedb6bd94310238e123bfdf9f0f
+```
+
+C0 至此关闭，入口不得重复执行。该结果排除“正式 0.05–0.70 Hz waveform 因 10-Hz 采样而丢失带宽”作为 C2 理由；C2 未来只能检验 nonlinear decoder capacity/placement。现按预注册顺序开放 C1 的实现与工程验收，formal 三 seed 仍须等待当前实现提交下的 CUDA synthetic 和独立 batch-128 acceptance 全部通过并登记。
 
 ## 4. C1：CRD_102 vs parameter-matched full-context TCN
 
@@ -200,4 +218,3 @@ C201/C202 各新增三个 formal seeds。两者各自相对 CRD_102 的基本资
 C1/C2 必须预先复用已冻结的 CRD_102 failure diagnostic 定义，报告 persistent failure/control、waveform-confidence strata、high-modulation failure 与 matched-observability case/control 的 secondary descriptives。不得用这些 validation 分层重新加权 loss、筛样本、选择 checkpoint 或事后定义新 gate。
 
 任一新候选未通过完整 lifecycle、finite、identity/parameter、acceptance 或正式 gate 时，保留 CRD_102，不补跑超参数变体。C0/C1/C2 均禁止读取 research-test；若最终形成新候选，只能建立新的 candidate lock，并在新锁定 cohort、外部数据或 prospective holdout 上获得强泛化证据。
-

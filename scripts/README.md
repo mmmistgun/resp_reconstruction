@@ -713,13 +713,13 @@ C0 只读取完整 validation target，执行 `Pi(target) → ::10 → Fourier 1
 ./.venv/bin/python -m pytest tests/test_crd_decoder_roundtrip.py
 ```
 
-实现与协议提交后，只允许在干净工作树执行一次：
+实现与协议提交后，已在干净 commit `5de0c0f` 执行一次：
 
 ```bash
 ./.venv/bin/python scripts/audit_crd102_decoder_roundtrip.py
 ```
 
-固定输出为 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`；目录存在时入口拒绝覆盖。正式结果登记进主协议前，C1 TCN 与 C2 decoder 均不得实现或运行。
+固定输出为 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`；全局最大绝对误差/RMSE 为 `5.538454e-7 / 8.217932e-8`，五项 primary 全部通过冻结门槛，decision 为 `roundtrip_negligible=true`。C0 已关闭，以上命令只保留 provenance，不得重复运行。当前只开放 C1 TCN 的实现与工程验收；formal 三 seed 和 C2 仍关闭。
 
 ## 固定呼吸带传统基线
 
