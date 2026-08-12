@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0/P1/P2 已完成并冻结；下一步仅可在用户明确授权或由用户执行时开展 P3 GPU 验收，P4 正式训练、P5 结果汇总与 P6 Fusion 仍未开放**
+状态：**P0/P1/P2 已完成并冻结；P3 验收入口已实现，现仅开放由用户在目标 GPU 上执行 P3，P4 正式训练、P5 结果汇总与 P6 Fusion 仍未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -34,7 +34,7 @@
 | P0 | C201 candidate lock、精确数学/决策冻结 | 已完成并冻结 | 已完成 |
 | P1 | synthetic/input-only calibration、固定表示缓存实现与审计 | 已完成并冻结 | 已完成 |
 | P2 | 模型、配置、汇总器与单测 | 已完成并冻结 | 已完成 |
-| P3 | CUDA synthetic、最大臂 physical-batch acceptance | 关闭 | 必须明确授权或由用户执行 |
+| P3 | CUDA synthetic、最大臂 physical-batch acceptance | 开放（仅工程验收） | 当前由用户执行 |
 | P4 | 正式三 seed 全矩阵 | 关闭 | 必须明确确认规模与运行顺序 |
 | P5 | 冻结 validation 汇总与候选选择 | 关闭 | 汇总前不需要主观选模型 |
 | P6 | gated residual / local cross-attention Fusion | 关闭 | P5 后另立协议并确认 |
@@ -417,7 +417,7 @@ P4 只有在以下全部完成后才可由主协议明确开放：
 3. 建立 M/W/S 和 L-spectrum train/validation cache，完成 cache audit。
 4. 实现统一 branch interface、FiLM、CTRL1/2/3、严格 config schema 和参数匹配。
 5. 运行定向测试与轻量 CPU smoke。
-6. 在用户授权后运行 CUDA synthetic 与最大 single/pair/triple acceptance。
+6. 用户运行全 15-arm CUDA synthetic，以及最大 single/pair/triple `TF102-W / TF204-WL / TF302-WLS` acceptance。W 的二维中间激活大于 M，L 引入 differentiable analytic-envelope 链，因此固定用 W、W+L、W+L+S 覆盖一至三支的保守显存边界；不得看 validation 效果改验收臂。
 7. 冻结 batch、显存、吞吐、准确参数数和全部正式命令。
 8. 用户确认 45-run（或 fallback 后 48-run）成本后，按固定顺序完成全部 P4；不得按中间结果删臂。
 9. 一次性生成 interaction/capacity/Pareto 冻结 summary。
@@ -504,3 +504,15 @@ P2 已实现并冻结以下工程契约：
 - 定向回归共 `60 passed`，新增 P2 data/model/selection 测试单独为 `15 passed`；Python 编译检查通过。CPU 测试只证明结构、身份和数据契约，不构成训练效果或目标 GPU 可运行性的证据。
 
 P2 至此关闭。P3 仍需目标 GPU 上的 CUDA synthetic 与统一 physical-batch acceptance；未经用户当次明确授权不由 Codex 启动。P3 通过并写回显存、吞吐与 batch 决策之前，P4 保持关闭。
+
+## 18. P3 工程验收入口（2026-08-12）
+
+P3 入口已实现，但尚无 GPU 结果：
+
+- `scripts/check_crd_tf_v1_cuda.py` 在同一干净 commit 下依次检查全部 15 个 variant 的 bf16 batch-1 forward/core-loss/backward、input/全部 parameter gradient finite、每个 active branch 最终 projection gradient 非零、精确 trainable increment 与 CUDA peak memory，并生成不可覆盖 receipt；
+- `scripts/run_crd_tf_v1_acceptance.py` 只允许 `TF102-W / TF204-WL / TF302-WLS`，严格解析为 `1 epoch / 128 train / 32 validation / physical batch 128 / accumulation 1 / one update / p3_cuda_acceptance`；
+- CRD-TF 的 `train_history.csv` 额外记录同步后的 train elapsed time 与 samples/s；旧 CRD 产物 schema 不变；
+- `scripts/audit_crd_tf_v1_p3.py` 要求 synthetic 与三个 acceptance 来自同一干净 commit，审计 resolved config/cache identity、完整 lifecycle、两个 finite checkpoint、32 条 validation、五项 primary finite、prediction nondegenerate、吞吐和 `peak_reserved_fraction≤0.80`，成功后生成不可覆盖的 P3 receipt。
+- P1–P3 相关非 GPU 定向回归为 `67 passed`，三个入口的编译与 `--help` 检查通过；CUDA 与 batch-128 本身尚未执行。
+
+P3 的运行命令冻结于 `scripts/README.md`。若任一 `128×1` acceptance OOM、非有限、生命周期失败或显存比例超过 80%，停止并由用户在 `64×2` 与 `32×4` 中确认统一 fallback；不得自行只调整失败 variant。P3 结果只作工程证据。

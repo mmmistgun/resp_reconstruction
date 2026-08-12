@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +87,9 @@ class CRDExperiment:
         best_local_rr = float("inf")
         best_epoch: int | None = None
         for epoch in range(1, total_epochs + 1):
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            train_started = time.perf_counter()
             train_summary, update_index = train_crd_one_epoch(
                 model,
                 data.train.loader,
@@ -104,6 +108,11 @@ class CRDExperiment:
                 epoch=epoch,
                 total_epochs=total_epochs,
             )
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            train_elapsed_seconds = time.perf_counter() - train_started
+            if train_elapsed_seconds <= 0.0:
+                raise RuntimeError("CRD train elapsed time 必须为正")
             val_summary, val_predictions = validate(
                 model,
                 data.val.loader,
@@ -133,6 +142,13 @@ class CRDExperiment:
                 "val_core_loss": val_core_loss,
                 "val_local_rr_mae": val_local_rr,
             }
+            if str(self.cfg.protocol.stage) == "tf":
+                record.update(
+                    {
+                        "train_elapsed_seconds": float(train_elapsed_seconds),
+                        "train_samples_per_second": float(len(data.train.loader.dataset) / train_elapsed_seconds),
+                    }
+                )
             if "loss_proto" in train_summary:
                 record.update(
                     {

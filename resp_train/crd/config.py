@@ -240,7 +240,6 @@ def _validate_crd_config(cfg: DictConfig) -> None:
 
         frozen.update(
             {
-                "protocol.execution_gate": "p2_cpu_only",
                 "data.tf_cache_path": CRD_TF_CACHE_PATH,
                 "model.tf_representations": list(TF_VARIANT_REPRESENTATIONS[variant]),
                 "training.early_stopping_enabled": False,
@@ -302,10 +301,16 @@ def _validate_crd_config(cfg: DictConfig) -> None:
     batch_size = int(cfg.training.batch_size)
     accumulation = int(cfg.training.gradient_accumulation_steps)
     if variant in CRD_TF_VARIANTS:
-        if str(cfg.protocol.execution_gate) != "p2_cpu_only":
-            raise ValueError("CRD-TF P2 execution_gate 必须为 p2_cpu_only")
-        if role != "smoke" or str(cfg.training.device) != "cpu":
-            raise ValueError("CRD-TF P2 只允许 smoke + CPU；P3/P4 尚未开放")
+        execution_gate = str(cfg.protocol.execution_gate)
+        device = str(cfg.training.device)
+        if execution_gate == "p2_cpu_only":
+            if role != "smoke" or device != "cpu":
+                raise ValueError("CRD-TF p2_cpu_only 只允许 smoke + CPU")
+        elif execution_gate == "p3_cuda_acceptance":
+            if role != "acceptance" or not device.startswith("cuda:"):
+                raise ValueError("CRD-TF p3_cuda_acceptance 只允许 acceptance + 显式 cuda:<index>")
+        else:
+            raise ValueError("CRD-TF execution_gate 只允许 p2_cpu_only 或 p3_cuda_acceptance；P4 尚未开放")
     maxima = [cfg.data.get(name) for name in ("max_train_windows", "max_val_windows", "max_test_windows")]
     if role == "formal":
         if (epochs, batch_size, accumulation) != (80, 128, 1):

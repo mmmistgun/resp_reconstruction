@@ -29,7 +29,7 @@
 - CRD_102 C0 decoder round-trip 已完成并冻结；`scripts/audit_crd102_decoder_roundtrip.py` 只保留 provenance，不得重复运行，固定产物位于 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`。
 - CRD C1 formal 与冻结汇总已完成；`scripts/summarize_crd_c1.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。
 - CRD C2 formal、C202 residual diagnostics 与冻结汇总已完成；`scripts/eval_crd_c202_residual_spectrum.py`、`scripts/summarize_crd_c2.py` 及其命令只作 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c2_validation_summary/`。
-- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；P1 calibration/cache 已完整生成并冻结，cache 位于 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`。现在只允许 P2 cache loader、branch encoder、FiLM、CTRL1/2/3、严格配置和冻结汇总器实现及 CPU 定向测试，不得重新生成 cache、启动 GPU acceptance 或 formal runs。
+- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；P1 calibration/cache 与 P2 模型/配置/汇总逻辑均已完成并冻结，cache 位于 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`。现在只开放 P3：由用户在目标 GPU 上运行全 15-arm CUDA synthetic，以及固定最大 single/pair/triple 的 batch-128 acceptance；不得重新生成 cache、启动 P4 formal 或提前执行 P5/P6。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。

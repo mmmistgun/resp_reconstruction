@@ -2042,12 +2042,14 @@ C2 冻结 summary 随后从干净 commit `6e893a300cf683e6e0de8be7998799cabafaf3
 
 新阶段保持数据、admission、train/validation split、target、正式 `Pi`、`L_sync + 0.25 L_effort`、五项 primary、Local-RR selector 和三个 seed 不变，只研究输入 BCG 的四类表示：multi-resolution STFT、analytic Morlet CWT、learnable analytic carrier-modulation filterbank 与固定 WSST ridge。M/W/S 允许只从 train/validation 输入预计算不可覆盖 cache；L 最终特征保持可学习，只允许复用固定 input spectrum。任何 cache 均不得读取 target 或 research-test。
 
-当前只开放 P0 的 C201 candidate lock/精确数学冻结，以及 P1 的 synthetic/input-only calibration、固定 cache 实现与审计；不授权长时间 cache 生成、GPU acceptance 或正式训练。Stage-1 预注册为 12 个 representation arms 加 `CTRL1/2/3`，共 15 个新 variant、45 个 formal runs；single 结果不得关闭 pair/triple。若统一 physical batch 从 `128×1` 回退到 `64×2` 或 `32×4`，必须新增同 batch 的 C201 三 seed control，总规模变为 48 runs。
+Stage-1 预注册为 12 个 representation arms 加 `CTRL1/2/3`，共 15 个新 variant、45 个 formal runs；single 结果不得关闭 pair/triple。若统一 physical batch 从 `128×1` 回退到 `64×2` 或 `32×4`，必须新增同 batch 的 C201 三 seed control，总规模变为 48 runs。P0/P1/P2 已完成；当前只开放用户执行 P3 工程验收，不授权 P4 正式训练。
 
 对 54 个既有完整 CRD formal histories 的回顾显示 selected epoch median 为 13、`43/54` 不晚于 25，但最大为 72；patience 20/30 的回放分别会错过 4/2 个历史全局 Local-RR 最佳。因此本 Stage-1 继续固定 80 epochs、关闭 early stopping、保留 Local-RR best checkpoint，不同时引入新的停止变量。Optimizer/LR 默认沿用 80×128×1、AdamW、`3e-4→3e-5`、5% warmup + exact cosine；梯度累计只作为全矩阵统一显存 fallback，不允许按 variant 临时改变。
 
-P2 模型、P3 CUDA/physical-batch acceptance、P4 三 seed formal、P5 冻结汇总与 P6 gated/cross-attention Fusion 均继续关闭。只有附件第 12 节验收项全部完成、精确参数/缓存/batch/命令写回、工作树在统一干净 commit，且用户明确确认长时间 GPU 队列后，才可由本节后续修订开放 P4。P5 即使形成候选也不自动开放 research-test；强泛化证据需新的锁定 cohort、外部数据或 prospective holdout。
+P3 CUDA/physical-batch acceptance 现只向用户开放；P4 三 seed formal、P5 冻结汇总与 P6 gated/cross-attention Fusion 继续关闭。只有附件第 12 节验收项全部完成、精确参数/缓存/batch/命令写回、工作树在统一干净 commit，且用户明确确认长时间 GPU 队列后，才可由本节后续修订开放 P4。P5 即使形成候选也不自动开放 research-test；强泛化证据需新的锁定 cohort、外部数据或 prospective holdout。
 
 用户随后接受默认 `runs/crd_tf_v1/cache/` 与新增 `CTRL3` 后的 45-run 设计。P1 已实现 M/W/S 固定表示、L learnable modulation/固定 input-spectrum cache、synthetic calibration、只允许 train/validation 的不可覆盖 cache builder 和定向测试；`10 passed`，M/L 轻量 synthetic 检查通过。完整 W/S calibration 与约 4 GiB 全量 cache 尚未运行；入口要求干净工作树，运行完成且结果写回前 P2–P6 状态不变。
 
 P1 随后由用户在干净 commit `6d16976010324c73b4c3b7aa9e313fd7f0d358c4` 完成。Synthetic calibration 四项全部通过，固定 S 参数为 `smoothness_penalty=2.0 / suppression_radius_bins=2`，产物 SHA-256 为 `044494e6c6966a98eb5dc00fb8bee1dcb68539910aeb9d750eb647781da7e3c0`。完整 fixed cache 覆盖 `10141 train + 2675 validation`，14 个文件共 `3.6398 GiB`；逐文件 hash/shape/dtype/finite、row identity 与 train–validation row-id 零交集审计通过，manifest SHA-256 为 `6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8`，固定目录为 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`。Manifest 固定 `target_read=false / research_test_used=false / test_cache_created=false / model_inference_used=false`。P1 至此关闭并只开放 P2 代码、配置与 CPU 定向测试；P3 GPU、P4 formal、P5 汇总、P6 Fusion 和 research-test 继续关闭。
+
+P2 随后在 commit `4d53444` 完成：实现冻结 cache reader、M/W/L/S encoder、统一 zero-init FiLM、CTRL1/2/3、15-arm 严格配置和预注册汇总纯函数；共同 branch 预算为 `150,000±2%`，定向回归 `60 passed`。P3 入口随后实现为全 15-arm CUDA synthetic 和固定最大 single/pair/triple `TF102-W / TF204-WL / TF302-WLS` 的独立 batch-128 acceptance，并预注册同 commit 完整性、finite checkpoint/metrics、prediction degeneracy、吞吐与 peak reserved `≤80%` 审计。P3 尚未产生 GPU 结果，P4–P6 继续关闭。

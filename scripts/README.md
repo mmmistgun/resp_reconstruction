@@ -858,7 +858,7 @@ P1 已从干净 commit `6d169760` 完成；规范见 `docs/experiments/crd_tf_v1
   --calibration runs/crd_tf_v1/calibration/7e29795edc13fe8dc2e12ada8d619c22d0ae19fa8d13feb729d2f9b261fd5535/calibration.json
 ```
 
-Cache 已固定写入 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`，只包含 10141 train + 2675 validation 的 M/W/S 和 L input spectrum，共 3.6398 GiB；逐文件 hash/shape/dtype/finite 审计通过，不读取 target、不生成 test cache。当前只开放 P2 CPU 实现；不得运行 GPU acceptance 或 formal training。
+Cache 已固定写入 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`，只包含 10141 train + 2675 validation 的 M/W/S 和 L input spectrum，共 3.6398 GiB；逐文件 hash/shape/dtype/finite 审计通过，不读取 target、不生成 test cache。P2 已完成；cache 不得重建或覆盖。
 
 以下 partial-cache smoke 也随 P1 关闭，不再运行；命令只说明历史调试接口，任何 partial cache 都不能进入训练：
 
@@ -868,6 +868,39 @@ Cache 已固定写入 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6
   --max-windows-per-split 1 \
   --allow-dirty-smoke
 ```
+
+### CRD-TF v1 P3 CUDA 与 batch-128 acceptance
+
+P3 必须从同一个干净 commit 顺序执行。先覆盖全部 15 个 variant 的 CUDA synthetic：
+
+```bash
+git status --short
+./.venv/bin/python scripts/check_crd_tf_v1_cuda.py --device cuda:0
+```
+
+首行必须无输出。Synthetic receipt 会写到 `runs/crd_tf_v1/p3_cuda_synthetic/<commit>_<timestamp>/synthetic_receipt.json`。15 项必须全部报告 output/input/parameter gradient finite，且 active branch final projection gradient 非零。
+
+随后依次运行冻结的最大 single/pair/triple；不得并行，以免污染显存证据：
+
+```bash
+for variant in crd_tf102_w crd_tf204_wl crd_tf302_wls; do
+  ./.venv/bin/python scripts/run_crd_tf_v1_acceptance.py \
+    --variant "$variant" \
+    --device cuda:0
+done
+```
+
+每项必须完成 `128 train / 32 validation / 1 epoch / 1 optimizer update`、best/final 两个 checkpoint、五项 finite primary、prediction nondegenerate，并满足 `peak_reserved_fraction≤0.80`。三个命令各自打印唯一 run 目录。拿到路径后执行冻结审计：
+
+```bash
+./.venv/bin/python scripts/audit_crd_tf_v1_p3.py \
+  --synthetic-receipt <synthetic_receipt.json> \
+  --tf102-run <crd_tf102_w_run_dir> \
+  --tf204-run <crd_tf204_wl_run_dir> \
+  --tf302-run <crd_tf302_wls_run_dir>
+```
+
+若任一 acceptance OOM、非有限、生命周期失败或超过 80% 显存线，立即停止并返回完整错误；不要自行改 batch。P3 单 update 的 validation 数值不作效果解释，P4 formal 仍关闭。
 
 ## 固定呼吸带传统基线
 
