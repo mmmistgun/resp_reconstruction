@@ -29,7 +29,7 @@
 - CRD_102 C0 decoder round-trip 已完成并冻结；`scripts/audit_crd102_decoder_roundtrip.py` 只保留 provenance，不得重复运行，固定产物位于 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`。
 - CRD C1 formal 与冻结汇总已完成；`scripts/summarize_crd_c1.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。
 - CRD C2 formal、C202 residual diagnostics 与冻结汇总已完成；`scripts/eval_crd_c202_residual_spectrum.py`、`scripts/summarize_crd_c2.py` 及其命令只作 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c2_validation_summary/`。
-- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；P1 calibration/cache、P2 模型/配置/汇总逻辑与 P3 CUDA/batch-128 工程验收均已完成并冻结，cache 位于 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`，P3 receipt 位于 `runs/crd_tf_v1/p3_acceptance_audit/0b4af9bd0c1c6441460702ad893cc5713f8ce3578cc055e51e86e60ad285234e/`。最终 batch 固定为 `128×1`；P4 formal 仍须用户明确确认 45-run 成本后才可开放，不得提前执行 P4/P5/P6。
+- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；P1–P3 已完成并冻结，cache 位于 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`，P3 receipt 位于 `runs/crd_tf_v1/p3_acceptance_audit/0b4af9bd0c1c6441460702ad893cc5713f8ce3578cc055e51e86e60ad285234e/`，最终 batch 为 `128×1`。用户已明确授权完整 45-run P4；只允许通过 `scripts/run_crd_tf_v1_formal_matrix.py --confirm-45-run-matrix` 从统一干净 commit 顺序运行，不得手工删臂、改序、改 batch/LR/early-stop 或使用中间结果；P5/P6 仍关闭。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。

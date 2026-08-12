@@ -309,8 +309,11 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         elif execution_gate == "p3_cuda_acceptance":
             if role != "acceptance" or not device.startswith("cuda:"):
                 raise ValueError("CRD-TF p3_cuda_acceptance 只允许 acceptance + 显式 cuda:<index>")
+        elif execution_gate == "p4_formal":
+            if role != "formal" or not device.startswith("cuda:"):
+                raise ValueError("CRD-TF p4_formal 只允许 formal + 显式 cuda:<index>")
         else:
-            raise ValueError("CRD-TF execution_gate 只允许 p2_cpu_only 或 p3_cuda_acceptance；P4 尚未开放")
+            raise ValueError("CRD-TF execution_gate 必须与已开放的 P2/P3/P4 阶段严格匹配")
     maxima = [cfg.data.get(name) for name in ("max_train_windows", "max_val_windows", "max_test_windows")]
     if role == "formal":
         if (epochs, batch_size, accumulation) != (80, 128, 1):

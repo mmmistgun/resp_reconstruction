@@ -156,6 +156,16 @@ def test_strict_config_accepts_every_variant_and_rejects_gate_drift() -> None:
     with pytest.raises(ValueError, match="p3_cuda_acceptance"):
         _validate_crd_config(bad)
 
+    formal = OmegaConf.create(OmegaConf.to_container(base, resolve=True))
+    formal.protocol.execution_gate = "p4_formal"
+    formal.protocol.run_role = "formal"
+    formal.training.device = "cuda:0"
+    formal.training.epochs = 80
+    formal.training.batch_size = 128
+    formal.data.max_train_windows = None
+    formal.data.max_val_windows = None
+    _validate_crd_config(formal)
+
     bad = OmegaConf.create(OmegaConf.to_container(base, resolve=True))
     bad.model.tf_representations = ["w"]
     with pytest.raises(ValueError, match="tf_representations"):

@@ -2059,3 +2059,5 @@ P2 随后在 commit `4d53444` 完成：实现冻结 cache reader、M/W/L/S encod
 Dropout 修订后的 15-arm CUDA synthetic 全部通过，但最大 single TF102-W 的首轮 `128×1` acceptance 虽完成完整生命周期，peak reserved 为 `14,488/15,936 MiB=90.91%`，超过 80% 工程线，故判定失败并停止 pair/triple。按附件已预注册的 activation-checkpoint 优先路径，新增 TF representation/control branch 训练态固定按 sample 轴 `chunk=8` 做 non-reentrant checkpoint，eval 不分块；该修订不改变数学输出、参数、C201、effective batch 或 LR，并须从新干净 commit 重跑 synthetic 与 TF102。只有该路径仍不满足 80% 时才由用户决定统一 `64×2` 或 `32×4` fallback。
 
 上述修订后，commit `56cabf1d37fa01104902b6aeaef3d256bee6b2a1` 的 15-arm CUDA synthetic 与 TF102-W / TF204-WL / TF302-WLS 三项 `128×1` acceptance 全部通过；最大 peak reserved fraction 为 TF302 的 `64.76%`，最低单-update lifecycle throughput 为 `7.361 samples/s`。统一 P3 receipt SHA-256 为 `d68790e5db45ce65f60a17badab535196a913466176b7ac52a5cac4910f49f14`，固定 batch 决策为 `128×1`，不触发 fallback 或 TF000 batch control。P3 至此关闭；45-run 顺序、三个 seed 和输出根目录已在附件第 19 节冻结，P4 仍等待用户明确确认成本，config gate 继续拒绝 formal。
+
+用户随后明确选择执行“完整”45-run 矩阵。P4 只开放附件第 20 节的统一 runner：它绑定干净 commit/P3 receipt/固定 45 项 identity，原子记录 matrix state，跳过已完成项，禁止隐式重跑失败或中断项，并在任一异常时立即停止。不得用手工 `train_crd.py` 命令删臂、改序或根据中间 validation 结果改变队列；P5/P6 继续关闭。

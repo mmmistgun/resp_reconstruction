@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0–P3 已完成并冻结；最终 physical batch 固定为 `128×1`。P4 正式训练等待用户明确确认 45-run 成本，P5 结果汇总与 P6 Fusion 仍未开放**
+状态：**P0–P3 已完成并冻结；用户已明确授权完整 45-run P4，现只开放统一矩阵 runner。P5 结果汇总与 P6 Fusion 仍未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -35,7 +35,7 @@
 | P1 | synthetic/input-only calibration、固定表示缓存实现与审计 | 已完成并冻结 | 已完成 |
 | P2 | 模型、配置、汇总器与单测 | 已完成并冻结 | 已完成 |
 | P3 | CUDA synthetic、最大臂 physical-batch acceptance | 已完成并冻结 | 已完成 |
-| P4 | 正式三 seed 全矩阵 | 关闭 | 必须明确确认规模与运行顺序 |
+| P4 | 正式三 seed 全矩阵 | 开放（统一 runner） | 用户已确认完整 45 runs |
 | P5 | 冻结 validation 汇总与候选选择 | 关闭 | 汇总前不需要主观选模型 |
 | P6 | gated residual / local cross-attention Fusion | 关闭 | P5 后另立协议并确认 |
 
@@ -406,7 +406,7 @@ P4 只有在以下全部完成后才可由主协议明确开放：
 - [x] CUDA synthetic 与统一 physical-batch acceptance 通过；
 - [x] 精确 trainable params、显存、吞吐和最终 `128×1` 决策写回；
 - [x] 15 个 variant × 3 seeds 的固定命令、输出根目录与运行顺序冻结；
-- [ ] 用户明确授权正式长时间 GPU 队列。
+- [x] 用户明确授权正式长时间 GPU 队列。
 
 任何 P3 acceptance 数值都只作工程证据，不形成模型效果结论。正式 run 必须来自包含最终协议、缓存身份和实现的统一干净 commit；中断 run 不凭已有 best checkpoint 纳入比较。
 
@@ -513,7 +513,7 @@ P3 入口与准入规则如下：
 - `scripts/run_crd_tf_v1_acceptance.py` 只允许 `TF102-W / TF204-WL / TF302-WLS`，严格解析为 `1 epoch / 128 train / 32 validation / physical batch 128 / accumulation 1 / one update / p3_cuda_acceptance`；
 - CRD-TF 的 `train_history.csv` 额外记录同步后的 train elapsed time 与 samples/s；旧 CRD 产物 schema 不变；
 - `scripts/audit_crd_tf_v1_p3.py` 要求 synthetic 与三个 acceptance 来自同一干净 commit，审计 resolved config/cache identity、完整 lifecycle、两个 finite checkpoint、32 条 validation、五项 primary finite、prediction nondegenerate、吞吐和 `peak_reserved_fraction≤0.80`，成功后生成不可覆盖的 P3 receipt。
-- P1–P3 相关非 GPU 定向回归在 branch checkpoint 修订后为 `73 passed`，三个入口的编译与 `--help` 检查通过。
+- P1–P4 相关非 GPU 定向回归在矩阵 runner 完成后为 `83 passed`，P3/P4 入口的编译与 `--help` 检查通过。
 
 P3 的运行命令冻结于 `scripts/README.md`。若任一 `128×1` acceptance OOM、非有限、生命周期失败或显存比例超过 80%，停止并由用户在 `64×2` 与 `32×4` 中确认统一 fallback；不得自行只调整失败 variant。P3 结果只作工程证据。
 
@@ -565,4 +565,28 @@ Seed 顺序固定为 `20260811 → 20260812 → 20260813`，共 45 runs。未来
 runs/crd_tf_v1/formal/<variant>/seed_<seed>/
 ```
 
-为防止误启动，当前 config gate 仍故意拒绝 `p4_formal`。只有用户明确确认 45-run 长时间成本后，才允许单独提交 gate-only P4 runner；该 runner 必须由上述表生成 variant/reps，不允许手填漂移，并要求显式 `--confirm-45-run-matrix`。P3 至此关闭。
+P3 至此关闭。用户随后明确选择“完整”矩阵，授权 45-run P4；执行约束见下一节。
+
+## 20. P4 统一 runner 与恢复语义（2026-08-12）
+
+P4 只允许以下入口：
+
+```text
+scripts/run_crd_tf_v1_formal_matrix.py --confirm-45-run-matrix
+```
+
+Runner 在任何 GPU 工作前强制：工作树干净、P3 receipt SHA/identity 合格、P3 后模型/数据/训练关键文件无 diff、45 个 strict resolved config 全部通过。矩阵 identity 绑定当前 commit、P3 receipt、arm/seed 顺序、`80 epochs / 128×1 / early_stopping=false / cuda:0` 与固定输出根；状态原子写入：
+
+```text
+runs/crd_tf_v1/formal_matrix/<matrix_id>/matrix_state.json
+```
+
+同一 matrix 使用文件锁禁止并发 runner。正常重启会审计并跳过产物完整的 completed runs；failed 或 interrupted run 不会自动重跑，分别要求显式 `--retry-failed` 或 `--retry-interrupted`，且旧 partial run 保留、重试从头生成新目录。任何单项异常立即停止整个队列，不继续消耗后续 arms。状态可由 `scripts/status_crd_tf_v1_formal_matrix.py` 只读查看。
+
+正式输出保持：
+
+```text
+runs/crd_tf_v1/formal/<variant>/seed_<seed>/<timestamp>/
+```
+
+运行期间不得根据 validation 数值暂停、删臂、改变顺序或调整 early stopping/batch/LR。P4 全部完成后只开放预注册 P5 一次性审计与汇总，不自动开放 research-test 或 P6。

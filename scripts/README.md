@@ -902,7 +902,30 @@ done
 
 若任一 acceptance OOM、非有限、生命周期失败或超过 80% 显存线，立即停止并返回完整错误；不要自行改 batch。P3 单 update 的 validation 数值不作效果解释，P4 formal 仍关闭。
 
-最终 P3 已在 commit `56cabf1` 完成。TF102/TF204/TF302 的 peak reserved fraction 分别为 `63.45% / 64.14% / 64.76%`，统一审计输出为 `runs/crd_tf_v1/p3_acceptance_audit/0b4af9bd0c1c6441460702ad893cc5713f8ce3578cc055e51e86e60ad285234e/p3_acceptance.json`，固定 batch 为 `128×1`。以上命令现只保留 provenance，不得重复运行；P4 gate 仍关闭，等待用户明确确认 45-run 成本。
+最终 P3 已在 commit `56cabf1` 完成。TF102/TF204/TF302 的 peak reserved fraction 分别为 `63.45% / 64.14% / 64.76%`，统一审计输出为 `runs/crd_tf_v1/p3_acceptance_audit/0b4af9bd0c1c6441460702ad893cc5713f8ce3578cc055e51e86e60ad285234e/p3_acceptance.json`，固定 batch 为 `128×1`。以上 P3 命令现只保留 provenance，不得重复运行；用户已确认的 P4 入口如下。
+
+### CRD-TF v1 P4 完整 formal matrix
+
+用户已确认完整 45-run。提交后先执行无 GPU 的计划预检：
+
+```bash
+./.venv/bin/python scripts/run_crd_tf_v1_formal_matrix.py --dry-run
+```
+
+正式长任务建议在 `tmux` 中启动，唯一允许的训练入口为：
+
+```bash
+./.venv/bin/python scripts/run_crd_tf_v1_formal_matrix.py \
+  --confirm-45-run-matrix
+```
+
+只读查看进度：
+
+```bash
+./.venv/bin/python scripts/status_crd_tf_v1_formal_matrix.py
+```
+
+Runner 自动跳过已完整完成项。若状态报告失败或中断，先返回错误和 state 路径进行审计；未经审计不要传重试参数。确认后分别使用 `--retry-failed` 或 `--retry-interrupted` 从头重跑当前项，旧 partial 目录不会覆盖。P4 期间不得根据中间 validation 数值停止剩余 arm；全部 45 项完成前不得执行 P5。
 
 ## 固定呼吸带传统基线
 
