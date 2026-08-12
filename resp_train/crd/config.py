@@ -88,6 +88,17 @@ def load_crd_config(path: str | Path, overrides: Iterable[str] | None = None) ->
     if not cfg_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {cfg_path}")
     cfg = OmegaConf.load(cfg_path)
+    base_reference = cfg.pop("_base_", None)
+    if base_reference is not None:
+        base_path = (cfg_path.parent / str(base_reference)).resolve()
+        if base_path.parent != cfg_path.resolve().parent:
+            raise ValueError("CRD _base_ 只允许引用同目录配置")
+        if not base_path.is_file():
+            raise FileNotFoundError(f"CRD base 配置不存在: {base_path}")
+        base_cfg = OmegaConf.load(base_path)
+        if "_base_" in base_cfg:
+            raise ValueError("CRD 配置只允许一层 _base_，禁止递归继承")
+        cfg = OmegaConf.merge(base_cfg, cfg)
     if overrides:
         cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(list(overrides)))
     OmegaConf.resolve(cfg)

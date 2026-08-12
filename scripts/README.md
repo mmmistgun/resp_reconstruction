@@ -906,26 +906,42 @@ done
 
 ### CRD-TF v1 P4 完整 formal matrix
 
-用户已确认完整 45-run。提交后先执行无 GPU 的计划预检：
+用户已确认完整 45-run，但每项独立运行，不使用统一队列入口。每个 arm 有独立 formal 配置；以下示例运行 CTRL1 的第一个 seed：
 
 ```bash
-./.venv/bin/python scripts/run_crd_tf_v1_formal_matrix.py --dry-run
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_tf_v1/crd_tf_ctrl1_formal.yaml \
+  --set training.seed=20260811
 ```
 
-正式长任务建议在 `tmux` 中启动，唯一允许的训练入口为：
+同一 arm 的其余 seed 只替换最后一项：
 
 ```bash
-./.venv/bin/python scripts/run_crd_tf_v1_formal_matrix.py \
-  --confirm-45-run-matrix
+--set training.seed=20260812
+--set training.seed=20260813
 ```
 
-只读查看进度：
+15 个独立配置按协议第 19 节顺序为：
 
-```bash
-./.venv/bin/python scripts/status_crd_tf_v1_formal_matrix.py
+```text
+crd_tf_ctrl1_formal.yaml
+crd_tf101_m_formal.yaml
+crd_tf102_w_formal.yaml
+crd_tf103_l_formal.yaml
+crd_tf104_s_formal.yaml
+crd_tf_ctrl2_formal.yaml
+crd_tf201_mw_formal.yaml
+crd_tf202_ml_formal.yaml
+crd_tf203_ms_formal.yaml
+crd_tf204_wl_formal.yaml
+crd_tf205_ws_formal.yaml
+crd_tf206_ls_formal.yaml
+crd_tf_ctrl3_formal.yaml
+crd_tf301_mls_formal.yaml
+crd_tf302_wls_formal.yaml
 ```
 
-Runner 自动跳过已完整完成项。若状态报告失败或中断，先返回错误和 state 路径进行审计；未经审计不要传重试参数。确认后分别使用 `--retry-failed` 或 `--retry-interrupted` 从头重跑当前项，旧 partial 目录不会覆盖。P4 期间不得根据中间 validation 数值停止剩余 arm；全部 45 项完成前不得执行 P5。
+每项完成后把打印的 run 目录返回审计，再手动启动下一项。失败或中断时先返回错误；重跑不会覆盖旧 timestamp 目录。不得根据中间 validation 数值删减剩余 arm；全部 45 项完成前不得执行 P5。
 
 ## 固定呼吸带传统基线
 

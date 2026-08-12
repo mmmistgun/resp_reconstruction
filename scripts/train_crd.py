@@ -11,6 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 from resp_train.config import check_required_packages
 from resp_train.crd.config import check_crd_dependencies, load_crd_config
 from resp_train.crd.experiment import CRDExperiment
+from resp_train.crd.model import CRD_TF_VARIANTS
 
 
 def main() -> None:
@@ -22,6 +23,10 @@ def main() -> None:
     if problems:
         raise SystemExit("CRD 环境不满足冻结要求: " + "; ".join(problems))
     cfg = load_crd_config(args.config, overrides=args.overrides)
+    if str(cfg.model.variant) in CRD_TF_VARIANTS and str(cfg.protocol.run_role) == "formal":
+        from resp_train.crd.tf_v1_p4 import validate_p4_formal_preflight
+
+        validate_p4_formal_preflight()
     print(CRDExperiment(cfg).train())
 
 

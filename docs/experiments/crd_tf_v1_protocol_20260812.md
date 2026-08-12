@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0–P3 已完成并冻结；用户已明确授权完整 45-run P4，现只开放统一矩阵 runner。P5 结果汇总与 P6 Fusion 仍未开放**
+状态：**P0–P3 已完成并冻结；用户已授权完整 45-run P4，并要求每个实验独立运行。P5 结果汇总与 P6 Fusion 仍未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -35,7 +35,7 @@
 | P1 | synthetic/input-only calibration、固定表示缓存实现与审计 | 已完成并冻结 | 已完成 |
 | P2 | 模型、配置、汇总器与单测 | 已完成并冻结 | 已完成 |
 | P3 | CUDA synthetic、最大臂 physical-batch acceptance | 已完成并冻结 | 已完成 |
-| P4 | 正式三 seed 全矩阵 | 开放（统一 runner） | 用户已确认完整 45 runs |
+| P4 | 正式三 seed 全矩阵 | 开放（逐项独立运行） | 用户已确认完整 45 runs |
 | P5 | 冻结 validation 汇总与候选选择 | 关闭 | 汇总前不需要主观选模型 |
 | P6 | gated residual / local cross-attention Fusion | 关闭 | P5 后另立协议并确认 |
 
@@ -513,7 +513,7 @@ P3 入口与准入规则如下：
 - `scripts/run_crd_tf_v1_acceptance.py` 只允许 `TF102-W / TF204-WL / TF302-WLS`，严格解析为 `1 epoch / 128 train / 32 validation / physical batch 128 / accumulation 1 / one update / p3_cuda_acceptance`；
 - CRD-TF 的 `train_history.csv` 额外记录同步后的 train elapsed time 与 samples/s；旧 CRD 产物 schema 不变；
 - `scripts/audit_crd_tf_v1_p3.py` 要求 synthetic 与三个 acceptance 来自同一干净 commit，审计 resolved config/cache identity、完整 lifecycle、两个 finite checkpoint、32 条 validation、五项 primary finite、prediction nondegenerate、吞吐和 `peak_reserved_fraction≤0.80`，成功后生成不可覆盖的 P3 receipt。
-- P1–P4 相关非 GPU 定向回归在矩阵 runner 完成后为 `83 passed`，P3/P4 入口的编译与 `--help` 检查通过。
+- P1–P4 相关非 GPU 定向回归在独立 formal configs 完成后为 `93 passed`，P3 入口及通用 `train_crd.py` 编译检查通过。
 
 P3 的运行命令冻结于 `scripts/README.md`。若任一 `128×1` acceptance OOM、非有限、生命周期失败或显存比例超过 80%，停止并由用户在 `64×2` 与 `32×4` 中确认统一 fallback；不得自行只调整失败 variant。P3 结果只作工程证据。
 
@@ -567,26 +567,22 @@ runs/crd_tf_v1/formal/<variant>/seed_<seed>/
 
 P3 至此关闭。用户随后明确选择“完整”矩阵，授权 45-run P4；执行约束见下一节。
 
-## 20. P4 统一 runner 与恢复语义（2026-08-12）
+## 20. P4 独立实验入口（2026-08-12）
 
-P4 只允许以下入口：
+用户明确拒绝把 45 个实验编排成统一入口。P4 因此不提供队列 runner、matrix state、自动跳过或自动重试；15 个 arm 各有一个独立 `configs/crd_tf_v1/*_formal.yaml`，三个 seed 分别由通用入口执行。配置只做一层同目录 `_base_` 合并以避免重复 90 余行冻结字段，resolved config 仍接受完整 strict schema 审计。
 
-```text
-scripts/run_crd_tf_v1_formal_matrix.py --confirm-45-run-matrix
-```
-
-Runner 在任何 GPU 工作前强制：工作树干净、P3 receipt SHA/identity 合格、P3 后模型/数据/训练关键文件无 diff、45 个 strict resolved config 全部通过。矩阵 identity 绑定当前 commit、P3 receipt、arm/seed 顺序、`80 epochs / 128×1 / early_stopping=false / cuda:0` 与固定输出根；状态原子写入：
+每个实验的固定形式为：
 
 ```text
-runs/crd_tf_v1/formal_matrix/<matrix_id>/matrix_state.json
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_tf_v1/<arm>_formal.yaml \
+  --set training.seed=<20260811|20260812|20260813>
 ```
 
-同一 matrix 使用文件锁禁止并发 runner。正常重启会审计并跳过产物完整的 completed runs；failed 或 interrupted run 不会自动重跑，分别要求显式 `--retry-failed` 或 `--retry-interrupted`，且旧 partial run 保留、重试从头生成新目录。任何单项异常立即停止整个队列，不继续消耗后续 arms。状态可由 `scripts/status_crd_tf_v1_formal_matrix.py` 只读查看。
-
-正式输出保持：
+`model.initialization_seed` 与输出 seed 目录均引用 `training.seed`，无需额外 override。`train_crd.py` 会在每个独立 formal run 前强制工作树干净、P3 receipt SHA/identity 合格、P3 后模型/数据/训练关键实现无变化。正式输出保持：
 
 ```text
 runs/crd_tf_v1/formal/<variant>/seed_<seed>/<timestamp>/
 ```
 
-运行期间不得根据 validation 数值暂停、删臂、改变顺序或调整 early stopping/batch/LR。P4 全部完成后只开放预注册 P5 一次性审计与汇总，不自动开放 research-test 或 P6。
+独立运行意味着失败只影响当前 run，也不存在隐藏的批量恢复状态。失败或中断时保留 partial 目录并先审计；重跑相同 config/seed 会自然创建新 timestamp 目录，不覆盖历史结果。研究计划仍是完整 45 项，运行期间不得根据 validation 数值删臂或调整 early stopping/batch/LR。P4 全部完成后只开放预注册 P5 一次性审计与汇总，不自动开放 research-test 或 P6。

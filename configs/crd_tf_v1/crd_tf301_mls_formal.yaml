@@ -1,0 +1,6 @@
+_base_: crd_tf101_m_smoke.yaml
+protocol: {run_role: formal, execution_gate: p4_formal}
+data: {max_train_windows: null, max_val_windows: null, max_test_windows: null}
+model: {variant: crd_tf301_mls, tf_representations: [m, l, s]}
+training: {epochs: 80, batch_size: 128, gradient_accumulation_steps: 1, device: 'cuda:0', show_progress: false}
+outputs: {run_root: '/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf301_mls/seed_${training.seed}'}
