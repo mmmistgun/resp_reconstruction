@@ -2042,11 +2042,11 @@ C2 冻结 summary 随后从干净 commit `6e893a300cf683e6e0de8be7998799cabafaf3
 
 新阶段保持数据、admission、train/validation split、target、正式 `Pi`、`L_sync + 0.25 L_effort`、五项 primary、Local-RR selector 和三个 seed 不变，只研究输入 BCG 的四类表示：multi-resolution STFT、analytic Morlet CWT、learnable analytic carrier-modulation filterbank 与固定 WSST ridge。M/W/S 允许只从 train/validation 输入预计算不可覆盖 cache；L 最终特征保持可学习，只允许复用固定 input spectrum。任何 cache 均不得读取 target 或 research-test。
 
-Stage-1 预注册为 12 个 representation arms 加 `CTRL1/2/3`，共 15 个新 variant、45 个 formal runs；single 结果不得关闭 pair/triple。若统一 physical batch 从 `128×1` 回退到 `64×2` 或 `32×4`，必须新增同 batch 的 C201 三 seed control，总规模变为 48 runs。P0/P1/P2 已完成；当前只开放用户执行 P3 工程验收，不授权 P4 正式训练。
+Stage-1 预注册为 12 个 representation arms 加 `CTRL1/2/3`，共 15 个新 variant、45 个 formal runs；single 结果不得关闭 pair/triple。若统一 physical batch 从 `128×1` 回退到 `64×2` 或 `32×4`，必须新增同 batch 的 C201 三 seed control，总规模变为 48 runs。P0–P3 已完成；当前等待用户确认 P4 的 45-run 成本，不授权提前执行正式训练。
 
 对 54 个既有完整 CRD formal histories 的回顾显示 selected epoch median 为 13、`43/54` 不晚于 25，但最大为 72；patience 20/30 的回放分别会错过 4/2 个历史全局 Local-RR 最佳。因此本 Stage-1 继续固定 80 epochs、关闭 early stopping、保留 Local-RR best checkpoint，不同时引入新的停止变量。Optimizer/LR 默认沿用 80×128×1、AdamW、`3e-4→3e-5`、5% warmup + exact cosine；梯度累计只作为全矩阵统一显存 fallback，不允许按 variant 临时改变。
 
-P3 CUDA/physical-batch acceptance 现只向用户开放；P4 三 seed formal、P5 冻结汇总与 P6 gated/cross-attention Fusion 继续关闭。只有附件第 12 节验收项全部完成、精确参数/缓存/batch/命令写回、工作树在统一干净 commit，且用户明确确认长时间 GPU 队列后，才可由本节后续修订开放 P4。P5 即使形成候选也不自动开放 research-test；强泛化证据需新的锁定 cohort、外部数据或 prospective holdout。
+P3 CUDA/physical-batch acceptance 已完成；P4 三 seed formal、P5 冻结汇总与 P6 gated/cross-attention Fusion 继续关闭。只有附件第 12 节工程项全部完成、精确参数/缓存/batch/命令写回、工作树在统一干净 commit，且用户明确确认长时间 GPU 队列后，才可由本节后续修订开放 P4。P5 即使形成候选也不自动开放 research-test；强泛化证据需新的锁定 cohort、外部数据或 prospective holdout。
 
 用户随后接受默认 `runs/crd_tf_v1/cache/` 与新增 `CTRL3` 后的 45-run 设计。P1 已实现 M/W/S 固定表示、L learnable modulation/固定 input-spectrum cache、synthetic calibration、只允许 train/validation 的不可覆盖 cache builder 和定向测试；`10 passed`，M/L 轻量 synthetic 检查通过。完整 W/S calibration 与约 4 GiB 全量 cache 尚未运行；入口要求干净工作树，运行完成且结果写回前 P2–P6 状态不变。
 
@@ -2057,3 +2057,5 @@ P2 随后在 commit `4d53444` 完成：实现冻结 cache reader、M/W/L/S encod
 首次 P3 CUDA synthetic 的 15 项虽均报告 finite，但准入审计发现新增 TF temporal mixer 错误继承通用 CRD block 的 `Dropout(0.10)`，违反附件冻结的新增 encoder dropout=0。该 receipt 作废且未开放 acceptance；修订仅将新增 TF mixer dropout 固定为 0，C201 主干和所有科学口径不变，须从修订后的新干净 commit 重跑全矩阵 synthetic。
 
 Dropout 修订后的 15-arm CUDA synthetic 全部通过，但最大 single TF102-W 的首轮 `128×1` acceptance 虽完成完整生命周期，peak reserved 为 `14,488/15,936 MiB=90.91%`，超过 80% 工程线，故判定失败并停止 pair/triple。按附件已预注册的 activation-checkpoint 优先路径，新增 TF representation/control branch 训练态固定按 sample 轴 `chunk=8` 做 non-reentrant checkpoint，eval 不分块；该修订不改变数学输出、参数、C201、effective batch 或 LR，并须从新干净 commit 重跑 synthetic 与 TF102。只有该路径仍不满足 80% 时才由用户决定统一 `64×2` 或 `32×4` fallback。
+
+上述修订后，commit `56cabf1d37fa01104902b6aeaef3d256bee6b2a1` 的 15-arm CUDA synthetic 与 TF102-W / TF204-WL / TF302-WLS 三项 `128×1` acceptance 全部通过；最大 peak reserved fraction 为 TF302 的 `64.76%`，最低单-update lifecycle throughput 为 `7.361 samples/s`。统一 P3 receipt SHA-256 为 `d68790e5db45ce65f60a17badab535196a913466176b7ac52a5cac4910f49f14`，固定 batch 决策为 `128×1`，不触发 fallback 或 TF000 batch control。P3 至此关闭；45-run 顺序、三个 seed 和输出根目录已在附件第 19 节冻结，P4 仍等待用户明确确认成本，config gate 继续拒绝 formal。

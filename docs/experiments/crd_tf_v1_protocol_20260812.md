@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0/P1/P2 已完成并冻结；P3 验收入口已实现，现仅开放由用户在目标 GPU 上执行 P3，P4 正式训练、P5 结果汇总与 P6 Fusion 仍未开放**
+状态：**P0–P3 已完成并冻结；最终 physical batch 固定为 `128×1`。P4 正式训练等待用户明确确认 45-run 成本，P5 结果汇总与 P6 Fusion 仍未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -34,7 +34,7 @@
 | P0 | C201 candidate lock、精确数学/决策冻结 | 已完成并冻结 | 已完成 |
 | P1 | synthetic/input-only calibration、固定表示缓存实现与审计 | 已完成并冻结 | 已完成 |
 | P2 | 模型、配置、汇总器与单测 | 已完成并冻结 | 已完成 |
-| P3 | CUDA synthetic、最大臂 physical-batch acceptance | 开放（仅工程验收） | 当前由用户执行 |
+| P3 | CUDA synthetic、最大臂 physical-batch acceptance | 已完成并冻结 | 已完成 |
 | P4 | 正式三 seed 全矩阵 | 关闭 | 必须明确确认规模与运行顺序 |
 | P5 | 冻结 validation 汇总与候选选择 | 关闭 | 汇总前不需要主观选模型 |
 | P6 | gated residual / local cross-attention Fusion | 关闭 | P5 后另立协议并确认 |
@@ -403,9 +403,9 @@ P4 只有在以下全部完成后才可由主协议明确开放：
 - [x] 相同 seed shared C201 state 与 zero-init waveform identity 通过；
 - [x] online-vs-cache 与 L cached-spectrum gradient 等价测试通过；
 - [x] CPU 结构/配置/汇总器定向测试通过；
-- [ ] CUDA synthetic 与统一 physical-batch acceptance 通过；
-- [ ] 精确 trainable params、显存、吞吐和最终 `128×1` 或 fallback 决策写回；
-- [ ] 15 个 variant × 3 seeds 的固定命令、输出根目录与运行顺序冻结；
+- [x] CUDA synthetic 与统一 physical-batch acceptance 通过；
+- [x] 精确 trainable params、显存、吞吐和最终 `128×1` 决策写回；
+- [x] 15 个 variant × 3 seeds 的固定命令、输出根目录与运行顺序冻结；
 - [ ] 用户明确授权正式长时间 GPU 队列。
 
 任何 P3 acceptance 数值都只作工程证据，不形成模型效果结论。正式 run 必须来自包含最终协议、缓存身份和实现的统一干净 commit；中断 run 不凭已有 best checkpoint 纳入比较。
@@ -503,17 +503,17 @@ P2 已实现并冻结以下工程契约：
 - P5 汇总逻辑已预先实现为纯函数：formal matrix 完整性闸门、逐 paired-seed 二阶/三阶 interaction、mean/sample-SD/方向计数、base guardrail、实质改善和 tolerance-aware Pareto；当前不得对未产生的 P4 结果执行选择；
 - 定向回归共 `60 passed`，新增 P2 data/model/selection 测试单独为 `15 passed`；Python 编译检查通过。CPU 测试只证明结构、身份和数据契约，不构成训练效果或目标 GPU 可运行性的证据。
 
-P2 至此关闭。P3 仍需目标 GPU 上的 CUDA synthetic 与统一 physical-batch acceptance；未经用户当次明确授权不由 Codex 启动。P3 通过并写回显存、吞吐与 batch 决策之前，P4 保持关闭。
+P2 至此关闭；其后的 P3 实现、失败修订与最终结果见下文。P4 在用户明确确认正式矩阵成本前保持关闭。
 
 ## 18. P3 工程验收入口（2026-08-12）
 
-P3 入口已实现，但尚无 GPU 结果：
+P3 入口与准入规则如下：
 
 - `scripts/check_crd_tf_v1_cuda.py` 在同一干净 commit 下依次检查全部 15 个 variant 的新增 encoder dropout=0、bf16 batch-1 forward/core-loss/backward、input/全部 parameter gradient finite、每个 active branch 最终 projection gradient 非零、精确 trainable increment 与 CUDA peak memory，并生成不可覆盖 receipt；
 - `scripts/run_crd_tf_v1_acceptance.py` 只允许 `TF102-W / TF204-WL / TF302-WLS`，严格解析为 `1 epoch / 128 train / 32 validation / physical batch 128 / accumulation 1 / one update / p3_cuda_acceptance`；
 - CRD-TF 的 `train_history.csv` 额外记录同步后的 train elapsed time 与 samples/s；旧 CRD 产物 schema 不变；
 - `scripts/audit_crd_tf_v1_p3.py` 要求 synthetic 与三个 acceptance 来自同一干净 commit，审计 resolved config/cache identity、完整 lifecycle、两个 finite checkpoint、32 条 validation、五项 primary finite、prediction nondegenerate、吞吐和 `peak_reserved_fraction≤0.80`，成功后生成不可覆盖的 P3 receipt。
-- P1–P3 相关非 GPU 定向回归在 branch checkpoint 修订后为 `73 passed`，三个入口的编译与 `--help` 检查通过；最终同 commit 的 CUDA 与 batch-128 证据尚未产生。
+- P1–P3 相关非 GPU 定向回归在 branch checkpoint 修订后为 `73 passed`，三个入口的编译与 `--help` 检查通过。
 
 P3 的运行命令冻结于 `scripts/README.md`。若任一 `128×1` acceptance OOM、非有限、生命周期失败或显存比例超过 80%，停止并由用户在 `64×2` 与 `32×4` 中确认统一 fallback；不得自行只调整失败 variant。P3 结果只作工程证据。
 
@@ -522,3 +522,47 @@ P3 的运行命令冻结于 `scripts/README.md`。若任一 `128×1` acceptance 
 Dropout 修订后的 synthetic receipt `6b24125aef52_20260812_131401_247126` 在 RTX 4070 Ti SUPER 上 15/15 通过，dropout/finite/projection-gradient/参数增量契约均合格。随后最大 single `TF102-W` 的首轮 `128×1` acceptance 完成一次 update 与完整 validation/checkpoint lifecycle，但 peak allocated/reserved 为 `13,318.60/14,488 MiB`，reserved fraction `90.91%`，超过 80% 安全线，因此 run `20260812_131604_764333` 判定为工程失败，pair/triple 未启动，validation 数值不作解释。
 
 该失败仍处于第 11.3 节预注册的“先用 chunking/activation checkpoint 争取 128×1”路径。为避免 W/L 等 branch 的 parameter-fill、temporal mixer 和 encoder 在 batch 128 下保留完整中间 activation，所有新增 representation/control branch 在训练态按 physical-batch 固定 `chunk=8`，使用 non-reentrant activation checkpoint 重算；eval 不分块。分块按 sample 轴，branch 内无 BatchNorm/dropout，数学输出与梯度的 CPU 等价测试通过，不改变 C201 主干、参数量、effective batch、update/LR 或表示。修订后必须在新干净 commit 重跑 15-arm synthetic 与 TF102 acceptance；在结果通过前仍不启动 pair/triple，也不触发梯度累计 fallback。
+
+## 19. P3 冻结结果与 P4 命令计划（2026-08-12）
+
+最终 P3 全部来自干净 commit `56cabf1d37fa01104902b6aeaef3d256bee6b2a1`。15-arm synthetic receipt 为：
+
+```text
+runs/crd_tf_v1/p3_cuda_synthetic/56cabf1d37fa_20260812_132151_006146/synthetic_receipt.json
+SHA-256 = 071dc0143084093b58944c076b1336f7a324a9bb769fb63ae5ad52f36ba1992a
+```
+
+15/15 arm 的 dropout=0、bf16 output/input/parameter-gradient finite、active projection gradient nonzero、waveform shape 和参数增量全部通过。最终三个 `128×1` acceptance 均完成一次 update、32 条 validation、best/final finite checkpoint、五项 primary finite和 prediction nondegenerate：
+
+| arm | trainable increment | total trainable | peak allocated MiB | peak reserved MiB | reserved fraction | lifecycle throughput samples/s |
+|---|---:|---:|---:|---:|---:|---:|
+| TF102-W | 150,048 | 1,219,850 | 8,752.67 | 10,112 | 63.45% | 7.543 |
+| TF204-WL | 299,952 | 1,369,754 | 8,847.58 | 10,222 | 64.14% | 7.421 |
+| TF302-WLS | 450,000 | 1,519,802 | 8,934.71 | 10,320 | 64.76% | 7.361 |
+
+这里的 throughput 是独立单-update lifecycle 的冷启动工程值，不外推为 80-epoch 稳态速度。最大 reserved fraction 为 `64.76%`，因此 batch 决策冻结为 `physical_batch=128 / accumulation=1 / effective_batch=128`，不触发 fallback，也不新增 TF000 batch control。统一审计为：
+
+```text
+runs/crd_tf_v1/p3_acceptance_audit/0b4af9bd0c1c6441460702ad893cc5713f8ce3578cc055e51e86e60ad285234e/p3_acceptance.json
+SHA-256 = d68790e5db45ce65f60a17badab535196a913466176b7ac52a5cac4910f49f14
+status=passed, complete=true, research_test_used=false
+```
+
+P4 固定按 seed 外层、arm 内层运行；任何中间效果不得删减后续 arm：
+
+| 顺序 | variant | reps | matched group |
+|---:|---|---|---|
+| 1 | `crd_tf_ctrl1` | none | single capacity |
+| 2–5 | `crd_tf101_m`, `crd_tf102_w`, `crd_tf103_l`, `crd_tf104_s` | M, W, L, S | singles |
+| 6 | `crd_tf_ctrl2` | none | pair capacity |
+| 7–12 | `crd_tf201_mw`, `crd_tf202_ml`, `crd_tf203_ms`, `crd_tf204_wl`, `crd_tf205_ws`, `crd_tf206_ls` | MW, ML, MS, WL, WS, LS | pairs |
+| 13 | `crd_tf_ctrl3` | none | triple capacity |
+| 14–15 | `crd_tf301_mls`, `crd_tf302_wls` | MLS, WLS | triples |
+
+Seed 顺序固定为 `20260811 → 20260812 → 20260813`，共 45 runs。未来每个 resolved command 固定为 `80 epochs / 128×1 / early_stopping=false / cuda:0`，输出根目录固定为：
+
+```text
+runs/crd_tf_v1/formal/<variant>/seed_<seed>/
+```
+
+为防止误启动，当前 config gate 仍故意拒绝 `p4_formal`。只有用户明确确认 45-run 长时间成本后，才允许单独提交 gate-only P4 runner；该 runner 必须由上述表生成 variant/reps，不允许手填漂移，并要求显式 `--confirm-45-run-matrix`。P3 至此关闭。
