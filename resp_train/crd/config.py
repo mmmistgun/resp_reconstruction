@@ -8,7 +8,7 @@ from typing import Any
 
 from omegaconf import DictConfig, OmegaConf
 
-from resp_train.crd.model import CRD_C1_VARIANTS, CRD_C2_VARIANTS, CRD_VARIANTS
+from resp_train.crd.model import CRD_C1_VARIANTS, CRD_C2_VARIANTS, CRD_TF_VARIANTS, CRD_VARIANTS
 
 
 CRD_PROTOCOL_VERSION = "crd-v1.1-s0-s1-20260808"
@@ -21,6 +21,11 @@ CRD_102_FAILURE_DIAGNOSTIC_PROTOCOL_VERSION = "crd-v1.1-crd102-failure-diagnosti
 CRD_102_FAILURE_METADATA_PROTOCOL_VERSION = "crd-v1.1-crd102-failure-metadata-20260811"
 CRD_102_MATCHED_OBSERVABILITY_PROTOCOL_VERSION = "crd-v1.1-crd102-matched-observability-20260811"
 CRD_CONTROLS_PROTOCOL_VERSION = "crd-v1.1-controls-research-informed-20260811"
+CRD_TF_PROTOCOL_VERSION = "crd-tf-v1-research-informed-20260812"
+CRD_TF_CACHE_PATH = (
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/"
+    "bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0"
+)
 CRD_DIAGNOSTIC_VARIANTS = {
     "crd_103_direct_local_mamba",
     "crd_105_direct_coarse",
@@ -135,7 +140,9 @@ def _validate_crd_config(cfg: DictConfig) -> None:
     variant = str(cfg.model.variant).lower()
     if variant not in CRD_VARIANTS:
         raise ValueError(f"未知 CRD variant={variant!r}；可选 {list(CRD_VARIANTS)}")
-    if variant in CRD_C1_VARIANTS:
+    if variant in CRD_TF_VARIANTS:
+        expected_stage = "tf"
+    elif variant in CRD_C1_VARIANTS:
         expected_stage = "c1"
     elif variant in CRD_C2_VARIANTS:
         expected_stage = "c2"
@@ -145,7 +152,9 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         expected_stage = "s2br"
     else:
         expected_stage = "s0" if variant.startswith("crd_00") else "s1"
-    if variant in CRD_C1_VARIANTS | CRD_C2_VARIANTS:
+    if variant in CRD_TF_VARIANTS:
+        expected_protocol = CRD_TF_PROTOCOL_VERSION
+    elif variant in CRD_C1_VARIANTS | CRD_C2_VARIANTS:
         expected_protocol = CRD_CONTROLS_PROTOCOL_VERSION
     elif variant in CRD_DIAGNOSTIC_VARIANTS:
         expected_protocol = CRD_DIAGNOSTIC_PROTOCOL_VERSION
@@ -226,6 +235,17 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         "training.drop_last": False,
         "training.resume": False,
     }
+    if variant in CRD_TF_VARIANTS:
+        from resp_train.crd.tf_v1_model import TF_VARIANT_REPRESENTATIONS
+
+        frozen.update(
+            {
+                "protocol.execution_gate": "p2_cpu_only",
+                "data.tf_cache_path": CRD_TF_CACHE_PATH,
+                "model.tf_representations": list(TF_VARIANT_REPRESENTATIONS[variant]),
+                "training.early_stopping_enabled": False,
+            }
+        )
     for key, expected in frozen.items():
         _assert_equal(cfg, key, expected)
 
@@ -258,6 +278,11 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         },
         "outputs": {"run_root"},
     }
+    if variant in CRD_TF_VARIANTS:
+        allowed_keys["protocol"].add("execution_gate")
+        allowed_keys["data"].add("tf_cache_path")
+        allowed_keys["model"].add("tf_representations")
+        allowed_keys["training"].add("early_stopping_enabled")
     top_level = set(cfg.keys())
     if top_level != set(allowed_keys):
         raise ValueError(f"CRD 配置顶层 section 必须是 {sorted(allowed_keys)}，当前为 {sorted(top_level)}")
@@ -276,6 +301,11 @@ def _validate_crd_config(cfg: DictConfig) -> None:
     epochs = int(cfg.training.epochs)
     batch_size = int(cfg.training.batch_size)
     accumulation = int(cfg.training.gradient_accumulation_steps)
+    if variant in CRD_TF_VARIANTS:
+        if str(cfg.protocol.execution_gate) != "p2_cpu_only":
+            raise ValueError("CRD-TF P2 execution_gate 必须为 p2_cpu_only")
+        if role != "smoke" or str(cfg.training.device) != "cpu":
+            raise ValueError("CRD-TF P2 只允许 smoke + CPU；P3/P4 尚未开放")
     maxima = [cfg.data.get(name) for name in ("max_train_windows", "max_val_windows", "max_test_windows")]
     if role == "formal":
         if (epochs, batch_size, accumulation) != (80, 128, 1):

@@ -11,6 +11,8 @@ from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from tqdm.auto import tqdm
 
+from resp_train.crd.tf_v1_data import batch_tf_to_device
+
 
 def train_one_epoch(
     model: nn.Module,
@@ -44,9 +46,12 @@ def train_one_epoch(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
+        tf = batch_tf_to_device(batch, resolved_device, non_blocking=non_blocking)
+        if sst is not None and tf is not None:
+            raise RuntimeError("同一 batch 不允许同时包含旧 sst 与 CRD-TF cache")
         optimizer.zero_grad(set_to_none=True)
         with torch.amp.autocast(resolved_device.type, enabled=amp_enabled):
-            pred = model(sensor, sst=sst) if sst is not None else model(sensor)
+            pred = _forward_with_optional_features(model, sensor, sst=sst, tf=tf)
             loss, parts = loss_fn(pred, target)
         if amp_enabled:
             scaler.scale(loss).backward()
@@ -101,12 +106,15 @@ def validate(
     for batch in progress:
         sensor, target = _move_batch(batch, resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
+        tf = batch_tf_to_device(batch, resolved_device, non_blocking=non_blocking)
+        if sst is not None and tf is not None:
+            raise RuntimeError("同一 batch 不允许同时包含旧 sst 与 CRD-TF cache")
         with torch.amp.autocast(
             resolved_device.type,
             dtype=torch.bfloat16,
             enabled=amp_enabled,
         ):
-            raw_pred = model(sensor, sst=sst) if sst is not None else model(sensor)
+            raw_pred = _forward_with_optional_features(model, sensor, sst=sst, tf=tf)
         loss, parts = loss_fn(raw_pred, target)
         meter.update(loss, parts, batch_size=sensor.size(0))
         if return_predictions:
@@ -182,12 +190,15 @@ def collect_predictions(
             raise KeyError("batch 必须包含 meta")
         x = batch["x"].to(resolved_device, non_blocking=non_blocking)
         sst = _batch_sst(batch, resolved_device, non_blocking=non_blocking)
+        tf = batch_tf_to_device(batch, resolved_device, non_blocking=non_blocking)
+        if sst is not None and tf is not None:
+            raise RuntimeError("同一 batch 不允许同时包含旧 sst 与 CRD-TF cache")
         with torch.amp.autocast(
             resolved_device.type,
             dtype=torch.bfloat16,
             enabled=amp_enabled,
         ):
-            raw_pred = model(x, sst=sst) if sst is not None else model(x)
+            raw_pred = _forward_with_optional_features(model, x, sst=sst, tf=tf)
         # NumPy 不支持 torch.bfloat16；评价统一落到 float32，旧 float32 路径数值不变。
         pred = _waveform_output(raw_pred).float().detach().cpu().numpy()
         target = batch["target"].detach().cpu().numpy()
@@ -312,6 +323,16 @@ def _batch_sst(batch: Mapping[str, torch.Tensor], device: torch.device, *, non_b
     if sst is None:
         return None
     return sst.to(device, non_blocking=non_blocking)
+
+
+def _forward_with_optional_features(model, sensor, *, sst=None, tf=None):
+    if sst is not None and tf is not None:
+        raise RuntimeError("同一 batch 不允许同时包含旧 sst 与 CRD-TF cache")
+    if tf is not None:
+        return model(sensor, tf=tf)
+    if sst is not None:
+        return model(sensor, sst=sst)
+    return model(sensor)
 
 
 def _waveform_output(output: Any) -> torch.Tensor:

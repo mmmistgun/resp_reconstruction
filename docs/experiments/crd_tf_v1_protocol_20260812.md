@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0/P1 已完成并冻结；现只开放 P2 模型/配置/汇总器实现与 CPU 定向测试，P3 GPU 验收、P4 正式训练、P5 汇总与 P6 Fusion 均未开放**
+状态：**P0/P1/P2 已完成并冻结；下一步仅可在用户明确授权或由用户执行时开展 P3 GPU 验收，P4 正式训练、P5 结果汇总与 P6 Fusion 仍未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -33,7 +33,7 @@
 |---|---|---|---|
 | P0 | C201 candidate lock、精确数学/决策冻结 | 已完成并冻结 | 已完成 |
 | P1 | synthetic/input-only calibration、固定表示缓存实现与审计 | 已完成并冻结 | 已完成 |
-| P2 | 模型、配置、汇总器与单测 | 开放 | 无 GPU 时不需要 |
+| P2 | 模型、配置、汇总器与单测 | 已完成并冻结 | 已完成 |
 | P3 | CUDA synthetic、最大臂 physical-batch acceptance | 关闭 | 必须明确授权或由用户执行 |
 | P4 | 正式三 seed 全矩阵 | 关闭 | 必须明确确认规模与运行顺序 |
 | P5 | 冻结 validation 汇总与候选选择 | 关闭 | 汇总前不需要主观选模型 |
@@ -186,7 +186,7 @@ z' = z * (1 + Σ 0.5*tanh(gamma_r)) + Σ 0.5*tanh(beta_r)
 
 求和只遍历当前 variant 存在的 branch。不得在 P4 同时比较 pre-Mamba、decoder-feature、gated 或 attention 融合。
 
-每个 representation branch（包含 L 的 48 个 filter logits）总 trainable increment 必须落在共同目标预算 `P_branch` 的 ±2% 内；P2 实现完成后把精确 `P_branch` 和每支参数数写回本文。若做不到，P4 继续阻塞，不能用宽泛的 `100k–150k` 代替参数匹配。
+每个 representation branch（包含 L 的 48 个 filter logits）总 trainable increment 必须落在共同目标预算 `P_branch=150,000` 的 ±2% 内。P2 冻结的精确 trainable increment 为：M `149,984`、W `150,048`、L `149,904`、S `150,048`、每个 temporal-only control stack `149,952`。所有 parameter-fill 模块均参与 forward，不允许 inert 参数凑数。
 
 ## 7. 固定表示缓存
 
@@ -397,12 +397,12 @@ updates_per_epoch = 80
 P4 只有在以下全部完成后才可由主协议明确开放：
 
 - [x] 新 C201 candidate lock 生成且身份审计通过；
-- [ ] M/W/L/S 数学与 S calibration parameters 全部冻结；
-- [ ] train/validation fixed cache 完整、不可覆盖、hash/row-id/finite 审计通过；
-- [ ] 四个 single、最大 pair、两个 triple、CTRL1/2/3 参数与 forward 契约通过；
-- [ ] 相同 seed shared C201 state 与 zero-init waveform identity 通过；
-- [ ] online-vs-cache 与 L cached-spectrum gradient 等价测试通过；
-- [ ] CPU 结构/配置/汇总器定向测试通过；
+- [x] M/W/L/S 数学与 S calibration parameters 全部冻结；
+- [x] train/validation fixed cache 完整、不可覆盖、hash/row-id/finite 审计通过；
+- [x] 四个 single、六个 pair、两个 triple、CTRL1/2/3 参数与 forward 契约通过；
+- [x] 相同 seed shared C201 state 与 zero-init waveform identity 通过；
+- [x] online-vs-cache 与 L cached-spectrum gradient 等价测试通过；
+- [x] CPU 结构/配置/汇总器定向测试通过；
 - [ ] CUDA synthetic 与统一 physical-batch acceptance 通过；
 - [ ] 精确 trainable params、显存、吞吐和最终 `128×1` 或 fallback 决策写回；
 - [ ] 15 个 variant × 3 seeds 的固定命令、输出根目录与运行顺序冻结；
@@ -490,4 +490,17 @@ Cache 审计结果：
 
 运行环境的 distribution metadata 报告 `PyWavelets=1.9.0`，而 `pywt.__version__` 为 `1.8.0`；本阶段 W/S 实际使用并冻结的是 `ssqueezepy==0.6.6`，没有直接导入 `pywt`，因此该环境元数据差异不改变本 cache 数值，但作为复现环境已知异常保留，不把 PyWavelets 版本解释为变换 identity。
 
-P1 至此关闭，calibration/cache 不得覆盖或重复生成。现在只开放 P2 的 branch encoder、FiLM、CTRL1/2/3、cache loader、严格 config 与冻结汇总器实现及 CPU 定向测试；P3–P6 状态不变。
+P1 至此关闭，calibration/cache 不得覆盖或重复生成。
+
+## 17. P2 实现与冻结结果（2026-08-12）
+
+P2 已实现并冻结以下工程契约：
+
+- `TfV1CacheReader` 只允许 train/validation，通过冻结 manifest SHA-256、transform identity、row-id hash/order、文件 size/shape/dtype/finite receipt 读取 memory-map；只打开当前 variant 所需表示，CTRL1/2/3 不读取 cache；
+- M/W/L/S 四个 encoder、统一 Stage-1 additive FiLM，以及只读 C201 temporal latent 的 CTRL1/2/3 已接入；各 branch 最终 gamma/beta projection 为严格 zero-init；
+- C201 拆分为 `encode_local`/`decode_local`，相同 seed 的 CRD-TF 内部 base 与独立 C201 state 逐 tensor 完全一致，隔离原生 Mamba 后的 zero-init waveform 逐 tensor 完全一致；
+- 15 个 variant 的 representation/control 映射、严格配置 schema、固定 cache path 与 `p2_cpu_only` execution gate 已实现；P2 配置显式 `early_stopping_enabled=false`；
+- P5 汇总逻辑已预先实现为纯函数：formal matrix 完整性闸门、逐 paired-seed 二阶/三阶 interaction、mean/sample-SD/方向计数、base guardrail、实质改善和 tolerance-aware Pareto；当前不得对未产生的 P4 结果执行选择；
+- 定向回归共 `60 passed`，新增 P2 data/model/selection 测试单独为 `15 passed`；Python 编译检查通过。CPU 测试只证明结构、身份和数据契约，不构成训练效果或目标 GPU 可运行性的证据。
+
+P2 至此关闭。P3 仍需目标 GPU 上的 CUDA synthetic 与统一 physical-batch acceptance；未经用户当次明确授权不由 Codex 启动。P3 通过并写回显存、吞吐与 batch 决策之前，P4 保持关闭。

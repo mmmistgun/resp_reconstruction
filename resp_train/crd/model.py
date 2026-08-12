@@ -27,6 +27,24 @@ from resp_train.models.stft_branch import TimeStftDual1D
 from resp_train.models.timeseries import PatchMixer1D
 
 
+CRD_TF_VARIANTS = (
+    "crd_tf101_m",
+    "crd_tf102_w",
+    "crd_tf103_l",
+    "crd_tf104_s",
+    "crd_tf201_mw",
+    "crd_tf202_ml",
+    "crd_tf203_ms",
+    "crd_tf204_wl",
+    "crd_tf205_ws",
+    "crd_tf206_ls",
+    "crd_tf301_mls",
+    "crd_tf302_wls",
+    "crd_tf_ctrl1",
+    "crd_tf_ctrl2",
+    "crd_tf_ctrl3",
+)
+
 CRD_VARIANTS = (
     "crd_001_b0_retrain",
     "crd_002_t4_retrain",
@@ -46,6 +64,7 @@ CRD_VARIANTS = (
     "crd_c101_b0_local_tcn",
     "crd_c201_decoder_10hz_cap",
     "crd_c202_decoder_100hz",
+    *CRD_TF_VARIANTS,
 )
 
 CRD_S2A_VARIANTS = {
@@ -259,6 +278,13 @@ class CRDCoarseModel(nn.Module):
 
     def forward(self, x: torch.Tensor, **_: Any) -> dict[str, torch.Tensor]:
         _validate_input(x)
+        latent = self.encode_local(x)
+        return self.decode_local(latent)
+
+    def encode_local(self, x: torch.Tensor) -> torch.Tensor:
+        """执行 frontend 与 local/global trunk，返回 refinement 前的 10-Hz latent。"""
+
+        _validate_input(x)
         latent = self.frontend(x)
         if latent.shape[1:] != (96, 1800):
             raise RuntimeError(f"CRD frontend 输出契约错误: {tuple(latent.shape)}")
@@ -296,6 +322,15 @@ class CRDCoarseModel(nn.Module):
             latent = block(latent)
         if self.global_stage is not None:
             latent = self.global_stage(latent)
+        return latent
+
+    def decode_local(self, latent: torch.Tensor) -> dict[str, torch.Tensor]:
+        """执行冻结 refinement 与 decoder；供 CRD-TF 在二者之间插入 FiLM。"""
+
+        if latent.ndim != 3 or latent.shape[1:] != (96, 1800):
+            raise ValueError(f"CRD decode_local 期望 (B,96,1800)，实际 {tuple(latent.shape)}")
+        if not torch.isfinite(latent).all():
+            raise FloatingPointError("CRD decode_local latent 包含 NaN/Inf")
         latent = self.refinement(latent)
         if self.variant not in CRD_C2_VARIANTS:
             waveform_10hz = self.head(latent)
@@ -339,6 +374,10 @@ def build_crd_model(cfg: Any) -> nn.Module:
         return LegacyB0Retrain(initialization_seed)
     if variant == "crd_002_t4_retrain":
         return LegacyT4Retrain(initialization_seed)
+    if variant in CRD_TF_VARIANTS:
+        from resp_train.crd.tf_v1_model import CRDTfV1Model
+
+        return CRDTfV1Model(variant, initialization_seed)
     if variant in CRD_VARIANTS[2:]:
         return CRDCoarseModel(variant, initialization_seed)
     raise ValueError(f"未知 CRD variant={variant!r}；可选 {list(CRD_VARIANTS)}")

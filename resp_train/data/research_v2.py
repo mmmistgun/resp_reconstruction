@@ -72,6 +72,22 @@ class ResearchV2WindowDataset(Dataset):
             ids = blob["row_ids"].astype(np.int64)
             sst = blob["sst"].astype(np.float32)
             self._sst_cache = {int(r): sst[i] for i, r in enumerate(ids)}
+        self._tf_v1_cache = None
+        tf_cache_path = cfg.data.get("tf_cache_path", None)
+        representations = cfg.model.get("tf_representations", [])
+        if tf_cache_path and representations:
+            from resp_train.crd.tf_v1_data import TfV1CacheReader
+
+            splits = set(self.rows["split"].astype(str).unique().tolist())
+            if len(splits) != 1:
+                raise ValueError(f"CRD-TF dataset 必须只含单一 split，实际 {sorted(splits)}")
+            split = next(iter(splits))
+            self._tf_v1_cache = TfV1CacheReader(
+                str(tf_cache_path),
+                split=split,
+                representations=representations,
+            )
+            self._tf_v1_cache.verify_rows(self.rows["dataset_row_id"].astype(int).tolist())
         self._preloaded: list[dict[str, Any]] | None = None
         if preload_windows:
             indices = _preload_indices(
@@ -134,6 +150,8 @@ class ResearchV2WindowDataset(Dataset):
             if row_id not in self._sst_cache:
                 raise KeyError(f"SST 缓存缺少 dataset_row_id={row_id}，请确认预计算覆盖全量窗口")
             item["sst"] = torch.from_numpy(self._sst_cache[row_id].copy())
+        if self._tf_v1_cache is not None:
+            item["tf"] = self._tf_v1_cache.get(int(row["dataset_row_id"]))
         return item
 
     def _rr_peak_valid_mask(self, row: pd.Series, start: int, end: int) -> np.ndarray:

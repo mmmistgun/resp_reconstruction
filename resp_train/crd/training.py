@@ -13,6 +13,7 @@ from torch import nn
 from tqdm.auto import tqdm
 
 from resp_train.crd.blocks import CustomRMSNorm
+from resp_train.crd.tf_v1_data import batch_tf_to_device
 from resp_train.losses.task import RespirationTaskLoss
 
 
@@ -197,12 +198,12 @@ def train_crd_one_epoch(
 
     for raw_group in progress:
         prepared = [_prepare_batch(batch, resolved_device, non_blocking=non_blocking) for batch in raw_group]
-        group_batch_size = sum(int(sensor.shape[0]) for sensor, _, _ in prepared)
+        group_batch_size = sum(int(sensor.shape[0]) for sensor, _, _, _ in prepared)
         if group_batch_size <= 0:
             raise ValueError("accumulation group 不得为空 batch")
         group_counts = {"loss_sync_count": 0, "loss_effort_count": 0}
         prepared_counts: list[dict[str, int]] = []
-        for _, target, _ in prepared:
+        for _, target, _, _ in prepared:
             with torch.amp.autocast(resolved_device.type, enabled=False):
                 counts = loss_fn.target_component_counts(target.float())
             micro_counts = {key: int(counts[key].item()) for key in group_counts}
@@ -213,13 +214,20 @@ def train_crd_one_epoch(
         optimizer.zero_grad(set_to_none=True)
         group_regularizer: torch.Tensor | None = None
         group_ramp: float | None = None
-        for (sensor, target, sst), expected_counts in zip(prepared, prepared_counts):
+        for (sensor, target, sst, tf), expected_counts in zip(prepared, prepared_counts):
             with torch.amp.autocast(
                 resolved_device.type,
                 dtype=torch.bfloat16,
                 enabled=amp_enabled,
             ):
-                prediction = model(sensor, sst=sst) if sst is not None else model(sensor)
+                if sst is not None and tf is not None:
+                    raise RuntimeError("同一 CRD batch 不允许同时包含旧 sst 与 CRD-TF cache")
+                if tf is not None:
+                    prediction = model(sensor, tf=tf)
+                elif sst is not None:
+                    prediction = model(sensor, sst=sst)
+                else:
+                    prediction = model(sensor)
             with torch.amp.autocast(resolved_device.type, enabled=False):
                 components = loss_fn.differentiable_component_sums(prediction, target.float())
                 _validate_component_counts(components, expected_counts)
@@ -296,7 +304,7 @@ def _prepare_batch(
     device: torch.device,
     *,
     non_blocking: bool,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, dict[str, torch.Tensor] | None]:
     try:
         sensor = batch["x"].to(device, non_blocking=non_blocking)
         target = batch["target"].to(device, non_blocking=non_blocking)
@@ -305,7 +313,8 @@ def _prepare_batch(
     sst = batch.get("sst")
     if sst is not None:
         sst = sst.to(device, non_blocking=non_blocking)
-    return sensor, target, sst
+    tf = batch_tf_to_device(batch, device, non_blocking=non_blocking)
+    return sensor, target, sst, tf
 
 
 def _normalized_component(numerator: torch.Tensor, count: int) -> torch.Tensor:
