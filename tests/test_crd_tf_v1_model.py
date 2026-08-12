@@ -13,9 +13,12 @@ from resp_train.crd.tf_v1_model import (
     P_BRANCH_TARGET,
     P_BRANCH_TOLERANCE,
     CRDTfV1Model,
+    SstRidgeBranch,
+    TF_BRANCH_CHECKPOINT_BATCH_CHUNK,
     TF_CONTROL_COUNT,
     TF_VARIANT_REPRESENTATIONS,
     TemporalCapacityBranch,
+    _checkpointed_mapping_branch,
     trainable_parameter_count,
 )
 
@@ -69,6 +72,27 @@ def test_all_new_tf_encoders_freeze_dropout_at_zero(branch_factory) -> None:
     dropout = [module for module in branch.modules() if isinstance(module, torch.nn.Dropout)]
     assert dropout
     assert all(module.p == 0.0 for module in dropout)
+
+
+def test_training_batch_checkpoint_preserves_branch_output_and_gradients() -> None:
+    direct = SstRidgeBranch().train()
+    with torch.no_grad():
+        direct.final_projection.weight.normal_(std=1e-3)
+    chunked = deepcopy(direct).train()
+    features = {"s": torch.randn(TF_BRANCH_CHECKPOINT_BATCH_CHUNK + 1, 12, 360)}
+
+    direct_output = direct(features)
+    chunked_output = _checkpointed_mapping_branch(chunked, features)
+    sum(value.square().mean() for value in direct_output).backward()
+    sum(value.square().mean() for value in chunked_output).backward()
+
+    for observed, expected in zip(chunked_output, direct_output):
+        torch.testing.assert_close(observed, expected, rtol=1e-5, atol=1e-6)
+    direct_parameters = dict(direct.named_parameters())
+    for name, parameter in chunked.named_parameters():
+        assert parameter.grad is not None
+        assert direct_parameters[name].grad is not None
+        torch.testing.assert_close(parameter.grad, direct_parameters[name].grad, rtol=1e-4, atol=1e-6)
 
 
 def test_all_fifteen_variants_have_frozen_representation_or_control_contract() -> None:

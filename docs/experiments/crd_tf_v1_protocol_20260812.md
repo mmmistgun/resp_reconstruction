@@ -513,8 +513,12 @@ P3 入口已实现，但尚无 GPU 结果：
 - `scripts/run_crd_tf_v1_acceptance.py` 只允许 `TF102-W / TF204-WL / TF302-WLS`，严格解析为 `1 epoch / 128 train / 32 validation / physical batch 128 / accumulation 1 / one update / p3_cuda_acceptance`；
 - CRD-TF 的 `train_history.csv` 额外记录同步后的 train elapsed time 与 samples/s；旧 CRD 产物 schema 不变；
 - `scripts/audit_crd_tf_v1_p3.py` 要求 synthetic 与三个 acceptance 来自同一干净 commit，审计 resolved config/cache identity、完整 lifecycle、两个 finite checkpoint、32 条 validation、五项 primary finite、prediction nondegenerate、吞吐和 `peak_reserved_fraction≤0.80`，成功后生成不可覆盖的 P3 receipt。
-- P1–P3 相关非 GPU 定向回归在 dropout 修订后为 `72 passed`，三个入口的编译与 `--help` 检查通过；有效的 CUDA 与 batch-128 证据尚未产生。
+- P1–P3 相关非 GPU 定向回归在 branch checkpoint 修订后为 `73 passed`，三个入口的编译与 `--help` 检查通过；最终同 commit 的 CUDA 与 batch-128 证据尚未产生。
 
 P3 的运行命令冻结于 `scripts/README.md`。若任一 `128×1` acceptance OOM、非有限、生命周期失败或显存比例超过 80%，停止并由用户在 `64×2` 与 `32×4` 中确认统一 fallback；不得自行只调整失败 variant。P3 结果只作工程证据。
 
 首次 CUDA synthetic receipt `3353c538b0ac_20260812_130914_034001` 的 15 项计算均 finite，但在结果准入审计时发现新增 TF `_TemporalMixer` 继承了通用 `ResidualDWBlock` 的 `Dropout(0.10)`，违反第 6 节“新增 encoder dropout=0”的冻结定义。该 receipt 明确作废，不进入 P3 工程证据，也不据此启动 acceptance；修订只把新增 TF mixer 的 dropout 固定为 0，不改变 C201 主干、参数量、表示、FiLM、数据或训练口径，修订提交后必须从新干净 commit 重跑全部 15 项 synthetic。
+
+Dropout 修订后的 synthetic receipt `6b24125aef52_20260812_131401_247126` 在 RTX 4070 Ti SUPER 上 15/15 通过，dropout/finite/projection-gradient/参数增量契约均合格。随后最大 single `TF102-W` 的首轮 `128×1` acceptance 完成一次 update 与完整 validation/checkpoint lifecycle，但 peak allocated/reserved 为 `13,318.60/14,488 MiB`，reserved fraction `90.91%`，超过 80% 安全线，因此 run `20260812_131604_764333` 判定为工程失败，pair/triple 未启动，validation 数值不作解释。
+
+该失败仍处于第 11.3 节预注册的“先用 chunking/activation checkpoint 争取 128×1”路径。为避免 W/L 等 branch 的 parameter-fill、temporal mixer 和 encoder 在 batch 128 下保留完整中间 activation，所有新增 representation/control branch 在训练态按 physical-batch 固定 `chunk=8`，使用 non-reentrant activation checkpoint 重算；eval 不分块。分块按 sample 轴，branch 内无 BatchNorm/dropout，数学输出与梯度的 CPU 等价测试通过，不改变 C201 主干、参数量、effective batch、update/LR 或表示。修订后必须在新干净 commit 重跑 15-arm synthetic 与 TF102 acceptance；在结果通过前仍不启动 pair/triple，也不触发梯度累计 fallback。

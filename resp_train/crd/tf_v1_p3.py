@@ -18,7 +18,12 @@ import torch
 from resp_train.crd.config import CRD_TF_CACHE_PATH, CRD_TF_PROTOCOL_VERSION, load_crd_config
 from resp_train.crd.model import CRDCoarseModel, build_crd_model
 from resp_train.crd.tf_v1_data import FROZEN_CACHE_MANIFEST_SHA256, FROZEN_CACHE_TRANSFORM_SHA256
-from resp_train.crd.tf_v1_model import TF_VARIANT_REPRESENTATIONS, TF_VARIANTS, trainable_parameter_count
+from resp_train.crd.tf_v1_model import (
+    TF_BRANCH_CHECKPOINT_BATCH_CHUNK,
+    TF_VARIANT_REPRESENTATIONS,
+    TF_VARIANTS,
+    trainable_parameter_count,
+)
 from resp_train.losses.task import RespirationTaskLoss
 from resp_train.utils.run import resolve_device, set_seed
 
@@ -74,6 +79,7 @@ def run_cuda_synthetic_matrix(
             "device": str(device),
             "device_name": torch.cuda.get_device_name(device),
             "seed": P3_SYNTHETIC_SEED,
+            "tf_branch_checkpoint_batch_chunk": TF_BRANCH_CHECKPOINT_BATCH_CHUNK,
             "cache_transform_sha256": FROZEN_CACHE_TRANSFORM_SHA256,
             "cache_manifest_sha256": FROZEN_CACHE_MANIFEST_SHA256,
             "expected_variants": list(TF_VARIANTS),
@@ -236,6 +242,7 @@ def audit_p3_acceptance(
         or synthetic.get("status") != "passed"
         or synthetic.get("complete") is not True
         or synthetic.get("git_dirty") is not False
+        or synthetic.get("tf_branch_checkpoint_batch_chunk") != TF_BRANCH_CHECKPOINT_BATCH_CHUNK
         or [row.get("variant") for row in synthetic.get("results", [])] != list(TF_VARIANTS)
         or not all(row.get("status") == "passed" for row in synthetic.get("results", []))
         or not all(row.get("all_new_encoder_dropout_zero") is True for row in synthetic.get("results", []))

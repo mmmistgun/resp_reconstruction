@@ -78,6 +78,7 @@ def test_p3_audit_accepts_complete_same_commit_engineering_receipts(tmp_path: Pa
                 "complete": True,
                 "git_commit": commit,
                 "git_dirty": False,
+                "tf_branch_checkpoint_batch_chunk": 8,
                 "results": [
                     {"variant": variant, "status": "passed", "all_new_encoder_dropout_zero": True}
                     for variant in TF_VARIANTS

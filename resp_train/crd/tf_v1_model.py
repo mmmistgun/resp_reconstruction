@@ -6,6 +6,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 from resp_train.crd.blocks import ResidualDWBlock
 from resp_train.crd.initialization import module_seed
@@ -15,6 +16,7 @@ from resp_train.crd.tf_v1_features import LearnableCarrierModulation
 
 P_BRANCH_TARGET = 150_000
 P_BRANCH_TOLERANCE = 0.02
+TF_BRANCH_CHECKPOINT_BATCH_CHUNK = 8
 
 TF_VARIANT_REPRESENTATIONS: dict[str, tuple[str, ...]] = {
     "crd_tf101_m": ("m",),
@@ -280,14 +282,15 @@ class CRDTfV1Model(nn.Module):
         if self.representations:
             if tf is None or set(tf) != expected_keys:
                 raise ValueError(f"{self.tf_variant} 要求 TF keys={sorted(expected_keys)}，实际={sorted(tf or {})}")
-            for branch in self.branches.values():
-                gamma, beta = branch(tf)
+            for name, branch in self.branches.items():
+                branch_features = {key: tf[key] for key in _expected_feature_keys((name,))}
+                gamma, beta = _checkpointed_mapping_branch(branch, branch_features)
                 gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
                 beta_sum = beta_sum + 0.5 * torch.tanh(beta)
         elif tf not in (None, {}):
             raise ValueError(f"{self.tf_variant} capacity control 不得读取 TF cache")
         for branch in self.controls:
-            gamma, beta = branch(latent)
+            gamma, beta = _checkpointed_tensor_branch(branch, latent)
             gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
             beta_sum = beta_sum + 0.5 * torch.tanh(beta)
         conditioned = latent * (1.0 + gamma_sum) + beta_sum
@@ -330,3 +333,47 @@ def _expected_feature_keys(representations: tuple[str, ...]) -> set[str]:
         else:
             keys.add(name)
     return keys
+
+
+def _checkpointed_mapping_branch(
+    branch: nn.Module,
+    features: Mapping[str, torch.Tensor],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """训练态按 physical-batch 分块重算完整 TF branch，降低中间 activation 峰值。"""
+
+    keys = tuple(sorted(features))
+    batch_size = int(features[keys[0]].shape[0])
+    if not branch.training or batch_size <= TF_BRANCH_CHECKPOINT_BATCH_CHUNK:
+        return branch(features)
+    outputs: list[tuple[torch.Tensor, torch.Tensor]] = []
+    for start in range(0, batch_size, TF_BRANCH_CHECKPOINT_BATCH_CHUNK):
+        stop = min(start + TF_BRANCH_CHECKPOINT_BATCH_CHUNK, batch_size)
+        chunks = tuple(features[key][start:stop] for key in keys)
+
+        def run(*values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+            return branch(dict(zip(keys, values)))
+
+        outputs.append(checkpoint(run, *chunks, use_reentrant=False, preserve_rng_state=False))
+    gamma = torch.cat([output[0] for output in outputs], dim=0)
+    beta = torch.cat([output[1] for output in outputs], dim=0)
+    return gamma, beta
+
+
+def _checkpointed_tensor_branch(
+    branch: nn.Module,
+    latent: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if not branch.training or int(latent.shape[0]) <= TF_BRANCH_CHECKPOINT_BATCH_CHUNK:
+        return branch(latent)
+    outputs = [
+        checkpoint(
+            branch,
+            latent[start : start + TF_BRANCH_CHECKPOINT_BATCH_CHUNK],
+            use_reentrant=False,
+            preserve_rng_state=False,
+        )
+        for start in range(0, int(latent.shape[0]), TF_BRANCH_CHECKPOINT_BATCH_CHUNK)
+    ]
+    gamma = torch.cat([output[0] for output in outputs], dim=0)
+    beta = torch.cat([output[1] for output in outputs], dim=0)
+    return gamma, beta

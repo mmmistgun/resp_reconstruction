@@ -2055,3 +2055,5 @@ P1 随后由用户在干净 commit `6d16976010324c73b4c3b7aa9e313fd7f0d358c4` �
 P2 随后在 commit `4d53444` 完成：实现冻结 cache reader、M/W/L/S encoder、统一 zero-init FiLM、CTRL1/2/3、15-arm 严格配置和预注册汇总纯函数；共同 branch 预算为 `150,000±2%`，定向回归 `60 passed`。P3 入口随后实现为全 15-arm CUDA synthetic 和固定最大 single/pair/triple `TF102-W / TF204-WL / TF302-WLS` 的独立 batch-128 acceptance，并预注册同 commit 完整性、finite checkpoint/metrics、prediction degeneracy、吞吐与 peak reserved `≤80%` 审计。P3 尚未产生 GPU 结果，P4–P6 继续关闭。
 
 首次 P3 CUDA synthetic 的 15 项虽均报告 finite，但准入审计发现新增 TF temporal mixer 错误继承通用 CRD block 的 `Dropout(0.10)`，违反附件冻结的新增 encoder dropout=0。该 receipt 作废且未开放 acceptance；修订仅将新增 TF mixer dropout 固定为 0，C201 主干和所有科学口径不变，须从修订后的新干净 commit 重跑全矩阵 synthetic。
+
+Dropout 修订后的 15-arm CUDA synthetic 全部通过，但最大 single TF102-W 的首轮 `128×1` acceptance 虽完成完整生命周期，peak reserved 为 `14,488/15,936 MiB=90.91%`，超过 80% 工程线，故判定失败并停止 pair/triple。按附件已预注册的 activation-checkpoint 优先路径，新增 TF representation/control branch 训练态固定按 sample 轴 `chunk=8` 做 non-reentrant checkpoint，eval 不分块；该修订不改变数学输出、参数、C201、effective batch 或 LR，并须从新干净 commit 重跑 synthetic 与 TF102。只有该路径仍不满足 80% 时才由用户决定统一 `64×2` 或 `32×4` fallback。
