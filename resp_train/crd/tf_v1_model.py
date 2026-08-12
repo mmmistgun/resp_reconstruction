@@ -107,7 +107,11 @@ class _ConditionBranch(nn.Module):
 class _TemporalMixer(nn.Module):
     def __init__(self, block_count: int = 3) -> None:
         super().__init__()
-        self.blocks = nn.Sequential(*(ResidualDWBlock(96, dilation=2**index) for index in range(block_count)))
+        blocks = [ResidualDWBlock(96, dilation=2**index) for index in range(block_count)]
+        # CRD 主干保留既有 dropout；CRD-TF 协议仅冻结所有新增 encoder 的 dropout=0。
+        for block in blocks:
+            block.dropout = nn.Dropout(0.0)
+        self.blocks = nn.Sequential(*blocks)
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
         return self.blocks(value)

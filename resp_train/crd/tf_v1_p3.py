@@ -98,6 +98,9 @@ def _run_one_synthetic(config_path: str | Path, variant: str, device: torch.devi
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats(device)
     model = build_crd_model(cfg).to(device).train()
+    new_encoder_dropout_zero = _new_encoder_dropout_is_zero(model)
+    if not new_encoder_dropout_zero:
+        raise RuntimeError(f"{variant} 新增 TF encoder dropout 不为 0")
     loss_fn = RespirationTaskLoss(cfg).to(device)
     target, sensor, features = _synthetic_batch(device, representations)
     started = time.perf_counter()
@@ -134,6 +137,7 @@ def _run_one_synthetic(config_path: str | Path, variant: str, device: torch.devi
         "effort_eligible": int(components["loss_effort_count"].item()),
         "all_output_input_parameter_gradients_finite": all_finite,
         "all_branch_final_projection_gradients_nonzero": branch_projection_nonzero,
+        "all_new_encoder_dropout_zero": new_encoder_dropout_zero,
         "trainable_parameters": trainable_parameter_count(model),
         "incremental_parameters_vs_c201": trainable_parameter_count(model) - _c201_parameter_count(),
         "elapsed_seconds": elapsed,
@@ -180,6 +184,17 @@ def _branch_projection_gradients_nonzero(model: torch.nn.Module) -> bool:
     )
 
 
+def _new_encoder_dropout_is_zero(model: torch.nn.Module) -> bool:
+    branches = list(model.branches.values()) + list(model.controls)
+    dropout = [
+        module
+        for branch in branches
+        for module in branch.modules()
+        if isinstance(module, torch.nn.Dropout)
+    ]
+    return bool(dropout and all(module.p == 0.0 for module in dropout))
+
+
 @lru_cache(maxsize=1)
 def _c201_parameter_count() -> int:
     # initialization seed 不改变参数数量；矩阵内只构造一次 CPU reference。
@@ -223,6 +238,7 @@ def audit_p3_acceptance(
         or synthetic.get("git_dirty") is not False
         or [row.get("variant") for row in synthetic.get("results", [])] != list(TF_VARIANTS)
         or not all(row.get("status") == "passed" for row in synthetic.get("results", []))
+        or not all(row.get("all_new_encoder_dropout_zero") is True for row in synthetic.get("results", []))
     ):
         raise RuntimeError("CRD-TF P3 synthetic receipt 不合格")
     expected_commit = str(synthetic["git_commit"])

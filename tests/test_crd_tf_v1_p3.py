@@ -78,7 +78,10 @@ def test_p3_audit_accepts_complete_same_commit_engineering_receipts(tmp_path: Pa
                 "complete": True,
                 "git_commit": commit,
                 "git_dirty": False,
-                "results": [{"variant": variant, "status": "passed"} for variant in TF_VARIANTS],
+                "results": [
+                    {"variant": variant, "status": "passed", "all_new_encoder_dropout_zero": True}
+                    for variant in TF_VARIANTS
+                ],
             }
         ),
         encoding="utf-8",

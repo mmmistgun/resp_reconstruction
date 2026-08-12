@@ -63,6 +63,14 @@ def test_temporal_control_is_active_and_parameter_matched() -> None:
     assert torch.count_nonzero(branch.input_projection.weight.grad) > 0
 
 
+@pytest.mark.parametrize("branch_factory", (*BRANCH_TYPES.values(), TemporalCapacityBranch))
+def test_all_new_tf_encoders_freeze_dropout_at_zero(branch_factory) -> None:
+    branch = branch_factory()
+    dropout = [module for module in branch.modules() if isinstance(module, torch.nn.Dropout)]
+    assert dropout
+    assert all(module.p == 0.0 for module in dropout)
+
+
 def test_all_fifteen_variants_have_frozen_representation_or_control_contract() -> None:
     assert len(TF_VARIANT_REPRESENTATIONS) == 15
     assert set(TF_CONTROL_COUNT) == {"crd_tf_ctrl1", "crd_tf_ctrl2", "crd_tf_ctrl3"}

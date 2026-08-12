@@ -509,10 +509,12 @@ P2 至此关闭。P3 仍需目标 GPU 上的 CUDA synthetic 与统一 physical-b
 
 P3 入口已实现，但尚无 GPU 结果：
 
-- `scripts/check_crd_tf_v1_cuda.py` 在同一干净 commit 下依次检查全部 15 个 variant 的 bf16 batch-1 forward/core-loss/backward、input/全部 parameter gradient finite、每个 active branch 最终 projection gradient 非零、精确 trainable increment 与 CUDA peak memory，并生成不可覆盖 receipt；
+- `scripts/check_crd_tf_v1_cuda.py` 在同一干净 commit 下依次检查全部 15 个 variant 的新增 encoder dropout=0、bf16 batch-1 forward/core-loss/backward、input/全部 parameter gradient finite、每个 active branch 最终 projection gradient 非零、精确 trainable increment 与 CUDA peak memory，并生成不可覆盖 receipt；
 - `scripts/run_crd_tf_v1_acceptance.py` 只允许 `TF102-W / TF204-WL / TF302-WLS`，严格解析为 `1 epoch / 128 train / 32 validation / physical batch 128 / accumulation 1 / one update / p3_cuda_acceptance`；
 - CRD-TF 的 `train_history.csv` 额外记录同步后的 train elapsed time 与 samples/s；旧 CRD 产物 schema 不变；
 - `scripts/audit_crd_tf_v1_p3.py` 要求 synthetic 与三个 acceptance 来自同一干净 commit，审计 resolved config/cache identity、完整 lifecycle、两个 finite checkpoint、32 条 validation、五项 primary finite、prediction nondegenerate、吞吐和 `peak_reserved_fraction≤0.80`，成功后生成不可覆盖的 P3 receipt。
-- P1–P3 相关非 GPU 定向回归为 `67 passed`，三个入口的编译与 `--help` 检查通过；CUDA 与 batch-128 本身尚未执行。
+- P1–P3 相关非 GPU 定向回归在 dropout 修订后为 `72 passed`，三个入口的编译与 `--help` 检查通过；有效的 CUDA 与 batch-128 证据尚未产生。
 
 P3 的运行命令冻结于 `scripts/README.md`。若任一 `128×1` acceptance OOM、非有限、生命周期失败或显存比例超过 80%，停止并由用户在 `64×2` 与 `32×4` 中确认统一 fallback；不得自行只调整失败 variant。P3 结果只作工程证据。
+
+首次 CUDA synthetic receipt `3353c538b0ac_20260812_130914_034001` 的 15 项计算均 finite，但在结果准入审计时发现新增 TF `_TemporalMixer` 继承了通用 `ResidualDWBlock` 的 `Dropout(0.10)`，违反第 6 节“新增 encoder dropout=0”的冻结定义。该 receipt 明确作废，不进入 P3 工程证据，也不据此启动 acceptance；修订只把新增 TF mixer 的 dropout 固定为 0，不改变 C201 主干、参数量、表示、FiLM、数据或训练口径，修订提交后必须从新干净 commit 重跑全部 15 项 synthetic。
