@@ -845,22 +845,22 @@ done
 
 ### CRD-TF v1 synthetic calibration 与 fixed cache
 
-当前只开放 P1；规范见 `docs/experiments/crd_tf_v1_protocol_20260812.md`。先在包含实现与协议的干净 commit 上运行 synthetic-only calibration：
+P1 已从干净 commit `6d169760` 完成；规范见 `docs/experiments/crd_tf_v1_protocol_20260812.md`。以下命令只保留 provenance，不得重复运行或覆盖：
 
 ```bash
 ./.venv/bin/python scripts/calibrate_crd_tf_v1.py
 ```
 
-命令会把不可覆盖的 `calibration.json` 写入 `runs/crd_tf_v1/calibration/<calibration_identity_sha256>/`；identity 同时包含数学 spec 与 calibration/feature 实现文件 hash。只有四项全部 `passed=true` 才能构建 cache：
+固定 calibration 为 `runs/crd_tf_v1/calibration/7e29795edc13fe8dc2e12ada8d619c22d0ae19fa8d13feb729d2f9b261fd5535/calibration.json`，四项全部通过，S 参数为 `2.0 / 2`。随后使用的 cache 命令为：
 
 ```bash
 ./.venv/bin/python scripts/build_crd_tf_v1_cache.py \
-  --calibration runs/crd_tf_v1/calibration/<calibration_identity_sha256>/calibration.json
+  --calibration runs/crd_tf_v1/calibration/7e29795edc13fe8dc2e12ada8d619c22d0ae19fa8d13feb729d2f9b261fd5535/calibration.json
 ```
 
-Cache 固定写入 `runs/crd_tf_v1/cache/<transform_sha256>/`，只包含 10141 train + 2675 validation 的 M/W/S 和 L input spectrum，预计约 4 GiB；不读取 target、不生成 test cache。两项均可能耗时，默认由用户执行。当前不得运行 P2 模型、GPU acceptance 或 formal training。
+Cache 已固定写入 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`，只包含 10141 train + 2675 validation 的 M/W/S 和 L input spectrum，共 3.6398 GiB；逐文件 hash/shape/dtype/finite 审计通过，不读取 target、不生成 test cache。当前只开放 P2 CPU 实现；不得运行 GPU acceptance 或 formal training。
 
-仅调试代码路径时可在 dirty tree 生成明确标记为 incomplete 的 partial cache，但它不能进入任何训练：
+以下 partial-cache smoke 也随 P1 关闭，不再运行；命令只说明历史调试接口，任何 partial cache 都不能进入训练：
 
 ```bash
 ./.venv/bin/python scripts/build_crd_tf_v1_cache.py \

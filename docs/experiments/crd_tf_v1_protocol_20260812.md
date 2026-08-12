@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**仅开放 P0 协议/锚点冻结与 P1 固定输入缓存实现；P2 模型实现、P3 GPU 验收、P4 正式训练、P5 汇总与 P6 Fusion 均未自动开放**
+状态：**P0/P1 已完成并冻结；现只开放 P2 模型/配置/汇总器实现与 CPU 定向测试，P3 GPU 验收、P4 正式训练、P5 汇总与 P6 Fusion 均未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -31,9 +31,9 @@
 
 | 阶段 | 内容 | 当前状态 | 用户介入 |
 |---|---|---|---|
-| P0 | C201 candidate lock、精确数学/决策冻结 | 开放 | 文档完成后确认关键取舍 |
-| P1 | synthetic/input-only calibration、固定表示缓存实现与审计 | 开放实现；不默认执行长任务 | 选择缓存盘并授权全量预计算 |
-| P2 | 模型、配置、汇总器与单测 | 关闭，需 P0/P1 登记完成后开放 | 无 GPU 时不需要 |
+| P0 | C201 candidate lock、精确数学/决策冻结 | 已完成并冻结 | 已完成 |
+| P1 | synthetic/input-only calibration、固定表示缓存实现与审计 | 已完成并冻结 | 已完成 |
+| P2 | 模型、配置、汇总器与单测 | 开放 | 无 GPU 时不需要 |
 | P3 | CUDA synthetic、最大臂 physical-batch acceptance | 关闭 | 必须明确授权或由用户执行 |
 | P4 | 正式三 seed 全矩阵 | 关闭 | 必须明确确认规模与运行顺序 |
 | P5 | 冻结 validation 汇总与候选选择 | 关闭 | 汇总前不需要主观选模型 |
@@ -445,7 +445,7 @@ P4 只有在以下全部完成后才可由主协议明确开放：
 - 不在 Stage 1 比较 gated/cross-attention、PCEN、de-shape、complex phase、mother wavelet 或窗口敏感性；
 - 不因 OOM 静默改变单个 variant 的 batch、accumulation、dtype 或缓存精度。
 
-## 16. P0/P1 实现状态（2026-08-12）
+## 16. P0/P1 实现与冻结结果（2026-08-12）
 
 用户已接受默认 cache 根目录 `runs/crd_tf_v1/cache/`、约 4 GiB 起步的存储预算，以及新增 `CTRL3` 后 45 个新 formal runs 的矩阵设计；这只确认协议与未来预算，不等于授权现在启动全量预计算、GPU 或 P4。
 
@@ -456,13 +456,38 @@ P0 candidate lock 已完成。P1 当前实现包括：
 - `resp_train/crd/tf_v1_cache.py`、`scripts/build_crd_tf_v1_cache.py`：只读 input BCG 的 train/validation memory-map cache、candidate-lock/calibration/index/row-id/hash/finite 审计和不可覆盖提交；
 - `tests/test_crd_tf_v1_features.py`、`tests/test_crd_tf_v1_cache.py`：固定 shape/frequency、L cached-spectrum/gradient、双 ridge、非有限拒绝、calibration/cache identity 与 array inventory。
 
-定向测试为 `10 passed`；M/L 的轻量 synthetic 定向检查均通过。完整 W/S calibration、全量 cache、CPU lifecycle、GPU acceptance 和正式训练均未运行。当前工作树含本次实现，完整 calibration/cache 入口会按协议拒绝 dirty tree；下一步需先形成干净 commit，再由用户执行或明确授权：
+定向测试为 `10 passed`；M/L 的轻量 synthetic 定向检查均通过。实现随后提交为干净 commit `6d16976010324c73b4c3b7aa9e313fd7f0d358c4`。
 
-```bash
-./.venv/bin/python scripts/calibrate_crd_tf_v1.py
+完整 synthetic calibration 已由用户从该干净 commit 执行并通过，固定产物为：
 
-./.venv/bin/python scripts/build_crd_tf_v1_cache.py \
-  --calibration runs/crd_tf_v1/calibration/<calibration_identity_sha256>/calibration.json
+```text
+runs/crd_tf_v1/calibration/7e29795edc13fe8dc2e12ada8d619c22d0ae19fa8d13feb729d2f9b261fd5535/calibration.json
+SHA-256: 044494e6c6966a98eb5dc00fb8bee1dcb68539910aeb9d750eb647781da7e3c0
 ```
 
-Calibration 必须 `complete=true / passed=true`；cache builder 会从中读取冻结的 S smoothness/suppression，并只生成 train/validation cache。任一步失败均停留在 P1，不能自动开放 P2。
+Calibration 固定为 `complete=true / passed=true / synthetic_only=true`，`research_test_used=false / validation_target_used=false / real_waveform_used=false`。M/W/L/S 四项均通过；S 冻结选择为：
+
+```text
+smoothness_penalty = 2.0
+suppression_radius_bins = 2
+```
+
+全量 fixed cache 随后由用户从同一干净 commit 执行完成，固定产物为：
+
+```text
+runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/cache_manifest.json
+manifest SHA-256: 6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8
+transform SHA-256: bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0
+```
+
+Cache 审计结果：
+
+- 完整 train/validation 为 `10141 / 2675` windows、`32 / 7` 个 `samp_id`；row-id SHA-256 分别为 `f290e569140a2ff7745cf1a5cfa6a4da943644d76498c9b85517d3ae0702c45e / b68a51b101bb80033c4de18c9c21cdfbb8924d1bfe134330f047617cf3b0915a`，集合交集为 0；
+- 共 14 个 `.npy`/频率文件，逐文件 size、SHA-256、shape、dtype 与 finite 审计全部通过；总字节 `3,908,167,968`，即 `3.6398 GiB`，磁盘占用约 `3.7G`；
+- `research_test_used=false / test_cache_created=false / target_read=false / model_inference_used=false`；
+- config source selector 为 `bcg_rawish_segment_soft_z_key`，索引实际解析到唯一源 key `bcg_rawish_wideband_state_aligned_segment_soft_z`，train/validation 一致；
+- calibration、candidate lock、dataset index、commit 与依赖 identity 均写入 manifest，candidate lock hash 保持不变。
+
+运行环境的 distribution metadata 报告 `PyWavelets=1.9.0`，而 `pywt.__version__` 为 `1.8.0`；本阶段 W/S 实际使用并冻结的是 `ssqueezepy==0.6.6`，没有直接导入 `pywt`，因此该环境元数据差异不改变本 cache 数值，但作为复现环境已知异常保留，不把 PyWavelets 版本解释为变换 identity。
+
+P1 至此关闭，calibration/cache 不得覆盖或重复生成。现在只开放 P2 的 branch encoder、FiLM、CTRL1/2/3、cache loader、严格 config 与冻结汇总器实现及 CPU 定向测试；P3–P6 状态不变。

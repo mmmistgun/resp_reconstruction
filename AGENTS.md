@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与 C0/C1/C2 控制线均已完成并关闭。C0 冻结为 `roundtrip_negligible=true`；C1 固定为 `mamba_retained_control_failure / retain CRD_102`；C2 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 CRD_102 Mamba backbone + `crd_c201_decoder_10hz_cap`。CRD-TF v1 由主协议第 46 节及 `docs/experiments/crd_tf_v1_protocol_20260812.md` 纳入，当前只开放 P0 协议/锚点冻结与 P1 synthetic/fixed-cache 实现；P2 模型、P3 GPU 验收、P4 正式训练、P5 汇总、P6 Fusion 与 research-test 均关闭。TCN+decoder、其他 decoder、S3、旧 gate/auxiliary/final ablation 继续关闭。
+- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与 C0/C1/C2 控制线均已完成并关闭。C0 冻结为 `roundtrip_negligible=true`；C1 固定为 `mamba_retained_control_failure / retain CRD_102`；C2 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 CRD_102 Mamba backbone + `crd_c201_decoder_10hz_cap`。CRD-TF v1 由主协议第 46 节及 `docs/experiments/crd_tf_v1_protocol_20260812.md` 纳入；P0/P1 candidate lock、synthetic calibration 与完整 train/validation fixed cache 已冻结，当前只开放 P2 模型/配置/汇总器实现和 CPU 定向测试。P3 GPU 验收、P4 正式训练、P5 汇总、P6 Fusion 与 research-test 均关闭。TCN+decoder、其他 decoder、S3、旧 gate/auxiliary/final ablation 继续关闭。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -29,7 +29,7 @@
 - CRD_102 C0 decoder round-trip 已完成并冻结；`scripts/audit_crd102_decoder_roundtrip.py` 只保留 provenance，不得重复运行，固定产物位于 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`。
 - CRD C1 formal 与冻结汇总已完成；`scripts/summarize_crd_c1.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。
 - CRD C2 formal、C202 residual diagnostics 与冻结汇总已完成；`scripts/eval_crd_c202_residual_spectrum.py`、`scripts/summarize_crd_c2.py` 及其命令只作 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c2_validation_summary/`。
-- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；C201 candidate lock 与 P1 calibration/cache 代码已实现，下一步只允许在干净 commit 上完成 synthetic calibration 和 train+validation fixed cache，不得生成 test cache、启动 P2 模型、GPU acceptance 或 formal runs。
+- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；P1 calibration/cache 已完整生成并冻结，cache 位于 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`。现在只允许 P2 cache loader、branch encoder、FiLM、CTRL1/2/3、严格配置和冻结汇总器实现及 CPU 定向测试，不得重新生成 cache、启动 GPU acceptance 或 formal runs。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。
