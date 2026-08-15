@@ -2061,3 +2061,5 @@ Dropout 修订后的 15-arm CUDA synthetic 全部通过，但最大 single TF102
 上述修订后，commit `56cabf1d37fa01104902b6aeaef3d256bee6b2a1` 的 15-arm CUDA synthetic 与 TF102-W / TF204-WL / TF302-WLS 三项 `128×1` acceptance 全部通过；最大 peak reserved fraction 为 TF302 的 `64.76%`，最低单-update lifecycle throughput 为 `7.361 samples/s`。统一 P3 receipt SHA-256 为 `d68790e5db45ce65f60a17badab535196a913466176b7ac52a5cac4910f49f14`，固定 batch 决策为 `128×1`，不触发 fallback 或 TF000 batch control。P3 至此关闭；45-run 顺序、三个 seed 和输出根目录已在附件第 19 节冻结，P4 仍等待用户明确确认成本，config gate 继续拒绝 formal。
 
 用户随后明确选择执行“完整”45-run 矩阵，但拒绝把所有实验整理成统一入口。P4 改为 15 个独立 formal arm 配置 × 3 seeds，各自通过通用 `train_crd.py` 单独启动；不实现队列状态机、自动跳过或自动重试。每个 run 仍强制干净 commit/P3 receipt/关键实现 identity，完整 45 项计划、batch/LR/early-stop 与证据约束不变；P5/P6 继续关闭。
+
+P4 随后完成全部 45 个正式 run，总审计确认均来自干净 commit `68b3b85`，每项 80 epochs/6400 updates、2675 条 validation、best/final checkpoint 与 primary/degeneracy 契约合格。TF302-WLS seed 20260811 有一个不含 history/checkpoint/metrics 的早期 incomplete 目录，随后完整重跑有效；partial 保留并须在 P5 exclusion 表显式登记。当前只开放附件第 21 节的一次性 P5 validation 汇总入口，P4 不重跑，research-test/P6 继续关闭。

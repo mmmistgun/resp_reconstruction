@@ -29,7 +29,7 @@
 - CRD_102 C0 decoder round-trip 已完成并冻结；`scripts/audit_crd102_decoder_roundtrip.py` 只保留 provenance，不得重复运行，固定产物位于 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`。
 - CRD C1 formal 与冻结汇总已完成；`scripts/summarize_crd_c1.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。
 - CRD C2 formal、C202 residual diagnostics 与冻结汇总已完成；`scripts/eval_crd_c202_residual_spectrum.py`、`scripts/summarize_crd_c2.py` 及其命令只作 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c2_validation_summary/`。
-- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；P1–P3 已完成并冻结，cache 位于 `runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/`，P3 receipt 位于 `runs/crd_tf_v1/p3_acceptance_audit/0b4af9bd0c1c6441460702ad893cc5713f8ce3578cc055e51e86e60ad285234e/`，最终 batch 为 `128×1`。用户已授权完整 45-run P4，但明确要求每个实验独立运行：只允许 `configs/crd_tf_v1/*_formal.yaml` 配合通用 `scripts/train_crd.py`，不得建立统一矩阵 runner、手工删臂、改 batch/LR/early-stop 或使用中间结果改变剩余计划；P5/P6 仍关闭。
+- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；P1–P3 已冻结，P4 的 15 arms × 3 seeds 已全部完成并通过生命周期审计，训练 commit 固定为 `68b3b85`。WLS seed 20260811 的一个早期 incomplete 目录必须保留并在汇总中显式排除。当前只开放一次性 `scripts/summarize_crd_tf_v1.py` P5 validation 汇总；不得重跑 P4、读取 research-test、提前执行 P6 或手工选择候选。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。

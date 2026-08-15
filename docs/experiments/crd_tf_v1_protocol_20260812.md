@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0–P3 已完成并冻结；用户已授权完整 45-run P4，并要求每个实验独立运行。P5 结果汇总与 P6 Fusion 仍未开放**
+状态：**P0–P4 已完成并冻结；45/45 正式 runs 通过总审计。当前只开放一次性 P5 validation 汇总，P6 Fusion 与 research-test 仍未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -35,8 +35,8 @@
 | P1 | synthetic/input-only calibration、固定表示缓存实现与审计 | 已完成并冻结 | 已完成 |
 | P2 | 模型、配置、汇总器与单测 | 已完成并冻结 | 已完成 |
 | P3 | CUDA synthetic、最大臂 physical-batch acceptance | 已完成并冻结 | 已完成 |
-| P4 | 正式三 seed 全矩阵 | 开放（逐项独立运行） | 用户已确认完整 45 runs |
-| P5 | 冻结 validation 汇总与候选选择 | 关闭 | 汇总前不需要主观选模型 |
+| P4 | 正式三 seed 全矩阵 | 已完成并冻结 | 已完成 |
+| P5 | 冻结 validation 汇总与候选选择 | 开放（一次性脚本） | 不需要用户运行 GPU |
 | P6 | gated residual / local cross-attention Fusion | 关闭 | P5 后另立协议并确认 |
 
 任何 single 的 validation 结果都不得关闭尚未完成的 pair/triple。工程 OOM、非有限、缓存身份错误或实现契约失败可以阻塞对应正式队列，但不能用模型效果结果删减组合。
@@ -513,7 +513,7 @@ P3 入口与准入规则如下：
 - `scripts/run_crd_tf_v1_acceptance.py` 只允许 `TF102-W / TF204-WL / TF302-WLS`，严格解析为 `1 epoch / 128 train / 32 validation / physical batch 128 / accumulation 1 / one update / p3_cuda_acceptance`；
 - CRD-TF 的 `train_history.csv` 额外记录同步后的 train elapsed time 与 samples/s；旧 CRD 产物 schema 不变；
 - `scripts/audit_crd_tf_v1_p3.py` 要求 synthetic 与三个 acceptance 来自同一干净 commit，审计 resolved config/cache identity、完整 lifecycle、两个 finite checkpoint、32 条 validation、五项 primary finite、prediction nondegenerate、吞吐和 `peak_reserved_fraction≤0.80`，成功后生成不可覆盖的 P3 receipt。
-- P1–P4 相关非 GPU 定向回归在独立 formal configs 完成后为 `93 passed`，P3 入口及通用 `train_crd.py` 编译检查通过。
+- P1–P5 相关非 GPU 定向回归在一次性 summarizer 完成后为 `96 passed`，P3/P5 入口及通用 `train_crd.py` 编译检查通过。
 
 P3 的运行命令冻结于 `scripts/README.md`。若任一 `128×1` acceptance OOM、非有限、生命周期失败或显存比例超过 80%，停止并由用户在 `64×2` 与 `32×4` 中确认统一 fallback；不得自行只调整失败 variant。P3 结果只作工程证据。
 
@@ -586,3 +586,23 @@ runs/crd_tf_v1/formal/<variant>/seed_<seed>/<timestamp>/
 ```
 
 独立运行意味着失败只影响当前 run，也不存在隐藏的批量恢复状态。失败或中断时保留 partial 目录并先审计；重跑相同 config/seed 会自然创建新 timestamp 目录，不覆盖历史结果。研究计划仍是完整 45 项，运行期间不得根据 validation 数值删臂或调整 early stopping/batch/LR。P4 全部完成后只开放预注册 P5 一次性审计与汇总，不自动开放 research-test 或 P6。
+
+## 21. P4 完成与 P5 一次性汇总入口（2026-08-15）
+
+P4 最终有 `15 variants × 3 seeds = 45` 个完整正式 run，全部来自干净 training commit `68b3b85df2f18b3dc8ec59e02ac0780f2be42122`，每项均满足 `80 epochs / 6400 updates / 2675 validation samples`、Local-RR checkpoint selector、best/final model+optimizer finite、五项 primary finite和 prediction degeneracy=0。Selected epoch 范围为 `6–36`；最大长期 peak reserved fraction 为 TF302-WLS seed 20260813 的 `82.80%`，该 run 完整稳定结束。
+
+WLS seed 20260811 存在一个早期中断目录：
+
+```text
+runs/crd_tf_v1/formal/crd_tf302_wls/seed_20260811/20260815_101530_938996
+```
+
+它只含 `config.yaml / run_manifest.json / train.log`，没有 history/checkpoint/metrics，明确标记为 `incomplete_lifecycle`；随后同 seed 的完整重跑目录有效。该 partial 不得删除，也不得静默纳入或忽略，必须写入 P5 exclusion 表。
+
+P5 唯一入口为：
+
+```text
+scripts/summarize_crd_tf_v1.py
+```
+
+它从干净 commit 一次性执行：TF000 lock/hash 审计、冻结 cache identity、45-run config/manifest/history/checkpoint/per-sample metrics 审计、partial exclusion、五项 metric 分别聚合、paired-seed 二阶/三阶 interaction、匹配 CTRL capacity qualification、base guardrails 与 tolerance-aware Pareto。不得构造总分，不得用 secondary 打破平局。固定输出为 `runs/crd_tf_v1/p5_validation_summary/`，目录存在即拒绝覆盖。P5 完成前 P6/research-test 保持关闭。

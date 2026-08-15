@@ -943,6 +943,14 @@ crd_tf302_wls_formal.yaml
 
 每项完成后把打印的 run 目录返回审计，再手动启动下一项。失败或中断时先返回错误；重跑不会覆盖旧 timestamp 目录。不得根据中间 validation 数值删减剩余 arm；全部 45 项完成前不得执行 P5。
 
+P4 已完成 45/45。当前唯一允许的 P5 命令为：
+
+```bash
+./.venv/bin/python scripts/summarize_crd_tf_v1.py
+```
+
+输出固定为 `runs/crd_tf_v1/p5_validation_summary/`，存在即拒绝覆盖。脚本会显式排除并登记 WLS seed 20260811 的早期 incomplete 目录；P5 结果冻结前不得执行 research-test 或 P6。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

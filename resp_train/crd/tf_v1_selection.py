@@ -114,6 +114,32 @@ def materially_improves(metric: str, candidate: float, reference: float) -> bool
     return bool((reference - candidate) / denominator >= 0.005)
 
 
+def paired_material_improvement(
+    metric: str,
+    candidate: Sequence[float],
+    reference: Sequence[float],
+) -> dict[str, float | int | bool]:
+    candidate_array = np.asarray(candidate, dtype=np.float64)
+    reference_array = np.asarray(reference, dtype=np.float64)
+    if candidate_array.shape != (3,) or reference_array.shape != (3,):
+        raise ValueError("capacity comparison 必须包含三个 paired seeds")
+    if not np.isfinite(candidate_array).all() or not np.isfinite(reference_array).all():
+        raise FloatingPointError("capacity comparison 包含 NaN/Inf")
+    utility_delta = to_utility(metric, candidate_array) - to_utility(metric, reference_array)
+    direction_count = int(np.sum(utility_delta > 0.0))
+    candidate_mean = float(np.mean(candidate_array))
+    reference_mean = float(np.mean(reference_array))
+    threshold_passed = materially_improves(metric, candidate_mean, reference_mean)
+    return {
+        "candidate_mean": candidate_mean,
+        "reference_mean": reference_mean,
+        "utility_delta_mean": float(np.mean(utility_delta)),
+        "positive_seed_count": direction_count,
+        "threshold_passed": threshold_passed,
+        "passed": bool(threshold_passed and direction_count >= 2),
+    }
+
+
 def tolerance_dominates(candidate: Mapping[str, float], reference: Mapping[str, float]) -> bool:
     """五轴容差支配：所有轴不过容差且至少一轴超过实质改善阈值。"""
 

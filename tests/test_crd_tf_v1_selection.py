@@ -8,6 +8,7 @@ from resp_train.crd.tf_v1_selection import (
     EXPECTED_SEEDS,
     interaction_summary,
     pair_interaction,
+    paired_material_improvement,
     passes_base_guardrails,
     tolerance_dominates,
     tolerance_pareto_set,
@@ -78,3 +79,22 @@ def test_formal_matrix_completeness_gate_is_strict() -> None:
     incomplete[TF_VARIANTS[0]] = list(EXPECTED_SEEDS[:-1])
     with pytest.raises(RuntimeError, match="seeds 不完整"):
         validate_formal_matrix(incomplete)
+
+
+def test_paired_capacity_improvement_requires_threshold_and_two_seed_direction() -> None:
+    passed = paired_material_improvement(
+        "local_rr_mae",
+        candidate=[0.99, 0.98, 1.01],
+        reference=[1.0, 1.0, 1.0],
+    )
+    threshold_only = paired_material_improvement(
+        "signed_pcc",
+        candidate=[0.504, 0.499, 0.499],
+        reference=[0.5, 0.5, 0.5],
+    )
+
+    assert passed["threshold_passed"] is True
+    assert passed["positive_seed_count"] == 2
+    assert passed["passed"] is True
+    assert threshold_only["positive_seed_count"] == 1
+    assert threshold_only["passed"] is False
