@@ -951,6 +951,8 @@ P4 已完成 45/45。当前唯一允许的 P5 命令为：
 
 输出固定为 `runs/crd_tf_v1/p5_validation_summary/`，存在即拒绝覆盖。脚本会显式排除并登记 WLS seed 20260811 的早期 incomplete 目录；P5 结果冻结前不得执行 research-test 或 P6。
 
+P5 已从 commit `c7b65b1` 完成，候选并集固定为 `crd_tf101_m / crd_tf102_w / crd_tf203_ms`。上述 summary 命令现只保留 provenance，不得重复运行；P6 与 research-test 继续关闭。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与 C0/C1/C2 控制线均已完成并关闭。C0 冻结为 `roundtrip_negligible=true`；C1 固定为 `mamba_retained_control_failure / retain CRD_102`；C2 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 CRD_102 Mamba backbone + `crd_c201_decoder_10hz_cap`。CRD-TF v1 由主协议第 46 节及 `docs/experiments/crd_tf_v1_protocol_20260812.md` 纳入；P0/P1 candidate lock、synthetic calibration 与完整 train/validation fixed cache 已冻结，当前只开放 P2 模型/配置/汇总器实现和 CPU 定向测试。P3 GPU 验收、P4 正式训练、P5 汇总、P6 Fusion 与 research-test 均关闭。TCN+decoder、其他 decoder、S3、旧 gate/auxiliary/final ablation 继续关闭。
+- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与 C0/C1/C2 控制线均已完成并关闭。C0 冻结为 `roundtrip_negligible=true`；C1 固定为 `mamba_retained_control_failure / retain CRD_102`；C2 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 CRD_102 Mamba backbone + `crd_c201_decoder_10hz_cap`。CRD-TF v1 P0–P5 亦已完成并关闭，冻结候选池为 `crd_tf101_m / crd_tf102_w / crd_tf203_ms`；证据仅属于 validation-development。P6 Fusion、research-test、TCN+decoder、其他 decoder、S3 与旧 gate/auxiliary/final ablation 均关闭。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -29,7 +29,7 @@
 - CRD_102 C0 decoder round-trip 已完成并冻结；`scripts/audit_crd102_decoder_roundtrip.py` 只保留 provenance，不得重复运行，固定产物位于 `runs/crd_v1/crd_102_decoder_roundtrip_audit/`。
 - CRD C1 formal 与冻结汇总已完成；`scripts/summarize_crd_c1.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。
 - CRD C2 formal、C202 residual diagnostics 与冻结汇总已完成；`scripts/eval_crd_c202_residual_spectrum.py`、`scripts/summarize_crd_c2.py` 及其命令只作 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c2_validation_summary/`。
-- CRD-TF v1 当前规范：`docs/experiments/crd_tf_v1_protocol_20260812.md`；P1–P3 已冻结，P4 的 15 arms × 3 seeds 已全部完成并通过生命周期审计，训练 commit 固定为 `68b3b85`。WLS seed 20260811 的一个早期 incomplete 目录必须保留并在汇总中显式排除。当前只开放一次性 `scripts/summarize_crd_tf_v1.py` P5 validation 汇总；不得重跑 P4、读取 research-test、提前执行 P6 或手工选择候选。
+- CRD-TF v1 P5 已从干净 commit `c7b65b1` 一次性完成，固定产物位于 `runs/crd_tf_v1/p5_validation_summary/`；summary SHA-256 为 `afb6feba1600c9c5e07d713db9cac7c886aa87a033037649d3e9ac32cb753b4e`。Qualified arms 为 M/W/S/MS，未来 P6 候选集合冻结为 M/W/MS；`scripts/summarize_crd_tf_v1.py` 只保留 provenance，不得重复运行。P4/P5/research-test 均关闭，P6 必须由用户另行确认并建立新协议。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。

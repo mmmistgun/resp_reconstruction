@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0–P4 已完成并冻结；45/45 正式 runs 通过总审计。当前只开放一次性 P5 validation 汇总，P6 Fusion 与 research-test 仍未开放**
+状态：**P0–P5 已完成并冻结；P6 Fusion 与 research-test 仍未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -36,7 +36,7 @@
 | P2 | 模型、配置、汇总器与单测 | 已完成并冻结 | 已完成 |
 | P3 | CUDA synthetic、最大臂 physical-batch acceptance | 已完成并冻结 | 已完成 |
 | P4 | 正式三 seed 全矩阵 | 已完成并冻结 | 已完成 |
-| P5 | 冻结 validation 汇总与候选选择 | 开放（一次性脚本） | 不需要用户运行 GPU |
+| P5 | 冻结 validation 汇总与候选选择 | 已完成并冻结 | 已完成 |
 | P6 | gated residual / local cross-attention Fusion | 关闭 | P5 后另立协议并确认 |
 
 任何 single 的 validation 结果都不得关闭尚未完成的 pair/triple。工程 OOM、非有限、缓存身份错误或实现契约失败可以阻塞对应正式队列，但不能用模型效果结果删减组合。
@@ -606,3 +606,34 @@ scripts/summarize_crd_tf_v1.py
 ```
 
 它从干净 commit 一次性执行：TF000 lock/hash 审计、冻结 cache identity、45-run config/manifest/history/checkpoint/per-sample metrics 审计、partial exclusion、五项 metric 分别聚合、paired-seed 二阶/三阶 interaction、匹配 CTRL capacity qualification、base guardrails 与 tolerance-aware Pareto。不得构造总分，不得用 secondary 打破平局。固定输出为 `runs/crd_tf_v1/p5_validation_summary/`，目录存在即拒绝覆盖。P5 完成前 P6/research-test 保持关闭。
+
+## 22. P5 冻结结果（2026-08-15）
+
+P5 已从干净 commit `c7b65b1bf64debacbab2241a9e8095984686a836` 一次性生成，未读取 research-test：
+
+```text
+runs/crd_tf_v1/p5_validation_summary/p5_summary.json
+SHA-256 = afb6feba1600c9c5e07d713db9cac7c886aa87a033037649d3e9ac32cb753b4e
+
+runs/crd_tf_v1/p5_validation_summary/p5_summary_manifest.json
+SHA-256 = cecd35d862cc975cf7d99af9ad18fce4576ddb6b9aa561ad88322e3888992a65
+```
+
+审计固定为 `45 formal + 3 TF000 anchor`，并显式排除 1 个 incomplete WLS 目录。通过 base guardrail 与匹配 capacity-control 实质改善门槛的 arms 为：
+
+```text
+M = crd_tf101_m
+W = crd_tf102_w
+S = crd_tf104_s
+MS = crd_tf203_ms
+```
+
+Tolerance-aware absolute Pareto set 为 `M / W / MS`；single Pareto set 为 `M / W`。MS 的五项预注册 interaction metric 均满足 descriptive positive（seed mean >0 且至少 2/3 paired seeds >0），因此 interaction candidate 为 `MS`。S 虽通过资格门槛，但被 tolerance-aware Pareto 支配，不进入未来 Fusion 候选池。最终候选并集冻结为：
+
+```text
+crd_tf101_m
+crd_tf102_w
+crd_tf203_ms
+```
+
+没有构造总分，也没有用 secondary 指标打破平局；不选择唯一赢家。该结论只属于现有 validation-development evidence，不是无偏 held-out 或强泛化证据。`scripts/summarize_crd_tf_v1.py` 至此关闭且不得重复运行。P5 不自动开放 research-test 或 P6；若继续 Fusion，必须由用户确认后建立新协议，并保持候选集合及证据边界。
