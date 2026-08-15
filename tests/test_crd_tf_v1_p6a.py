@@ -20,6 +20,7 @@ from resp_train.crd.tf_v1_model import (
 from resp_train.crd.tf_v1_p6a import (
     P6A_ACCEPTANCE_VARIANTS,
     P6A_EXPECTED_INCREMENTAL_PARAMETERS,
+    _synthetic_row_passed,
     p6a_acceptance_overrides,
 )
 
@@ -105,7 +106,6 @@ def test_p6a_acceptance_overrides_resolve_strict_config(tmp_path, variant: str) 
         "configs/crd_tf_v1/crd_tf401_mws_add_smoke.yaml",
         overrides=p6a_acceptance_overrides(variant, device="cuda:0", output_root=tmp_path),
     )
-
     assert str(cfg.protocol.execution_gate) == "p6a_cuda_acceptance"
     assert str(cfg.protocol.run_role) == "acceptance"
     assert (cfg.training.epochs, cfg.training.batch_size, cfg.training.gradient_accumulation_steps) == (
@@ -119,6 +119,21 @@ def test_p6a_acceptance_overrides_resolve_strict_config(tmp_path, variant: str) 
         None,
     )
 
+
+def test_p6a_synthetic_audit_requires_exact_parameter_and_gradient_contract() -> None:
+    row = {
+        "variant": "crd_tf402_mws_gate",
+        "status": "passed",
+        "all_output_input_parameter_gradients_finite": True,
+        "all_branch_final_projection_gradients_nonzero": True,
+        "all_new_encoder_dropout_zero": True,
+        "gate_initially_identity": True,
+        "incremental_parameters_vs_c201": 463_427,
+        "gate_parameters": 13_347,
+    }
+    assert _synthetic_row_passed(row)
+    row["incremental_parameters_vs_c201"] += 1
+    assert not _synthetic_row_passed(row)
 
 def test_p6a_early_stopping_replay_semantics_wait_for_thirty_misses() -> None:
     best = float("inf")
