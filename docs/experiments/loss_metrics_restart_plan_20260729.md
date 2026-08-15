@@ -4,7 +4,7 @@
 
 最后更新：2026-08-15
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46 节 CRD-TF v1 P0–P5 已完成并冻结；第 47 节 9-run P6a 已开放至工程验收，formal、local cross-attention 与 research-test 未开放
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46 节 CRD-TF v1 P0–P5 已完成并冻结；第 47 节 P6a 工程验收已完成并开放 9-run formal，local cross-attention 与 research-test 未开放
 
 ## 1. 定位
 
@@ -2070,4 +2070,4 @@ P5 随后从干净 commit `c7b65b1` 一次性完成，summary SHA-256 为 `afb6f
 
 用户已确认按 9-run P6a 继续。新附件 `docs/experiments/crd_tf_v1_p6a_protocol_20260815.md` 由本节纳入唯一协议：只新增 `MWS-ADD / MWS-GATE / CTRL-GATE × seeds 20260811/12/13`，保留既有 MS、CTRL3 和 C201 作冻结对照。Gate 只读共享 temporal latent，以 zero-init 三路 logits 产生 `[0.5,1.5]` factor；MWS-GATE 与 CTRL-GATE 总增量分别为 `463,427 / 463,203`，差 224 parameters。P4/P5 的 15-arm 集合与历史结果不变。
 
-P6a 保持 cache、数据/split/target、loss/metrics、physical batch `128×1`、AdamW 与 6400-update LR schedule 不变。对 45 条 P4 history 回放时，patience `10/15/20/25/30` 分别错过 `5/4/3/1/0` 个全程最优，因此冻结 `max_epochs=80 / early-stop patience=30 / min_delta=0`；该回放不保证新结构没有更晚最优，仍是残余风险。当前代码与独立 formal configs 已建立，但 `train_crd.py` 在 CUDA synthetic 和两个最大 gated arm batch-128 acceptance 冻结前拒绝 P6a formal。Research-test、local cross-attention、batch/LR 搜索与统一矩阵 runner 继续关闭。
+P6a 保持 cache、数据/split/target、loss/metrics、physical batch `128×1`、AdamW 与 6400-update LR schedule 不变。对 45 条 P4 history 回放时，patience `10/15/20/25/30` 分别错过 `5/4/3/1/0` 个全程最优，因此冻结 `max_epochs=80 / early-stop patience=30 / min_delta=0`；该回放不保证新结构没有更晚最优，仍是残余风险。三个新 variant 的 CUDA synthetic 与 MWS-GATE/CTRL-GATE batch-128 acceptance 已在 engineering commit `3802423` 通过，最大 reserved fraction `67.48%`；统一 receipt SHA-256 为 `a23c1dd9aca724ecae3d867429911043a0da1843ede61a3784578abbf99040a9`，batch 决策保持 `128×1`。9-run formal 现通过 frozen-receipt/critical-identity preflight 开放。Research-test、local cross-attention、batch/LR 搜索与统一矩阵 runner 继续关闭。

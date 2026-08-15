@@ -973,7 +973,23 @@ for variant in crd_tf402_mws_gate crd_tf403_ctrl_gate; do
 done
 ```
 
-请返回 synthetic receipt 和两个 run 目录。结果写回协议并建立 formal preflight 前，`train_crd.py` 会拒绝三个 P6a formal 配置；不要绕过该 gate，也不要自行调整 batch、累计梯度、LR、patience 或最大 epoch。
+Synthetic 与两项 acceptance 已从 engineering commit `3802423` 通过，最大 reserved fraction 为 `67.48%`；统一冻结 receipt 为：
+
+```text
+runs/crd_tf_v1/p6a_acceptance_audit/9304ae7abd2056c9c28b09702d8fcfc88672a4b53ea412e2922d8d7c7ee821b1/p6a_acceptance.json
+SHA-256 = a23c1dd9aca724ecae3d867429911043a0da1843ede61a3784578abbf99040a9
+```
+
+以上 engineering 命令与下列审计命令现只保留 provenance，不得重复运行：
+
+```bash
+./.venv/bin/python scripts/audit_crd_tf_v1_p6a.py \
+  --synthetic-receipt runs/crd_tf_v1/p6a_cuda_synthetic/38024237059a_20260815_220244_034450/synthetic_receipt.json \
+  --mws-gate-run runs/crd_tf_v1/p6a_acceptance/crd_tf402_mws_gate/20260815_220344_143254 \
+  --ctrl-gate-run runs/crd_tf_v1/p6a_acceptance/crd_tf403_ctrl_gate/20260815_220430_380745
+```
+
+9-run formal 现已开放。每项仍通过独立配置和通用 `train_crd.py` 运行；不要调整 batch、累计梯度、LR、patience 或最大 epoch，也不要建立统一矩阵 runner。
 
 ## 固定呼吸带传统基线
 

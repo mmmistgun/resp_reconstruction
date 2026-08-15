@@ -2,7 +2,7 @@
 
 日期：2026-08-15
 
-状态：**协议与工程实现已建立；CPU 定向测试通过；CUDA synthetic / batch-128 acceptance 未执行，9-run formal 关闭**
+状态：**协议、工程实现与 CUDA/batch-128 acceptance 已完成；9-run formal 已开放，尚未执行**
 
 协议标识：`crd-tf-v1-p6a-validation-development-20260815`
 
@@ -96,7 +96,7 @@ P6a 不调整 batch 或 LR：physical batch `128`、gradient accumulation `1`、
 2. `MWS-GATE` 与 `CTRL-GATE` 各一次 `128 train / 32 validation / one update / physical batch 128×1` acceptance，要求完整 lifecycle、finite checkpoint/metrics、prediction nondegenerate 与显存可接受；
 3. 将 receipt、run 路径、commit 与显存结果写回本文并建立 formal preflight 后，才开放 9-run 队列。
 
-当前 `train_crd.py` 对 P6a formal 主动拒绝执行，避免在 acceptance 前误启动。CUDA 工程任务由用户执行；Codex 不代跑长时间 GPU 工作。
+CUDA synthetic 与两项 acceptance 已完成并通过统一审计，结果见第 9 节。`train_crd.py` 现通过冻结 receipt SHA、关键实现 identity 和干净工作树 preflight 开放 P6a formal。CUDA 正式训练由用户执行；Codex 不代跑长时间 GPU 工作。
 
 ## 6. 正式配置、输出与执行纪律
 
@@ -130,5 +130,30 @@ runs/crd_tf_v1/p6a_formal/<variant>/seed_<seed>/<timestamp>/
 
 ## 8. 需要用户介入的节点
 
-当前下一节点是执行一次三-arm CUDA synthetic，以及两个独立 batch-128 acceptance。用户回传三个输出路径后，Codex负责审计、写回协议并解除或维持 formal gate。只有工程验收通过后，才会给出两张卡上的 9-run `for` 命令。
+当前下一节点是用户在两张卡上执行 9 个独立 formal runs。全部 run 完成前不得根据 validation 中间结果改变剩余队列；完成后先做完整性审计与冻结汇总，不自动访问 research-test。
 
+## 9. CUDA synthetic 与 batch-128 acceptance 冻结结果
+
+三个新 variant 的 CUDA synthetic 来自干净 engineering commit `38024237059a4c2f2a22b502415502427dc1ada2`，RTX 4070 Ti SUPER 上 3/3 通过：waveform shape、bf16 output/input/parameter-gradient finite、active branch projection gradient nonzero、新 encoder dropout=0、gate 初始 identity 和精确参数增量均合格。Synthetic receipt 为：
+
+```text
+runs/crd_tf_v1/p6a_cuda_synthetic/38024237059a_20260815_220244_034450/synthetic_receipt.json
+SHA-256 = 670bff599c955ec13720350a1e67abbec860b9ca821713aca05fc6bee07b35b9
+```
+
+两个 `128×1` acceptance 均完成 `128 train / 32 validation / 1 update`、best/final finite checkpoint、五项 primary finite、prediction degeneracy=0 和 early-stop metadata 契约：
+
+| arm | peak allocated MiB | peak reserved MiB | reserved fraction | throughput samples/s |
+|---|---:|---:|---:|---:|
+| MWS-GATE | 9,388.92 | 10,754 | 67.48% | 7.355 |
+| CTRL-GATE | 9,357.93 | 10,730 | 67.33% | 7.475 |
+
+单 update 的 validation 数值不作效果解释。最大 reserved fraction `67.48% < 80%`，因此 batch 决策冻结为 `physical_batch=128 / accumulation=1`，不触发梯度累计 fallback。统一审计由干净 audit commit `5829d63af9e91ead64dccca2e8ab3b0d0e947504` 生成：
+
+```text
+runs/crd_tf_v1/p6a_acceptance_audit/9304ae7abd2056c9c28b09702d8fcfc88672a4b53ea412e2922d8d7c7ee821b1/p6a_acceptance.json
+SHA-256 = a23c1dd9aca724ecae3d867429911043a0da1843ede61a3784578abbf99040a9
+status=passed, complete=true, research_test_used=false
+```
+
+P6a engineering gate 至此关闭，9-run formal 开放。每个 formal run 必须来自包含本登记的干净 commit，且 preflight 验证上述 receipt 与 engineering commit 后关键模型/数据/训练文件未变化。

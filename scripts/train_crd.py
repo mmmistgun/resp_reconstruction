@@ -28,7 +28,9 @@ def main() -> None:
 
         validate_p4_formal_preflight()
     if str(cfg.model.variant) in CRD_TF_P6_VARIANTS and str(cfg.protocol.run_role) == "formal":
-        raise SystemExit("CRD-TF P6a formal 尚未开放：必须先完成并冻结 P6a CUDA synthetic 与 batch-128 acceptance")
+        from resp_train.crd.tf_v1_p6a_preflight import validate_p6a_formal_preflight
+
+        validate_p6a_formal_preflight()
     print(CRDExperiment(cfg).train())
 
 
