@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0–P5 已完成并冻结；P6 Fusion 与 research-test 仍未开放**
+状态：**P0–P5 已完成并冻结；P6a 已由独立协议开放至工程验收，formal 与 research-test 未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -37,7 +37,8 @@
 | P3 | CUDA synthetic、最大臂 physical-batch acceptance | 已完成并冻结 | 已完成 |
 | P4 | 正式三 seed 全矩阵 | 已完成并冻结 | 已完成 |
 | P5 | 冻结 validation 汇总与候选选择 | 已完成并冻结 | 已完成 |
-| P6 | gated residual / local cross-attention Fusion | 关闭 | P5 后另立协议并确认 |
+| P6a | MWS additive / gated residual / matched gated control | 工程验收开放，formal 关闭 | 已确认 9-run 设计；待 CUDA 验收 |
+| P6b | local cross-attention 等扩展 | 关闭 | P6a 后另立协议并确认 |
 
 任何 single 的 validation 结果都不得关闭尚未完成的 pair/triple。工程 OOM、非有限、缓存身份错误或实现契约失败可以阻塞对应正式队列，但不能用模型效果结果删减组合。
 
@@ -637,3 +638,7 @@ crd_tf203_ms
 ```
 
 没有构造总分，也没有用 secondary 指标打破平局；不选择唯一赢家。该结论只属于现有 validation-development evidence，不是无偏 held-out 或强泛化证据。`scripts/summarize_crd_tf_v1.py` 至此关闭且不得重复运行。P5 不自动开放 research-test 或 P6；若继续 Fusion，必须由用户确认后建立新协议，并保持候选集合及证据边界。
+
+## 23. P6a 独立协议（2026-08-15）
+
+用户已明确确认继续 9-run P6a。规范性附件为 `docs/experiments/crd_tf_v1_p6a_protocol_20260815.md`：固定 `MWS-ADD / MWS-GATE / CTRL-GATE × 3 seeds`，保持 P4/P5 15-arm 集合不变；batch/LR/cache/metric/split 不变，引入经 45 条 P4 history 回放选择的 Local-RR early stop `patience=30 / min_delta=0 / max_epochs=80`。当前只开放 CPU 实现与 CUDA engineering acceptance，9-run formal 由入口硬阻塞，research-test 和 local cross-attention 继续关闭。

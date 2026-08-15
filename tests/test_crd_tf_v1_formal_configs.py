@@ -8,7 +8,10 @@ from resp_train.crd.config import FORMAL_SEEDS, load_crd_config
 from resp_train.crd.tf_v1_model import TF_VARIANT_REPRESENTATIONS
 
 
-FORMAL_CONFIGS = tuple(sorted(Path("configs/crd_tf_v1").glob("*_formal.yaml")))
+FORMAL_CONFIGS = tuple(
+    Path("configs/crd_tf_v1") / f"{variant}_formal.yaml"
+    for variant in TF_VARIANT_REPRESENTATIONS
+)
 
 
 def test_every_tf_arm_has_one_independent_formal_config() -> None:

@@ -42,6 +42,22 @@ TF_CONTROL_COUNT = {
     "crd_tf_ctrl3": 3,
 }
 
+# P6a 独立于已冻结的 15-arm P4/P5 集合，避免改变历史矩阵完整性语义。
+TF_P6_VARIANT_REPRESENTATIONS: dict[str, tuple[str, ...]] = {
+    "crd_tf401_mws_add": ("m", "w", "s"),
+    "crd_tf402_mws_gate": ("m", "w", "s"),
+    "crd_tf403_ctrl_gate": (),
+}
+TF_P6_VARIANTS = tuple(TF_P6_VARIANT_REPRESENTATIONS)
+TF_ALL_VARIANT_REPRESENTATIONS = {
+    **TF_VARIANT_REPRESENTATIONS,
+    **TF_P6_VARIANT_REPRESENTATIONS,
+}
+TF_P6_CONTROL_COUNT = {"crd_tf403_ctrl_gate": 3}
+TF_ALL_CONTROL_COUNT = {**TF_CONTROL_COUNT, **TF_P6_CONTROL_COUNT}
+TF_GATED_VARIANTS = {"crd_tf402_mws_gate", "crd_tf403_ctrl_gate"}
+P6_GATE_PARAMETER_COUNT = 13_347
+
 
 def _initialize_conv(module: nn.Conv1d | nn.Conv2d) -> None:
     nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
@@ -225,6 +241,35 @@ class TemporalCapacityBranch(_ConditionBranch):
         return self.project_condition(context)
 
 
+class TemporalFusionGate(nn.Module):
+    """由共享 temporal latent 生成逐时间、逐分支的有界残差门控。"""
+
+    def __init__(self, branch_count: int) -> None:
+        super().__init__()
+        if int(branch_count) != 3:
+            raise ValueError("P6a fusion gate 固定要求 3 个 condition branches")
+        self.branch_count = int(branch_count)
+        self.norm = nn.GroupNorm(12, 96)
+        self.depthwise = nn.Conv1d(96, 96, kernel_size=5, padding=2, groups=96, bias=False)
+        self.expand = nn.Conv1d(96, 128, kernel_size=1, bias=False)
+        self.final_projection = nn.Conv1d(128, self.branch_count, kernel_size=1, bias=True)
+        _initialize_norm(self.norm)
+        _initialize_conv(self.depthwise)
+        _initialize_conv(self.expand)
+        # 初始 factor 严格为 1，使 gated arm 与对应 additive/control arm 同函数。
+        nn.init.zeros_(self.final_projection.weight)
+        nn.init.zeros_(self.final_projection.bias)
+        count = trainable_parameter_count(self)
+        if count != P6_GATE_PARAMETER_COUNT:
+            raise RuntimeError(f"P6a fusion gate 参数数错误: {count} != {P6_GATE_PARAMETER_COUNT}")
+
+    def forward(self, latent: torch.Tensor) -> torch.Tensor:
+        if latent.ndim != 3 or latent.shape[1:] != (96, 1800):
+            raise ValueError(f"P6a gate 期望 (B,96,1800)，实际 {tuple(latent.shape)}")
+        logits = self.final_projection(F.silu(self.expand(self.depthwise(self.norm(latent)))))
+        return 1.0 + 0.5 * torch.tanh(logits)
+
+
 BRANCH_TYPES = {
     "m": MultiResolutionStftBranch,
     "w": CwtBranch,
@@ -239,10 +284,10 @@ class CRDTfV1Model(nn.Module):
     def __init__(self, variant: str, initialization_seed: int) -> None:
         super().__init__()
         variant = str(variant).lower()
-        if variant not in TF_VARIANT_REPRESENTATIONS:
+        if variant not in TF_ALL_VARIANT_REPRESENTATIONS:
             raise ValueError(f"未知 CRD-TF variant={variant!r}")
         self.tf_variant = variant
-        self.representations = TF_VARIANT_REPRESENTATIONS[variant]
+        self.representations = TF_ALL_VARIANT_REPRESENTATIONS[variant]
         # 内部保持 C201 identity，使共享模块和 decoder 初始化逐 tensor 相同。
         self.base = CRDCoarseModel("crd_c201_decoder_10hz_cap", int(initialization_seed))
         branches = {}
@@ -251,10 +296,17 @@ class CRDTfV1Model(nn.Module):
                 branches[name] = BRANCH_TYPES[name]()
         self.branches = nn.ModuleDict(branches)
         controls = []
-        for index in range(TF_CONTROL_COUNT.get(variant, 0)):
+        for index in range(TF_ALL_CONTROL_COUNT.get(variant, 0)):
             with module_seed(int(initialization_seed), f"tf_control_{index}"):
                 controls.append(TemporalCapacityBranch())
         self.controls = nn.ModuleList(controls)
+        if variant in TF_GATED_VARIANTS:
+            with module_seed(int(initialization_seed), "tf_fusion_gate"):
+                self.fusion_gate: TemporalFusionGate | None = TemporalFusionGate(
+                    len(self.representations) + len(self.controls)
+                )
+        else:
+            self.fusion_gate = None
         self._validate_parameter_contract()
 
     def _validate_parameter_contract(self) -> None:
@@ -266,6 +318,10 @@ class CRDTfV1Model(nn.Module):
             count = trainable_parameter_count(branch)
             if abs(count - P_BRANCH_TARGET) / P_BRANCH_TARGET > P_BRANCH_TOLERANCE:
                 raise RuntimeError(f"TF control {index} 参数数 {count} 不满足预算")
+        if self.fusion_gate is not None:
+            count = trainable_parameter_count(self.fusion_gate)
+            if count != P6_GATE_PARAMETER_COUNT:
+                raise RuntimeError(f"P6a fusion gate 参数数 {count} 不满足冻结预算")
 
     def forward(
         self,
@@ -278,6 +334,8 @@ class CRDTfV1Model(nn.Module):
         latent = self.base.encode_local(x)
         gamma_sum = torch.zeros_like(latent)
         beta_sum = torch.zeros_like(latent)
+        gate_factors = self.fusion_gate(latent) if self.fusion_gate is not None else None
+        condition_index = 0
         expected_keys = _expected_feature_keys(self.representations)
         if self.representations:
             if tf is None or set(tf) != expected_keys:
@@ -285,20 +343,34 @@ class CRDTfV1Model(nn.Module):
             for name, branch in self.branches.items():
                 branch_features = {key: tf[key] for key in _expected_feature_keys((name,))}
                 gamma, beta = _checkpointed_mapping_branch(branch, branch_features)
-                gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
-                beta_sum = beta_sum + 0.5 * torch.tanh(beta)
+                if gate_factors is None:
+                    gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
+                    beta_sum = beta_sum + 0.5 * torch.tanh(beta)
+                else:
+                    factor = gate_factors[:, condition_index : condition_index + 1]
+                    gamma_sum = gamma_sum + factor * (0.5 * torch.tanh(gamma))
+                    beta_sum = beta_sum + factor * (0.5 * torch.tanh(beta))
+                condition_index += 1
         elif tf not in (None, {}):
             raise ValueError(f"{self.tf_variant} capacity control 不得读取 TF cache")
         for branch in self.controls:
             gamma, beta = _checkpointed_tensor_branch(branch, latent)
-            gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
-            beta_sum = beta_sum + 0.5 * torch.tanh(beta)
+            if gate_factors is None:
+                gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
+                beta_sum = beta_sum + 0.5 * torch.tanh(beta)
+            else:
+                factor = gate_factors[:, condition_index : condition_index + 1]
+                gamma_sum = gamma_sum + factor * (0.5 * torch.tanh(gamma))
+                beta_sum = beta_sum + factor * (0.5 * torch.tanh(beta))
+            condition_index += 1
         conditioned = latent * (1.0 + gamma_sum) + beta_sum
         return self.base.decode_local(conditioned)
 
     def branch_parameter_counts(self) -> dict[str, int]:
         counts = {name: trainable_parameter_count(branch) for name, branch in self.branches.items()}
         counts.update({f"control_{index}": trainable_parameter_count(branch) for index, branch in enumerate(self.controls)})
+        if self.fusion_gate is not None:
+            counts["fusion_gate"] = trainable_parameter_count(self.fusion_gate)
         return counts
 
 

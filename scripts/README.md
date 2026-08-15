@@ -951,7 +951,29 @@ P4 已完成 45/45。当前唯一允许的 P5 命令为：
 
 输出固定为 `runs/crd_tf_v1/p5_validation_summary/`，存在即拒绝覆盖。脚本会显式排除并登记 WLS seed 20260811 的早期 incomplete 目录；P5 结果冻结前不得执行 research-test 或 P6。
 
-P5 已从 commit `c7b65b1` 完成，候选并集固定为 `crd_tf101_m / crd_tf102_w / crd_tf203_ms`。上述 summary 命令现只保留 provenance，不得重复运行；P6 与 research-test 继续关闭。
+P5 已从 commit `c7b65b1` 完成，候选并集固定为 `crd_tf101_m / crd_tf102_w / crd_tf203_ms`。上述 summary 命令现只保留 provenance，不得重复运行；research-test 继续关闭。
+
+### CRD-TF v1 P6a 工程验收
+
+P6a 固定为 `MWS-ADD / MWS-GATE / CTRL-GATE × 3 seeds`；完整规范见 `docs/experiments/crd_tf_v1_p6a_protocol_20260815.md`。当前只运行工程验收。提交代码并确认工作树干净后，先执行三个新 variant 的 CUDA synthetic：
+
+```bash
+git status --short
+./.venv/bin/python scripts/check_crd_tf_v1_p6a_cuda.py --device cuda:0
+```
+
+首行必须无输出。随后在同一张空闲 GPU 上依次执行两个最大 gated arm 的独立 batch-128 acceptance：
+
+```bash
+for variant in crd_tf402_mws_gate crd_tf403_ctrl_gate; do
+  ./.venv/bin/python scripts/run_crd_tf_v1_p6a_acceptance.py \
+    --variant "${variant}" \
+    --device cuda:0 \
+    || exit 1
+done
+```
+
+请返回 synthetic receipt 和两个 run 目录。结果写回协议并建立 formal preflight 前，`train_crd.py` 会拒绝三个 P6a formal 配置；不要绕过该 gate，也不要自行调整 batch、累计梯度、LR、patience 或最大 epoch。
 
 ## 固定呼吸带传统基线
 
@@ -1077,13 +1099,13 @@ F0 与 IEWT 不训练、无 seed：
 - `audit.csv`：数据加载审计摘要。
 - `train_history.csv`：每 epoch 仅含 `train_loss_total`、`train_loss_sync`、`train_loss_effort`、`val_core_loss` 和 `val_local_rr_mae`。
 - `checkpoint_best_local_rr.pt`：Local RR 严格最小 epoch；完全并列时保留更早 epoch。
-- `checkpoint_final.pt`：固定预算最后 epoch，仅用于追溯。
+- `checkpoint_final.pt`：实际完成的最后 epoch，仅用于追溯；旧阶段等于固定预算最后 epoch，P6a 可能是 early-stop epoch。
 - `metrics.csv`：选中 checkpoint 的完整 validation 逐 sample 指标。
 - `metrics_summary.csv`：逐 sample direct-mean validation 汇总。
 - `research_test_metrics.csv` / `research_test_metrics_summary.csv`：显式 research-test 评价产物。
 - `*_metrics_manifest.json`：checkpoint 复评的命令、split、配置与代码版本。
 - `train.log`：训练日志。
 
-CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json`；后者记录训练到最终 validation 复评期间的 CUDA peak allocated/reserved 和显存占比。`train_history.csv` 还记录 optimizer update、每 epoch 首末 LR。CRD checkpoint 的 `extra_state` 保存协议版本、update index/total updates、依赖版本与 `resume_supported=false`。
+CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json`；后者记录训练到最终 validation 复评期间的 CUDA peak allocated/reserved 和显存占比。`train_history.csv` 还记录 optimizer update、每 epoch 首末 LR。CRD checkpoint 的 `extra_state` 保存协议版本、actual update index、planned total updates、依赖版本与 `resume_supported=false`；P6a 另存 early-stop monitor/patience/wait/triggered/completed epochs。
 
 不再生成或解释旧 `checkpoint.pt`、`checkpoint_best_rr.pt`、`checkpoint_best_task.pt`、`checkpoint_topN.pt`、`epoch_metrics.csv`、旧 target-feature cache 或旧指标 summary。

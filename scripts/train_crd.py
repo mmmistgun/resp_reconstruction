@@ -11,7 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 from resp_train.config import check_required_packages
 from resp_train.crd.config import check_crd_dependencies, load_crd_config
 from resp_train.crd.experiment import CRDExperiment
-from resp_train.crd.model import CRD_TF_VARIANTS
+from resp_train.crd.model import CRD_TF_P6_VARIANTS, CRD_TF_VARIANTS
 
 
 def main() -> None:
@@ -27,6 +27,8 @@ def main() -> None:
         from resp_train.crd.tf_v1_p4 import validate_p4_formal_preflight
 
         validate_p4_formal_preflight()
+    if str(cfg.model.variant) in CRD_TF_P6_VARIANTS and str(cfg.protocol.run_role) == "formal":
+        raise SystemExit("CRD-TF P6a formal 尚未开放：必须先完成并冻结 P6a CUDA synthetic 与 batch-128 acceptance")
     print(CRDExperiment(cfg).train())
 
 

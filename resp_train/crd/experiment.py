@@ -25,6 +25,15 @@ from resp_train.metrics.task import evaluate_task_predictions, summarize_task_me
 from resp_train.utils.run import create_run_dir, resolve_device, save_config, save_execution_manifest, set_seed, setup_logger
 
 
+def _early_stopping_step(
+    *, value: float, best: float, epochs_without_improvement: int, min_delta: float
+) -> tuple[bool, int]:
+    """按严格改善更新 P6a patience；相等值不重置等待计数。"""
+
+    improved = float(value) < float(best) - float(min_delta)
+    return improved, 0 if improved else int(epochs_without_improvement) + 1
+
+
 class CRDExperiment:
     """冻结的 CRD-v1.1 S0/S1/S2 训练与 validation checkpoint 流程。"""
 
@@ -86,6 +95,11 @@ class CRDExperiment:
         history: list[dict[str, float | int]] = []
         best_local_rr = float("inf")
         best_epoch: int | None = None
+        early_stopping_enabled = bool(self.cfg.training.get("early_stopping_enabled", False))
+        early_stopping_patience = int(self.cfg.training.get("early_stopping_patience", 0))
+        early_stopping_min_delta = float(self.cfg.training.get("early_stopping_min_delta", 0.0))
+        epochs_without_improvement = 0
+        early_stopping_triggered = False
         for epoch in range(1, total_epochs + 1):
             if device.type == "cuda":
                 torch.cuda.synchronize(device)
@@ -130,6 +144,17 @@ class CRDExperiment:
             val_local_rr = validation_local_rr_mean(val_predictions, self.cfg)
             if not np.isfinite(val_core_loss) or not np.isfinite(val_local_rr):
                 raise ValueError("CRD validation core loss 或 Local RR 非有限")
+            improved, epochs_without_improvement = _early_stopping_step(
+                value=val_local_rr,
+                best=best_local_rr,
+                epochs_without_improvement=epochs_without_improvement,
+                min_delta=early_stopping_min_delta,
+            )
+            if improved:
+                best_local_rr = val_local_rr
+            early_stopping_triggered = bool(
+                early_stopping_enabled and epochs_without_improvement >= early_stopping_patience
+            )
 
             record: dict[str, float | int] = {
                 "epoch": epoch,
@@ -142,11 +167,19 @@ class CRDExperiment:
                 "val_core_loss": val_core_loss,
                 "val_local_rr_mae": val_local_rr,
             }
-            if str(self.cfg.protocol.stage) == "tf":
+            if str(self.cfg.protocol.stage) in {"tf", "tf_p6a"}:
                 record.update(
                     {
                         "train_elapsed_seconds": float(train_elapsed_seconds),
                         "train_samples_per_second": float(len(data.train.loader.dataset) / train_elapsed_seconds),
+                    }
+                )
+            if early_stopping_enabled:
+                record.update(
+                    {
+                        "early_stopping_improved": int(improved),
+                        "early_stopping_wait": epochs_without_improvement,
+                        "early_stopping_triggered": int(early_stopping_triggered),
                     }
                 )
             if "loss_proto" in train_summary:
@@ -178,6 +211,16 @@ class CRDExperiment:
                 "resume_supported": False,
                 "dependency_versions": crd_dependency_versions(),
             }
+            if early_stopping_enabled:
+                checkpoint_extra["early_stopping"] = {
+                    "enabled": True,
+                    "monitor": "validation_local_rr_mae_full_split",
+                    "patience": early_stopping_patience,
+                    "min_delta": early_stopping_min_delta,
+                    "epochs_without_improvement": epochs_without_improvement,
+                    "triggered": early_stopping_triggered,
+                    "planned_epochs": total_epochs,
+                }
             if "loss_proto" in train_summary:
                 checkpoint_extra["structural_regularizer"] = {
                     "name": "prototype_orthogonality",
@@ -185,8 +228,7 @@ class CRDExperiment:
                     "ramp": "optimizer_update_5S_to_15S",
                     "updates_per_epoch": updates_per_epoch,
                 }
-            if val_local_rr < best_local_rr:
-                best_local_rr = val_local_rr
+            if improved:
                 best_epoch = epoch
                 save_checkpoint(
                     run_dir / "checkpoint_best_local_rr.pt",
@@ -197,8 +239,17 @@ class CRDExperiment:
                     cfg=self.cfg,
                     extra_state=checkpoint_extra,
                 )
+            if early_stopping_triggered:
+                logger.info(
+                    "early_stop epoch=%d best_epoch=%d best_local_rr=%.6f patience=%d",
+                    epoch,
+                    best_epoch,
+                    best_local_rr,
+                    early_stopping_patience,
+                )
+                break
 
-        if update_index != total_updates:
+        if update_index != total_updates and not early_stopping_triggered:
             raise RuntimeError(f"optimizer update 数不一致: {update_index} != {total_updates}")
         if best_epoch is None:
             raise RuntimeError("训练结束但没有产生 Local RR checkpoint")
@@ -206,7 +257,7 @@ class CRDExperiment:
             run_dir / "checkpoint_final.pt",
             model=model,
             optimizer=optimizer,
-            epoch=total_epochs,
+            epoch=int(history[-1]["epoch"]),
             metrics=history[-1],
             cfg=self.cfg,
             extra_state={
@@ -215,6 +266,22 @@ class CRDExperiment:
                 "total_updates": total_updates,
                 "resume_supported": False,
                 "dependency_versions": crd_dependency_versions(),
+                **(
+                    {
+                        "early_stopping": {
+                            "enabled": True,
+                            "monitor": "validation_local_rr_mae_full_split",
+                            "patience": early_stopping_patience,
+                            "min_delta": early_stopping_min_delta,
+                            "epochs_without_improvement": epochs_without_improvement,
+                            "triggered": early_stopping_triggered,
+                            "planned_epochs": total_epochs,
+                            "completed_epochs": int(history[-1]["epoch"]),
+                        }
+                    }
+                    if early_stopping_enabled
+                    else {}
+                ),
                 **(
                     {
                         "structural_regularizer": {
