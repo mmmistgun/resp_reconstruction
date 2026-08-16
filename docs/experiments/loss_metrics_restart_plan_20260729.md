@@ -2079,3 +2079,5 @@ P6a 9/9 formal 随后从干净 commit `94033ce` 完成，全部由 patience=30 �
 用户随后明确表示不要求独立证据并授权开始 research-test。附件 `docs/experiments/crd_tf_v1_research_test_protocol_20260816.md` 由本节纳入唯一协议。证据名称固定为 reused research/development evidence，不得写成未触碰 held-out 或无偏泛化。
 
 评价矩阵固定为 C201 anchor 与 P5 保留的 M/W/MS，各三个 validation-selected checkpoints，共 12 次；不加入 P6a 失败模型或其他 P4 arms，不重选 epoch、不重训。第一步只开放独立的完整 2310-window test input-only M/W/S cache builder，保持原 train/validation cache 不变且不读取 test target array。Cache manifest 审计写回前，checkpoint evaluation 与 test target 继续关闭。
+
+完整 input-only cache 随后从干净 commit `dfd9313` 生成，覆盖 `2310 windows / 8 samp_id`，目录 514 MiB；manifest SHA-256=`5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745`。7 个受管文件的实际 SHA/size/shape/dtype/finite、row identity 与 manifest 重新计算完全一致，且 `test_target_array_read=false / model_inference_used=false`。现开放只接受冻结 allowlist 的 12-checkpoint 专用入口；普通 CRD eval 仍保持 validation-only，R4 汇总在 12 项齐备前关闭。

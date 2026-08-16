@@ -340,6 +340,7 @@ class CRDExperiment:
         *,
         split: str = "val",
         metrics_output: str | Path | None = None,
+        tf_research_test_cache_path: str | Path | None = None,
     ) -> pd.DataFrame:
         """复评指定 split；research-test 授权必须由受控的公共入口完成。"""
 
@@ -367,8 +368,14 @@ class CRDExperiment:
         else:
             raise ValueError("split 必须是 val 或 test")
 
+        data_cfg = self.cfg
+        if normalized_split == "test" and self.cfg.model.get("tf_representations", []):
+            if tf_research_test_cache_path is None:
+                raise ValueError("CRD-TF test evaluation 必须显式提供冻结 research-test cache")
+            data_cfg = OmegaConf.create(OmegaConf.to_container(self.cfg, resolve=True))
+            data_cfg.data.tf_research_test_cache_path = str(Path(tf_research_test_cache_path).resolve())
         window_data = build_window_data(
-            self.cfg,
+            data_cfg,
             split=split_name,
             max_windows=max_windows,
             sample_strategy=strategy,

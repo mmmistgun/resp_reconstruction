@@ -2,7 +2,7 @@
 
 日期：2026-08-16
 
-状态：**用户已明确授权；R0 协议与 input-only cache builder 已实现，完整 test cache 尚未生成；模型评价尚未开放**
+状态：**用户已明确授权；完整 test cache 已冻结，受控 12-checkpoint evaluation 已实现并开放，尚未执行**
 
 协议标识：`crd-tf-v1-research-test-development-20260816`
 
@@ -47,15 +47,45 @@ Cache 固定覆盖完整 2310 个 test windows，使用既有 test sample seed `
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| R0 | 协议、cache builder 与 CPU 定向测试 | 已实现，待提交 |
-| R1 | 完整 2310-window input-only cache | 待用户执行 |
-| R2 | cache reader、12-checkpoint 受控评价入口与 CPU 测试 | R1 结果冻结后开放 |
-| R3 | 12 次 GPU research-test evaluation | 关闭 |
+| R0 | 协议、cache builder 与 CPU 定向测试 | 已完成 |
+| R1 | 完整 2310-window input-only cache | 已完成并冻结 |
+| R2 | cache reader、12-checkpoint 受控评价入口与 CPU 测试 | 已完成 |
+| R3 | 12 次 GPU research-test evaluation | 已开放，待用户执行 |
 | R4 | 一次性审计、paired-seed 汇总与候选比较 | 关闭 |
 
-当前唯一需要用户执行的长任务是 R1 cache。Cache manifest 返回并审计前，不评价任何 checkpoint，也不读取 test target。
+当前需要用户在两张相同 GPU 上完成固定 12 次 evaluation。入口只接受冻结矩阵内 SHA-256 匹配的 checkpoint，显式要求 `--confirm-research-test`，结果不可覆盖；12 项完成前不得根据中间结果改变矩阵。
 
 ## 5. 未来汇总口径
 
 R4 将分别报告五项 primary、IBI/coverage、分层 envelope Spearman、coherence 与 nDTW；primary 按 seed 报 mean、sample SD 和相对 C201 的 paired direction，不构造总分。可以按用户授权将结果用于 research/development 选择，但结论必须附带 test 已被重复使用且受前序研究方向影响的限制。
 
+## 6. R1 cache 冻结结果
+
+完整 cache 由用户从干净 commit `dfd931379c01609fbd154549117b16950f16ec3f` 生成，耗时 `29:43`。Manifest 与 7 个受管文件重新计算 identity 后全部一致：
+
+```text
+runs/crd_tf_v1/research_test_cache/40a24df424b2ff9182cfcc6f5b7c12d287578b0df1ed1e25b56b7af1c7f73839/cache_manifest.json
+SHA-256 = 5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745
+```
+
+Cache 共 `2310 windows / 8 samp_id / 538,086,928 bytes managed files / 514 MiB directory`；row IDs 唯一、严格递增，row-id SHA-256 为 `184e9d6a934b6719a4b679ebf6224e20dda1101c1920ed5b9e22ea80f0f293e8`。所有数组 shape/dtype/finite 与文件 SHA-256 通过；manifest 固定 `test_target_array_read=false / target_read=false / model_inference_used=false`。
+
+Reader 每个 evaluation 启动时重新校验 manifest SHA、所需数组文件 SHA/size/shape/dtype、row-id content hash，并要求完整 2310 个 dataset rows 一一存在；不得 fallback 为在线计算。
+
+## 7. R2 受控评价入口
+
+唯一入口为：
+
+```text
+scripts/eval_crd_tf_v1_research_test.py
+```
+
+入口从冻结 C201 candidate lock 与 P5 formal audit 构造精确 12-checkpoint allowlist，逐 checkpoint 校验 path、variant、seed、selected epoch 和 SHA-256。普通 `eval_crd.py` 继续 validation-only。每项成功后在原 run 目录新增且不覆盖：
+
+```text
+research_test_metrics.csv
+research_test_metrics_summary.csv
+research_test_metrics_manifest.json
+```
+
+Manifest 记录 checkpoint/cache identity、evaluation commit、完整命令和 reused evidence 属性。任何一项失败时保留已有成功结果并停止对应 shell；修复前不得跳过失败项生成 R4 summary。

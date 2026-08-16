@@ -1008,6 +1008,19 @@ git status --short
 
 首行必须无输出。预计耗时与 P1 完整 cache 的 test-window 比例相当；只读 BCG input，不读取 test target array，不运行模型。命令打印唯一 `cache_manifest.json` 路径。返回 manifest 并冻结前，不启动 checkpoint research-test evaluation。
 
+Cache 已从干净 commit `dfd9313` 完成并冻结，manifest SHA-256=`5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745`。上述 builder 命令现只保留 provenance，不得重复运行。
+
+专用评价入口为：
+
+```bash
+./.venv/bin/python scripts/eval_crd_tf_v1_research_test.py \
+  --checkpoint <冻结矩阵内的 checkpoint_best_local_rr.pt> \
+  --device cuda:0 \
+  --confirm-research-test
+```
+
+入口只接受 C201/M/W/MS × 3 的 12 个精确 path/hash，输出写回 checkpoint 原 run 目录且拒绝覆盖。可由两张相同 GPU 用 shell `for` 分组并行，但每个 checkpoint 仍是独立入口；完整命令见 research-test 协议执行记录。12 项齐备前不得运行汇总或根据中间结果删减矩阵。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

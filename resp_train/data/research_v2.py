@@ -76,17 +76,23 @@ class ResearchV2WindowDataset(Dataset):
         tf_cache_path = cfg.data.get("tf_cache_path", None)
         representations = cfg.model.get("tf_representations", [])
         if tf_cache_path and representations:
-            from resp_train.crd.tf_v1_data import TfV1CacheReader
-
             splits = set(self.rows["split"].astype(str).unique().tolist())
             if len(splits) != 1:
                 raise ValueError(f"CRD-TF dataset 必须只含单一 split，实际 {sorted(splits)}")
             split = next(iter(splits))
-            self._tf_v1_cache = TfV1CacheReader(
-                str(tf_cache_path),
-                split=split,
-                representations=representations,
-            )
+            research_test_cache_path = cfg.data.get("tf_research_test_cache_path", None)
+            if split == "test" and research_test_cache_path:
+                from resp_train.crd.tf_v1_research_test_data import TfV1ResearchTestCacheReader
+
+                self._tf_v1_cache = TfV1ResearchTestCacheReader(
+                    str(research_test_cache_path), split=split, representations=representations
+                )
+            else:
+                from resp_train.crd.tf_v1_data import TfV1CacheReader
+
+                self._tf_v1_cache = TfV1CacheReader(
+                    str(tf_cache_path), split=split, representations=representations
+                )
             self._tf_v1_cache.verify_rows(self.rows["dataset_row_id"].astype(int).tolist())
         self._preloaded: list[dict[str, Any]] | None = None
         if preload_windows:

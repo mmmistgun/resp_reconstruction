@@ -10,7 +10,7 @@
 - 不在仓库内创建 `archive/`；旧代码、旧配置和旧说明通过 Git 历史恢复。
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
-- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与 C0/C1/C2 控制线均已完成并关闭。C0 冻结为 `roundtrip_negligible=true`；C1 固定为 `mamba_retained_control_failure / retain CRD_102`；C2 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 CRD_102 Mamba backbone + `crd_c201_decoder_10hz_cap`。CRD-TF v1 P0–P6a 亦已完成并关闭；P6a 没有 qualified 新候选，冻结候选池仍为 `crd_tf101_m / crd_tf102_w / crd_tf203_ms`。用户已明确授权 C201/M/W/MS × 3 的 reused research-test；当前只开放完整 test input-only M/W/S cache 构建，cache 冻结前不得评价 checkpoint 或读取 test target。P6b/local cross-attention、TCN+decoder、其他 decoder、S3 与旧 gate/auxiliary/final ablation 均关闭。
+- CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与 C0/C1/C2 控制线均已完成并关闭。C0 冻结为 `roundtrip_negligible=true`；C1 固定为 `mamba_retained_control_failure / retain CRD_102`；C2 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 CRD_102 Mamba backbone + `crd_c201_decoder_10hz_cap`。CRD-TF v1 P0–P6a 亦已完成并关闭；P6a 没有 qualified 新候选，冻结候选池仍为 `crd_tf101_m / crd_tf102_w / crd_tf203_ms`。用户已明确授权 C201/M/W/MS × 3 的 reused research-test；完整 test input-only cache 已冻结，现开放专用 12-checkpoint evaluation，全部齐备前不得汇总或改变矩阵。P6b/local cross-attention、TCN+decoder、其他 decoder、S3 与旧 gate/auxiliary/final ablation 均关闭。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -30,6 +30,7 @@
 - CRD C1 formal 与冻结汇总已完成；`scripts/summarize_crd_c1.py` 只保留 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c1_validation_summary/`。
 - CRD C2 formal、C202 residual diagnostics 与冻结汇总已完成；`scripts/eval_crd_c202_residual_spectrum.py`、`scripts/summarize_crd_c2.py` 及其命令只作 provenance，不得重复运行，冻结产物位于 `runs/crd_v1/crd_c2_validation_summary/`。
 - CRD-TF v1 P5 已从干净 commit `c7b65b1` 一次性完成，固定产物位于 `runs/crd_tf_v1/p5_validation_summary/`；summary SHA-256 为 `afb6feba1600c9c5e07d713db9cac7c886aa87a033037649d3e9ac32cb753b4e`。P6a 规范为 `docs/experiments/crd_tf_v1_p6a_protocol_20260815.md`；9/9 formal 与冻结汇总已完成，无 incomplete，全部 early stop，summary SHA-256 为 `b970a6ea6d77e6d6858d8b7dbd77ed4c2ed8ff633c7f48eca15aeba227ef6e64`，decision=`no_p6a_candidate_retain_p5_pool`。`scripts/summarize_crd_tf_v1.py` 与 `scripts/summarize_crd_tf_v1_p6a.py` 均只保留 provenance，不得重复运行。
+- CRD-TF reused research-test 协议为 `docs/experiments/crd_tf_v1_research_test_protocol_20260816.md`；cache 固定在 `runs/crd_tf_v1/research_test_cache/40a24df424b2ff9182cfcc6f5b7c12d287578b0df1ed1e25b56b7af1c7f73839/`，manifest SHA-256=`5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745`。唯一评价入口 `scripts/eval_crd_tf_v1_research_test.py` 只允许 C201/M/W/MS 各三个冻结 checkpoint并要求显式确认；普通 `eval_crd.py` 仍不得用于 test。
 - 数据审计：`scripts/audit_tho_dataset.py`
 - Split 审计：`scripts/audit_split_independence.py`
 - 详细旧阶段 smoke/batch 128 与 CRD smoke/physical-batch-128 acceptance/正式 seed 命令见 `scripts/README.md`。

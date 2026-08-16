@@ -652,3 +652,5 @@ MWS-ADD 未在任何 primary 上实质优于 MS，且相对 C201 的 PCC drop `0
 ## 25. Research-test 授权（2026-08-16）
 
 用户已在了解独立性限制后明确授权开始 research-test。独立协议为 `docs/experiments/crd_tf_v1_research_test_protocol_20260816.md`，矩阵固定为 C201/M/W/MS × 3 validation-selected seeds。当前仅开放完整 test input-only M/W/S cache 构建；cache 冻结前不运行模型或读取 test target。结果一律称 reused research/development evidence。
+
+完整 test input-only cache 已从干净 commit `dfd9313` 生成并冻结，manifest SHA-256 为 `5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745`，2310 个 rows 与全部文件 identity 合格且 target 未读。专用 12-checkpoint allowlist 入口现已开放，R4 汇总仍等待全部结果。
