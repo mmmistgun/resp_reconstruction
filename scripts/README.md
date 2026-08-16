@@ -989,7 +989,13 @@ SHA-256 = a23c1dd9aca724ecae3d867429911043a0da1843ede61a3784578abbf99040a9
   --ctrl-gate-run runs/crd_tf_v1/p6a_acceptance/crd_tf403_ctrl_gate/20260815_220430_380745
 ```
 
-9-run formal 现已开放。每项仍通过独立配置和通用 `train_crd.py` 运行；不要调整 batch、累计梯度、LR、patience 或最大 epoch，也不要建立统一矩阵 runner。
+9-run formal 已完成。三项配置与通用 `train_crd.py` 命令现只保留 provenance，不得重跑。唯一冻结汇总命令为：
+
+```bash
+./.venv/bin/python scripts/summarize_crd_tf_v1_p6a.py
+```
+
+该命令已从干净 commit `e658d42` 一次性完成，现不得重复运行。9/9 formal 无 incomplete，全部 early stop；冻结 summary 为 `runs/crd_tf_v1/p6a_validation_summary/p6a_summary.json`，SHA-256=`b970a6ea6d77e6d6858d8b7dbd77ed4c2ed8ff633c7f48eca15aeba227ef6e64`。Decision 为 `no_p6a_candidate_retain_p5_pool`：MWS-ADD 未优于 MS 且未过 PCC 护栏，MWS-GATE 未优于 MWS-ADD。P6a 关闭，research-test/P6b 不自动开放。
 
 ## 固定呼吸带传统基线
 

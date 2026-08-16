@@ -2,7 +2,7 @@
 
 日期：2026-08-12
 
-状态：**P0–P5 已完成并冻结；P6a 工程验收已完成并开放 9-run formal，research-test 未开放**
+状态：**P0–P6a 已完成并冻结；P6a 未产生 qualified 新候选，research-test/P6b 未开放**
 
 协议标识：`crd-tf-v1-research-informed-20260812`
 
@@ -37,7 +37,7 @@
 | P3 | CUDA synthetic、最大臂 physical-batch acceptance | 已完成并冻结 | 已完成 |
 | P4 | 正式三 seed 全矩阵 | 已完成并冻结 | 已完成 |
 | P5 | 冻结 validation 汇总与候选选择 | 已完成并冻结 | 已完成 |
-| P6a | MWS additive / gated residual / matched gated control | 工程验收完成，9-run formal 开放 | 待用户执行正式训练 |
+| P6a | MWS additive / gated residual / matched gated control | 已完成并关闭 | 无 qualified 新候选，保留 P5 候选池 |
 | P6b | local cross-attention 等扩展 | 关闭 | P6a 后另立协议并确认 |
 
 任何 single 的 validation 结果都不得关闭尚未完成的 pair/triple。工程 OOM、非有限、缓存身份错误或实现契约失败可以阻塞对应正式队列，但不能用模型效果结果删减组合。
@@ -642,3 +642,9 @@ crd_tf203_ms
 ## 23. P6a 独立协议（2026-08-15）
 
 用户已明确确认继续 9-run P6a。规范性附件为 `docs/experiments/crd_tf_v1_p6a_protocol_20260815.md`：固定 `MWS-ADD / MWS-GATE / CTRL-GATE × 3 seeds`，保持 P4/P5 15-arm 集合不变；batch/LR/cache/metric/split 不变，引入经 45 条 P4 history 回放选择的 Local-RR early stop `patience=30 / min_delta=0 / max_epochs=80`。三个 variant CUDA synthetic 与 MWS-GATE/CTRL-GATE `128×1` acceptance 已在 engineering commit `3802423` 通过，最大 reserved fraction `67.48%`；冻结 receipt SHA-256 为 `a23c1dd9aca724ecae3d867429911043a0da1843ede61a3784578abbf99040a9`。9-run formal 已通过 preflight 开放，research-test 和 local cross-attention 继续关闭。
+
+## 24. P6a 冻结结果（2026-08-16）
+
+P6a 9/9 formal runs 均来自干净 commit `94033ce`，无 incomplete，九项均按 patience=30 在 epoch `38–51` 停止，selected epoch 为 `8–21`；checkpoint、2675 条逐 sample validation、finite/degeneracy 与 early-stop 契约全部通过。冻结 summary 由干净 commit `e658d42` 生成，SHA-256 为 `b970a6ea6d77e6d6858d8b7dbd77ed4c2ed8ff633c7f48eca15aeba227ef6e64`。
+
+MWS-ADD 未在任何 primary 上实质优于 MS，且相对 C201 的 PCC drop `0.005898` 超出护栏；MWS-GATE 虽在 Local RR/trajectory/global envelope 上优于匹配 CTRL-GATE，但没有任何 primary 实质优于 MWS-ADD。因此两者均不 qualified，decision 为 `no_p6a_candidate_retain_p5_pool`，保留 M/W/MS 候选池且不选唯一赢家。P6a 与汇总入口关闭；research-test 和 P6b/local cross-attention 不自动开放。

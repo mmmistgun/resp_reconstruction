@@ -2,7 +2,7 @@
 
 日期：2026-08-15
 
-状态：**协议、工程实现与 CUDA/batch-128 acceptance 已完成；9-run formal 已开放，尚未执行**
+状态：**协议、工程验收、9-run formal 与冻结汇总均已完成；P6a 关闭，research-test/P6b 未开放**
 
 协议标识：`crd-tf-v1-p6a-validation-development-20260815`
 
@@ -130,7 +130,7 @@ runs/crd_tf_v1/p6a_formal/<variant>/seed_<seed>/<timestamp>/
 
 ## 8. 需要用户介入的节点
 
-当前下一节点是用户在两张卡上执行 9 个独立 formal runs。全部 run 完成前不得根据 validation 中间结果改变剩余队列；完成后先做完整性审计与冻结汇总，不自动访问 research-test。
+9 个 formal runs 与冻结汇总已经完成，结果见第 10 节。P6a 入口至此只保留 provenance，不得重跑；后续若继续，必须另立候选锁定或独立证据协议，不自动访问 research-test。
 
 ## 9. CUDA synthetic 与 batch-128 acceptance 冻结结果
 
@@ -157,3 +157,40 @@ status=passed, complete=true, research_test_used=false
 ```
 
 P6a engineering gate 至此关闭，9-run formal 开放。每个 formal run 必须来自包含本登记的干净 commit，且 preflight 验证上述 receipt 与 engineering commit 后关键模型/数据/训练文件未变化。
+
+## 10. P6a formal 与冻结汇总结果（2026-08-16）
+
+9/9 formal runs 均来自干净 commit `94033ce66a845d81c19db97114953da5413f60fd`，每项具有完整 config/manifest/history、best/final model+optimizer、2675 条 validation metrics 和 runtime summary；没有 incomplete 目录。九项均按预注册 patience=30 正常 early stop，selected epoch 范围 `8–21`，完成 epoch 范围 `38–51`，实际 updates 范围 `3040–4080`；checkpoint 仍记录 planned total updates `6400`，LR schedule 未压缩。
+
+Formal 最大 peak reserved fraction 为 MWS-GATE 的 `85.48%`，高于单-update acceptance 的 `67.48%`，但所有 run 均无 OOM/非有限并完成完整 lifecycle。该数值说明长程 allocator 安全余量较 acceptance 小，不触发结果重跑或事后改变 batch。
+
+三 seed validation mean ± sample SD 为：
+
+| arm | Whole RR | Local RR | Trajectory | Global envelope | Signed PCC |
+|---|---:|---:|---:|---:|---:|
+| C201 | 0.510907 ± 0.013032 | 0.552281 ± 0.002761 | 0.151298 ± 0.002580 | 0.181563 ± 0.003961 | 0.863517 ± 0.001264 |
+| MS | 0.474841 ± 0.010139 | 0.540883 ± 0.011687 | 0.147234 ± 0.001958 | 0.190835 ± 0.011119 | 0.861776 ± 0.001037 |
+| CTRL3 | 0.487240 ± 0.023420 | 0.544897 ± 0.008627 | 0.152684 ± 0.003913 | 0.202012 ± 0.014853 | 0.865962 ± 0.001765 |
+| MWS-ADD | 0.480255 ± 0.014025 | 0.550665 ± 0.010080 | 0.147725 ± 0.000597 | 0.195640 ± 0.006644 | 0.857619 ± 0.002437 |
+| MWS-GATE | 0.490636 ± 0.021186 | 0.550104 ± 0.007794 | 0.149320 ± 0.004282 | 0.198688 ± 0.005648 | 0.859247 ± 0.002006 |
+| CTRL-GATE | 0.496424 ± 0.027496 | 0.555820 ± 0.014386 | 0.152304 ± 0.006074 | 0.199825 ± 0.013700 | 0.864410 ± 0.001637 |
+
+预注册 paired comparisons 得到：
+
+- MWS-ADD vs MS：五项均未同时达到 mean 实质改善和至少 2/3 paired-seed 同方向，W 加到 MS 上没有增量证据；
+- MWS-ADD vs CTRL3：Whole RR、trajectory、global envelope 通过，但 MWS-ADD 相对 C201 的 signed PCC 下降 `0.005898`，超过 `0.005` 护栏，因此不 qualified；
+- MWS-GATE vs MWS-ADD：五项均未通过，gate 机制没有独立增量证据；
+- MWS-GATE vs CTRL-GATE：Local RR、trajectory、global envelope 通过，支持 M/W/S 表示相对匹配 gated capacity 含有任务信息，但不能证明 gate 优于 additive；
+- CTRL-GATE vs CTRL3：只有 global envelope 通过，不支持 gate 本身带来一致多指标收益。
+
+最终 `qualified_p6a_candidates=[]`，decision 固定为 `no_p6a_candidate_retain_p5_pool`。不选择 MWS-ADD 或 MWS-GATE，不构造总分；保留 P5 候选池 `M / W / MS`，仍不选择唯一最终模型。冻结输出为：
+
+```text
+runs/crd_tf_v1/p6a_validation_summary/p6a_summary.json
+SHA-256 = b970a6ea6d77e6d6858d8b7dbd77ed4c2ed8ff633c7f48eca15aeba227ef6e64
+
+runs/crd_tf_v1/p6a_validation_summary/p6a_summary_manifest.json
+SHA-256 = ffc0df0b4941dc91e7383bbc23af40dd78e9454eb814e4fbf982fc79ccac4e98
+```
+
+汇总来自干净 commit `e658d42c38cde1c3bfbc22d70029999eb7d3ac99`，审计 `research_test_used=false`。以上结论仍仅为 validation-development evidence；P6a、formal 和汇总入口全部关闭，P6b/local cross-attention 与 research-test 不自动开放。
