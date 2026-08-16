@@ -997,6 +997,17 @@ SHA-256 = a23c1dd9aca724ecae3d867429911043a0da1843ede61a3784578abbf99040a9
 
 该命令已从干净 commit `e658d42` 一次性完成，现不得重复运行。9/9 formal 无 incomplete，全部 early stop；冻结 summary 为 `runs/crd_tf_v1/p6a_validation_summary/p6a_summary.json`，SHA-256=`b970a6ea6d77e6d6858d8b7dbd77ed4c2ed8ff633c7f48eca15aeba227ef6e64`。Decision 为 `no_p6a_candidate_retain_p5_pool`：MWS-ADD 未优于 MS 且未过 PCC 护栏，MWS-GATE 未优于 MWS-ADD。P6a 关闭，research-test/P6b 不自动开放。
 
+### CRD-TF v1 冻结候选 research-test cache
+
+用户已明确授权 reused research-test，固定矩阵为 C201/M/W/MS × 3 validation-selected checkpoints。当前只构建一次独立的完整 2310-window test input-only M/W/S cache：
+
+```bash
+git status --short
+./.venv/bin/python scripts/build_crd_tf_v1_research_test_cache.py
+```
+
+首行必须无输出。预计耗时与 P1 完整 cache 的 test-window 比例相当；只读 BCG input，不读取 test target array，不运行模型。命令打印唯一 `cache_manifest.json` 路径。返回 manifest 并冻结前，不启动 checkpoint research-test evaluation。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

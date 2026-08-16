@@ -29,6 +29,7 @@ CRD_102_MATCHED_OBSERVABILITY_PROTOCOL_VERSION = "crd-v1.1-crd102-matched-observ
 CRD_CONTROLS_PROTOCOL_VERSION = "crd-v1.1-controls-research-informed-20260811"
 CRD_TF_PROTOCOL_VERSION = "crd-tf-v1-research-informed-20260812"
 CRD_TF_P6A_PROTOCOL_VERSION = "crd-tf-v1-p6a-validation-development-20260815"
+CRD_TF_RESEARCH_TEST_PROTOCOL_VERSION = "crd-tf-v1-research-test-development-20260816"
 CRD_TF_CACHE_PATH = (
     "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/"
     "bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0"

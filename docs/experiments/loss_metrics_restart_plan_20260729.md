@@ -2073,3 +2073,9 @@ P5 随后从干净 commit `c7b65b1` 一次性完成，summary SHA-256 为 `afb6f
 P6a 保持 cache、数据/split/target、loss/metrics、physical batch `128×1`、AdamW 与 6400-update LR schedule 不变。对 45 条 P4 history 回放时，patience `10/15/20/25/30` 分别错过 `5/4/3/1/0` 个全程最优，因此冻结 `max_epochs=80 / early-stop patience=30 / min_delta=0`；该回放不保证新结构没有更晚最优，仍是残余风险。三个新 variant 的 CUDA synthetic 与 MWS-GATE/CTRL-GATE batch-128 acceptance 已在 engineering commit `3802423` 通过，最大 reserved fraction `67.48%`；统一 receipt SHA-256 为 `a23c1dd9aca724ecae3d867429911043a0da1843ede61a3784578abbf99040a9`，batch 决策保持 `128×1`。9-run formal 现通过 frozen-receipt/critical-identity preflight 开放。Research-test、local cross-attention、batch/LR 搜索与统一矩阵 runner 继续关闭。
 
 P6a 9/9 formal 随后从干净 commit `94033ce` 完成，全部由 patience=30 在 epoch `38–51` 正常停止，selected epoch 为 `8–21`，无 incomplete；最大长期 reserved fraction 为 `85.48%`，所有生命周期均完整且 finite。冻结 summary SHA-256 为 `b970a6ea6d77e6d6858d8b7dbd77ed4c2ed8ff633c7f48eca15aeba227ef6e64`。MWS-ADD 没有任何 primary 实质优于 MS 且 PCC 未过 base 护栏；MWS-GATE 没有任何 primary 实质优于 MWS-ADD。最终无 qualified P6a candidate，保留 P5 的 M/W/MS 候选池，不选唯一赢家。P6a/formal/summary 关闭，P6b 与 research-test 仍须另立协议。
+
+## 48. CRD-TF v1 冻结候选池 research-test（2026-08-16）
+
+用户随后明确表示不要求独立证据并授权开始 research-test。附件 `docs/experiments/crd_tf_v1_research_test_protocol_20260816.md` 由本节纳入唯一协议。证据名称固定为 reused research/development evidence，不得写成未触碰 held-out 或无偏泛化。
+
+评价矩阵固定为 C201 anchor 与 P5 保留的 M/W/MS，各三个 validation-selected checkpoints，共 12 次；不加入 P6a 失败模型或其他 P4 arms，不重选 epoch、不重训。第一步只开放独立的完整 2310-window test input-only M/W/S cache builder，保持原 train/validation cache 不变且不读取 test target array。Cache manifest 审计写回前，checkpoint evaluation 与 test target 继续关闭。

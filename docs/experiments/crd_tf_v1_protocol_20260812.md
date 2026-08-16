@@ -648,3 +648,7 @@ crd_tf203_ms
 P6a 9/9 formal runs 均来自干净 commit `94033ce`，无 incomplete，九项均按 patience=30 在 epoch `38–51` 停止，selected epoch 为 `8–21`；checkpoint、2675 条逐 sample validation、finite/degeneracy 与 early-stop 契约全部通过。冻结 summary 由干净 commit `e658d42` 生成，SHA-256 为 `b970a6ea6d77e6d6858d8b7dbd77ed4c2ed8ff633c7f48eca15aeba227ef6e64`。
 
 MWS-ADD 未在任何 primary 上实质优于 MS，且相对 C201 的 PCC drop `0.005898` 超出护栏；MWS-GATE 虽在 Local RR/trajectory/global envelope 上优于匹配 CTRL-GATE，但没有任何 primary 实质优于 MWS-ADD。因此两者均不 qualified，decision 为 `no_p6a_candidate_retain_p5_pool`，保留 M/W/MS 候选池且不选唯一赢家。P6a 与汇总入口关闭；research-test 和 P6b/local cross-attention 不自动开放。
+
+## 25. Research-test 授权（2026-08-16）
+
+用户已在了解独立性限制后明确授权开始 research-test。独立协议为 `docs/experiments/crd_tf_v1_research_test_protocol_20260816.md`，矩阵固定为 C201/M/W/MS × 3 validation-selected seeds。当前仅开放完整 test input-only M/W/S cache 构建；cache 冻结前不运行模型或读取 test target。结果一律称 reused research/development evidence。
