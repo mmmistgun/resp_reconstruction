@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-15
+最后更新：2026-08-16
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46 节 CRD-TF v1 P0–P5 已完成并冻结；第 47 节 P6a formal/汇总亦已完成并关闭且未产生 qualified 新候选，local cross-attention 与 research-test 未开放
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节已登记 CRD-TF-W v2 融合、小波与 Local BiMamba 深度计划，但新阶段尚未开放实现或实验
 
 ## 1. 定位
 
@@ -2083,3 +2083,11 @@ P6a 9/9 formal 随后从干净 commit `94033ce` 完成，全部由 patience=30 �
 完整 input-only cache 随后从干净 commit `dfd9313` 生成，覆盖 `2310 windows / 8 samp_id`，目录 514 MiB；manifest SHA-256=`5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745`。7 个受管文件的实际 SHA/size/shape/dtype/finite、row identity 与 manifest 重新计算完全一致，且 `test_target_array_read=false / model_inference_used=false`。现开放只接受冻结 allowlist 的 12-checkpoint 专用入口；普通 CRD eval 仍保持 validation-only，R4 汇总在 12 项齐备前关闭。
 
 12/12 research-test evaluations 随后从干净 commit `9f429da` 完成；全部 checkpoint/cache/row/finite/eligibility/degeneracy identity 通过，无 checkpoint reselection。一次性 summary 从干净 commit `a1ce90c` 生成，SHA-256=`e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0`。M/W/MS 均通过 C201 guardrail 与至少一项 paired material improvement；tolerance-aware Pareto 为 W/MS，M 被支配。W 是 Local-RR lead（mean `0.609566`），但 W 的 global envelope 与若干 secondary 不占优，因此不构造总分或唯一赢家。Research-test 阶段关闭，结果只作 reused research/development evidence。
+
+## 49. CRD-TF-W v2 融合、小波与 Local BiMamba 深度计划（2026-08-16）
+
+用户明确将下一阶段“稳健”定义为结果在数值、优化、机制、任务交换和跨 split 表现上合理，而不要求现有 test split 保持完全独立。该定义不改变已经发生的 research-test 访问事实：现有 split 已多次评价并影响后续研究，只能继续称为 reused research/development evidence，不得包装为未触碰的独立测试。
+
+规范性附件为 `docs/experiments/crd_tf_w_v2_protocol_20260816.md`。计划以冻结的 `crd_tf102_w` 为 anchor，顺序研究：single-W 的 FiLM/additive/multiplicative/同位置 residual-concat 融合；W 的 respiratory/carrier 频带来源与 Morlet effective-Q；以及 4/6/8 层 Local BiMamba2 质量—效率曲线。C201、W、CTRL1、P5 矩阵、P6a gate、C1 TCN 和 C2 decoder 证据直接复用，不重复训练；不运行融合×小波×深度全因子，不开放 local cross-attention、TCN+decoder 或其他 decoder。
+
+当前附件只完成方案登记，P0–P5 均关闭。开始任何实现、cache、测试、smoke、acceptance、formal 或 reused research-test 前，须先与用户讨论并冻结 P1 arm、退化线、Q 定义、screening 生命周期和 GPU 预算，再建立新的 candidate lock。
