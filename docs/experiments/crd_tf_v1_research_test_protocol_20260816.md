@@ -2,7 +2,7 @@
 
 日期：2026-08-16
 
-状态：**用户已明确授权；完整 test cache 已冻结，受控 12-checkpoint evaluation 已实现并开放，尚未执行**
+状态：**12-checkpoint evaluation 与一次性冻结汇总已完成；research-test 阶段关闭**
 
 协议标识：`crd-tf-v1-research-test-development-20260816`
 
@@ -50,10 +50,10 @@ Cache 固定覆盖完整 2310 个 test windows，使用既有 test sample seed `
 | R0 | 协议、cache builder 与 CPU 定向测试 | 已完成 |
 | R1 | 完整 2310-window input-only cache | 已完成并冻结 |
 | R2 | cache reader、12-checkpoint 受控评价入口与 CPU 测试 | 已完成 |
-| R3 | 12 次 GPU research-test evaluation | 已开放，待用户执行 |
-| R4 | 一次性审计、paired-seed 汇总与候选比较 | 关闭 |
+| R3 | 12 次 GPU research-test evaluation | 已完成 |
+| R4 | 一次性审计、paired-seed 汇总与候选比较 | 已完成并冻结 |
 
-当前需要用户在两张相同 GPU 上完成固定 12 次 evaluation。入口只接受冻结矩阵内 SHA-256 匹配的 checkpoint，显式要求 `--confirm-research-test`，结果不可覆盖；12 项完成前不得根据中间结果改变矩阵。
+固定 12 次 evaluation 已完成且没有缺项。评价入口与 summary 入口现只保留 provenance，不得重复运行或覆盖结果。
 
 ## 5. 未来汇总口径
 
@@ -89,3 +89,40 @@ research_test_metrics_manifest.json
 ```
 
 Manifest 记录 checkpoint/cache identity、evaluation commit、完整命令和 reused evidence 属性。任何一项失败时保留已有成功结果并停止对应 shell；修复前不得跳过失败项生成 R4 summary。
+
+## 8. R3/R4 冻结结果
+
+12/12 evaluations 全部来自干净 commit `9f429dae8f4a879c6b9530c1190df1949b6c420a`。每项严格对应冻结 checkpoint path/hash/validation-selected epoch，TF variants 使用冻结 cache；每项均为相同顺序的 2310 个 test rows，五项 primary finite、joint target eligibility=1、prediction degeneracy=0。没有重选 checkpoint。
+
+三 seed research-test mean ± sample SD：
+
+| variant | Whole RR | Local RR | Trajectory | Global envelope | Signed PCC |
+|---|---:|---:|---:|---:|---:|
+| C201 | 0.702232 ± 0.032241 | 0.663832 ± 0.011575 | 0.142537 ± 0.003638 | 0.171310 ± 0.009071 | 0.876464 ± 0.000996 |
+| M | 0.704849 ± 0.023883 | 0.657296 ± 0.014508 | 0.142040 ± 0.003138 | 0.169338 ± 0.005093 | 0.873427 ± 0.003614 |
+| W | 0.617234 ± 0.027788 | 0.609566 ± 0.018472 | 0.139546 ± 0.001037 | 0.173418 ± 0.006625 | 0.876577 ± 0.001329 |
+| MS | 0.643805 ± 0.067921 | 0.633577 ± 0.011256 | 0.141044 ± 0.002264 | 0.168844 ± 0.011908 | 0.874493 ± 0.001670 |
+
+相对 C201，按预注册 mean 实质门槛 + 至少 2/3 paired seeds 同方向：
+
+- M：Local RR、global envelope 通过；base guardrails 通过；
+- W：Whole RR、Local RR、trajectory 通过且均为 3/3；base guardrails 通过；
+- MS：Whole RR、Local RR、trajectory、global envelope 通过，均至少 2/3；base guardrails 通过。
+
+W 相对 C201 的 Whole/Local RR mean 改善分别为 `12.10% / 8.17%`，trajectory 改善 `2.10%`，PCC 略高 `0.000113`，但 global envelope 恶化 `1.23%`。MS 的 Whole/Local RR 改善为 `8.32% / 4.56%`，global envelope 改善 `1.44%`，PCC 下降 `0.001971`。W 相对 MS 在 Whole/Local RR/trajectory/PCC 上更好，但 global envelope 更差，因此两者互不容差支配。
+
+Secondary 不支持“W 全指标获胜”：C201 的 coherence、nDTW 和多数 envelope Spearman 均优于 W；W 的 IBI coverage 略高，但 IBI MedAE 略差。这些描述不覆盖 primary/Pareto 规则。
+
+最终三项候选均 qualified；tolerance-aware Pareto 固定为 `W / MS`，M 被容差支配。由于不构造总分，`unique_winner_selected=false`；按既有 Local-RR checkpoint 目标，描述性 lead 为 W，Local RR=`0.609566`。若项目需要一个实际主模型，W 是与当前任务选择目标一致的首选，MS 保留为 envelope trade-off 候选。
+
+冻结产物：
+
+```text
+runs/crd_tf_v1/research_test_summary/research_test_summary.json
+SHA-256 = e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0
+
+runs/crd_tf_v1/research_test_summary/research_test_summary_manifest.json
+SHA-256 = 1c1a4571eaf281a2dbbbd86da633f45e9e44bed2f7d31b7b4320bd38e411e180
+```
+
+汇总来自干净 commit `a1ce90c9e82ba044449587c1692b0073f7dce889`，decision=`retain_research_test_pareto_without_total_score`。证据属性继续是 reused research/development evidence。

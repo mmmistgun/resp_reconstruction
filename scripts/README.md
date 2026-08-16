@@ -1021,6 +1021,14 @@ Cache 已从干净 commit `dfd9313` 完成并冻结，manifest SHA-256=`5d43ecf3
 
 入口只接受 C201/M/W/MS × 3 的 12 个精确 path/hash，输出写回 checkpoint 原 run 目录且拒绝覆盖。可由两张相同 GPU 用 shell `for` 分组并行，但每个 checkpoint 仍是独立入口；完整命令见 research-test 协议执行记录。12 项齐备前不得运行汇总或根据中间结果删减矩阵。
 
+12 项已从干净 commit `9f429da` 完成；评价入口现只保留 provenance。唯一汇总命令为：
+
+```bash
+./.venv/bin/python scripts/summarize_crd_tf_v1_research_test.py
+```
+
+该命令已从干净 commit `a1ce90c` 一次性完成，现不得重复运行。冻结 summary 为 `runs/crd_tf_v1/research_test_summary/research_test_summary.json`，SHA-256=`e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0`。M/W/MS 均 qualified，Pareto 为 W/MS，W 是 Local-RR lead；未构造总分或唯一赢家。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的
