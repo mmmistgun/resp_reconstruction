@@ -2,11 +2,11 @@
 
 日期：2026-08-16
 
-状态：**仅完成方案登记；P0–P5 均未开放实现、cache 构建、训练、汇总或 research-test 评价。开始任何实验前，须由用户与 Codex 再次确认本协议的实验臂、晋级门槛、资源预算和执行顺序。**
+状态：**已于 2026-08-17 被 `docs/experiments/crd_tf_w_v2_protocol_20260817.md` 取代。本文只保留为历史设计记录，不得据此实现、验收、训练、汇总或访问 research-test。**
 
 ## 1. 权威性与阶段定位
 
-本文是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 49 节引用的规范性附件。发生冲突时，以主协议为准。
+本文曾是 `docs/experiments/loss_metrics_restart_plan_20260729.md` 第 49 节引用的规范性附件；现已失效，执行口径只见 2026-08-17 修订版与主协议。
 
 新阶段暂命名为 `CRD-TF-W v2`，只围绕已冻结候选 `crd_tf102_w` 回答三个问题：
 

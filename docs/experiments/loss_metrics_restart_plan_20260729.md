@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-16
+最后更新：2026-08-17
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节已登记 CRD-TF-W v2 融合、小波与 Local BiMamba 深度计划，但新阶段尚未开放实现或实验
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0 与 P−1 实现验收已完成，当前等待用户在干净提交上运行完整 P−1 validation audit
 
 ## 1. 定位
 
@@ -2084,10 +2084,22 @@ P6a 9/9 formal 随后从干净 commit `94033ce` 完成，全部由 patience=30 �
 
 12/12 research-test evaluations 随后从干净 commit `9f429da` 完成；全部 checkpoint/cache/row/finite/eligibility/degeneracy identity 通过，无 checkpoint reselection。一次性 summary 从干净 commit `a1ce90c` 生成，SHA-256=`e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0`。M/W/MS 均通过 C201 guardrail 与至少一项 paired material improvement；tolerance-aware Pareto 为 W/MS，M 被支配。W 是 Local-RR lead（mean `0.609566`），但 W 的 global envelope 与若干 secondary 不占优，因此不构造总分或唯一赢家。Research-test 阶段关闭，结果只作 reused research/development evidence。
 
-## 49. CRD-TF-W v2 融合、小波与 Local BiMamba 深度计划（2026-08-16）
+## 49. CRD-TF-W v2 机制、频带与效率计划（2026-08-17 修订）
 
-用户明确将下一阶段“稳健”定义为结果在数值、优化、机制、任务交换和跨 split 表现上合理，而不要求现有 test split 保持完全独立。该定义不改变已经发生的 research-test 访问事实：现有 split 已多次评价并影响后续研究，只能继续称为 reused research/development evidence，不得包装为未触碰的独立测试。
+用户已确认以 `docs/experiments/crd_tf_w_v2_protocol_20260817.md` 作为规范性附件；原 `crd_tf_w_v2_protocol_20260816.md` 与 `docs/temp/实验计划20260817.md` 只保留为设计演化记录。新附件冲突时仍以本文为准。
 
-规范性附件为 `docs/experiments/crd_tf_w_v2_protocol_20260816.md`。计划以冻结的 `crd_tf102_w` 为 anchor，顺序研究：single-W 的 FiLM/additive/multiplicative/同位置 residual-concat 融合；W 的 respiratory/carrier 频带来源与 Morlet effective-Q；以及 4/6/8 层 Local BiMamba2 质量—效率曲线。C201、W、CTRL1、P5 矩阵、P6a gate、C1 TCN 和 C2 decoder 证据直接复用，不重复训练；不运行融合×小波×深度全因子，不开放 local cross-attention、TCN+decoder 或其他 decoder。
+本阶段继续属于 research-test-informed development；现有 test split 已多次评价并影响研究，只能称为 reused research/development evidence。当前明确暂不做 `samp_id` delta、`5/7` 方向门槛或 leave-one-`samp_id`-out；`samp_id` 仅保留作逐 sample 身份追溯，正式汇总继续使用逐 sample direct mean 与三个 paired training seeds。
 
-当前附件只完成方案登记，P0–P5 均关闭。开始任何实现、cache、测试、smoke、acceptance、formal 或 reused research-test 前，须先与用户讨论并冻结 P1 arm、退化线、Q 定义、screening 生命周期和 GPU 预算，再建立新的 candidate lock。
+修订后的固定顺序为：P0 candidate lock；P−1 对冻结 W 三 checkpoint 做 gamma/beta、频带遮挡和时间负对照的 validation-only 功能审计；P1 运行 RESP-only、CARRIER-only 与 full-band 6-voice 各三个 seed；P2 仅在 P−1 预注册 near 规则触发时运行 ADD 或 SCALE 中一个 arm；P3 只在当前 `W0_FULL_12V_FILM` 上训练 D4 三 seed，并复用既有 D6。各问题保持独立，不构造未经训练的频带/voices/融合/D4 复合候选。
+
+质量候选采用 `0.5% / 0.002` 实质改善、`2/3` paired seeds、Local RR 最多恶化 `0.5%`、其他 error primary 最多恶化 `1.5%`、PCC 最多下降 `0.003`；`3% / 0.005` 只作 catastrophic failure。效率候选要求四个 error primary 在 1% 内、PCC 下降不超过 0.003、预注册结构缩减，并达到 throughput `+10%` 或 peak allocated `−15%`。不构造加权总分。
+
+标准预算固定为 12 个新 training runs，条件融合触发时硬上限为 15。Morlet Q、concat、D8、gate、attention、local cross-attention、TCN+decoder、其他 decoder 与全因子矩阵均关闭。每个新 variant 在 formal 前须通过至少 400 optimizer updates、两次完整 validation 的隔离 stress；peak reserved `<85%` 通过、`85%–90%` warning 通过、`>90%` 或 OOM 关闭，不为单臂改变 batch。
+
+P0 静态审计随后完成，candidate lock 固定为 `docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json`，SHA-256=`6ae35076bbd89bec688bfd4918cfecd20c7d5ea7f845f460034a88045432c7b6`。C201/W0/CTRL1 的 9 个 checkpoint 与 36 项配套文件 identity 全部复核通过；三类模型各一个代表 checkpoint 的 current-code strict-load 与同 seed base initialization identity 通过。W0/C201/W-branch/CTRL1 参数数为 `1,219,850 / 1,069,802 / 150,048 / 1,219,754`，D4 静态准确参数为 `902,722`。
+
+P0 同时纠正名义频带与 cache 实际离散映射的表述：W 的名义目标网格为 `0.03125–8.00 Hz`，实际 97 个 mapped centers 为 `0.03662109375–7.99560546875 Hz`；RESP 固定为 indices `0..55`（56 scales，`≤0.80 Hz`），CARRIER 为 `56..96`（41 scales，`>0.80 Hz`），6V 为偶数 indices `0,2,…,96`（49 scales）。P0 未推理、未改 cache、未训练、未访问 research-test；审计时 runtime code 无 dirty。
+
+P0 随后关闭并只保留 provenance。用户明确允许进入 P−1 实现阶段；独立 `tf_w_v2_audit.py` 包装器和专用 `eval_crd_tf_w_v2_functional_audit.py` 已实现，未修改锁定的 v1 model/cache reader。入口只接受固定 lock/hash、干净 Git、CUDA、完整 validation、三个 W0 checkpoints 与 10 项干预；FULL 必须在绝对 `1e-6` 内复现锁定 primary/degeneracy summary。定向 `py_compile`、candidate-lock input verification 与新审计/model/data/experiment 回归为 `40 passed`；测试覆盖去除原生 Mamba 执行后的真实 W0 active-FiLM wrapper identity，没有加载冻结 W0 checkpoint、运行完整 validation、训练或 research-test。
+
+当前唯一下一步是用户从包含本登记的新干净 commit 运行 `./.venv/bin/python scripts/eval_crd_tf_w_v2_functional_audit.py --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json --split val --device cuda:0`。固定输出为 `runs/crd_tf_w_v2/p_minus_1_validation_audit/`，存在即拒绝覆盖；失败保留 `.incomplete_* / failure.json`。P−1 结果登记前，P1/P2/P3 实现、GPU stress、formal 与 research-test 继续关闭。最终 research-test 仍须在 P4 allowlist 冻结后由用户再次明确授权。

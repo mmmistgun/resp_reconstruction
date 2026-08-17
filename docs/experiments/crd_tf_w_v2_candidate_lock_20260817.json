@@ -1,0 +1,500 @@
+{
+  "schema_version": 1,
+  "lock_id": "crd-tf-w-v2-candidate-lock-20260817",
+  "protocol": "crd-tf-w-v2-research-informed-20260817",
+  "created_date": "2026-08-17",
+  "status": "p0_complete_downstream_implementation_not_activated",
+  "evidence_role": "research-test-informed validation-development; not unbiased held-out evidence",
+  "p0_scope": "static identity/config/code audit only; no model inference, cache build, training, GPU work, or research-test access",
+  "audit_basis": {
+    "repository_head": "00037cd84704bc9132752125c97bbd820346af69",
+    "git_dirty": true,
+    "dirty_scope_at_audit": [
+      "AGENTS.md",
+      "docs/experiments/crd_tf_w_v2_protocol_20260816.md",
+      "docs/experiments/crd_tf_w_v2_protocol_20260817.md",
+      "docs/experiments/loss_metrics_restart_plan_20260729.md"
+    ],
+    "runtime_code_dirty": false,
+    "formal_requires_future_clean_commit": true,
+    "research_test_read": false,
+    "model_inference_used": false,
+    "cache_created_or_modified": false
+  },
+  "fixed_seeds": [20260811, 20260812, 20260813],
+  "artifact_convention": {
+    "checkpoint": "checkpoint_best_local_rr.pt",
+    "resolved_config": "config.yaml",
+    "run_manifest": "run_manifest.json",
+    "validation_metrics_summary": "metrics_summary.csv",
+    "checkpoint_reselection_allowed": false,
+    "retraining_anchor_allowed": false
+  },
+  "source_evidence": {
+    "c201_candidate_lock": {
+      "path": "docs/experiments/crd_tf_v1_candidate_lock_20260812.json",
+      "size_bytes": 3445,
+      "sha256": "c8d4823500e6096fcacb8d2e8787f7b3422160813eabe31adf01b1f1f75cc139"
+    },
+    "p5_validation_summary": {
+      "path": "runs/crd_tf_v1/p5_validation_summary/p5_summary.json",
+      "size_bytes": 1808,
+      "sha256": "afb6feba1600c9c5e07d713db9cac7c886aa87a033037649d3e9ac32cb753b4e",
+      "manifest_path": "runs/crd_tf_v1/p5_validation_summary/p5_summary_manifest.json",
+      "manifest_size_bytes": 1397,
+      "manifest_sha256": "cecd35d862cc975cf7d99af9ad18fce4576ddb6b9aa561ad88322e3888992a65"
+    },
+    "reused_research_test_summary": {
+      "path": "runs/crd_tf_v1/research_test_summary/research_test_summary.json",
+      "size_bytes": 1249,
+      "sha256": "e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0",
+      "manifest_path": "runs/crd_tf_v1/research_test_summary/research_test_summary_manifest.json",
+      "manifest_size_bytes": 1126,
+      "manifest_sha256": "1c1a4571eaf281a2dbbbd86da633f45e9e44bed2f7d31b7b4320bd38e411e180",
+      "reuse_only": true
+    }
+  },
+  "runtime_code_identity": {
+    "resp_train/crd/tf_v1_model.py": "727e2a2fe9a1c58f501bdf170a234e24f73df3c50294d881b0025f863ef7b943",
+    "resp_train/crd/tf_v1_data.py": "12e935446902fec74bb7d1150fa1f8a56605b4a3dc4dbc9e2e6ef5dd86ea90bb",
+    "resp_train/crd/model.py": "f1bdf2b2c6fb23768ac20208d25b89ffbd3179118079d76283e81c5190c1be19",
+    "resp_train/crd/initialization.py": "6c72ea8881e6f498adcd73a5ad8afa5e5a299c4f313e5d3bc56f4c54add44ffc",
+    "configs/crd_tf_v1/crd_tf101_m_smoke.yaml": "208f5ae0bbefd7a43558b107b9e5de57edb37df3abd06a3a6b480460657351ae",
+    "configs/crd_tf_v1/crd_tf102_w_formal.yaml": "4f7fb910871c4c6a33fa5e59919eff6e836b347c257830345ac9a036e73c071e",
+    "configs/crd_tf_v1/crd_tf_ctrl1_formal.yaml": "2a6a9499efcf492657a59599413b96762b405587e40fac7ea021a8d0bce7ae4f"
+  },
+  "cache_lock": {
+    "root": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+    "transform_sha256": "bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+    "manifest": {
+      "path": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/cache_manifest.json",
+      "size_bytes": 9529,
+      "sha256": "6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8",
+      "complete": true,
+      "target_read": false,
+      "research_test_used": false,
+      "test_cache_created": false
+    },
+    "w_transform": {
+      "library": "ssqueezepy==0.6.6",
+      "wavelet": "morlet",
+      "mu": 13.4,
+      "voices_per_octave": 12,
+      "nominal_target_frequency_hz": [0.03125, 8.0],
+      "mapped_frequency_hz": [0.03662109375, 7.99560546875],
+      "scale_count": 97,
+      "pool_samples": 50,
+      "feature": "mean50_log1p_abs",
+      "padtype": "reflect"
+    },
+    "frequency_file": {
+      "path": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/w_frequencies_hz.npy",
+      "size_bytes": 904,
+      "file_sha256": "15cc722c38e5572b3284c92137cfdeec7cbc4153b4588c2c1e086f26ae3238b3",
+      "content_sha256_c_order": "9fb164e7b09d42b31f7ee57a7d3e966af7adabc6d8c6a0e1eff3090b00b73c0c",
+      "dtype": "float64",
+      "shape": [97],
+      "nondecreasing": true,
+      "duplicate_count": 1
+    },
+    "train_w": {
+      "path": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/train_w.npy",
+      "size_bytes": 1416495008,
+      "sha256": "9ed2657cb92ba8e73ce8199dd8b19834ac3b964df10ef615ebb771e9a57e09a3",
+      "dtype": "float32",
+      "shape": [10141, 97, 360],
+      "finite": true
+    },
+    "val_w": {
+      "path": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/val_w.npy",
+      "size_bytes": 373644128,
+      "sha256": "fb8b44f174f078f93ae6f58083f2ba8c089a011457329e361a9965e409df3cc2",
+      "dtype": "float32",
+      "shape": [2675, 97, 360],
+      "finite": true
+    },
+    "row_identity": {
+      "train_count": 10141,
+      "train_row_file_sha256": "2e383fac6c8c5c9421a39be3797f5abc05a7393a2407c21ada3a71ed421953e0",
+      "train_row_content_sha256": "f290e569140a2ff7745cf1a5cfa6a4da943644d76498c9b85517d3ae0702c45e",
+      "val_count": 2675,
+      "val_row_file_sha256": "cd5a0092647b07dc17ed4ae73b7e767684f37dc6084832340f324d18eeed5432",
+      "val_row_content_sha256": "b68a51b101bb80033c4de18c9c21cdfbb8924d1bfe134330f047617cf3b0915a"
+    },
+    "views": {
+      "resp": {
+        "frequency_rule": "mapped_frequency_hz <= 0.80",
+        "indices": "0..55",
+        "count": 56,
+        "mapped_frequency_hz": [0.03662109375, 0.7965087890625],
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "460c40aca1f47cb149e783f690fc0f2aec0cda4717a2da644ec7927a6a744f36"
+      },
+      "carrier": {
+        "frequency_rule": "mapped_frequency_hz > 0.80",
+        "indices": "56..96",
+        "count": 41,
+        "mapped_frequency_hz": [0.84228515625, 7.99560546875],
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "b9e31adaf7120cbdb7f503cfd806bb59831f0b09549ac705845f12d1e19e95c4"
+      },
+      "carrier_l_diagnostic": {
+        "frequency_rule": "0.80 < mapped_frequency_hz <= 2.00",
+        "indices": "56..71",
+        "count": 16,
+        "mapped_frequency_hz": [0.84228515625, 1.959228515625],
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "b6d39f4cb2f7be5060c4e919a9fceb2fedf411ff20be1fa11fb9f6e7ed2f9fcd"
+      },
+      "carrier_h_diagnostic": {
+        "frequency_rule": "mapped_frequency_hz > 2.00",
+        "indices": "72..96",
+        "count": 25,
+        "mapped_frequency_hz": [2.0721435546875, 7.99560546875],
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "66778e1669c9935dffef828f36f2846dc684bb9fa4b845e0a40de7d1463d55bb"
+      },
+      "full_6v": {
+        "indices": "0,2,...,96",
+        "count": 49,
+        "mapped_frequency_hz": [0.03662109375, 7.99560546875],
+        "mapped_frequency_duplicate_count": 0,
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "3734c4183c17744eb4779ac65ac8521de1897f6a12f364e913aeb02528e250d6",
+        "target_grid_formula": "0.03125 * 2**(j/6), j=0..48",
+        "target_12v_even_vs_theoretical_6v_max_abs_hz": 1.7763568394002505e-15
+      }
+    },
+    "view_application_point": "after TfV1CacheReader.get copies the read-only memmap sample and before CwtBranch.conv_in; the source memmap and manifest remain unchanged"
+  },
+  "film_contract": {
+    "context_shape": [96, 1800],
+    "parameter_fill_before_projection": true,
+    "projection": "Conv1d(96,192,kernel_size=1,bias=true)",
+    "projection_initialization": "zero weight and zero bias",
+    "split": "final_projection(context).chunk(2, dim=1): first 96 channels gamma_raw, last 96 channels beta_raw",
+    "effective_gamma": "0.5 * tanh(gamma_raw)",
+    "effective_beta": "0.5 * tanh(beta_raw)",
+    "fusion": "conditioned = latent * (1 + effective_gamma) + effective_beta",
+    "fusion_position": "after base.encode_local and before base.decode_local/refinement/head/decoder",
+    "p_minus_1_gamma_beta_intervention_point": "after tanh scaling and before conditioned latent",
+    "add_training_contract": "effective_gamma is fixed to zero; effective_beta remains active",
+    "scale_training_contract": "effective_beta is fixed to zero; effective_gamma remains active"
+  },
+  "architecture_contract": {
+    "module_seed_names": {
+      "base_frontend": "patch_frontend",
+      "local_trunk": "local_trunk",
+      "refinement": "refinement",
+      "coarse_head": "coarse_head",
+      "decoder_residual": "decoder_residual",
+      "w_branch": "tf_branch_w"
+    },
+    "w0_total_trainable_parameters": 1219850,
+    "c201_total_trainable_parameters": 1069802,
+    "w_branch_trainable_parameters": 150048,
+    "ctrl1_total_trainable_parameters": 1219754,
+    "local_d6_block_count": 6,
+    "local_block_trainable_parameters_each": 158564,
+    "local_d6_trainable_parameters": 951384,
+    "d4_projected_total_trainable_parameters": 902722,
+    "d4_parameter_reduction": 317128,
+    "d4_relative_parameter_reduction": 0.25997294749354427,
+    "d4_initialization_contract": "construct the first four blocks under the unchanged module_seed(seed, local_trunk) sequence and omit only original block indices 4 and 5",
+    "same_seed_initial_state_checks": {
+      "w0_base_equals_c201": true,
+      "ctrl1_base_equals_c201": true
+    },
+    "current_checkpoint_strict_load_checks": {
+      "c201_seed_20260811": true,
+      "w0_seed_20260811": true,
+      "ctrl1_seed_20260811": true
+    },
+    "current_code_limitations": {
+      "cwt_branch_requires_shape_97x360": true,
+      "local_block_count_hardcoded_to_6": true,
+      "add_scale_interventions_not_implemented": true,
+      "new_variant_registry_not_implemented": true
+    }
+  },
+  "planned_variant_allowlist": [
+    {
+      "id": "crd_tfw_v2_w1_resp_12v_film_d6",
+      "stage": "p1",
+      "role": "required_formal",
+      "single_change": "zero W mapped-frequency indices 56..96 before the W encoder; retain shape 97x360",
+      "formal_config": "configs/crd_tf_w_v2/crd_tfw_v2_w1_resp_12v_film_d6_formal.yaml",
+      "stress_config": "configs/crd_tf_w_v2/crd_tfw_v2_w1_resp_12v_film_d6_stress.yaml"
+    },
+    {
+      "id": "crd_tfw_v2_w2_carrier_12v_film_d6",
+      "stage": "p1",
+      "role": "required_formal",
+      "single_change": "zero W mapped-frequency indices 0..55 before the W encoder; retain shape 97x360",
+      "formal_config": "configs/crd_tf_w_v2/crd_tfw_v2_w2_carrier_12v_film_d6_formal.yaml",
+      "stress_config": "configs/crd_tf_w_v2/crd_tfw_v2_w2_carrier_12v_film_d6_stress.yaml"
+    },
+    {
+      "id": "crd_tfw_v2_w3_full_6v_film_d6",
+      "stage": "p1",
+      "role": "required_formal",
+      "single_change": "use W scale indices 0,2,...,96 as a 49x360 input view",
+      "formal_config": "configs/crd_tf_w_v2/crd_tfw_v2_w3_full_6v_film_d6_formal.yaml",
+      "stress_config": "configs/crd_tf_w_v2/crd_tfw_v2_w3_full_6v_film_d6_stress.yaml"
+    },
+    {
+      "id": "crd_tfw_v2_f1_add_full_12v_d6",
+      "stage": "p2",
+      "role": "conditional_formal",
+      "activation": "P-1 BETA_ONLY quality-near branch",
+      "single_change": "effective gamma fixed to zero",
+      "formal_config": "configs/crd_tf_w_v2/crd_tfw_v2_f1_add_full_12v_d6_formal.yaml",
+      "stress_config": "configs/crd_tf_w_v2/crd_tfw_v2_f1_add_full_12v_d6_stress.yaml"
+    },
+    {
+      "id": "crd_tfw_v2_f2_scale_full_12v_d6",
+      "stage": "p2",
+      "role": "conditional_formal",
+      "activation": "P-1 GAMMA_ONLY quality-near branch",
+      "single_change": "effective beta fixed to zero",
+      "formal_config": "configs/crd_tf_w_v2/crd_tfw_v2_f2_scale_full_12v_d6_formal.yaml",
+      "stress_config": "configs/crd_tf_w_v2/crd_tfw_v2_f2_scale_full_12v_d6_stress.yaml"
+    },
+    {
+      "id": "crd_tfw_v2_d4_full_12v_film",
+      "stage": "p3",
+      "role": "required_formal",
+      "single_change": "four Local BiMamba2 blocks instead of six",
+      "formal_config": "configs/crd_tf_w_v2/crd_tfw_v2_d4_full_12v_film_formal.yaml",
+      "stress_config": "configs/crd_tf_w_v2/crd_tfw_v2_d4_full_12v_film_stress.yaml"
+    }
+  ],
+  "stage_allowlist": {
+    "p_minus_1": [
+      "FULL",
+      "BETA_ONLY",
+      "GAMMA_ONLY",
+      "CONDITION_OFF",
+      "RESP",
+      "CARRIER",
+      "CARRIER_L",
+      "CARRIER_H",
+      "TIME_MEAN",
+      "TIME_SHIFT_30S"
+    ],
+    "p1": [
+      "crd_tfw_v2_w1_resp_12v_film_d6",
+      "crd_tfw_v2_w2_carrier_12v_film_d6",
+      "crd_tfw_v2_w3_full_6v_film_d6"
+    ],
+    "p2_max_count": 1,
+    "p2_candidates": [
+      "crd_tfw_v2_f1_add_full_12v_d6",
+      "crd_tfw_v2_f2_scale_full_12v_d6"
+    ],
+    "p3": ["crd_tfw_v2_d4_full_12v_film"]
+  },
+  "forbidden": {
+    "samp_id_analysis": true,
+    "subject_balanced_aggregation": true,
+    "morlet_q_search": true,
+    "concat": true,
+    "d8": true,
+    "gate_or_attention": true,
+    "composite_candidate": true,
+    "per_arm_batch_fallback": true,
+    "ordinary_eval_crd_test": true,
+    "checkpoint_reselection": true,
+    "single_seed_effect_screening": true
+  },
+  "output_contract": {
+    "root": "runs/crd_tf_w_v2",
+    "overwrite_allowed": false,
+    "p_minus_1_root": "runs/crd_tf_w_v2/p_minus_1_validation_audit",
+    "engineering_root_template": "runs/crd_tf_w_v2/engineering/<variant>",
+    "formal_root_template": "runs/crd_tf_w_v2/formal/<variant>/seed_${training.seed}",
+    "p4_summary_root": "runs/crd_tf_w_v2/p4_validation_summary",
+    "research_test_root": "runs/crd_tf_w_v2/research_test",
+    "p_minus_1_required_files": [
+      "intervention_seed_metrics.csv",
+      "intervention_summary.csv",
+      "film_statistics.csv",
+      "p_minus_1_decision.json",
+      "p_minus_1_manifest.json"
+    ],
+    "formal_required_files": [
+      "config.yaml",
+      "run_manifest.json",
+      "train_history.csv",
+      "checkpoint_best_local_rr.pt",
+      "checkpoint_final.pt",
+      "metrics.csv",
+      "metrics_summary.csv",
+      "optimizer_parameter_groups.json",
+      "runtime_summary.json"
+    ],
+    "p4_required_files": [
+      "formal_run_audit.csv",
+      "seed_metrics.csv",
+      "candidate_eligibility.csv",
+      "pareto.json",
+      "p4_summary.json",
+      "p4_summary_manifest.json"
+    ]
+  },
+  "summary_schema": {
+    "aggregation": "per-sample direct mean within each seed, then arithmetic mean and sample SD across the three fixed seeds",
+    "samp_id_fields_retained_for_identity_only": true,
+    "samp_id_analysis_allowed": false,
+    "primary_metrics": [
+      {"name": "whole_rr_abs_error_bpm_mean", "direction": "minimize"},
+      {"name": "local_rr_mae_bpm_mean", "direction": "minimize"},
+      {"name": "envelope_trajectory_mae_mean", "direction": "minimize"},
+      {"name": "global_envelope_modulation_error_mean", "direction": "minimize"},
+      {"name": "lag_aware_signed_pcc_mean", "direction": "maximize"}
+    ],
+    "no_total_score": true,
+    "paired_seed_direction_required_for_claimed_quality_improvement": 2,
+    "quality_thresholds": {
+      "material_error_relative_improvement_min": 0.005,
+      "material_pcc_absolute_improvement_min": 0.002,
+      "local_rr_relative_worsening_max": 0.005,
+      "other_error_relative_worsening_max": 0.015,
+      "pcc_absolute_drop_max": 0.003
+    },
+    "efficiency_thresholds": {
+      "all_error_relative_worsening_max": 0.01,
+      "pcc_absolute_drop_max": 0.003,
+      "throughput_relative_improvement_min": 0.10,
+      "peak_allocated_relative_reduction_min": 0.15
+    },
+    "catastrophic_thresholds": {
+      "any_error_relative_worsening": 0.03,
+      "pcc_absolute_drop": 0.005
+    }
+  },
+  "command_templates": {
+    "p_minus_1": "./.venv/bin/python scripts/eval_crd_tf_w_v2_functional_audit.py --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json --split val",
+    "stress": "./.venv/bin/python scripts/train_crd.py --config configs/crd_tf_w_v2/<variant>_stress.yaml --set training.seed=20260811 --set training.device=cuda:0",
+    "formal": "./.venv/bin/python scripts/train_crd.py --config configs/crd_tf_w_v2/<variant>_formal.yaml --set training.seed=<20260811|20260812|20260813> --set training.device=cuda:0",
+    "p4": "./.venv/bin/python scripts/summarize_crd_tf_w_v2.py --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json",
+    "p5": "./.venv/bin/python scripts/eval_crd_tf_w_v2_research_test.py --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json --confirm-research-test"
+  },
+  "anchors": [
+    {
+      "role": "base_reference",
+      "variant": "crd_c201_decoder_10hz_cap",
+      "training_commit": "4ec737164e20461ab8b3f3595cb1813a38ff1ddd",
+      "training_protocol": "crd-v1.1-controls-research-informed-20260811",
+      "checkpoints": [
+        {
+          "seed": 20260811,
+          "selected_epoch": 10,
+          "run_dir": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260811/20260811_162853_343330",
+          "checkpoint": {"size_bytes": 13050641, "sha256": "1224860fb67ff2ac9843104caf7b7a820ccfe484b1ad97b808601ee8078f8d9f"},
+          "config": {"size_bytes": 2296, "sha256": "3d70b254dd41fd54eb36e1940d5b0b6bd1c1a2813efd28521b2a9106f7d9f6a9"},
+          "manifest": {"size_bytes": 720, "sha256": "1198c6880dd43c8378e163ed525f0cb64757abc6d94340783ae651275b18b488"},
+          "validation_summary": {"size_bytes": 2223, "sha256": "b4393a541f2add601b78c31d6ed9cdf705ad5e85869700c934e97337c464d87b"}
+        },
+        {
+          "seed": 20260812,
+          "selected_epoch": 11,
+          "run_dir": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260812/20260811_173454_537310",
+          "checkpoint": {"size_bytes": 13050641, "sha256": "0b18f786b518e7011b1f602960bdb2b6e1e3aadf6829f83f291876e7f93feecb"},
+          "config": {"size_bytes": 2296, "sha256": "08270f5b177c51b8a72dc63d10b0357e95c9e08dabb5f6e4b15163ead46450a5"},
+          "manifest": {"size_bytes": 720, "sha256": "f71697d7f9acec641d9f72ad27145bb00453f2527f8e4be7f9f08de59055f8fc"},
+          "validation_summary": {"size_bytes": 2222, "sha256": "ffa8e4bc71db41c8d863a40b4d068364352349940e0f600dde11584b46a1451a"}
+        },
+        {
+          "seed": 20260813,
+          "selected_epoch": 13,
+          "run_dir": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260813/20260811_184113_013380",
+          "checkpoint": {"size_bytes": 13050641, "sha256": "113b2b47ddce1e4097f4bb012b12e30345a12f216f442b711a886af11b8115fa"},
+          "config": {"size_bytes": 2296, "sha256": "a9ad3458bba2992afc07d17f9ee65918595dd8b87ae428a50a634e9ea38041ef"},
+          "manifest": {"size_bytes": 720, "sha256": "da02616957ebc188dd33226bca557aa504435692d69f83bf4a6342d1f49dd453"},
+          "validation_summary": {"size_bytes": 2222, "sha256": "efaf2116a9209475432ca4465a9a40d0725fd2a4dd767303af97d08bd848764b"}
+        }
+      ]
+    },
+    {
+      "role": "w0_anchor",
+      "variant": "crd_tf102_w",
+      "training_commit": "68b3b85df2f18b3dc8ec59e02ac0780f2be42122",
+      "training_protocol": "crd-tf-v1-research-informed-20260812",
+      "checkpoints": [
+        {
+          "seed": 20260811,
+          "selected_epoch": 13,
+          "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861",
+          "checkpoint": {"size_bytes": 14890845, "sha256": "18425476831628d9614925dc6835de97ab466aac8cce157f7d95335f504c70f5"},
+          "config": {"size_bytes": 2548, "sha256": "675232d48b7aadb2f0116e43a9cb737a5ac1737013dd54c4544e4f49cc1b2843"},
+          "manifest": {"size_bytes": 619, "sha256": "0f44d8ca2a461ac02543cf9da4fdee789c46aa978474f939ebfb4983e08dc5cf"},
+          "validation_summary": {"size_bytes": 2222, "sha256": "7aa1f305349c7a1fd3c9bbc26a40c6d28c6ea9a942ab13787b84a1bfdac49a00"}
+        },
+        {
+          "seed": 20260812,
+          "selected_epoch": 15,
+          "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130",
+          "checkpoint": {"size_bytes": 14890845, "sha256": "f6a174f88067bd88f0739faee6ce3c7cada79e8b43171a6a3d2e12a9798a5a61"},
+          "config": {"size_bytes": 2548, "sha256": "497f6dfab8e350ee145a568deb6d72df631a81ada5dd2c00847b500323f74eeb"},
+          "manifest": {"size_bytes": 619, "sha256": "5475a24265ee24f8836fde29450c79b019efa8d7c09e1c1a3c4d96589db7d313"},
+          "validation_summary": {"size_bytes": 2223, "sha256": "6568302d579ad09a1cd08b80c39a8ac46702d29e16b4f149e9d798de96d80e17"}
+        },
+        {
+          "seed": 20260813,
+          "selected_epoch": 14,
+          "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006",
+          "checkpoint": {"size_bytes": 14890845, "sha256": "efafbb653507fbee782f5946a07660121737bfd5339ff2b13b81b4b1e3a0fe99"},
+          "config": {"size_bytes": 2548, "sha256": "572711e26097b089e2e190d7e583ca59da0f162dfd5fb0421331cc7932981cc9"},
+          "manifest": {"size_bytes": 619, "sha256": "42f5031e5c97d70f67d4dfb817413120d2c9d7824839531e5c1613a6f5475986"},
+          "validation_summary": {"size_bytes": 2222, "sha256": "67cf88a19b56736cd0d9c315c7f24ba8b38deb00679a98bec531c441090c548d"}
+        }
+      ]
+    },
+    {
+      "role": "matched_capacity_reference",
+      "variant": "crd_tf_ctrl1",
+      "training_commit": "68b3b85df2f18b3dc8ec59e02ac0780f2be42122",
+      "training_protocol": "crd-tf-v1-research-informed-20260812",
+      "checkpoints": [
+        {
+          "seed": 20260811,
+          "selected_epoch": 13,
+          "run_dir": "runs/crd_tf_v1/formal/crd_tf_ctrl1/seed_20260811/20260812_144953_510202",
+          "checkpoint": {"size_bytes": 14884653, "sha256": "397263ff278668207ac63f9072187048d47889be169c25b2a8efff28d844dba4"},
+          "config": {"size_bytes": 2547, "sha256": "45535dc8d1381431cdf4909ad244212a20a072ac82bd8f493e899855fdd4cb8f"},
+          "manifest": {"size_bytes": 620, "sha256": "d34f97525f00446f789c911d12bd103903053e9a38b74a629f7878ca205a2143"},
+          "validation_summary": {"size_bytes": 2223, "sha256": "c3247e61f61e0462167f3902935aa80257d4a5e4a99dd227a319818c5149ac71"}
+        },
+        {
+          "seed": 20260812,
+          "selected_epoch": 18,
+          "run_dir": "runs/crd_tf_v1/formal/crd_tf_ctrl1/seed_20260812/20260812_160324_989600",
+          "checkpoint": {"size_bytes": 14884653, "sha256": "eb48c0eaada8376a8a0d9cd81275d8aec138982c9aa3368bb2c359c14f5ac836"},
+          "config": {"size_bytes": 2547, "sha256": "346f84d89783281fd5f4f0c305858331f1a3b7f5611cb1677de873169a3168c2"},
+          "manifest": {"size_bytes": 620, "sha256": "b0f993cf910a17a2063c3a118234872735889b0d7d017780bdd161c2da86a0d2"},
+          "validation_summary": {"size_bytes": 2223, "sha256": "f2bee0fd2d20f0ca364cbe0e34008aceda6c6fc968105eb53eef0f58b53da669"}
+        },
+        {
+          "seed": 20260813,
+          "selected_epoch": 12,
+          "run_dir": "runs/crd_tf_v1/formal/crd_tf_ctrl1/seed_20260813/20260812_171638_475258",
+          "checkpoint": {"size_bytes": 14884653, "sha256": "0045fe8551e0be0c25668652bfc41ec2eba25679a8874c6a4973f274b2e3624f"},
+          "config": {"size_bytes": 2547, "sha256": "214522a95431c1e464f783e687266556860459bcfee819656a00a4d4b70e9fc4"},
+          "manifest": {"size_bytes": 620, "sha256": "d80fae49b5f85ba9011040afa18ce88e204ffcc4982aedcbcf024aeb68d8b1a6"},
+          "validation_summary": {"size_bytes": 2222, "sha256": "4ed081c1d3385b4ce52f9bd37f3abb795b95255cea9053d73160d53ea9cf7401"}
+        }
+      ]
+    }
+  ],
+  "p0_outcome": {
+    "identity_audit_passed": true,
+    "protocol_correction_required": true,
+    "protocol_correction": "distinguish the nominal 0.03125-8.00 Hz target grid from the actual cached mapped centers 0.03662109375-7.99560546875",
+    "candidate_lock_complete": true,
+    "new_variants_implemented": false,
+    "downstream_implementation_opened": false,
+    "gpu_work_opened": false,
+    "research_test_opened": false
+  }
+}

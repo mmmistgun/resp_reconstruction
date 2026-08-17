@@ -1029,6 +1029,32 @@ Cache 已从干净 commit `dfd9313` 完成并冻结，manifest SHA-256=`5d43ecf3
 
 该命令已从干净 commit `a1ce90c` 一次性完成，现不得重复运行。冻结 summary 为 `runs/crd_tf_v1/research_test_summary/research_test_summary.json`，SHA-256=`e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0`。M/W/MS 均 qualified，Pareto 为 W/MS，W 是 Local-RR lead；未构造总分或唯一赢家。
 
+### CRD-TF-W v2 P−1 validation 功能审计
+
+P0 candidate lock 固定为 `docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json`，SHA-256=`6ae35076bbd89bec688bfd4918cfecd20c7d5ea7f845f460034a88045432c7b6`。P−1 只评价锁定的三个 W0 validation checkpoints，不训练、不改 cache/checkpoint、不读取 research-test，也不做 `samp_id` 分析。
+
+实现定向测试：
+
+```bash
+./.venv/bin/python -m pytest -q \
+  tests/test_crd_tf_w_v2_audit.py \
+  tests/test_crd_tf_v1_model.py \
+  tests/test_crd_tf_v1_data.py \
+  tests/test_crd_experiment.py
+```
+
+测试通过并提交后，先确认工作树干净，再由用户运行完整 audit：
+
+```bash
+git status --short
+./.venv/bin/python scripts/eval_crd_tf_w_v2_functional_audit.py \
+  --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json \
+  --split val \
+  --device cuda:0
+```
+
+首行必须无输出。该命令固定执行 3 checkpoints × 10 interventions；可能长时间占用 GPU，不由 Codex 默认代跑。成功输出唯一写入 `runs/crd_tf_w_v2/p_minus_1_validation_audit/`，目录存在即拒绝覆盖；失败保留 `.incomplete_* / failure.json`，不得删除后静默重跑。返回完整产物并登记 P2 decision 前，不实现 P1/P2/P3。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的

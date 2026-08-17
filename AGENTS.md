@@ -11,6 +11,7 @@
 - 历史 `runs/`、checkpoint、日志、CSV、图表和原始数据不得删除、覆盖或改写。
 - 模型注册表与数据基础设施保留；旧阶段以 `patch_mixer1d` 为 baseline，T2–T4 复用冻结的 `time_stft_dual1d` 结构。
 - CRD-v1.1 S0/S1/S1C/S1F/S2A/S2B-R、CRD_102 failure/matched-observability diagnostics 与 C0/C1/C2 控制线均已完成并关闭。C0 冻结为 `roundtrip_negligible=true`；C1 固定为 `mamba_retained_control_failure / retain CRD_102`；C2 固定为 `decoder_capacity_supported_100hz_placement_not_supported`，选择 CRD_102 Mamba backbone + `crd_c201_decoder_10hz_cap`。CRD-TF v1 P0–P6a 亦已完成并关闭；P6a 没有 qualified 新候选。C201/M/W/MS × 3 reused research-test 与冻结汇总已完成并关闭；M/W/MS 均 qualified，Pareto=W/MS，Local-RR lead=W，但不构造总分或唯一赢家。P6b/local cross-attention、TCN+decoder、其他 decoder、S3 与旧 gate/auxiliary/final ablation 均关闭。
+- CRD-TF-W v2 当前规范为 `docs/experiments/crd_tf_w_v2_protocol_20260817.md`；2026-08-16 附件已失效。P0 candidate lock 已完成，固定文件为 `docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json`、SHA-256=`6ae35076bbd89bec688bfd4918cfecd20c7d5ea7f845f460034a88045432c7b6`。P−1 validation-only 功能审计入口与定向测试已实现，完整 audit 尚未运行；下一步由用户在新干净 commit 上执行专用入口。标准预算为 RESP/CARRIER/6V 各三 seed 加 W0-D4 三 seed，共 12 个新 training runs；P−1 触发 ADD 或 SCALE 时上限 15。暂不做 `samp_id` 分析，Q/concat/D8/gate/attention 与复合候选均关闭。P−1 结果登记前，P1/P2/P3 实现、GPU stress、formal 与 research-test 均关闭。
 - CRD 训练阶段仍只使用 train/validation；普通 `eval_crd.py` 保持 validation-only。S1C 的 12 项 access receipt 已齐备，队列关闭，不得重复调用 `eval_crd_s1c.py`；不存在新协议时不得新增或调用其他 CRD test 入口。
 
 ## 当前入口
@@ -46,7 +47,7 @@
 
 ## 当前验证
 
-- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_capacity.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py tests/test_crd_s2_selection.py tests/test_crd_s2br_selection.py tests/test_crd_failure_diagnostics.py tests/test_crd_failure_metadata.py tests/test_crd_matched_observability.py tests/test_crd_decoder_roundtrip.py tests/test_crd_c1_selection.py tests/test_crd_decoder_diagnostics.py tests/test_crd_c2_selection.py tests/test_crd_tf_v1_features.py tests/test_crd_tf_v1_cache.py`
+- 定向协议测试：`./.venv/bin/python -m pytest tests/test_respiration_protocol.py tests/test_respiration_metrics.py tests/test_tho_protocol_config.py tests/test_tho_current_experiment.py tests/test_time_stft_fusion.py tests/test_tho_time_frequency_candidates.py tests/test_crd_spectral_ops.py tests/test_crd_representations.py tests/test_crd_capacity.py tests/test_crd_models.py tests/test_crd_config.py tests/test_crd_training.py tests/test_crd_experiment.py tests/test_crd_batch_scaling.py tests/test_crd_confirmation.py tests/test_crd_s2_selection.py tests/test_crd_s2br_selection.py tests/test_crd_failure_diagnostics.py tests/test_crd_failure_metadata.py tests/test_crd_matched_observability.py tests/test_crd_decoder_roundtrip.py tests/test_crd_c1_selection.py tests/test_crd_decoder_diagnostics.py tests/test_crd_c2_selection.py tests/test_crd_tf_v1_features.py tests/test_crd_tf_v1_cache.py tests/test_crd_tf_w_v2_audit.py`
 - 全量当前测试：`./.venv/bin/python -m pytest tests`
 - GPU 正式运行必须在沙盒外执行；CPU smoke 只用于实现验收，不形成科研结论。
 
