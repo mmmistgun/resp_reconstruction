@@ -1055,7 +1055,7 @@ git status --short
 
 该命令已从干净 commit `d91db6e` 完成 30/30 evaluations，固定 source manifest SHA-256=`249c761799b1f8020a77ed51875985776718d9cf1e9701900ce5dae783492f3f`，现不得重复运行或修改 source audit。冻结 P2 decision=`retain_film_no_p2_training`，不训练 ADD/SCALE。
 
-独立复核发现 source `film_statistics.csv` 的两项相邻帧统计错误地使用 `mean(diff(abs(x)))`，而协议要求 `mean(abs(diff(x)))`；prediction、primary、干预 summary 和 P2 decision 不受影响。修复提交后，先确认工作树干净，再由用户运行只包含 3 checkpoints × FULL 的 correction：
+独立复核发现 source `film_statistics.csv` 的两项相邻帧统计错误地使用 `mean(diff(abs(x)))`，而协议要求 `mean(abs(diff(x)))`；prediction、primary、干预 summary 和 P2 decision 不受影响。correction 的历史命令为：
 
 ```bash
 git status --short
@@ -1065,7 +1065,7 @@ git status --short
   --device cuda:0
 ```
 
-首行必须无输出。成功输出唯一写入 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`，不覆盖 source audit；目录存在即拒绝覆盖。失败保留 `.incomplete_* / failure.json`。correction 结果登记前不实现 P1/P3；P2 已关闭。
+该命令已从干净 commit `4eb9b3c` 完成，固定输出为 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`；manifest SHA-256=`1c6f7218c280b2a1579b2169a2b4752d7c10416d89de67ed5e9a1cc58d104463`，corrected CSV SHA-256=`2b7a4edef8e9828356a336c3c1ec7880235914207b00d164bf016ce1cd7a5203`。correction 与 source audit 均不得重复运行或改写。P−1 已关闭，P2 已关闭；当前只开放 P1 实现与定向测试。
 
 ## 固定呼吸带传统基线
 

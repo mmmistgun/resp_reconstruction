@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**P0 candidate lock 与 P−1 的 30/30 validation 功能评价已完成；冻结决策为 `retain_film_no_p2_training`，P2 关闭。P−1 原始 `film_statistics.csv` 的两项相邻帧统计存在实现口径错误，主要指标和 P2 决策不受影响；独立 correction 入口与测试已完成，当前等待用户在干净提交上只重跑三个 FULL checkpoint。correction 登记前，P1/P3–P5 的实现、stress、formal training 与 research-test 仍关闭。**
+状态：**P0 candidate lock、P−1 的 30/30 validation 功能评价与三个 FULL checkpoint 的 FiLM statistics correction 均已完成并冻结；决策为 `retain_film_no_p2_training`，P2 关闭。原始 `film_statistics.csv` 的两项错误列已退出当前结论，修正证据见独立 correction 目录。当前下一步仅开放 P1 实现与定向测试；P1 stress/formal、P3–P5 实现与 research-test 仍关闭。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -244,7 +244,15 @@ FULL 每个 seed 必须以绝对容差 `1e-6` 复现锁定 validation 五项 pri
 
 独立复核随后发现 source `film_statistics.csv`（SHA-256=`a785b2df38c5012e342e2400d2f817bc113421b9becdfac5f6783bbf0b04127a`）把协议要求的 `mean(abs(diff(g))) / mean(abs(diff(b)))` 错写为 `mean(diff(abs(g))) / mean(diff(abs(b)))`，导致 gamma/beta 两列分别有 `1,974 / 1,887` 个负值。该错误只影响两项描述性 FiLM 时间统计；统计在原生输出完成后计算，因此不影响 prediction、primary、频带/时间负对照或 P2 decision。原 source audit 目录保持不可改写。
 
-修订后的独立 correction 入口固定校验 source manifest/film/decision hash，只运行三个 FULL validation checkpoints，并将 `film_statistics_corrected.csv` 与 correction manifest 原子写入 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`。它必须重验 FULL 锚点、8,025 行身份、全部 corrected 值 finite/nonnegative，以及六项非目标 FiLM 统计相对 source 的最大绝对差不超过 `1e-12`。correction 完成并登记前不实现 P1/P3；P2 已由不受影响的冻结 decision 关闭。
+修订后的独立 correction 入口固定校验 source manifest/film/decision hash，只运行三个 FULL validation checkpoints，并将 `film_statistics_corrected.csv` 与 correction manifest 原子写入 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`。它必须重验 FULL 锚点、8,025 行身份、全部 corrected 值 finite/nonnegative，以及六项非目标 FiLM 统计相对 source 的最大绝对差不超过 `1e-12`。
+
+correction 随后从干净 commit `4eb9b3ce937792d151393a40c0f95b5cab0e7c9b` 完成，manifest SHA-256=`1c6f7218c280b2a1579b2169a2b4752d7c10416d89de67ed5e9a1cc58d104463`，`film_statistics_corrected.csv` SHA-256=`2b7a4edef8e9828356a336c3c1ec7880235914207b00d164bf016ce1cd7a5203`。FULL 三 seed 锚点差与 source audit 一致，8,025 行 identity 唯一且 finite，gamma/beta 时间差负值数均为 0；六项非目标统计最大绝对差不超过 `9.98e-17`。原 source audit 的 manifest/film/decision hash 复核未变，correction 未训练、未修改 checkpoint/cache/source、未访问 research-test、未做 `samp_id` 分析。
+
+修正后的逐 sample direct mean 为：`mean|g|=0.26685546`、`median|g|=0.28009504`、`mean|b|=0.24302296`、`median|b|=0.24550465`、`mean|Δ_t g|=0.02261490`、`mean|Δ_t b|=0.02396674`、gamma/beta saturation fraction=`0.02633766 / 0.02032499`。这些是三个已联合训练 checkpoint 的 validation 描述性功能统计，不是重新训练机制的因果效应。
+
+P−1 的冻结功能证据为：BETA_ONLY 仅 `1/3` seed quality-near，三-seed mean global-envelope error 恶化 `9.31%`；GAMMA_ONLY 为 `0/3`，global-envelope error 恶化 `2.53%`，因此不分配 P2。CONDITION_OFF 的 global-envelope error 恶化 `20.40%`、PCC 下降 `0.00822`。TIME_MEAN 的 global-envelope error 恶化 `25.97%`、PCC 下降 `0.01210`；TIME_SHIFT_30S 的四项 error 分别变化 `+3.99% / +6.60% / +23.05% / +24.10%`，PCC 下降 `0.02382`，且四项 error 和 PCC 在 `3/3` seed 方向一致，支持冻结 W0 对局部时频演化与时间对齐存在功能依赖。RESP/CARRIER 遮挡呈指标间权衡，只作为 P1 两个固定重训练臂的机制动机，不解释为频带因果优胜。
+
+P−1 至此关闭并只保留 provenance；完整功能 audit 与 correction 均不得重复运行。P2 已关闭，剩余训练预算固定为 P1 九 runs 加 P3 三 runs，共 12 runs。
 
 ## 7. P1：W 信息来源与 6-voice 效率
 
@@ -372,15 +380,12 @@ P5 当前关闭。
 
 ## 14. 当前唯一下一步
 
-P0 与 P−1 的主要评价和 P2 决策已经完成。下一步不是继续写 P1/P3，而是先提交 correction 代码和登记、确认 `git status --short` 无输出，再由用户只重跑三个 FULL checkpoint：
+P0 与 P−1 已关闭，P2 不触发。当前只开放 P1 的实现和定向测试，不运行 GPU stress、formal 或 research-test：
 
-```bash
-./.venv/bin/python scripts/eval_crd_tf_w_v2_film_statistics_correction.py \
-  --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json \
-  --split val \
-  --device cuda:0
-```
+1. 注册且只注册 candidate lock 中的 W1 RESP、W2 CARRIER、W3 full-band 6V 三个 P1 variant；
+2. W1/W2 在 W encoder normalization 前应用固定只读 mask，输入仍为 `[97,360]`，其余结构和参数必须与 W0 相同；
+3. W3 严格使用 source cache indices `0,2,…,96` 的 `[49,360]` view，锁定 source frequency/hash/index/mapped-center identity，并适配 W encoder 的 scale 维输入，不改 FiLM、D6 Mamba、decoder 或训练口径；
+4. 建立 candidate lock 指定的三份 stress 与三份 formal config，formal seed 仍由命令行固定为 `20260811/12/13`；
+5. 增加 variant registry、view/mask/no-mutation、shape、参数数、同 seed base initialization、配置与 source-cache identity 定向测试。
 
-该命令只评价 3 checkpoints × FULL，不重复另外 27 项干预，不改变 source audit 或 P2 decision。它可能占用 GPU，Codex 不代跑。固定成功输出为 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`；目录已存在时拒绝覆盖。若留下 `.incomplete_*`，必须先审计 `failure.json`，不得删除后静默重跑。
-
-correction 结果只修正两项描述性 FiLM 时间统计，不重新决定 P2。correction 登记前不实现 P1/P3，不运行 stress、formal 或 research-test。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+实现和 CPU 定向测试通过后先提交、登记 code/config hash，再由用户决定是否依次运行三臂 isolation stress。P1 stress 未通过前不得启动任何 formal；P3 实现继续关闭。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。

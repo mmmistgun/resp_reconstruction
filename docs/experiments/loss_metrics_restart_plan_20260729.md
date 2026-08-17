@@ -4,7 +4,7 @@
 
 最后更新：2026-08-17
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0 与 P−1 主要评价已完成，P2 固定关闭，当前等待用户运行三个 FULL checkpoint 的 FiLM statistics correction
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0、P−1 与 FiLM statistics correction 已完成并冻结，P2 关闭，当前仅开放 P1 实现与定向测试
 
 ## 1. 定位
 
@@ -2108,4 +2108,6 @@ P0 随后关闭并只保留 provenance。用户明确允许进入 P−1 实现�
 
 独立复核发现 source `film_statistics.csv` 的 gamma/beta 相邻帧统计错用了 `mean(diff(abs(x)))`，分别产生 `1,974 / 1,887` 个负值；协议要求 `mean(abs(diff(x)))`。该后处理错误不影响 prediction、primary、干预 summary 或 P2 decision，source audit 目录保持不可改写。修订实现新增只读 source hash 校验和独立 correction 入口，定向回归为 `42 passed`。
 
-当前唯一下一步是用户从包含本登记的新干净 commit 运行 `./.venv/bin/python scripts/eval_crd_tf_w_v2_film_statistics_correction.py --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json --split val --device cuda:0`。它只重跑三个 FULL checkpoints，固定输出为 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`，不修改 source audit，也不重选 P2。correction 登记前，P1/P3 实现、GPU stress、formal 与 research-test 继续关闭；P2 已关闭。最终 research-test 仍须在 P4 allowlist 冻结后由用户再次明确授权。
+FiLM statistics correction 随后从干净 commit `4eb9b3ce937792d151393a40c0f95b5cab0e7c9b` 完成，manifest SHA-256=`1c6f7218c280b2a1579b2169a2b4752d7c10416d89de67ed5e9a1cc58d104463`，corrected CSV SHA-256=`2b7a4edef8e9828356a336c3c1ec7880235914207b00d164bf016ce1cd7a5203`。三个 FULL 锚点通过，8,025 行 identity/finite/nonnegative 通过，gamma/beta 负值数归零，六项非目标统计最大漂移 `<1e-16`；source audit 三项 hash 未变。修正后的 `mean|Δ_t g| / mean|Δ_t b|` 为 `0.02261490 / 0.02396674`。P−1 至此关闭，完整 audit 和 correction 均不得重复运行。
+
+当前唯一下一步是实现 candidate lock 的 P1 三臂：W1 RESP `[97,360]` mask、W2 CARRIER `[97,360]` mask、W3 full-band 6V indices `0,2,…,96` 的 `[49,360]` view，以及对应 registry、六份 stress/formal config 和定向测试。当前只开放实现与 CPU 定向测试，不运行 isolation stress、formal 或 research-test；P3 实现继续关闭。P1 实现验收后由用户决定是否依次运行三个 isolation stress。最终 research-test 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
