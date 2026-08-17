@@ -25,6 +25,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PROTOCOL = "crd-tf-w-v2-research-informed-20260817"
 CANDIDATE_LOCK = REPO_ROOT / "docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json"
 CANDIDATE_LOCK_SHA256 = "6ae35076bbd89bec688bfd4918cfecd20c7d5ea7f845f460034a88045432c7b6"
+P_MINUS_1_SOURCE_ROOT = REPO_ROOT / "runs/crd_tf_w_v2/p_minus_1_validation_audit"
+P_MINUS_1_SOURCE_MANIFEST_SHA256 = "249c761799b1f8020a77ed51875985776718d9cf1e9701900ce5dae783492f3f"
+P_MINUS_1_SOURCE_FILM_SHA256 = "a785b2df38c5012e342e2400d2f817bc113421b9becdfac5f6783bbf0b04127a"
+P_MINUS_1_SOURCE_DECISION_SHA256 = "6aae72dd32b09f0ac5c5a5151f78510ec292d7b2c8942feddd0b751bc0787f4a"
+P_MINUS_1_CORRECTION_ROOT = REPO_ROOT / "runs/crd_tf_w_v2/p_minus_1_film_statistics_correction"
 
 P_MINUS_1_INTERVENTIONS = (
     "FULL",
@@ -430,6 +435,165 @@ def run_p_minus_1_audit(
         raise
 
 
+def run_p_minus_1_film_statistics_correction(
+    *,
+    candidate_lock_path: str | Path = CANDIDATE_LOCK,
+    split: str = "val",
+    device_name: str = "cuda:0",
+) -> Path:
+    """只重跑三个 FULL checkpoint，修正 P−1 FiLM 相邻帧绝对差统计。"""
+
+    _validate_audit_split(split)
+    commit = _require_clean_git()
+    lock_path, lock = _load_candidate_lock(candidate_lock_path)
+    _verify_lock_inputs(lock)
+    source_manifest, source_film = _load_completed_p_minus_1_source()
+    resolved_device = torch.device(device_name)
+    if resolved_device.type != "cuda":
+        raise ValueError("P−1 FiLM statistics correction 必须使用 CUDA")
+    if P_MINUS_1_CORRECTION_ROOT.exists():
+        raise FileExistsError(f"P−1 correction 固定输出已存在，拒绝覆盖: {P_MINUS_1_CORRECTION_ROOT}")
+
+    staging = _create_staging_directory(P_MINUS_1_CORRECTION_ROOT)
+    try:
+        seed_entries = _w0_seed_entries(lock)
+        first_cfg = _load_audit_config(seed_entries[0], device_name=device_name)
+        val_data = build_window_data(
+            first_cfg,
+            split=str(first_cfg.data.val_split),
+            max_windows=None,
+            sample_strategy=str(first_cfg.data.val_sample_strategy),
+            sample_seed=int(first_cfg.data.val_sample_seed),
+            shuffle=False,
+        )
+        _validate_validation_rows(val_data.rows, lock)
+        expected_windows = int(lock["cache_lock"]["row_identity"]["val_count"])
+        if len(val_data.dataset) != expected_windows:
+            raise RuntimeError(f"P−1 correction validation windows={len(val_data.dataset)} != {expected_windows}")
+
+        film_frames: list[pd.DataFrame] = []
+        full_anchor_checks: list[dict[str, Any]] = []
+        for entry in seed_entries:
+            cfg = _load_audit_config(entry, device_name=device_name)
+            checkpoint_path = REPO_ROOT / entry["run_dir"] / "checkpoint_best_local_rr.pt"
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+            _validate_checkpoint_config(checkpoint.get("config"), cfg)
+            model = build_crd_model(cfg)
+            model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+            seed = int(entry["seed"])
+            audited_model = AuditedW0Model(model, intervention="FULL", record_film_statistics=True)
+            predictions = collect_predictions(
+                audited_model,
+                val_data.loader,
+                device=resolved_device,
+                max_windows=expected_windows,
+                use_amp=bool(cfg.training.use_amp),
+            )
+            _validate_prediction_identity(predictions, val_data.rows)
+            metrics = evaluate_task_predictions(
+                predictions,
+                cfg,
+                include_test_only=False,
+                method="crd_tf102_w__p_minus_1__film_statistics_correction",
+            )
+            summary = summarize_task_metrics(metrics)
+            _validate_primary_summary(summary, intervention="FULL_CORRECTION", seed=seed)
+            full_anchor_checks.append(_check_full_anchor(summary, entry))
+
+            statistics = audited_model.take_film_statistics()
+            if not statistics:
+                raise RuntimeError(f"P−1 correction 缺少 FiLM statistics seed={seed}")
+            film = pd.DataFrame(statistics)
+            if len(film) != expected_windows:
+                raise RuntimeError(f"P−1 correction FiLM statistics 行数错误 seed={seed}: {len(film)}")
+            film.insert(0, "samp_id", predictions["samp_id"])
+            film.insert(0, "dataset_row_id", predictions["dataset_row_id"])
+            film.insert(0, "intervention", "FULL")
+            film.insert(0, "seed", seed)
+            film_frames.append(film)
+            print(f"P−1 film statistics correction complete seed={seed} intervention=FULL", flush=True)
+            del predictions, metrics, summary, audited_model, model
+            if resolved_device.type == "cuda":
+                torch.cuda.empty_cache()
+
+        corrected_film = pd.concat(film_frames, ignore_index=True)
+        validation_receipt = _validate_corrected_film_statistics(
+            corrected_film,
+            source_film,
+            expected_rows=len(seed_entries) * expected_windows,
+        )
+        corrected_path = staging / "film_statistics_corrected.csv"
+        corrected_film.to_csv(corrected_path, index=False)
+        manifest = {
+            "protocol": PROTOCOL,
+            "phase": "p_minus_1_film_statistics_correction",
+            "status": "passed",
+            "complete": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "command": [
+                "scripts/eval_crd_tf_w_v2_film_statistics_correction.py",
+                "--candidate-lock",
+                "docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json",
+                "--split",
+                "val",
+                "--device",
+                str(resolved_device),
+            ],
+            "git_commit": commit,
+            "git_dirty": False,
+            "candidate_lock": str(lock_path),
+            "candidate_lock_sha256": CANDIDATE_LOCK_SHA256,
+            "source_audit_root": str(P_MINUS_1_SOURCE_ROOT),
+            "source_audit_manifest_sha256": P_MINUS_1_SOURCE_MANIFEST_SHA256,
+            "source_invalid_film_statistics_sha256": P_MINUS_1_SOURCE_FILM_SHA256,
+            "source_decision_sha256": P_MINUS_1_SOURCE_DECISION_SHA256,
+            "source_decision": source_manifest["decision"],
+            "source_decision_unchanged": True,
+            "correction_scope": "gamma/beta adjacent-frame mean absolute difference only",
+            "corrected_formula": "mean(abs(diff(effective_condition, axis=time)))",
+            "split": "validation",
+            "research_test_used": False,
+            "model_training_used": False,
+            "checkpoint_modified": False,
+            "cache_modified": False,
+            "source_audit_modified": False,
+            "samp_id_analysis_used": False,
+            "device": str(resolved_device),
+            "dependency_versions": crd_dependency_versions(),
+            "expected_windows_per_evaluation": expected_windows,
+            "checkpoint_count": len(seed_entries),
+            "evaluation_count": len(seed_entries),
+            "film_statistic_rows": int(len(corrected_film)),
+            "full_anchor_checks": full_anchor_checks,
+            "validation_receipt": validation_receipt,
+            "files": {
+                corrected_path.name: {
+                    "size_bytes": corrected_path.stat().st_size,
+                    "sha256": _sha256_file(corrected_path),
+                }
+            },
+        }
+        (staging / "p_minus_1_film_statistics_correction_manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        staging.rename(P_MINUS_1_CORRECTION_ROOT)
+        return P_MINUS_1_CORRECTION_ROOT
+    except BaseException as exc:
+        failure = {
+            "protocol": PROTOCOL,
+            "phase": "p_minus_1_film_statistics_correction",
+            "status": "failed",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+        (staging / "failure.json").write_text(
+            json.dumps(failure, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        raise
+
+
 def _normalize_intervention(intervention: str) -> str:
     name = str(intervention).strip().upper()
     if name not in P_MINUS_1_INTERVENTIONS:
@@ -460,8 +624,8 @@ def _film_statistics(gamma: torch.Tensor, beta: torch.Tensor) -> dict[str, np.nd
         "median_abs_gamma": torch.quantile(gamma_flat, 0.5, dim=1, interpolation="linear"),
         "mean_abs_beta": beta_flat.mean(dim=1),
         "median_abs_beta": torch.quantile(beta_flat, 0.5, dim=1, interpolation="linear"),
-        "gamma_time_mean_abs_difference": gamma_abs.diff(dim=-1).mean(dim=(1, 2)),
-        "beta_time_mean_abs_difference": beta_abs.diff(dim=-1).mean(dim=(1, 2)),
+        "gamma_time_mean_abs_difference": gamma.detach().float().diff(dim=-1).abs().mean(dim=(1, 2)),
+        "beta_time_mean_abs_difference": beta.detach().float().diff(dim=-1).abs().mean(dim=(1, 2)),
         "gamma_saturation_fraction": (gamma_abs >= 0.49).float().mean(dim=(1, 2)),
         "beta_saturation_fraction": (beta_abs >= 0.49).float().mean(dim=(1, 2)),
     }
@@ -533,6 +697,125 @@ def _verify_lock_inputs(lock: Mapping[str, Any]) -> None:
         observed = hashlib.sha256(indices.astype("<i8").tobytes()).hexdigest()
         if observed != cache["views"][key]["indices_sha256"]:
             raise RuntimeError(f"P−1 W view identity 漂移: {key}")
+
+
+def _load_completed_p_minus_1_source() -> tuple[dict[str, Any], pd.DataFrame]:
+    expected_files = {
+        "film_statistics.csv",
+        "intervention_seed_metrics.csv",
+        "intervention_summary.csv",
+        "p_minus_1_decision.json",
+        "p_minus_1_manifest.json",
+    }
+    if not P_MINUS_1_SOURCE_ROOT.is_dir():
+        raise FileNotFoundError(f"P−1 correction 缺少冻结 source audit: {P_MINUS_1_SOURCE_ROOT}")
+    observed_files = {path.name for path in P_MINUS_1_SOURCE_ROOT.iterdir() if path.is_file()}
+    if observed_files != expected_files:
+        raise RuntimeError(f"P−1 source audit 文件集合漂移: {sorted(observed_files)}")
+    manifest_path = P_MINUS_1_SOURCE_ROOT / "p_minus_1_manifest.json"
+    if _sha256_file(manifest_path) != P_MINUS_1_SOURCE_MANIFEST_SHA256:
+        raise RuntimeError("P−1 source audit manifest SHA-256 漂移")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if (
+        manifest.get("status") != "passed"
+        or manifest.get("complete") is not True
+        or manifest.get("split") != "validation"
+        or manifest.get("research_test_used") is not False
+        or manifest.get("samp_id_analysis_used") is not False
+        or manifest.get("decision") != "retain_film_no_p2_training"
+        or manifest.get("selected_p2_variant") is not None
+        or int(manifest.get("evaluation_count", -1)) != 30
+        or int(manifest.get("per_sample_metric_rows", -1)) != 80_250
+        or int(manifest.get("film_statistic_rows", -1)) != 8_025
+    ):
+        raise RuntimeError("P−1 source audit completion contract 不合格")
+    for name, expected in manifest["files"].items():
+        _verify_file_identity(P_MINUS_1_SOURCE_ROOT / name, expected)
+    if manifest["files"]["film_statistics.csv"]["sha256"] != P_MINUS_1_SOURCE_FILM_SHA256:
+        raise RuntimeError("P−1 source invalid film statistics identity 不一致")
+    if manifest["files"]["p_minus_1_decision.json"]["sha256"] != P_MINUS_1_SOURCE_DECISION_SHA256:
+        raise RuntimeError("P−1 source decision identity 不一致")
+    decision = json.loads((P_MINUS_1_SOURCE_ROOT / "p_minus_1_decision.json").read_text(encoding="utf-8"))
+    if decision.get("decision") != manifest["decision"] or decision.get("selected_p2_variant") is not None:
+        raise RuntimeError("P−1 source decision 内容不一致")
+    return manifest, pd.read_csv(P_MINUS_1_SOURCE_ROOT / "film_statistics.csv")
+
+
+def _validate_corrected_film_statistics(
+    corrected: pd.DataFrame,
+    source: pd.DataFrame,
+    *,
+    expected_rows: int,
+) -> dict[str, Any]:
+    identity_columns = ("seed", "intervention", "dataset_row_id", "samp_id")
+    unchanged_columns = (
+        "mean_abs_gamma",
+        "median_abs_gamma",
+        "mean_abs_beta",
+        "median_abs_beta",
+        "gamma_saturation_fraction",
+        "beta_saturation_fraction",
+    )
+    corrected_columns = (
+        "gamma_time_mean_abs_difference",
+        "beta_time_mean_abs_difference",
+    )
+    required = {*identity_columns, *unchanged_columns, *corrected_columns}
+    if required - set(corrected) or required - set(source):
+        raise KeyError("P−1 correction FiLM statistics 缺少冻结列")
+    if len(corrected) != int(expected_rows) or len(source) != int(expected_rows):
+        raise RuntimeError(f"P−1 correction 行数错误: corrected={len(corrected)} source={len(source)}")
+    if corrected.duplicated(["seed", "dataset_row_id"]).any():
+        raise RuntimeError("P−1 correction seed/dataset_row_id 重复")
+    if set(corrected["seed"].astype(int)) != {20260811, 20260812, 20260813}:
+        raise RuntimeError("P−1 correction seed allowlist 错误")
+    if set(corrected["intervention"].astype(str)) != {"FULL"}:
+        raise RuntimeError("P−1 correction 只允许 FULL")
+
+    order = ["seed", "dataset_row_id"]
+    left = corrected.sort_values(order).reset_index(drop=True)
+    right = source.sort_values(order).reset_index(drop=True)
+    for column in identity_columns:
+        if not np.array_equal(left[column].astype(str).to_numpy(), right[column].astype(str).to_numpy()):
+            raise RuntimeError(f"P−1 correction identity 漂移: {column}")
+    numeric = left[[*unchanged_columns, *corrected_columns]].to_numpy(dtype=np.float64)
+    if not np.isfinite(numeric).all():
+        raise FloatingPointError("P−1 corrected FiLM statistics 包含非有限值")
+    for column in corrected_columns:
+        if bool((left[column].to_numpy(dtype=np.float64) < 0.0).any()):
+            raise RuntimeError(f"P−1 corrected FiLM statistics 出现负值: {column}")
+        if not bool((left[column].to_numpy(dtype=np.float64) > 0.0).any()):
+            raise RuntimeError(f"P−1 corrected FiLM statistics 全为零: {column}")
+
+    unchanged_max_abs_deltas = {
+        column: float(
+            np.max(
+                np.abs(
+                    left[column].to_numpy(dtype=np.float64)
+                    - right[column].to_numpy(dtype=np.float64)
+                )
+            )
+        )
+        for column in unchanged_columns
+    }
+    unchanged_atol = 1e-12
+    if max(unchanged_max_abs_deltas.values()) > unchanged_atol:
+        raise RuntimeError(f"P−1 correction 非目标 FiLM statistics 漂移: {unchanged_max_abs_deltas}")
+    source_negative_counts = {
+        column: int((right[column].to_numpy(dtype=np.float64) < 0.0).sum())
+        for column in corrected_columns
+    }
+    if any(count <= 0 for count in source_negative_counts.values()):
+        raise RuntimeError("P−1 correction source 未复现已登记的负值缺陷")
+    return {
+        "identity_rows_match_source": True,
+        "unchanged_columns": list(unchanged_columns),
+        "unchanged_atol": unchanged_atol,
+        "unchanged_max_abs_deltas": unchanged_max_abs_deltas,
+        "source_negative_counts": source_negative_counts,
+        "corrected_negative_counts": {column: 0 for column in corrected_columns},
+        "all_corrected_values_finite": True,
+    }
 
 
 def _w0_seed_entries(lock: Mapping[str, Any]) -> list[dict[str, Any]]:

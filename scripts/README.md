@@ -1043,7 +1043,7 @@ P0 candidate lock 固定为 `docs/experiments/crd_tf_w_v2_candidate_lock_2026081
   tests/test_crd_experiment.py
 ```
 
-测试通过并提交后，先确认工作树干净，再由用户运行完整 audit：
+完整 audit 的原始命令为：
 
 ```bash
 git status --short
@@ -1053,7 +1053,19 @@ git status --short
   --device cuda:0
 ```
 
-首行必须无输出。该命令固定执行 3 checkpoints × 10 interventions；可能长时间占用 GPU，不由 Codex 默认代跑。成功输出唯一写入 `runs/crd_tf_w_v2/p_minus_1_validation_audit/`，目录存在即拒绝覆盖；失败保留 `.incomplete_* / failure.json`，不得删除后静默重跑。返回完整产物并登记 P2 decision 前，不实现 P1/P2/P3。
+该命令已从干净 commit `d91db6e` 完成 30/30 evaluations，固定 source manifest SHA-256=`249c761799b1f8020a77ed51875985776718d9cf1e9701900ce5dae783492f3f`，现不得重复运行或修改 source audit。冻结 P2 decision=`retain_film_no_p2_training`，不训练 ADD/SCALE。
+
+独立复核发现 source `film_statistics.csv` 的两项相邻帧统计错误地使用 `mean(diff(abs(x)))`，而协议要求 `mean(abs(diff(x)))`；prediction、primary、干预 summary 和 P2 decision 不受影响。修复提交后，先确认工作树干净，再由用户运行只包含 3 checkpoints × FULL 的 correction：
+
+```bash
+git status --short
+./.venv/bin/python scripts/eval_crd_tf_w_v2_film_statistics_correction.py \
+  --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json \
+  --split val \
+  --device cuda:0
+```
+
+首行必须无输出。成功输出唯一写入 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`，不覆盖 source audit；目录存在即拒绝覆盖。失败保留 `.incomplete_* / failure.json`。correction 结果登记前不实现 P1/P3；P2 已关闭。
 
 ## 固定呼吸带传统基线
 

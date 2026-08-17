@@ -4,7 +4,7 @@
 
 最后更新：2026-08-17
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0 与 P−1 实现验收已完成，当前等待用户在干净提交上运行完整 P−1 validation audit
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0 与 P−1 主要评价已完成，P2 固定关闭，当前等待用户运行三个 FULL checkpoint 的 FiLM statistics correction
 
 ## 1. 定位
 
@@ -2094,7 +2094,7 @@ P6a 9/9 formal 随后从干净 commit `94033ce` 完成，全部由 patience=30 �
 
 质量候选采用 `0.5% / 0.002` 实质改善、`2/3` paired seeds、Local RR 最多恶化 `0.5%`、其他 error primary 最多恶化 `1.5%`、PCC 最多下降 `0.003`；`3% / 0.005` 只作 catastrophic failure。效率候选要求四个 error primary 在 1% 内、PCC 下降不超过 0.003、预注册结构缩减，并达到 throughput `+10%` 或 peak allocated `−15%`。不构造加权总分。
 
-标准预算固定为 12 个新 training runs，条件融合触发时硬上限为 15。Morlet Q、concat、D8、gate、attention、local cross-attention、TCN+decoder、其他 decoder 与全因子矩阵均关闭。每个新 variant 在 formal 前须通过至少 400 optimizer updates、两次完整 validation 的隔离 stress；peak reserved `<85%` 通过、`85%–90%` warning 通过、`>90%` 或 OOM 关闭，不为单臂改变 batch。
+剩余预算固定为 12 个新 training runs；P−1 未触发融合训练，原条件硬上限 15 已关闭。Morlet Q、concat、D8、gate、attention、local cross-attention、TCN+decoder、其他 decoder 与全因子矩阵均关闭。每个新 variant 在 formal 前须通过至少 400 optimizer updates、两次完整 validation 的隔离 stress；peak reserved `<85%` 通过、`85%–90%` warning 通过、`>90%` 或 OOM 关闭，不为单臂改变 batch。
 
 P0 静态审计随后完成，candidate lock 固定为 `docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json`，SHA-256=`6ae35076bbd89bec688bfd4918cfecd20c7d5ea7f845f460034a88045432c7b6`。C201/W0/CTRL1 的 9 个 checkpoint 与 36 项配套文件 identity 全部复核通过；三类模型各一个代表 checkpoint 的 current-code strict-load 与同 seed base initialization identity 通过。W0/C201/W-branch/CTRL1 参数数为 `1,219,850 / 1,069,802 / 150,048 / 1,219,754`，D4 静态准确参数为 `902,722`。
 
@@ -2104,4 +2104,8 @@ P0 随后关闭并只保留 provenance。用户明确允许进入 P−1 实现�
 
 第一次完整 P−1 audit 从干净 commit `82926b2` 在 seed `20260811` FULL 锚点停止，最大 summary 绝对差为 `2.6775125796740795e-05`；失败记录按约定保留。随后同 checkpoint 的原生 validation 复评与冻结六项 summary 差均为 `0.0`，定位为包装器在 decoder 前执行统计算子改变 CUDA 执行路径，而非 checkpoint、cache、指标或环境漂移。实现已修订为 FULL 直接调用原生 W0 forward、用只读 hook 捕获 FiLM 输出并在原生输出完成后统计；`1e-6` 门槛保持不变。第一次失败不形成科研结果，须从新的干净 commit 重跑。
 
-当前唯一下一步是用户从包含本登记的新干净 commit 运行 `./.venv/bin/python scripts/eval_crd_tf_w_v2_functional_audit.py --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json --split val --device cuda:0`。固定输出为 `runs/crd_tf_w_v2/p_minus_1_validation_audit/`，存在即拒绝覆盖；失败保留 `.incomplete_* / failure.json`。P−1 结果登记前，P1/P2/P3 实现、GPU stress、formal 与 research-test 继续关闭。最终 research-test 仍须在 P4 allowlist 冻结后由用户再次明确授权。
+第二次完整 audit 随后从干净 commit `d91db6e2177fa8e4fea3ac27237cff2cdb8b9c35` 完成 30/30 validation evaluations，source manifest SHA-256=`249c761799b1f8020a77ed51875985776718d9cf1e9701900ce5dae783492f3f`。FULL 三 seed 最大锚点差均低于 `9e-17`；80,250 行逐 sample metrics、8,025 行 FiLM statistics 与 40 行 summary 的身份、行数、finite 和 hash 通过。BETA_ONLY/GAMMA_ONLY 均非 quality-near，P2 固定为 `retain_film_no_p2_training`，不训练 ADD/SCALE。
+
+独立复核发现 source `film_statistics.csv` 的 gamma/beta 相邻帧统计错用了 `mean(diff(abs(x)))`，分别产生 `1,974 / 1,887` 个负值；协议要求 `mean(abs(diff(x)))`。该后处理错误不影响 prediction、primary、干预 summary 或 P2 decision，source audit 目录保持不可改写。修订实现新增只读 source hash 校验和独立 correction 入口，定向回归为 `42 passed`。
+
+当前唯一下一步是用户从包含本登记的新干净 commit 运行 `./.venv/bin/python scripts/eval_crd_tf_w_v2_film_statistics_correction.py --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json --split val --device cuda:0`。它只重跑三个 FULL checkpoints，固定输出为 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`，不修改 source audit，也不重选 P2。correction 登记前，P1/P3 实现、GPU stress、formal 与 research-test 继续关闭；P2 已关闭。最终 research-test 仍须在 P4 allowlist 冻结后由用户再次明确授权。

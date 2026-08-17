@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**用户已确认本修订版的实验范围、执行顺序、晋级门槛、资源线与 GPU 预算。P0 candidate lock 已完成；P−1 validation-only 功能审计入口与定向测试已实现，完整三-checkpoint audit 尚未运行。P1–P5 的实现、stress、formal training 与 research-test 仍关闭。**
+状态：**P0 candidate lock 与 P−1 的 30/30 validation 功能评价已完成；冻结决策为 `retain_film_no_p2_training`，P2 关闭。P−1 原始 `film_statistics.csv` 的两项相邻帧统计存在实现口径错误，主要指标和 P2 决策不受影响；独立 correction 入口与测试已完成，当前等待用户在干净提交上只重跑三个 FULL checkpoint。correction 登记前，P1/P3–P5 的实现、stress、formal training 与 research-test 仍关闭。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -227,19 +227,24 @@ CARRIER_H  = indices 72..96, mapped_frequency > 2.00 Hz          # 仅诊断
 
 P−1 已通过新增的独立包装器实现，不修改 P0 锁定的 `tf_v1_model.py`、既有 checkpoint 或 cache reader：
 
-- `resp_train/crd/tf_w_v2_audit.py`：SHA-256=`96307c9ee28e8070651868113313378fe21bb561808c80b5ddfb6b8a6c79b21e`；
+- `resp_train/crd/tf_w_v2_audit.py`：SHA-256=`42d3ebc7536979763cc306d5b7e71345f168388633af73bb9e455f5ec9ea6db5`；
 - `scripts/eval_crd_tf_w_v2_functional_audit.py`：SHA-256=`62cee8677595f5351a3a771d422116273f64d4a759a2cbcff997a6625e139dd3`；
-- `tests/test_crd_tf_w_v2_audit.py`：SHA-256=`b6b02b7433341e4fb6554bea492c3899b71ca121f8d723981d1c24a930a4fe3e`。
+- `scripts/eval_crd_tf_w_v2_film_statistics_correction.py`：SHA-256=`6bd6de9770d597327c22818829283f1555f26aaae87fee010e81a608578328e8`；
+- `tests/test_crd_tf_w_v2_audit.py`：SHA-256=`13d7d3db7a8040b1ca87f92cbf2c63a063deeb420f85af2a78e00ed516ef0515`。
 
 入口强制 candidate-lock path/hash、36 项 anchor artifact identity、锁定 runtime identity、validation W cache/frequency/view identity、干净 Git、CUDA、`split=val`、三个 W0 checkpoint 与 10 项固定 intervention；不提供 test、max-windows、任意 checkpoint 或输出覆盖入口。所有 W 干预只作用于 `TfV1CacheReader.get` 已复制的 batch tensor，不写原 memmap。失败保留独立 `.incomplete_*` 目录和 `failure.json`，成功才原子重命名到固定 P−1 目录。
 
 FULL 每个 seed 必须以绝对容差 `1e-6` 复现锁定 validation 五项 primary 与 degeneracy summary，否则整个 audit 失败。成功产物严格为 candidate lock 中的五项文件；预计逐 sample metric 行数为 `3×10×2675=80,250`，FULL FiLM statistic 行数为 `3×2675=8,025`。P2 decision 由第 6.4 节纯函数生成，不读取 `samp_id`、secondary 排名或 research-test。
 
-定向命令 `./.venv/bin/python -m pytest -q tests/test_crd_tf_w_v2_audit.py tests/test_crd_tf_v1_model.py tests/test_crd_tf_v1_data.py tests/test_crd_experiment.py` 已通过，结果为 `40 passed`；同时完成三个新增文件的 `py_compile` 和 candidate-lock input verification。测试覆盖真实 W0 结构在替换 Local Mamba 为 Identity 后的 active-FiLM FULL wrapper 逐 tensor identity，但没有加载冻结 W0 checkpoint、运行原生 Mamba 或完整 validation。
+定向命令 `./.venv/bin/python -m pytest -q tests/test_crd_tf_w_v2_audit.py tests/test_crd_tf_v1_model.py tests/test_crd_tf_v1_data.py tests/test_crd_experiment.py` 已通过，结果为 `42 passed`；同时完成 correction 相关 Python 文件的 `py_compile`、CLI help、candidate-lock/source-audit input verification。测试覆盖真实 W0 结构在替换 Local Mamba 为 Identity 后的 active-FiLM FULL wrapper 逐 tensor identity、相邻帧 mean absolute difference 的数值语义，以及 correction 对身份与六项非目标统计的保持；没有由 Codex 运行 GPU correction。
 
 第一次完整 audit 从干净 commit `82926b2` 启动，在 seed `20260811` 的 FULL 锚点失败并按约定保留 `p_minus_1_validation_audit.incomplete_20260817T070706_900712Z/failure.json`；观测到锁定六项 summary 最大绝对差 `2.6775125796740795e-05`。随后用原生 `eval_crd.py` 对同一 checkpoint、cache 和 validation rows 复评，六项与冻结 summary 的差均严格为 `0.0`，排除历史 summary 或当前 CUDA 环境漂移。根因是旧包装器在 decoder 前执行 FiLM 统计算子，改变了原生 CUDA 执行/内存路径。修订后 FULL 直接调用未修改的 W0 原生 forward，只用只读 forward hook 捕获 gamma/beta，并在原生输出完成后计算统计；`1e-6` 锚点门槛不放宽。该失败不形成 P−1 科研结果，修订代码仍须从新的干净 commit 重跑完整 audit。
 
-P−1 实现已完成，但完整 audit 尚未运行。它必须在本轮代码与协议提交、工作树干净后由用户执行；运行结果返回并登记前不实现 P1/P2/P3。
+第二次完整 audit 从干净 commit `d91db6e2177fa8e4fea3ac27237cff2cdb8b9c35` 完成 3 checkpoints × 10 interventions。固定 source manifest SHA-256=`249c761799b1f8020a77ed51875985776718d9cf1e9701900ce5dae783492f3f`；80,250 行逐 sample metrics、8,025 行 FiLM statistics 与 40 行 seed/aggregate summary 的身份、行数、finite 和文件 hash 均通过。FULL 三 seed 的最大锚点差分别为 `2.7755575615628914e-17 / 8.326672684688674e-17 / 5.551115123125783e-17`。BETA_ONLY 与 GAMMA_ONLY 均非 quality-near，冻结 P2 decision=`retain_film_no_p2_training`、decision SHA-256=`6aae72dd32b09f0ac5c5a5151f78510ec292d7b2c8942feddd0b751bc0787f4a`；不训练 ADD/SCALE。
+
+独立复核随后发现 source `film_statistics.csv`（SHA-256=`a785b2df38c5012e342e2400d2f817bc113421b9becdfac5f6783bbf0b04127a`）把协议要求的 `mean(abs(diff(g))) / mean(abs(diff(b)))` 错写为 `mean(diff(abs(g))) / mean(diff(abs(b)))`，导致 gamma/beta 两列分别有 `1,974 / 1,887` 个负值。该错误只影响两项描述性 FiLM 时间统计；统计在原生输出完成后计算，因此不影响 prediction、primary、频带/时间负对照或 P2 decision。原 source audit 目录保持不可改写。
+
+修订后的独立 correction 入口固定校验 source manifest/film/decision hash，只运行三个 FULL validation checkpoints，并将 `film_statistics_corrected.csv` 与 correction manifest 原子写入 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`。它必须重验 FULL 锚点、8,025 行身份、全部 corrected 值 finite/nonnegative，以及六项非目标 FiLM 统计相对 source 的最大绝对差不超过 `1e-12`。correction 完成并登记前不实现 P1/P3；P2 已由不受影响的冻结 decision 关闭。
 
 ## 7. P1：W 信息来源与 6-voice 效率
 
@@ -356,26 +361,26 @@ P5 当前关闭。
 |---|---|---:|
 | P−1 | FiLM、频带、时间负对照功能审计 | 0 |
 | P1 | RESP、CARRIER、full-band 6V | 9 |
-| P2 | ADD 或 SCALE，按 P−1 固定规则最多一个 | 0–3 |
+| P2 | 冻结决策为 retain FiLM；ADD/SCALE 均关闭 | 0 |
 | P3 | W0 设置下 D4 | 3 |
 | P4 | validation summary | 0 |
 | P5 | 最终 research-test | 0 |
 
-因此标准预算为 **12 个新 training runs**，硬上限为 **15 个**。Engineering stress 和 checkpoint evaluation 不计为 training runs，但其 GPU 成本必须单独记录。
+因此剩余预算固定为 **12 个新 training runs**，原条件硬上限 15 已因 P2 不触发而关闭。Engineering stress 和 checkpoint evaluation 不计为 training runs，但其 GPU 成本必须单独记录。
 
 禁止执行融合×频带×voices×深度全因子矩阵，也不为形成论文线性故事追加复合候选。
 
 ## 14. 当前唯一下一步
 
-P0 与 P−1 实现验收已经完成。下一步不是继续写 P1/P2/P3，而是先提交本轮代码和协议、确认 `git status --short` 无输出，再由用户运行一次完整 P−1：
+P0 与 P−1 的主要评价和 P2 决策已经完成。下一步不是继续写 P1/P3，而是先提交 correction 代码和登记、确认 `git status --short` 无输出，再由用户只重跑三个 FULL checkpoint：
 
 ```bash
-./.venv/bin/python scripts/eval_crd_tf_w_v2_functional_audit.py \
+./.venv/bin/python scripts/eval_crd_tf_w_v2_film_statistics_correction.py \
   --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json \
   --split val \
   --device cuda:0
 ```
 
-该命令将依次评价 3 checkpoints × 10 interventions，可能长时间占用 GPU，Codex 不代跑。固定成功输出为 `runs/crd_tf_w_v2/p_minus_1_validation_audit/`；目录已存在时拒绝覆盖。若留下 `.incomplete_*`，必须先审计 `failure.json`，不得删除后静默重跑。
+该命令只评价 3 checkpoints × FULL，不重复另外 27 项干预，不改变 source audit 或 P2 decision。它可能占用 GPU，Codex 不代跑。固定成功输出为 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`；目录已存在时拒绝覆盖。若留下 `.incomplete_*`，必须先审计 `failure.json`，不得删除后静默重跑。
 
-P−1 结果决定 P2 的 ADD/SCALE/retain-FiLM 分支，但不改变固定 P1 三臂。P−1 结果登记前不实现 P1/P2/P3，不运行 stress、formal 或 research-test。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+correction 结果只修正两项描述性 FiLM 时间统计，不重新决定 P2。correction 登记前不实现 P1/P3，不运行 stress、formal 或 research-test。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。

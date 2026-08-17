@@ -11,9 +11,11 @@ from resp_train.crd.tf_w_v2_audit import (
     CANDIDATE_LOCK,
     CANDIDATE_LOCK_SHA256,
     AuditedW0Model,
+    _film_statistics,
     _load_candidate_lock,
     _sha256_file,
     _validate_audit_split,
+    _validate_corrected_film_statistics,
     apply_w_intervention,
     decide_p2_fusion,
 )
@@ -160,6 +162,53 @@ def test_full_wrapper_records_compact_per_sample_statistics_once() -> None:
     assert all(value.shape == (2,) for value in statistics.values())
     assert all(np.isfinite(value).all() for value in statistics.values())
     assert wrapper.take_film_statistics() == {}
+
+
+def test_film_time_statistics_are_mean_absolute_adjacent_differences() -> None:
+    gamma = torch.tensor([[[-0.5, 0.5, -0.5], [0.0, 0.25, 0.0]]])
+    beta = torch.tensor([[[0.0, 0.1, 0.3], [0.5, 0.0, -0.5]]])
+
+    statistics = _film_statistics(gamma, beta)
+
+    expected_gamma = gamma.diff(dim=-1).abs().mean().item()
+    expected_beta = beta.diff(dim=-1).abs().mean().item()
+    assert statistics["gamma_time_mean_abs_difference"].item() == pytest.approx(expected_gamma)
+    assert statistics["beta_time_mean_abs_difference"].item() == pytest.approx(expected_beta)
+    assert statistics["gamma_time_mean_abs_difference"].item() > 0.0
+    assert statistics["beta_time_mean_abs_difference"].item() > 0.0
+
+
+def test_corrected_film_statistics_preserve_identity_and_unaffected_columns() -> None:
+    unchanged = {
+        "mean_abs_gamma": [0.1, 0.2, 0.3],
+        "median_abs_gamma": [0.1, 0.2, 0.3],
+        "mean_abs_beta": [0.2, 0.3, 0.4],
+        "median_abs_beta": [0.2, 0.3, 0.4],
+        "gamma_saturation_fraction": [0.0, 0.1, 0.2],
+        "beta_saturation_fraction": [0.0, 0.0, 0.1],
+    }
+    source = pd.DataFrame(
+        {
+            "seed": [20260811, 20260812, 20260813],
+            "intervention": ["FULL"] * 3,
+            "dataset_row_id": [1, 2, 3],
+            "samp_id": ["a", "b", "c"],
+            **unchanged,
+            "gamma_time_mean_abs_difference": [-0.1, 0.0, -0.2],
+            "beta_time_mean_abs_difference": [-0.1, -0.2, 0.0],
+        }
+    )
+    corrected = source.copy()
+    corrected["gamma_time_mean_abs_difference"] = [0.1, 0.2, 0.3]
+    corrected["beta_time_mean_abs_difference"] = [0.2, 0.3, 0.4]
+
+    receipt = _validate_corrected_film_statistics(corrected, source, expected_rows=3)
+
+    assert receipt["identity_rows_match_source"] is True
+    assert receipt["corrected_negative_counts"] == {
+        "gamma_time_mean_abs_difference": 0,
+        "beta_time_mean_abs_difference": 0,
+    }
 
 
 def _seed_summaries(*, beta: tuple[float, float], gamma: tuple[float, float]) -> pd.DataFrame:
