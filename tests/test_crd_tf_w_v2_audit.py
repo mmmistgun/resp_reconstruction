@@ -127,11 +127,15 @@ def test_full_wrapper_matches_real_w0_forward_with_active_film() -> None:
 
     with torch.no_grad():
         expected = model(x, tf={"w": w})
-        observed = AuditedW0Model(model, intervention="FULL")(x, tf={"w": w})
+        wrapper = AuditedW0Model(model, intervention="FULL", record_film_statistics=True)
+        observed = wrapper(x, tf={"w": w})
 
     assert observed.keys() == expected.keys()
     for key in expected:
         torch.testing.assert_close(observed[key], expected[key], rtol=0.0, atol=0.0)
+    statistics = wrapper.take_film_statistics()
+    assert statistics
+    assert all(value.shape == (1,) for value in statistics.values())
 
 
 def test_full_wrapper_records_compact_per_sample_statistics_once() -> None:

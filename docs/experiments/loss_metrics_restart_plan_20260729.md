@@ -2102,4 +2102,6 @@ P0 同时纠正名义频带与 cache 实际离散映射的表述：W 的名义�
 
 P0 随后关闭并只保留 provenance。用户明确允许进入 P−1 实现阶段；独立 `tf_w_v2_audit.py` 包装器和专用 `eval_crd_tf_w_v2_functional_audit.py` 已实现，未修改锁定的 v1 model/cache reader。入口只接受固定 lock/hash、干净 Git、CUDA、完整 validation、三个 W0 checkpoints 与 10 项干预；FULL 必须在绝对 `1e-6` 内复现锁定 primary/degeneracy summary。定向 `py_compile`、candidate-lock input verification 与新审计/model/data/experiment 回归为 `40 passed`；测试覆盖去除原生 Mamba 执行后的真实 W0 active-FiLM wrapper identity，没有加载冻结 W0 checkpoint、运行完整 validation、训练或 research-test。
 
+第一次完整 P−1 audit 从干净 commit `82926b2` 在 seed `20260811` FULL 锚点停止，最大 summary 绝对差为 `2.6775125796740795e-05`；失败记录按约定保留。随后同 checkpoint 的原生 validation 复评与冻结六项 summary 差均为 `0.0`，定位为包装器在 decoder 前执行统计算子改变 CUDA 执行路径，而非 checkpoint、cache、指标或环境漂移。实现已修订为 FULL 直接调用原生 W0 forward、用只读 hook 捕获 FiLM 输出并在原生输出完成后统计；`1e-6` 门槛保持不变。第一次失败不形成科研结果，须从新的干净 commit 重跑。
+
 当前唯一下一步是用户从包含本登记的新干净 commit 运行 `./.venv/bin/python scripts/eval_crd_tf_w_v2_functional_audit.py --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json --split val --device cuda:0`。固定输出为 `runs/crd_tf_w_v2/p_minus_1_validation_audit/`，存在即拒绝覆盖；失败保留 `.incomplete_* / failure.json`。P−1 结果登记前，P1/P2/P3 实现、GPU stress、formal 与 research-test 继续关闭。最终 research-test 仍须在 P4 allowlist 冻结后由用户再次明确授权。

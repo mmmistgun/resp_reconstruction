@@ -227,15 +227,17 @@ CARRIER_H  = indices 72..96, mapped_frequency > 2.00 Hz          # 仅诊断
 
 P−1 已通过新增的独立包装器实现，不修改 P0 锁定的 `tf_v1_model.py`、既有 checkpoint 或 cache reader：
 
-- `resp_train/crd/tf_w_v2_audit.py`：SHA-256=`607b33e290d80d5e9b0ca0d437ce30198314bc26b2176a0b0f01093f363bea39`；
+- `resp_train/crd/tf_w_v2_audit.py`：SHA-256=`96307c9ee28e8070651868113313378fe21bb561808c80b5ddfb6b8a6c79b21e`；
 - `scripts/eval_crd_tf_w_v2_functional_audit.py`：SHA-256=`62cee8677595f5351a3a771d422116273f64d4a759a2cbcff997a6625e139dd3`；
-- `tests/test_crd_tf_w_v2_audit.py`：SHA-256=`3771b7e7d5a548d89ad62add10f1b8b1540dc822a24cc78391cff8b555661813`。
+- `tests/test_crd_tf_w_v2_audit.py`：SHA-256=`b6b02b7433341e4fb6554bea492c3899b71ca121f8d723981d1c24a930a4fe3e`。
 
 入口强制 candidate-lock path/hash、36 项 anchor artifact identity、锁定 runtime identity、validation W cache/frequency/view identity、干净 Git、CUDA、`split=val`、三个 W0 checkpoint 与 10 项固定 intervention；不提供 test、max-windows、任意 checkpoint 或输出覆盖入口。所有 W 干预只作用于 `TfV1CacheReader.get` 已复制的 batch tensor，不写原 memmap。失败保留独立 `.incomplete_*` 目录和 `failure.json`，成功才原子重命名到固定 P−1 目录。
 
 FULL 每个 seed 必须以绝对容差 `1e-6` 复现锁定 validation 五项 primary 与 degeneracy summary，否则整个 audit 失败。成功产物严格为 candidate lock 中的五项文件；预计逐 sample metric 行数为 `3×10×2675=80,250`，FULL FiLM statistic 行数为 `3×2675=8,025`。P2 decision 由第 6.4 节纯函数生成，不读取 `samp_id`、secondary 排名或 research-test。
 
 定向命令 `./.venv/bin/python -m pytest -q tests/test_crd_tf_w_v2_audit.py tests/test_crd_tf_v1_model.py tests/test_crd_tf_v1_data.py tests/test_crd_experiment.py` 已通过，结果为 `40 passed`；同时完成三个新增文件的 `py_compile` 和 candidate-lock input verification。测试覆盖真实 W0 结构在替换 Local Mamba 为 Identity 后的 active-FiLM FULL wrapper 逐 tensor identity，但没有加载冻结 W0 checkpoint、运行原生 Mamba 或完整 validation。
+
+第一次完整 audit 从干净 commit `82926b2` 启动，在 seed `20260811` 的 FULL 锚点失败并按约定保留 `p_minus_1_validation_audit.incomplete_20260817T070706_900712Z/failure.json`；观测到锁定六项 summary 最大绝对差 `2.6775125796740795e-05`。随后用原生 `eval_crd.py` 对同一 checkpoint、cache 和 validation rows 复评，六项与冻结 summary 的差均严格为 `0.0`，排除历史 summary 或当前 CUDA 环境漂移。根因是旧包装器在 decoder 前执行 FiLM 统计算子，改变了原生 CUDA 执行/内存路径。修订后 FULL 直接调用未修改的 W0 原生 forward，只用只读 forward hook 捕获 gamma/beta，并在原生输出完成后计算统计；`1e-6` 锚点门槛不放宽。该失败不形成 P−1 科研结果，修订代码仍须从新的干净 commit 重跑完整 audit。
 
 P−1 实现已完成，但完整 audit 尚未运行。它必须在本轮代码与协议提交、工作树干净后由用户执行；运行结果返回并登记前不实现 P1/P2/P3。
 

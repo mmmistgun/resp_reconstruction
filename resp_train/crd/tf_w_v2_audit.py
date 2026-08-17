@@ -105,13 +105,38 @@ class AuditedW0Model(nn.Module):
     ) -> dict[str, torch.Tensor]:
         if tf is None or set(tf) != {"w"}:
             raise ValueError(f"P−1 W0 只接受 tf keys=['w']，实际={sorted(tf or {})}")
+        if self.intervention == "FULL":
+            # FULL 是冻结 W0 的原生复现锚点。必须直接走原模型 forward；否则即使公式
+            # 等价，解码前插入统计算子也可能改变 CUDA kernel/内存路径并产生微小漂移。
+            if not self.record_film_statistics:
+                return self.model(x, tf=tf)
+            captured: list[tuple[torch.Tensor, torch.Tensor]] = []
+
+            def capture_condition(
+                _: nn.Module,
+                __: tuple[Any, ...],
+                output: tuple[torch.Tensor, torch.Tensor],
+            ) -> None:
+                captured.append(output)
+
+            handle = self.model.branches["w"].register_forward_hook(capture_condition)
+            try:
+                result = self.model(x, tf=tf)
+            finally:
+                handle.remove()
+            if len(captured) != 1:
+                raise RuntimeError(f"P−1 FULL 期望捕获一次 W condition，实际={len(captured)}")
+            gamma_raw, beta_raw = captured[0]
+            self._statistics.append(
+                _film_statistics(0.5 * torch.tanh(gamma_raw), 0.5 * torch.tanh(beta_raw))
+            )
+            return result
+
         w_value = apply_w_intervention(tf["w"], self.intervention)
         latent = self.model.base.encode_local(x)
         gamma_raw, beta_raw = self.model.branches["w"]({"w": w_value})
         effective_gamma = 0.5 * torch.tanh(gamma_raw)
         effective_beta = 0.5 * torch.tanh(beta_raw)
-        if self.record_film_statistics:
-            self._statistics.append(_film_statistics(effective_gamma, effective_beta))
 
         if self.intervention in {"BETA_ONLY", "CONDITION_OFF"}:
             effective_gamma = torch.zeros_like(effective_gamma)
