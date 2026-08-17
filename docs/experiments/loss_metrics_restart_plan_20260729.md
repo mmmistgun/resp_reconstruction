@@ -4,7 +4,7 @@
 
 最后更新：2026-08-17
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0、P−1 与 FiLM statistics correction 已完成并冻结，P2 关闭，当前仅开放 P1 实现与定向测试
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction 与 P1 实现锁已完成，P2 关闭，当前等待用户决定是否依次运行三个 P1 isolation stress
 
 ## 1. 定位
 
@@ -2110,4 +2110,6 @@ P0 随后关闭并只保留 provenance。用户明确允许进入 P−1 实现�
 
 FiLM statistics correction 随后从干净 commit `4eb9b3ce937792d151393a40c0f95b5cab0e7c9b` 完成，manifest SHA-256=`1c6f7218c280b2a1579b2169a2b4752d7c10416d89de67ed5e9a1cc58d104463`，corrected CSV SHA-256=`2b7a4edef8e9828356a336c3c1ec7880235914207b00d164bf016ce1cd7a5203`。三个 FULL 锚点通过，8,025 行 identity/finite/nonnegative 通过，gamma/beta 负值数归零，六项非目标统计最大漂移 `<1e-16`；source audit 三项 hash 未变。修正后的 `mean|Δ_t g| / mean|Δ_t b|` 为 `0.02261490 / 0.02396674`。P−1 至此关闭，完整 audit 和 correction 均不得重复运行。
 
-当前唯一下一步是实现 candidate lock 的 P1 三臂：W1 RESP `[97,360]` mask、W2 CARRIER `[97,360]` mask、W3 full-band 6V indices `0,2,…,96` 的 `[49,360]` view，以及对应 registry、六份 stress/formal config 和定向测试。当前只开放实现与 CPU 定向测试，不运行 isolation stress、formal 或 research-test；P3 实现继续关闭。P1 实现验收后由用户决定是否依次运行三个 isolation stress。最终 research-test 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+P1 三臂实现随后完成并锁定为 `docs/experiments/crd_tf_w_v2_p1_implementation_lock_20260817.json`，SHA-256=`fb822ca7f8607e45443e07a94d91150bcc108217fb25c47f0b4504fbdf644f58`。W1/W2 为 encoder 前 `[97,360]` input-only mask；W3 为固定 even indices 的 `[49,360]` strided view，source cache 和 host→device tensor 仍为完整 12V，不声称磁盘/传输减半。三臂参数均为 `1,219,850`，W0/C201 同 seed state identity、source/frequency/index hash、六份 config 与定向 receipt/formal gate 均通过；定向回归为 `112 passed`，未运行 GPU。
+
+当前唯一下一步是用户决定是否按 W1→W2→W3 顺序运行三个 isolation stress。每臂固定 5 epochs、`128×1`、完整 train/validation、400 optimizer updates，并生成不可覆盖的 `p1_stress_receipt.json`；每个结果必须先核验再运行下一臂。三臂 stress 全部登记前不运行任何 formal，不实现 P3，不访问 research-test。最终 research-test 仍须在 P4 allowlist 冻结后另行获得用户明确授权。

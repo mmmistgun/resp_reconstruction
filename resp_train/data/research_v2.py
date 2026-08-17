@@ -74,8 +74,13 @@ class ResearchV2WindowDataset(Dataset):
             self._sst_cache = {int(r): sst[i] for i, r in enumerate(ids)}
         self._tf_v1_cache = None
         tf_cache_path = cfg.data.get("tf_cache_path", None)
-        representations = cfg.model.get("tf_representations", [])
+        model_cfg = cfg.get("model", {})
+        representations = model_cfg.get("tf_representations", [])
         if tf_cache_path and representations:
+            from resp_train.crd.tf_w_v2 import P1_VARIANTS, verify_p1_source_identity
+
+            if str(model_cfg.get("variant", "")).lower() in P1_VARIANTS:
+                verify_p1_source_identity(str(tf_cache_path))
             splits = set(self.rows["split"].astype(str).unique().tolist())
             if len(splits) != 1:
                 raise ValueError(f"CRD-TF dataset 必须只含单一 split，实际 {sorted(splits)}")

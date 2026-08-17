@@ -23,6 +23,7 @@ from resp_train.crd.representations import (
     MorphologyRepresentation,
 )
 from resp_train.crd.spectral_ops import fft_hard_lowpass, fourier_interpolate
+from resp_train.crd.tf_w_v2 import P1_VARIANTS as CRD_TF_W_V2_VARIANTS
 from resp_train.models.stft_branch import TimeStftDual1D
 from resp_train.models.timeseries import PatchMixer1D
 
@@ -72,6 +73,7 @@ CRD_VARIANTS = (
     "crd_c202_decoder_100hz",
     *CRD_TF_VARIANTS,
     *CRD_TF_P6_VARIANTS,
+    *CRD_TF_W_V2_VARIANTS,
 )
 
 CRD_S2A_VARIANTS = {
@@ -381,7 +383,7 @@ def build_crd_model(cfg: Any) -> nn.Module:
         return LegacyB0Retrain(initialization_seed)
     if variant == "crd_002_t4_retrain":
         return LegacyT4Retrain(initialization_seed)
-    if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS):
+    if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS, *CRD_TF_W_V2_VARIANTS):
         from resp_train.crd.tf_v1_model import CRDTfV1Model
 
         return CRDTfV1Model(variant, initialization_seed)

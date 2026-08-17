@@ -13,6 +13,7 @@ from resp_train.crd.model import (
     CRD_C2_VARIANTS,
     CRD_TF_P6_VARIANTS,
     CRD_TF_VARIANTS,
+    CRD_TF_W_V2_VARIANTS,
     CRD_VARIANTS,
 )
 
@@ -30,6 +31,7 @@ CRD_CONTROLS_PROTOCOL_VERSION = "crd-v1.1-controls-research-informed-20260811"
 CRD_TF_PROTOCOL_VERSION = "crd-tf-v1-research-informed-20260812"
 CRD_TF_P6A_PROTOCOL_VERSION = "crd-tf-v1-p6a-validation-development-20260815"
 CRD_TF_RESEARCH_TEST_PROTOCOL_VERSION = "crd-tf-v1-research-test-development-20260816"
+CRD_TF_W_V2_PROTOCOL_VERSION = "crd-tf-w-v2-research-informed-20260817"
 CRD_TF_CACHE_PATH = (
     "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/"
     "bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0"
@@ -159,7 +161,9 @@ def _validate_crd_config(cfg: DictConfig) -> None:
     variant = str(cfg.model.variant).lower()
     if variant not in CRD_VARIANTS:
         raise ValueError(f"未知 CRD variant={variant!r}；可选 {list(CRD_VARIANTS)}")
-    if variant in CRD_TF_P6_VARIANTS:
+    if variant in CRD_TF_W_V2_VARIANTS:
+        expected_stage = "tf_w_v2"
+    elif variant in CRD_TF_P6_VARIANTS:
         expected_stage = "tf_p6a"
     elif variant in CRD_TF_VARIANTS:
         expected_stage = "tf"
@@ -173,7 +177,9 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         expected_stage = "s2br"
     else:
         expected_stage = "s0" if variant.startswith("crd_00") else "s1"
-    if variant in CRD_TF_P6_VARIANTS:
+    if variant in CRD_TF_W_V2_VARIANTS:
+        expected_protocol = CRD_TF_W_V2_PROTOCOL_VERSION
+    elif variant in CRD_TF_P6_VARIANTS:
         expected_protocol = CRD_TF_P6A_PROTOCOL_VERSION
     elif variant in CRD_TF_VARIANTS:
         expected_protocol = CRD_TF_PROTOCOL_VERSION
@@ -258,7 +264,7 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         "training.drop_last": False,
         "training.resume": False,
     }
-    if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS):
+    if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS, *CRD_TF_W_V2_VARIANTS):
         from resp_train.crd.tf_v1_model import TF_ALL_VARIANT_REPRESENTATIONS
 
         frozen.update(
@@ -309,7 +315,7 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         },
         "outputs": {"run_root"},
     }
-    if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS):
+    if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS, *CRD_TF_W_V2_VARIANTS):
         allowed_keys["protocol"].add("execution_gate")
         allowed_keys["data"].add("tf_cache_path")
         allowed_keys["model"].add("tf_representations")
@@ -329,15 +335,29 @@ def _validate_crd_config(cfg: DictConfig) -> None:
         raise ValueError("model.initialization_seed 必须与 training.seed 一致，以保证配对初始化")
 
     role = str(cfg.protocol.run_role).lower()
-    if role not in {"formal", "acceptance", "smoke"}:
-        raise ValueError("protocol.run_role 必须是 formal、acceptance 或 smoke")
+    allowed_roles = {"formal", "acceptance", "smoke"}
+    if variant in CRD_TF_W_V2_VARIANTS:
+        allowed_roles.add("stress")
+    if role not in allowed_roles:
+        raise ValueError(f"protocol.run_role 必须属于 {sorted(allowed_roles)}")
     epochs = int(cfg.training.epochs)
     batch_size = int(cfg.training.batch_size)
     accumulation = int(cfg.training.gradient_accumulation_steps)
-    if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS):
+    if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS, *CRD_TF_W_V2_VARIANTS):
         execution_gate = str(cfg.protocol.execution_gate)
         device = str(cfg.training.device)
-        if variant in CRD_TF_P6_VARIANTS and execution_gate == "p6a_cpu_only":
+        if variant in CRD_TF_W_V2_VARIANTS and execution_gate == "p1_cpu_only":
+            if role != "smoke" or device != "cpu":
+                raise ValueError("CRD-TF-W v2 p1_cpu_only 只允许 smoke + CPU")
+        elif variant in CRD_TF_W_V2_VARIANTS and execution_gate == "p1_cuda_stress":
+            if role != "stress" or not device.startswith("cuda:"):
+                raise ValueError("CRD-TF-W v2 p1_cuda_stress 只允许 stress + 显式 cuda:<index>")
+        elif variant in CRD_TF_W_V2_VARIANTS and execution_gate == "p1_formal":
+            if role != "formal" or not device.startswith("cuda:"):
+                raise ValueError("CRD-TF-W v2 p1_formal 只允许 formal + 显式 cuda:<index>")
+        elif variant in CRD_TF_W_V2_VARIANTS:
+            raise ValueError("CRD-TF-W v2 execution_gate 必须与 P1 CPU/stress/formal 阶段严格匹配")
+        elif variant in CRD_TF_P6_VARIANTS and execution_gate == "p6a_cpu_only":
             if role != "smoke" or device != "cpu":
                 raise ValueError("CRD-TF P6a p6a_cpu_only 只允许 smoke + CPU")
         elif variant in CRD_TF_P6_VARIANTS and execution_gate == "p6a_cuda_acceptance":
@@ -367,6 +387,15 @@ def _validate_crd_config(cfg: DictConfig) -> None:
             raise ValueError("formal 必须使用完整 train/val/test 索引，max_*_windows 均为 null")
         if int(cfg.training.seed) not in FORMAL_SEEDS:
             raise ValueError(f"formal seed 只允许 {list(FORMAL_SEEDS)}")
+    elif role == "stress":
+        if variant not in CRD_TF_W_V2_VARIANTS:
+            raise ValueError("stress role 只为 CRD-TF-W v2 P1 开放")
+        if (epochs, batch_size, accumulation) != (5, 128, 1):
+            raise ValueError("P1 stress 固定 epochs=5、physical batch=128、accumulation=1")
+        if any(value is not None for value in maxima):
+            raise ValueError("P1 stress 必须使用完整 train/val，max_*_windows 均为 null")
+        if int(cfg.training.seed) != FORMAL_SEEDS[0]:
+            raise ValueError(f"P1 stress 固定 seed={FORMAL_SEEDS[0]}")
     elif role == "acceptance":
         if (epochs, batch_size, accumulation) != (1, 128, 1):
             raise ValueError("acceptance 固定 epochs=1、physical batch=128、accumulation=1")

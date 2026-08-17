@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**P0 candidate lock、P−1 的 30/30 validation 功能评价与三个 FULL checkpoint 的 FiLM statistics correction 均已完成并冻结；决策为 `retain_film_no_p2_training`，P2 关闭。原始 `film_statistics.csv` 的两项错误列已退出当前结论，修正证据见独立 correction 目录。当前下一步仅开放 P1 实现与定向测试；P1 stress/formal、P3–P5 实现与 research-test 仍关闭。**
+状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 的 W1 RESP、W2 CARRIER、W3 full-band 6V 三臂实现、六份 stress/formal config、source/view provenance、isolation-stress receipt 和 formal preflight 已完成，定向回归通过；尚未运行 GPU stress。当前等待用户决定是否依次运行三个 P1 isolation stress；P1 formal、P3–P5 实现与 research-test 仍关闭。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -273,7 +273,19 @@ W3 不声称现有磁盘 cache 自动减半。必须分别报告 source cache �
 
 W1/W2/W3 一旦开放 formal，均直接完成三个 seed；P−1 普通效果不取消任何 P1 arm。
 
-P1 当前关闭；P0 已完成，仍等待后续明确开放实现、工程验收和 GPU stress。
+### 7.1 P1 实现锁（2026-08-17）
+
+P1 实现锁固定为 `docs/experiments/crd_tf_w_v2_p1_implementation_lock_20260817.json`，SHA-256=`fb822ca7f8607e45443e07a94d91150bcc108217fb25c47f0b4504fbdf644f58`。实现只注册 candidate lock 的三个 P1 variant；P2 ADD/SCALE 与 P3 D4 未注册。
+
+W1/W2 在 batch W tensor 已由只读 memmap copy 后、`CwtBranch.conv_in` 前应用 `zeros_like` input-only mask，保持 `[97,360]`、W encoder state、FiLM、D6 Mamba、decoder 和 `1,219,850` 参数不变。W3 用 `[:,::2,:]` 实现固定 indices `0,2,…,96` 的只读 strided view，模型输入为 `[49,360]`；source 仍从完整 `[97,360]` cache 读取，单 sample model-input elements 从 `34,920` 降至 `17,640`，不声称磁盘或 host→device 传输自动减半。W3 CWT branch 参数与初始化 state 仍和 W0 逐 tensor 相同。
+
+运行时 source preflight 固定复核 candidate lock、cache manifest、train/val W metadata、frequency file/content、RESP/CARRIER/6V index hash，以及 49 个 mapped centers SHA-256=`2eda45200cc329c4989a516fa3611f0862c3c546bca26bb124025a2bb8146b29`。每个 run manifest/checkpoint 记录 variant view、source hashes、input/active elements、application point 与 materialization strategy；不写 source cache。
+
+三份 stress config 固定 5 epochs、physical batch `128×1`、完整 train/validation、seed `20260811`，即 `5×ceil(10141/128)=400` optimizer updates 和 5 次完整 validation。stress 结束后专用 receipt 额外验证 history/checkpoint/primary finite、degeneracy=0、batch-1 bf16 input/全部 parameter gradients、warm train samples/s、forward 与 forward+backward latency、独立 validation peak；`<85% / 85%–90% / >90%或OOM` 显存规则不变。任一 stress run 目录存在即拒绝静默重复；formal preflight 要求三个 variant 各自唯一且 passed 的 `p1_stress_receipt.json`、全部与 formal 使用同一 commit，并拒绝重复 seed run。
+
+定向 `py_compile` 与 `tests/test_crd_tf_w_v2_p1.py`、P−1 audit、v1 model/data/formal-config、CRD config/experiment/training 回归通过，结果为 `112 passed`。测试覆盖 allowlist/config path、mask/view/no-mutation、frequency/index/source identity、参数数、W0/C201 同 seed 初始化 identity、W3 `[49,360]` branch、variant forward application、stress/formal schema和 receipt/formal gate；未运行 CPU/GPU smoke、GPU stress、formal 或 research-test。
+
+P1 实现阶段至此关闭并只保留 provenance。当前仅可在用户明确同意后依次运行三个 isolation stress；stress 结果登记前，P1 formal 与 P3 实现继续关闭。
 
 ## 8. P2：有证据才开放的单一融合 arm
 
@@ -380,12 +392,12 @@ P5 当前关闭。
 
 ## 14. 当前唯一下一步
 
-P0 与 P−1 已关闭，P2 不触发。当前只开放 P1 的实现和定向测试，不运行 GPU stress、formal 或 research-test：
+P0/P−1 已关闭，P2 不触发，P1 实现锁已完成。当前唯一下一步是用户决定是否依次运行 W1、W2、W3 三个 isolation stress；Codex 不代跑：
 
-1. 注册且只注册 candidate lock 中的 W1 RESP、W2 CARRIER、W3 full-band 6V 三个 P1 variant；
-2. W1/W2 在 W encoder normalization 前应用固定只读 mask，输入仍为 `[97,360]`，其余结构和参数必须与 W0 相同；
-3. W3 严格使用 source cache indices `0,2,…,96` 的 `[49,360]` view，锁定 source frequency/hash/index/mapped-center identity，并适配 W encoder 的 scale 维输入，不改 FiLM、D6 Mamba、decoder 或训练口径；
-4. 建立 candidate lock 指定的三份 stress 与三份 formal config，formal seed 仍由命令行固定为 `20260811/12/13`；
-5. 增加 variant registry、view/mask/no-mutation、shape、参数数、同 seed base initialization、配置与 source-cache identity 定向测试。
+```bash
+./.venv/bin/python scripts/train_crd.py --config configs/crd_tf_w_v2/crd_tfw_v2_w1_resp_12v_film_d6_stress.yaml
+./.venv/bin/python scripts/train_crd.py --config configs/crd_tf_w_v2/crd_tfw_v2_w2_carrier_12v_film_d6_stress.yaml
+./.venv/bin/python scripts/train_crd.py --config configs/crd_tf_w_v2/crd_tfw_v2_w3_full_6v_film_d6_stress.yaml
+```
 
-实现和 CPU 定向测试通过后先提交、登记 code/config hash，再由用户决定是否依次运行三臂 isolation stress。P1 stress 未通过前不得启动任何 formal；P3 实现继续关闭。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+三个命令必须从同一新的干净 commit 依次执行；每个命令成功后先返回 run path 与 `p1_stress_receipt.json`，完成核验后再运行下一臂。不要并行运行，不要删除失败/不合格的 engineering run 后重试。三臂 stress 全部登记前不运行任何 formal，不实现 P3，不访问 research-test。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。

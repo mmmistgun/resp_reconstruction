@@ -12,6 +12,12 @@ from resp_train.crd.blocks import ResidualDWBlock
 from resp_train.crd.initialization import module_seed
 from resp_train.crd.model import CRDCoarseModel, _validate_input
 from resp_train.crd.tf_v1_features import LearnableCarrierModulation
+from resp_train.crd.tf_w_v2 import (
+    P1_VARIANT_REPRESENTATIONS,
+    P1_VARIANTS,
+    apply_p1_w_view,
+    p1_w_scale_count,
+)
 
 
 P_BRANCH_TARGET = 150_000
@@ -52,6 +58,7 @@ TF_P6_VARIANTS = tuple(TF_P6_VARIANT_REPRESENTATIONS)
 TF_ALL_VARIANT_REPRESENTATIONS = {
     **TF_VARIANT_REPRESENTATIONS,
     **TF_P6_VARIANT_REPRESENTATIONS,
+    **P1_VARIANT_REPRESENTATIONS,
 }
 TF_P6_CONTROL_COUNT = {"crd_tf403_ctrl_gate": 3}
 TF_ALL_CONTROL_COUNT = {**TF_CONTROL_COUNT, **TF_P6_CONTROL_COUNT}
@@ -174,8 +181,11 @@ class MultiResolutionStftBranch(_ConditionBranch):
 
 
 class CwtBranch(_ConditionBranch):
-    def __init__(self) -> None:
+    def __init__(self, scale_count: int = 97) -> None:
         super().__init__()
+        self.scale_count = int(scale_count)
+        if self.scale_count not in {49, 97}:
+            raise ValueError("CWT branch scale_count 只允许 49 或 97")
         self.conv_in = nn.Conv2d(1, 48, kernel_size=(5, 3), padding=(2, 1), bias=False)
         self.norm = nn.GroupNorm(8, 48)
         self.depthwise = nn.Conv2d(48, 48, kernel_size=(3, 3), padding=1, groups=48, bias=False)
@@ -187,7 +197,7 @@ class CwtBranch(_ConditionBranch):
         self.finalize_parameter_match()
 
     def forward(self, tf: Mapping[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        value = _require_feature(tf, "w", (97, 360)).float()[:, None]
+        value = _require_feature(tf, "w", (self.scale_count, 360)).float()[:, None]
         value = F.silu(self.norm(self.conv_in(value)))
         value = F.silu(self.conv_out(self.depthwise(value))).mean(dim=2)
         value = F.interpolate(value, size=1800, mode="linear", align_corners=False)
@@ -293,7 +303,10 @@ class CRDTfV1Model(nn.Module):
         branches = {}
         for name in self.representations:
             with module_seed(int(initialization_seed), f"tf_branch_{name}"):
-                branches[name] = BRANCH_TYPES[name]()
+                if name == "w" and variant in P1_VARIANTS:
+                    branches[name] = CwtBranch(scale_count=p1_w_scale_count(variant))
+                else:
+                    branches[name] = BRANCH_TYPES[name]()
         self.branches = nn.ModuleDict(branches)
         controls = []
         for index in range(TF_ALL_CONTROL_COUNT.get(variant, 0)):
@@ -342,6 +355,8 @@ class CRDTfV1Model(nn.Module):
                 raise ValueError(f"{self.tf_variant} 要求 TF keys={sorted(expected_keys)}，实际={sorted(tf or {})}")
             for name, branch in self.branches.items():
                 branch_features = {key: tf[key] for key in _expected_feature_keys((name,))}
+                if name == "w" and self.tf_variant in P1_VARIANTS:
+                    branch_features = {"w": apply_p1_w_view(branch_features["w"], self.tf_variant)}
                 gamma, beta = _checkpointed_mapping_branch(branch, branch_features)
                 if gate_factors is None:
                     gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)

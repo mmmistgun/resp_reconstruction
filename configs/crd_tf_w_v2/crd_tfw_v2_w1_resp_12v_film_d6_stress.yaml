@@ -1,0 +1,5 @@
+_base_: _p1_base.yaml
+protocol: {run_role: stress, execution_gate: p1_cuda_stress}
+data: {max_train_windows: null, max_val_windows: null, max_test_windows: null}
+training: {epochs: 5, batch_size: 128, gradient_accumulation_steps: 1, device: 'cuda:0', show_progress: false}
+outputs: {run_root: '/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_w_v2/engineering/crd_tfw_v2_w1_resp_12v_film_d6'}

@@ -45,6 +45,11 @@ class CRDExperiment:
         self.device: torch.device | None = None
 
     def train(self) -> Path:
+        p1_contract = None
+        if str(self.cfg.protocol.stage) == "tf_w_v2":
+            from resp_train.crd.tf_w_v2 import p1_variant_contract
+
+            p1_contract = p1_variant_contract(str(self.cfg.model.variant))
         run_dir = create_run_dir(self.cfg.outputs.run_root)
         self.run_dir = run_dir
         save_config(self.cfg, run_dir)
@@ -57,6 +62,7 @@ class CRDExperiment:
             run_role=str(self.cfg.protocol.run_role),
             dependency_versions=crd_dependency_versions(),
             resume_supported=False,
+            **({"tf_w_v2_p1_contract": p1_contract} if p1_contract is not None else {}),
         )
         logger = setup_logger(run_dir)
         set_seed(int(self.cfg.training.seed))
@@ -167,7 +173,7 @@ class CRDExperiment:
                 "val_core_loss": val_core_loss,
                 "val_local_rr_mae": val_local_rr,
             }
-            if str(self.cfg.protocol.stage) in {"tf", "tf_p6a"}:
+            if str(self.cfg.protocol.stage) in {"tf", "tf_p6a", "tf_w_v2"}:
                 record.update(
                     {
                         "train_elapsed_seconds": float(train_elapsed_seconds),
@@ -210,6 +216,7 @@ class CRDExperiment:
                 "total_updates": total_updates,
                 "resume_supported": False,
                 "dependency_versions": crd_dependency_versions(),
+                **({"tf_w_v2_p1_contract": p1_contract} if p1_contract is not None else {}),
             }
             if early_stopping_enabled:
                 checkpoint_extra["early_stopping"] = {
@@ -266,6 +273,7 @@ class CRDExperiment:
                 "total_updates": total_updates,
                 "resume_supported": False,
                 "dependency_versions": crd_dependency_versions(),
+                **({"tf_w_v2_p1_contract": p1_contract} if p1_contract is not None else {}),
                 **(
                     {
                         "early_stopping": {
@@ -302,10 +310,26 @@ class CRDExperiment:
         metrics = self._evaluate_model(model, data.val.loader)
         metrics.to_csv(run_dir / "metrics.csv", index=False)
         summarize_task_metrics(metrics).to_csv(run_dir / "metrics_summary.csv", index=False)
+        runtime_summary = _runtime_summary(device)
         (run_dir / "runtime_summary.json").write_text(
-            json.dumps(_runtime_summary(device), ensure_ascii=False, indent=2) + "\n",
+            json.dumps(runtime_summary, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        if str(self.cfg.protocol.stage) == "tf_w_v2" and str(self.cfg.protocol.run_role) == "stress":
+            from resp_train.crd.tf_w_v2_p1 import write_p1_stress_receipt
+
+            write_p1_stress_receipt(
+                run_dir=run_dir,
+                cfg=self.cfg,
+                model=model,
+                loss_fn=loss_fn,
+                optimizer=optimizer,
+                data=data,
+                history=history,
+                metrics=metrics,
+                device=device,
+                runtime_summary=runtime_summary,
+            )
         return run_dir
 
     def _evaluate_model(

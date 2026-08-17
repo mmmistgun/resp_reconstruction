@@ -11,7 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 from resp_train.config import check_required_packages
 from resp_train.crd.config import check_crd_dependencies, load_crd_config
 from resp_train.crd.experiment import CRDExperiment
-from resp_train.crd.model import CRD_TF_P6_VARIANTS, CRD_TF_VARIANTS
+from resp_train.crd.model import CRD_TF_P6_VARIANTS, CRD_TF_VARIANTS, CRD_TF_W_V2_VARIANTS
 
 
 def main() -> None:
@@ -31,6 +31,10 @@ def main() -> None:
         from resp_train.crd.tf_v1_p6a_preflight import validate_p6a_formal_preflight
 
         validate_p6a_formal_preflight()
+    if str(cfg.model.variant) in CRD_TF_W_V2_VARIANTS:
+        from resp_train.crd.tf_w_v2_p1 import validate_p1_training_preflight
+
+        validate_p1_training_preflight(cfg)
     print(CRDExperiment(cfg).train())
 
 
