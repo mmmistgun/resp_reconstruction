@@ -1,0 +1,107 @@
+{
+  "protocol": "crd-tf-w-v2-research-informed-20260817",
+  "phase": "p3_implementation_lock",
+  "status": "implementation_complete_stress_not_run",
+  "recorded_at": "2026-08-18",
+  "parent_candidate_lock_sha256": "6ae35076bbd89bec688bfd4918cfecd20c7d5ea7f845f460034a88045432c7b6",
+  "p1_results_registration_commit": "248256bc4811d90b1f30e10fecdd80fe67a821f3",
+  "p1_formal_training_commit": "1d1b22edc6f1b9b96459c1b05eddf39208041162",
+  "implementation_audit": {
+    "git_dirty_during_implementation": true,
+    "runtime_requires_future_clean_commit": true,
+    "gpu_used": false,
+    "stress_used": false,
+    "formal_training_used": false,
+    "research_test_used": false,
+    "samp_id_analysis_used": false,
+    "cache_created_or_modified": false,
+    "checkpoint_created_or_modified": false
+  },
+  "source_identity": {
+    "cache_manifest_sha256": "6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8",
+    "train_w_sha256": "9ed2657cb92ba8e73ce8199dd8b19834ac3b964df10ef615ebb771e9a57e09a3",
+    "val_w_sha256": "fb8b44f174f078f93ae6f58083f2ba8c089a011457329e361a9965e409df3cc2",
+    "frequency_file_sha256": "15cc722c38e5572b3284c92137cfdeec7cbc4153b4588c2c1e086f26ae3238b3",
+    "frequency_content_sha256": "9fb164e7b09d42b31f7ee57a7d3e966af7adabc6d8c6a0e1eff3090b00b73c0c",
+    "full_12v_indices_sha256": "57bc2b5e25a87033b5ecf05d936e6274e9e7faeb35e9084af3fa1589c10c7306"
+  },
+  "variant": {
+    "id": "crd_tfw_v2_d4_full_12v_film",
+    "view": "full_12v",
+    "source_shape": [97, 360],
+    "model_input_shape": [97, 360],
+    "active_scale_count": 97,
+    "trainable_parameters": 902722,
+    "local_bimamba2_blocks": 4,
+    "removed_local_bimamba2_blocks": 2,
+    "parameters_per_removed_block": 158564,
+    "parameter_reduction": 317128,
+    "parameter_reduction_fraction": 0.25997294749354427,
+    "w_branch_parameters": 150048,
+    "disk_cache_reduction_claimed": false
+  },
+  "identity_checks": {
+    "three_fixed_seeds_checked": [20260811, 20260812, 20260813],
+    "all_d4_shared_state_tensors_identical_to_same_seed_w0": true,
+    "only_anchor_state_removed_is_local_blocks_4_and_5": true,
+    "frontend_w_encoder_film_refinement_head_decoder_identical": true,
+    "full_12v_input_passed_without_mask_or_subsampling": true,
+    "source_not_mutated": true,
+    "p2_variants_implemented": false,
+    "d8_implemented": false,
+    "composite_variant_implemented": false
+  },
+  "stress_contract": {
+    "epochs": 5,
+    "physical_batch_size": 128,
+    "gradient_accumulation_steps": 1,
+    "expected_optimizer_updates": 400,
+    "minimum_full_validations": 2,
+    "actual_planned_full_validations": 5,
+    "benchmark_batch_size": 1,
+    "receipt": "p3_stress_receipt.json",
+    "formal_preflight_requires_unique_passed_same_commit_stress_receipt": true,
+    "peak_reserved_uses_max_of_training_and_validation": true,
+    "peak_reserved_pass": "<0.85",
+    "peak_reserved_warning_pass": "0.85..0.90",
+    "peak_reserved_failure": ">0.90 or OOM"
+  },
+  "formal_contract": {
+    "seeds": [20260811, 20260812, 20260813],
+    "epochs": 80,
+    "early_stopping_enabled": false,
+    "physical_batch_size": 128,
+    "gradient_accumulation_steps": 1,
+    "full_train_validation": true,
+    "research_test_used": false
+  },
+  "file_sha256": {
+    "resp_train/crd/tf_w_v2.py": "b3435b67d1dcea656565551812df5683ba7881abad6de7b7f4e21ddc3f4225f3",
+    "resp_train/crd/tf_w_v2_p1.py": "a95878eaac7d8b386a1e4c3f2e8c511c965ed0cbc98ad48bb7f1c61fb61d1f19",
+    "resp_train/crd/tf_w_v2_p3.py": "4010c30a9d4fc0b09f71e349c9cc65c10f96ba6ae8345c8f47db01b549b70112",
+    "resp_train/crd/tf_v1_model.py": "d63262e7191ab22728e8d8f23b7a7ab3fe0f3368915fe1a304b602c2a0c6a3eb",
+    "resp_train/crd/model.py": "201391a90bd40292007cfc64604071825be3d19e88fc1264276b80515c54df6e",
+    "resp_train/crd/config.py": "273c69ae4be1c8940aeeb0335a4320800fde665ad2a22c9e8286dd24ef26d45f",
+    "resp_train/crd/experiment.py": "2024e852350b4121c7a89dc1b7511c923818cc3b4a2b023ed3b1b7f9889ca19e",
+    "resp_train/crd/tf_v1_data.py": "12e935446902fec74bb7d1150fa1f8a56605b4a3dc4dbc9e2e6ef5dd86ea90bb",
+    "resp_train/data/research_v2.py": "37f013106ecd3270a79a87305c05f5105e0d046fc3a941c46f084a777eb024fb",
+    "scripts/train_crd.py": "f48ed924803400bce4b271619c11098686508e8ad889e46695722b73dccda456",
+    "tests/test_crd_tf_w_v2_p1.py": "8976de4679107997dc838661e414370cb6618a15fccaa8c0317d713c023f3d7b",
+    "tests/test_crd_tf_w_v2_p3.py": "d156a40b54a7108cbee8197ff1f10dd3d5ec8e7682fe6da48f12bdd99b252f0e",
+    "configs/crd_tf_w_v2/_p3_base.yaml": "c7dd42922c62bc1109a476e463f7fc303872e689cf542af56914f0b9f4045349",
+    "configs/crd_tf_w_v2/crd_tfw_v2_d4_full_12v_film_stress.yaml": "8761d234a872ed0f31682542cc6718fc720129c98a03ff23c3721b4b9ca08a74",
+    "configs/crd_tf_w_v2/crd_tfw_v2_d4_full_12v_film_formal.yaml": "84f65ca596c09074639c9d0ff04a889299e7d23fad296011da8bdb839412a4df"
+  },
+  "verification": {
+    "py_compile_passed": true,
+    "targeted_pytest": "123 passed",
+    "gpu_validation_run": false,
+    "full_test_suite_run": false
+  },
+  "next_allowed": "user-approved P3 D4 isolation stress after a clean implementation commit",
+  "forbidden_until_stress_passes": [
+    "P3 formal training",
+    "P4 validation summary",
+    "research-test"
+  ]
+}

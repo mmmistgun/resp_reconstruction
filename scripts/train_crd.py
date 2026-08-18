@@ -32,9 +32,16 @@ def main() -> None:
 
         validate_p6a_formal_preflight()
     if str(cfg.model.variant) in CRD_TF_W_V2_VARIANTS:
-        from resp_train.crd.tf_w_v2_p1 import validate_p1_training_preflight
+        from resp_train.crd.tf_w_v2 import P1_VARIANTS, P3_VARIANTS
 
-        validate_p1_training_preflight(cfg)
+        if str(cfg.model.variant) in P1_VARIANTS:
+            from resp_train.crd.tf_w_v2_p1 import validate_p1_training_preflight
+
+            validate_p1_training_preflight(cfg)
+        elif str(cfg.model.variant) in P3_VARIANTS:
+            from resp_train.crd.tf_w_v2_p3 import validate_p3_training_preflight
+
+            validate_p3_training_preflight(cfg)
     print(CRDExperiment(cfg).train())
 
 

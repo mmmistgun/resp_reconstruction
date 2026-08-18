@@ -15,6 +15,8 @@ from resp_train.crd.tf_v1_features import LearnableCarrierModulation
 from resp_train.crd.tf_w_v2 import (
     P1_VARIANT_REPRESENTATIONS,
     P1_VARIANTS,
+    P3_VARIANT_REPRESENTATIONS,
+    P3_VARIANTS,
     apply_p1_w_view,
     p1_w_scale_count,
 )
@@ -59,6 +61,7 @@ TF_ALL_VARIANT_REPRESENTATIONS = {
     **TF_VARIANT_REPRESENTATIONS,
     **TF_P6_VARIANT_REPRESENTATIONS,
     **P1_VARIANT_REPRESENTATIONS,
+    **P3_VARIANT_REPRESENTATIONS,
 }
 TF_P6_CONTROL_COUNT = {"crd_tf403_ctrl_gate": 3}
 TF_ALL_CONTROL_COUNT = {**TF_CONTROL_COUNT, **TF_P6_CONTROL_COUNT}
@@ -298,8 +301,13 @@ class CRDTfV1Model(nn.Module):
             raise ValueError(f"未知 CRD-TF variant={variant!r}")
         self.tf_variant = variant
         self.representations = TF_ALL_VARIANT_REPRESENTATIONS[variant]
-        # 内部保持 C201 identity，使共享模块和 decoder 初始化逐 tensor 相同。
-        self.base = CRDCoarseModel("crd_c201_decoder_10hz_cap", int(initialization_seed))
+        # D4 仅缩短 local trunk；独立 module seed 保证其余 C201/W 模块逐 tensor 同初始化。
+        local_block_count = 4 if variant in P3_VARIANTS else 6
+        self.base = CRDCoarseModel(
+            "crd_c201_decoder_10hz_cap",
+            int(initialization_seed),
+            local_block_count=local_block_count,
+        )
         branches = {}
         for name in self.representations:
             with module_seed(int(initialization_seed), f"tf_branch_{name}"):

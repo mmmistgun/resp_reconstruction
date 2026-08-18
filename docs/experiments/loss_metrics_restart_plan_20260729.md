@@ -4,7 +4,7 @@
 
 最后更新：2026-08-18
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1 已完成并冻结，P2 关闭，当前只开放 P3 D4 的实现与工程验收
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1 已完成并冻结，P2 关闭，P3 D4 实现锁已完成，当前只开放一次 D4 isolation stress
 
 ## 1. 定位
 
@@ -2116,4 +2116,8 @@ P1 三臂实现随后完成并锁定为 `docs/experiments/crd_tf_w_v2_p1_impleme
 
 相对 W0，W1 的 Local RR/PCC 分别变化 `+1.2168% / −0.003938`，不通过质量门槛；W2 虽使 Whole/Local RR 改善 `6.7179% / 2.4838%`，但 global envelope 恶化 `1.7038%`、PCC 下降 `0.003158`，仍不通过严格门槛。W3 的 Whole/Local/trajectory/global-envelope/PCC 变化为 `−3.7254% / −0.7968% / −2.4228% / −0.2133% / −0.002064`，进入质量候选池；其 active elements 减少 `49.4845%`，但 throughput 仅 `+4.2809%` 且 peak allocated 未下降，不进入效率候选池。P4 最终候选池仍等待 P3。
 
-P1 executable config、实现测试与 W0 anchor 均固定 `early_stopping_enabled=false`、完整 80 epochs；附件第 3 节原 `patience 30` 为文档错误，现已透明纠正。所有 P1 selected epoch 均不晚于 29，尾部训练不改变所选 checkpoint。P1 至此关闭且不得重跑。当前唯一下一步是 P3 `W0_FULL_12V_FILM_D4` 的实现、定向测试、implementation lock 与独立 stress；P3 formal、P4/P5 和 research-test 仍关闭。
+P1 executable config、实现测试与 W0 anchor 均固定 `early_stopping_enabled=false`、完整 80 epochs；附件第 3 节原 `patience 30` 为文档错误，现已透明纠正。所有 P1 selected epoch 均不晚于 29，尾部训练不改变所选 checkpoint。P1 至此关闭且不得重跑。
+
+P3 D4 实现随后完成并锁定为 `docs/experiments/crd_tf_w_v2_p3_implementation_lock_20260818.json`，SHA-256=`0aa2f520a52a667640ea6550a6d26c48b0f65dd088de6b4616938705a7e40da7`。唯一 variant `crd_tfw_v2_d4_full_12v_film` 保持 full-12V W branch/FiLM 和同 seed 共享 state，只移除 local blocks 4/5；三个固定 seed identity 通过，准确参数为 `902,722`，减少 `317,128 = 25.9973%`。P2/D8/复合 variant 未实现。P3 stress/formal config、专用 receipt 与 same-commit formal preflight 已完成，定向回归为 `123 passed`，未运行 GPU。
+
+当前唯一下一步是用户从新的干净实现 commit 运行一次 D4 isolation stress；固定 5 epochs、`128×1`、400 updates、5 次完整 validation。receipt 核验通过前 P3 formal、P4/P5 和 research-test 仍关闭。

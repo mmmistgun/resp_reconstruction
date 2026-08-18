@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂实现、三个 isolation stress 与 9/9 formal 已从干净 commit `1d1b22e` 完成并核验；W1/W2 不通过严格质量门槛，W3 通过质量门槛但不通过效率门槛。P1 已关闭并只保留 provenance；P4 最终候选池尚未生成。当前唯一下一步是 P3 D4 的实现与工程验收，P3 formal、P4/P5 与 research-test 仍关闭。**
+状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂实现、三个 isolation stress 与 9/9 formal 已从干净 commit `1d1b22e` 完成并核验；W1/W2 不通过严格质量门槛，W3 通过质量门槛但不通过效率门槛。P3 D4 实现、配置、source/depth provenance、专用 stress receipt、formal preflight 与定向回归已完成并锁定，尚未运行 GPU stress。当前唯一下一步是用户执行一次 P3 D4 isolation stress；P3 formal、P4/P5 与 research-test 仍关闭。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -346,7 +346,17 @@ D4 只回答当前 W0 设置下的质量—效率问题。不得把 D4 与 RESP/
 
 D8 保持关闭。D4 失败本身不构成 D8 的开放证据。
 
-P3 当前关闭；P0 已完成，仍等待后续明确开放实现、工程验收和 GPU stress。
+P3 实现阶段已按用户授权完成；GPU stress 与 formal 状态见下一节。
+
+### 9.1 P3 实现锁（2026-08-18）
+
+P3 实现锁固定为 `docs/experiments/crd_tf_w_v2_p3_implementation_lock_20260818.json`，SHA-256=`0aa2f520a52a667640ea6550a6d26c48b0f65dd088de6b4616938705a7e40da7`。唯一注册 variant 为 `crd_tfw_v2_d4_full_12v_film`；P2、D8 和任何频带/6V/深度复合 variant 均未注册。
+
+D4 继续读取未修改的 full-12V `[97,360]` W input，W branch、FiLM、frontend、refinement/head/decoder 与同 seed W0 保持逐 tensor 相同；只从 C201 local trunk 尾部移除 blocks 4/5。三个固定 seed 的共享 state identity 均已测试，参数数固定为 `902,722`，相对 W0 减少 `317,128 = 25.9973%`；每个移除 block 为 `158,564` 参数。四层 override 只允许 D4 内部复用 C201，不作为通用任意深度接口，D8 会被拒绝。
+
+新增 `_p3_base.yaml`、唯一 stress/formal config、`tf_w_v2_p3_contract` manifest/checkpoint provenance、不可覆盖 `p3_stress_receipt.json` 与 formal preflight。stress 固定 5 epochs、`128×1`、完整 train/validation、seed `20260811`，即 400 updates 与 5 次完整 validation；receipt 复核 history/checkpoint/optimizer/primary finite、degeneracy=0、batch-1 bf16 input/parameter gradients、latency/throughput，并以 training/validation 两者最大值计算 peak allocated/reserved。formal 只接受唯一 passed receipt，且必须与 stress 使用同一 clean commit。
+
+定向 `py_compile` 与 P1/P3、CRD config/model/experiment/training、v1 model/data/formal-config 回归通过，结果为 `123 passed`。实现期间未运行 GPU、stress、formal 或 research-test，未读写 target test、未修改 cache/checkpoint。P3 implementation 至此关闭并只保留 provenance。
 
 ## 10. 工程验收与显存停止线
 
@@ -423,6 +433,12 @@ P5 当前关闭。
 
 ## 14. 当前唯一下一步
 
-P0/P−1/P1 已关闭，P2 不触发。当前唯一下一步是实现并验收 P3 的 `W0_FULL_12V_FILM_D4`；先补 variant/config、初始化与参数 identity、定向测试和独立 CUDA stress receipt，再决定是否开放三个 formal seeds。P3 不得与 RESP/CARRIER/6V 组合，不实现 D8，也不访问 research-test。
+P0/P−1/P1 已关闭，P2 不触发，P3 implementation lock 已完成。当前唯一下一步是用户从新的干净实现 commit 执行一次 D4 isolation stress；Codex 不代跑：
 
-P3 尚无已冻结的可执行命令；在实现、测试、implementation lock 与 clean commit 完成前，用户不得直接构造 config 运行。P4 仍须等待 P3 完整结束后一次性生成，P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+```bash
+git status --short
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_tf_w_v2/crd_tfw_v2_d4_full_12v_film_stress.yaml
+```
+
+首行必须无输出。命令成功后先返回 run path 与 `p3_stress_receipt.json`，完成核验前不运行 formal，也不要修改/提交工作树。不得删除失败或不合格的 engineering run 后重试。P4 仍须等待 P3 三个 formal seeds 完整结束后一次性生成，P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。

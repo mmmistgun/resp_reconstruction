@@ -21,6 +21,7 @@ SOURCE_CACHE_MANIFEST_SHA256 = "6fb44aad2689d9426ad78dc1f054db5aaac698792af5818b
 W_FREQUENCY_FILE_SHA256 = "15cc722c38e5572b3284c92137cfdeec7cbc4153b4588c2c1e086f26ae3238b3"
 W_FREQUENCY_CONTENT_SHA256 = "9fb164e7b09d42b31f7ee57a7d3e966af7adabc6d8c6a0e1eff3090b00b73c0c"
 FULL_6V_MAPPED_FREQUENCY_SHA256 = "2eda45200cc329c4989a516fa3611f0862c3c546bca26bb124025a2bb8146b29"
+FULL_12V_INDICES_SHA256 = "57bc2b5e25a87033b5ecf05d936e6274e9e7faeb35e9084af3fa1589c10c7306"
 
 P1_VARIANT_W_VIEW: dict[str, str] = {
     "crd_tfw_v2_w1_resp_12v_film_d6": "resp",
@@ -29,6 +30,14 @@ P1_VARIANT_W_VIEW: dict[str, str] = {
 }
 P1_VARIANT_REPRESENTATIONS = {variant: ("w",) for variant in P1_VARIANT_W_VIEW}
 P1_VARIANTS = tuple(P1_VARIANT_W_VIEW)
+P3_VARIANT = "crd_tfw_v2_d4_full_12v_film"
+P3_VARIANTS = (P3_VARIANT,)
+P3_VARIANT_REPRESENTATIONS = {P3_VARIANT: ("w",)}
+TF_W_V2_VARIANT_REPRESENTATIONS = {
+    **P1_VARIANT_REPRESENTATIONS,
+    **P3_VARIANT_REPRESENTATIONS,
+}
+TF_W_V2_VARIANTS = tuple(TF_W_V2_VARIANT_REPRESENTATIONS)
 
 RESP_INDICES = np.arange(0, 56, dtype="<i8")
 CARRIER_INDICES = np.arange(56, 97, dtype="<i8")
@@ -96,6 +105,29 @@ def p1_variant_contract(variant: str) -> dict[str, Any]:
         "materialization_strategy": (
             "zeros_like input-only mask" if view in {"resp", "carrier"} else "strided input-only slice [:,::2,:]"
         ),
+    }
+
+
+def p3_variant_contract(variant: str) -> dict[str, Any]:
+    """返回 D4 的 full-12V、深度和 source provenance 契约。"""
+
+    normalized = str(variant).strip().lower()
+    if normalized not in P3_VARIANTS:
+        raise ValueError(f"未知 CRD-TF-W v2 P3 variant={variant!r}")
+    return {
+        **verify_p1_source_identity(),
+        "variant": normalized,
+        "w_view": "full_12v",
+        "source_shape_per_sample": [97, 360],
+        "model_input_shape_per_sample": [97, 360],
+        "source_tensor_elements_per_sample": 97 * 360,
+        "model_input_tensor_elements_per_sample": 97 * 360,
+        "active_scale_count": 97,
+        "view_index_sha256": FULL_12V_INDICES_SHA256,
+        "local_bimamba2_blocks": 4,
+        "trainable_parameters": 902_722,
+        "application_point": "unmodified full-12V input immediately before CwtBranch.conv_in",
+        "materialization_strategy": "identity full-12V input",
     }
 
 

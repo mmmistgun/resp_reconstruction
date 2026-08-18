@@ -346,17 +346,30 @@ def _validate_crd_config(cfg: DictConfig) -> None:
     if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS, *CRD_TF_W_V2_VARIANTS):
         execution_gate = str(cfg.protocol.execution_gate)
         device = str(cfg.training.device)
-        if variant in CRD_TF_W_V2_VARIANTS and execution_gate == "p1_cpu_only":
+        from resp_train.crd.tf_w_v2 import P1_VARIANTS, P3_VARIANTS
+
+        if variant in P1_VARIANTS and execution_gate == "p1_cpu_only":
             if role != "smoke" or device != "cpu":
                 raise ValueError("CRD-TF-W v2 p1_cpu_only 只允许 smoke + CPU")
-        elif variant in CRD_TF_W_V2_VARIANTS and execution_gate == "p1_cuda_stress":
+        elif variant in P1_VARIANTS and execution_gate == "p1_cuda_stress":
             if role != "stress" or not device.startswith("cuda:"):
                 raise ValueError("CRD-TF-W v2 p1_cuda_stress 只允许 stress + 显式 cuda:<index>")
-        elif variant in CRD_TF_W_V2_VARIANTS and execution_gate == "p1_formal":
+        elif variant in P1_VARIANTS and execution_gate == "p1_formal":
             if role != "formal" or not device.startswith("cuda:"):
                 raise ValueError("CRD-TF-W v2 p1_formal 只允许 formal + 显式 cuda:<index>")
-        elif variant in CRD_TF_W_V2_VARIANTS:
+        elif variant in P1_VARIANTS:
             raise ValueError("CRD-TF-W v2 execution_gate 必须与 P1 CPU/stress/formal 阶段严格匹配")
+        elif variant in P3_VARIANTS and execution_gate == "p3_cpu_only":
+            if role != "smoke" or device != "cpu":
+                raise ValueError("CRD-TF-W v2 p3_cpu_only 只允许 smoke + CPU")
+        elif variant in P3_VARIANTS and execution_gate == "p3_cuda_stress":
+            if role != "stress" or not device.startswith("cuda:"):
+                raise ValueError("CRD-TF-W v2 p3_cuda_stress 只允许 stress + 显式 cuda:<index>")
+        elif variant in P3_VARIANTS and execution_gate == "p3_formal":
+            if role != "formal" or not device.startswith("cuda:"):
+                raise ValueError("CRD-TF-W v2 p3_formal 只允许 formal + 显式 cuda:<index>")
+        elif variant in P3_VARIANTS:
+            raise ValueError("CRD-TF-W v2 execution_gate 必须与 P3 CPU/stress/formal 阶段严格匹配")
         elif variant in CRD_TF_P6_VARIANTS and execution_gate == "p6a_cpu_only":
             if role != "smoke" or device != "cpu":
                 raise ValueError("CRD-TF P6a p6a_cpu_only 只允许 smoke + CPU")
@@ -389,13 +402,13 @@ def _validate_crd_config(cfg: DictConfig) -> None:
             raise ValueError(f"formal seed 只允许 {list(FORMAL_SEEDS)}")
     elif role == "stress":
         if variant not in CRD_TF_W_V2_VARIANTS:
-            raise ValueError("stress role 只为 CRD-TF-W v2 P1 开放")
+            raise ValueError("stress role 只为 CRD-TF-W v2 注册 variant 开放")
         if (epochs, batch_size, accumulation) != (5, 128, 1):
-            raise ValueError("P1 stress 固定 epochs=5、physical batch=128、accumulation=1")
+            raise ValueError("CRD-TF-W v2 stress 固定 epochs=5、physical batch=128、accumulation=1")
         if any(value is not None for value in maxima):
-            raise ValueError("P1 stress 必须使用完整 train/val，max_*_windows 均为 null")
+            raise ValueError("CRD-TF-W v2 stress 必须使用完整 train/val，max_*_windows 均为 null")
         if int(cfg.training.seed) != FORMAL_SEEDS[0]:
-            raise ValueError(f"P1 stress 固定 seed={FORMAL_SEEDS[0]}")
+            raise ValueError(f"CRD-TF-W v2 stress 固定 seed={FORMAL_SEEDS[0]}")
     elif role == "acceptance":
         if (epochs, batch_size, accumulation) != (1, 128, 1):
             raise ValueError("acceptance 固定 epochs=1、physical batch=128、accumulation=1")

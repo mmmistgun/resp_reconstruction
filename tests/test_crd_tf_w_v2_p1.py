@@ -20,6 +20,7 @@ from resp_train.crd.tf_w_v2 import (
     FULL_6V_MAPPED_FREQUENCY_SHA256,
     P1_VARIANT_W_VIEW,
     P1_VARIANTS,
+    TF_W_V2_VARIANTS,
     SOURCE_CACHE_ROOT,
     VIEW_INDEX_SHA256,
     apply_p1_w_view,
@@ -39,7 +40,7 @@ STRESS_CONFIGS = {
 
 
 def test_p1_allowlist_and_candidate_lock_config_paths_are_exact() -> None:
-    assert tuple(CRD_TF_W_V2_VARIANTS) == P1_VARIANTS
+    assert tuple(CRD_TF_W_V2_VARIANTS) == TF_W_V2_VARIANTS
     assert P1_VARIANT_W_VIEW == {
         "crd_tfw_v2_w1_resp_12v_film_d6": "resp",
         "crd_tfw_v2_w2_carrier_12v_film_d6": "carrier",

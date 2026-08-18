@@ -23,7 +23,7 @@ from resp_train.crd.representations import (
     MorphologyRepresentation,
 )
 from resp_train.crd.spectral_ops import fft_hard_lowpass, fourier_interpolate
-from resp_train.crd.tf_w_v2 import P1_VARIANTS as CRD_TF_W_V2_VARIANTS
+from resp_train.crd.tf_w_v2 import TF_W_V2_VARIANTS as CRD_TF_W_V2_VARIANTS
 from resp_train.models.stft_branch import TimeStftDual1D
 from resp_train.models.timeseries import PatchMixer1D
 
@@ -196,12 +196,18 @@ class GlobalContextStage(nn.Module):
 class CRDCoarseModel(nn.Module):
     """S1/S2 共享 trunk；variant 只控制协议预注册的静态因素。"""
 
-    def __init__(self, variant: str, initialization_seed: int) -> None:
+    def __init__(self, variant: str, initialization_seed: int, *, local_block_count: int = 6) -> None:
         super().__init__()
         variant = str(variant).lower()
         if variant not in CRD_VARIANTS[2:]:
             raise ValueError(f"CRDCoarseModel 不支持 variant={variant!r}")
+        local_block_count = int(local_block_count)
+        if local_block_count not in {4, 6}:
+            raise ValueError("CRD local_block_count 只允许协议注册的 4 或 6")
+        if local_block_count != 6 and variant != "crd_c201_decoder_10hz_cap":
+            raise ValueError("四层 local trunk 只允许 CRD-TF-W v2 D4 内部复用 C201")
         self.variant = variant
+        self.local_block_count = local_block_count
         uses_direct = variant in {
             "crd_103_direct_local_mamba",
             "crd_104_direct_hier_mamba",
@@ -257,7 +263,9 @@ class CRDCoarseModel(nn.Module):
             self.capacity_control = None
         if uses_local:
             with module_seed(initialization_seed, "local_trunk"):
-                self.local_blocks = nn.ModuleList([BidirectionalMamba2Block(96) for _ in range(6)])
+                self.local_blocks = nn.ModuleList(
+                    [BidirectionalMamba2Block(96) for _ in range(self.local_block_count)]
+                )
         else:
             self.local_blocks = nn.ModuleList()
         if uses_local_tcn:

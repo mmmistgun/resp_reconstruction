@@ -1,0 +1,97 @@
+protocol:
+  name: crd-tf-w-v2-research-informed-20260817
+  stage: tf_w_v2
+  run_role: smoke
+  execution_gate: p3_cpu_only
+
+data:
+  format: research_v2
+  dataset_root: /mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf
+  index_csv: training/dataset_index.csv
+  input_set: research_v2_waveform
+  train_split: train
+  val_split: val
+  test_split: test
+  target_task: waveform
+  bcg_input_key: bcg_rawish_segment_soft_z_key
+  target_key: target_waveform_segment_soft_z_key
+  tf_cache_path: /mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0
+  max_train_windows: 8
+  max_val_windows: 8
+  max_test_windows: null
+  filter_unusable: true
+  drop_nonfinite_windows: false
+  preload_windows: true
+  train_sample_strategy: stratified_random
+  val_sample_strategy: stratified_random
+  test_sample_strategy: stratified_random
+  train_sample_seed: 20260610
+  val_sample_seed: 20260611
+  test_sample_seed: 20260612
+  stratify_column: allowed_losses
+  min_hard_valid_ratio: 0.80
+  min_state_alignment_valid_ratio: 0.80
+
+window:
+  target_fs: 100
+  duration_samples: 18000
+  duration_sec: 180
+
+model:
+  name: crd_v1
+  variant: crd_tfw_v2_d4_full_12v_film
+  initialization_seed: ${training.seed}
+  tf_representations: [w]
+
+loss:
+  band_low_hz: 0.05
+  band_high_hz: 0.70
+  scale_eps: 1.0e-8
+  dynamic_eps: 1.0e-8
+  corr_eps: 1.0e-8
+  envelope_eps: 1.0e-8
+  max_lag_sec: 0.30
+  envelope_window_sec: 10
+  envelope_step_sec: 5
+  sync_weight: 1.0
+  effort_weight: 0.25
+
+evaluation:
+  local_rr_window_sec: 60
+  local_rr_step_sec: 15
+  ibi_peak_distance_samples: 142
+  ibi_match_tolerance_sec: 0.5
+  ibi_coverage_threshold: 0.80
+  ndtw_fs: 10
+  ndtw_radius_sec: 0.30
+  envelope_quantile_method: linear
+  envelope_strata_low: 0.30875308839006915
+  envelope_strata_high: 0.7031542121234101
+
+training:
+  optimizer: adamw
+  epochs: 1
+  early_stopping_enabled: false
+  batch_size: 4
+  gradient_accumulation_steps: 1
+  max_learning_rate: 3.0e-4
+  min_learning_rate: 3.0e-5
+  adam_betas: [0.9, 0.999]
+  adam_eps: 1.0e-8
+  weight_decay: 1.0e-4
+  warmup_fraction: 0.05
+  lr_schedule: step_exact_warmup_cosine
+  grad_clip_norm: 1.0
+  use_amp: true
+  amp_dtype: bfloat16
+  drop_last: false
+  resume: false
+  num_workers: 0
+  persistent_workers: false
+  prefetch_factor: null
+  seed: 20260811
+  device: cpu
+  show_progress: false
+
+outputs:
+  run_root: /tmp/crd_tf_w_v2_p3_cpu_only

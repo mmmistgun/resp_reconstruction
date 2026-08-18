@@ -45,11 +45,20 @@ class CRDExperiment:
         self.device: torch.device | None = None
 
     def train(self) -> Path:
-        p1_contract = None
+        tf_w_v2_contract = None
+        tf_w_v2_contract_key = None
         if str(self.cfg.protocol.stage) == "tf_w_v2":
-            from resp_train.crd.tf_w_v2 import p1_variant_contract
+            from resp_train.crd.tf_w_v2 import P1_VARIANTS, P3_VARIANTS, p1_variant_contract, p3_variant_contract
 
-            p1_contract = p1_variant_contract(str(self.cfg.model.variant))
+            variant = str(self.cfg.model.variant)
+            if variant in P1_VARIANTS:
+                tf_w_v2_contract = p1_variant_contract(variant)
+                tf_w_v2_contract_key = "tf_w_v2_p1_contract"
+            elif variant in P3_VARIANTS:
+                tf_w_v2_contract = p3_variant_contract(variant)
+                tf_w_v2_contract_key = "tf_w_v2_p3_contract"
+            else:
+                raise ValueError(f"tf_w_v2 stage 未注册 variant={variant!r}")
         run_dir = create_run_dir(self.cfg.outputs.run_root)
         self.run_dir = run_dir
         save_config(self.cfg, run_dir)
@@ -62,7 +71,11 @@ class CRDExperiment:
             run_role=str(self.cfg.protocol.run_role),
             dependency_versions=crd_dependency_versions(),
             resume_supported=False,
-            **({"tf_w_v2_p1_contract": p1_contract} if p1_contract is not None else {}),
+            **(
+                {str(tf_w_v2_contract_key): tf_w_v2_contract}
+                if tf_w_v2_contract is not None and tf_w_v2_contract_key is not None
+                else {}
+            ),
         )
         logger = setup_logger(run_dir)
         set_seed(int(self.cfg.training.seed))
@@ -216,7 +229,11 @@ class CRDExperiment:
                 "total_updates": total_updates,
                 "resume_supported": False,
                 "dependency_versions": crd_dependency_versions(),
-                **({"tf_w_v2_p1_contract": p1_contract} if p1_contract is not None else {}),
+                **(
+                    {str(tf_w_v2_contract_key): tf_w_v2_contract}
+                    if tf_w_v2_contract is not None and tf_w_v2_contract_key is not None
+                    else {}
+                ),
             }
             if early_stopping_enabled:
                 checkpoint_extra["early_stopping"] = {
@@ -273,7 +290,11 @@ class CRDExperiment:
                 "total_updates": total_updates,
                 "resume_supported": False,
                 "dependency_versions": crd_dependency_versions(),
-                **({"tf_w_v2_p1_contract": p1_contract} if p1_contract is not None else {}),
+                **(
+                    {str(tf_w_v2_contract_key): tf_w_v2_contract}
+                    if tf_w_v2_contract is not None and tf_w_v2_contract_key is not None
+                    else {}
+                ),
                 **(
                     {
                         "early_stopping": {
@@ -316,20 +337,31 @@ class CRDExperiment:
             encoding="utf-8",
         )
         if str(self.cfg.protocol.stage) == "tf_w_v2" and str(self.cfg.protocol.run_role) == "stress":
-            from resp_train.crd.tf_w_v2_p1 import write_p1_stress_receipt
+            from resp_train.crd.tf_w_v2 import P1_VARIANTS, P3_VARIANTS
 
-            write_p1_stress_receipt(
-                run_dir=run_dir,
-                cfg=self.cfg,
-                model=model,
-                loss_fn=loss_fn,
-                optimizer=optimizer,
-                data=data,
-                history=history,
-                metrics=metrics,
-                device=device,
-                runtime_summary=runtime_summary,
-            )
+            receipt_kwargs = {
+                "run_dir": run_dir,
+                "cfg": self.cfg,
+                "model": model,
+                "loss_fn": loss_fn,
+                "optimizer": optimizer,
+                "data": data,
+                "history": history,
+                "metrics": metrics,
+                "device": device,
+                "runtime_summary": runtime_summary,
+            }
+            variant = str(self.cfg.model.variant)
+            if variant in P1_VARIANTS:
+                from resp_train.crd.tf_w_v2_p1 import write_p1_stress_receipt
+
+                write_p1_stress_receipt(**receipt_kwargs)
+            elif variant in P3_VARIANTS:
+                from resp_train.crd.tf_w_v2_p3 import write_p3_stress_receipt
+
+                write_p3_stress_receipt(**receipt_kwargs)
+            else:
+                raise ValueError(f"tf_w_v2 stress 未注册 variant={variant!r}")
         return run_dir
 
     def _evaluate_model(

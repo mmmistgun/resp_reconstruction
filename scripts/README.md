@@ -1116,7 +1116,21 @@ for variant in \
 done
 ```
 
-W1/W2 不通过严格质量门槛；W3 进入质量候选池，但 throughput/peak-allocated 不满足效率门槛。P1 已关闭。当前只开放 P3 D4 的实现与工程验收；P3 尚无冻结命令，不得自行运行，P4/P5 与 research-test 继续关闭。
+W1/W2 不通过严格质量门槛；W3 进入质量候选池，但 throughput/peak-allocated 不满足效率门槛。P1 已关闭；P3 进展与当前入口见下一节。
+
+### CRD-TF-W v2 P3 D4 implementation 与 isolation stress
+
+P3 implementation lock 为 `docs/experiments/crd_tf_w_v2_p3_implementation_lock_20260818.json`，SHA-256=`0aa2f520a52a667640ea6550a6d26c48b0f65dd088de6b4616938705a7e40da7`。唯一 variant 为 `crd_tfw_v2_d4_full_12v_film`：保持 full-12V W branch/FiLM 与同 seed 共享 state，只移除 local blocks 4/5；准确参数为 `902,722`。P2/D8/频带或 6V 复合 D4 均未实现。定向结果为 `123 passed`。
+
+提交实现并确认工作树干净后，当前唯一允许的 GPU 命令为：
+
+```bash
+git status --short
+./.venv/bin/python scripts/train_crd.py \
+  --config configs/crd_tf_w_v2/crd_tfw_v2_d4_full_12v_film_stress.yaml
+```
+
+首行必须无输出。stress 固定 5 epochs、physical batch `128×1`、完整 train/validation、400 optimizer updates 与 5 次完整 validation；输出根为 `runs/crd_tf_w_v2/engineering/crd_tfw_v2_d4_full_12v_film/`，存在任意 run 即拒绝重复。成功后返回 run path 和 `p3_stress_receipt.json` 供核验。receipt 未通过前不得运行 formal，也不要修改或提交工作树；P4/P5 与 research-test 继续关闭。
 
 ## 固定呼吸带传统基线
 
