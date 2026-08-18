@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 的 W1 RESP、W2 CARRIER、W3 full-band 6V 三臂实现、六份 stress/formal config、source/view provenance、isolation-stress receipt 和 formal preflight 已完成，定向回归通过；尚未运行 GPU stress。当前等待用户决定是否依次运行三个 P1 isolation stress；P1 formal、P3–P5 实现与 research-test 仍关闭。**
+状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂实现、三个 isolation stress 与 9/9 formal 已从干净 commit `1d1b22e` 完成并核验；W1/W2 不通过严格质量门槛，W3 通过质量门槛但不通过效率门槛。P1 已关闭并只保留 provenance；P4 最终候选池尚未生成。当前唯一下一步是 P3 D4 的实现与工程验收，P3 formal、P4/P5 与 research-test 仍关闭。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -79,7 +79,7 @@ max_lr / min_lr = 3e-4 / 3e-5
 effective batch = 128
 physical batch = 128, accumulation = 1
 max_epochs = 80
-early stopping = patience 30, min_delta 0
+early stopping = disabled；固定完成 80 epochs
 formal seeds = 20260811 / 20260812 / 20260813
 AMP = bf16
 ```
@@ -283,9 +283,40 @@ W1/W2 在 batch W tensor 已由只读 memmap copy 后、`CwtBranch.conv_in` 前�
 
 三份 stress config 固定 5 epochs、physical batch `128×1`、完整 train/validation、seed `20260811`，即 `5×ceil(10141/128)=400` optimizer updates 和 5 次完整 validation。stress 结束后专用 receipt 额外验证 history/checkpoint/primary finite、degeneracy=0、batch-1 bf16 input/全部 parameter gradients、warm train samples/s、forward 与 forward+backward latency、独立 validation peak；`<85% / 85%–90% / >90%或OOM` 显存规则不变。任一 stress run 目录存在即拒绝静默重复；formal preflight 要求三个 variant 各自唯一且 passed 的 `p1_stress_receipt.json`、全部与 formal 使用同一 commit，并拒绝重复 seed run。
 
-定向 `py_compile` 与 `tests/test_crd_tf_w_v2_p1.py`、P−1 audit、v1 model/data/formal-config、CRD config/experiment/training 回归通过，结果为 `112 passed`。测试覆盖 allowlist/config path、mask/view/no-mutation、frequency/index/source identity、参数数、W0/C201 同 seed 初始化 identity、W3 `[49,360]` branch、variant forward application、stress/formal schema和 receipt/formal gate；未运行 CPU/GPU smoke、GPU stress、formal 或 research-test。
+定向 `py_compile` 与 `tests/test_crd_tf_w_v2_p1.py`、P−1 audit、v1 model/data/formal-config、CRD config/experiment/training 回归通过，结果为 `112 passed`。测试覆盖 allowlist/config path、mask/view/no-mutation、frequency/index/source identity、参数数、W0/C201 同 seed 初始化 identity、W3 `[49,360]` branch、variant forward application、stress/formal schema 和 receipt/formal gate；实现锁建立时未运行 CPU/GPU smoke、GPU stress、formal 或 research-test。
 
-P1 实现阶段至此关闭并只保留 provenance。当前仅可在用户明确同意后依次运行三个 isolation stress；stress 结果登记前，P1 formal 与 P3 实现继续关闭。
+P1 实现阶段至此关闭并只保留 provenance；后续 stress/formal 完成登记见下一节。
+
+### 7.2 P1 stress 与 formal 完成登记（2026-08-18）
+
+三个 isolation stress 均从干净 commit `1d1b22edc6f1b9b96459c1b05eddf39208041162` 串行完成，均为 `400` optimizer updates、5 次完整 validation、history/checkpoint/primary finite、prediction degeneracy=0、batch-1 bf16 input/parameter gradients finite，且 source cache 未修改、`target_read=false`、`research_test_used=false`：
+
+| Arm | Run | Receipt SHA-256 | warm samples/s | peak reserved |
+|---|---|---|---:|---:|
+| W1 | `runs/crd_tf_w_v2/engineering/crd_tfw_v2_w1_resp_12v_film_d6/20260817_162641_480661` | `489b49cd4765f13ddd30908931eed1604862ad7395080b1c3c07b89045c05a6c` | 219.4886 | 81.6497% |
+| W2 | `runs/crd_tf_w_v2/engineering/crd_tfw_v2_w2_carrier_12v_film_d6/20260817_164531_290929` | `c1db21673ec58e25b16c345944e31c9fda8adb2ada64ad429bd4ae18a772fce8` | 221.9951 | 81.6497% |
+| W3 | `runs/crd_tf_w_v2/engineering/crd_tfw_v2_w3_full_6v_film_d6/20260817_165715_535534` | `b1bc8a1dcb14b4213a84cf6a9f20fd701515ecb0af9288e2ffaf19cd309f8414` | 221.7101 | 71.2960% |
+
+随后 9/9 formal 仍从同一干净 commit 完成。每个 run 均完整执行 80 epochs / 6,400 optimizer updates；三 seed、初始化 seed、config/cache/view identity、best/final checkpoint、逐 epoch history 与 validation summary 均通过复核，全部 finite 且 prediction degeneracy=0。选中 epoch 与唯一 run 为：
+
+- W1：`9 / 18 / 29`；对应目录时间戳为 `20260817_171024_127509 / 20260817_183439_496437 / 20260817_195932_042352`；
+- W2：`10 / 9 / 15`；对应目录时间戳为 `20260817_222958_552354 / 20260817_235416_840867 / 20260818_011907_164696`；
+- W3：`9 / 12 / 12`；对应目录时间戳为 `20260818_142005_581105 / 20260818_154254_103140 / 20260818_142041_877481`。
+
+三-seed validation 的 mean ± sample SD 及相对 W0 的冻结变化为：
+
+| Arm | Whole RR | Local RR | trajectory | global envelope | signed PCC |
+|---|---:|---:|---:|---:|---:|
+| W0 anchor | 0.499298 ± 0.018320 | 0.551309 ± 0.012064 | 0.152729 ± 0.001423 | 0.191051 ± 0.003022 | 0.865300 ± 0.001491 |
+| W1 | 0.505571 ± 0.024581 (`+1.2564%`) | 0.558017 ± 0.005791 (`+1.2168%`) | 0.153386 ± 0.006058 (`+0.4302%`) | 0.186611 ± 0.004759 (`−2.3242%`) | 0.861362 ± 0.003875 (`−0.003938`) |
+| W2 | 0.465755 ± 0.003527 (`−6.7179%`) | 0.537615 ± 0.014087 (`−2.4838%`) | 0.153743 ± 0.003382 (`+0.6640%`) | 0.194306 ± 0.008800 (`+1.7038%`) | 0.862142 ± 0.003169 (`−0.003158`) |
+| W3 | 0.480697 ± 0.017247 (`−3.7254%`) | 0.546916 ± 0.013429 (`−0.7968%`) | 0.149029 ± 0.002601 (`−2.4228%`) | 0.190644 ± 0.005097 (`−0.2133%`) | 0.863237 ± 0.001579 (`−0.002064`) |
+
+按第 4 节预注册门槛，W1 因 Local RR 恶化超过 `0.5%` 且 PCC 下降超过 `0.003`，不进入质量池；W2 虽在 Whole/Local RR 上均为 `3/3` paired seeds 改善，但 global envelope 恶化 `1.7038%` 且 PCC 下降 `0.003158`，也不进入质量池。二者均未触发 catastrophic failure 线。
+
+W3 的 Whole/Local/trajectory 改善方向分别为 `3/3、2/3、3/3`，四个 error guardrail 与 PCC guardrail 全部通过，因此进入质量候选池。W3 active model-input elements 减少 `49.4845%`，但 formal warm train throughput 仅由 W0 的 `223.2250` 增至 `232.7809 samples/s`（`+4.2809%`），peak allocated 由 `8773.3438` 变为 `8773.8242 MiB`，未达到 `+10%` throughput 或 `−15%` peak-allocated 门槛，因此不进入效率候选池。最终候选池仍须等待 P3 后由 P4 一次性冻结。
+
+实现测试和六份 P1 stress/formal resolved config 从一开始均固定 `early_stopping_enabled=false`，W0 anchor 也完整运行 80 epochs；本协议第 3 节先前写成 `patience 30` 是文档错误。九个 P1 run 均按冻结 executable config 完成，所有选中 epoch 均不晚于 29，之后没有更低 Local RR；因此多跑的尾部 epoch 不改变 validation-selected checkpoint。现将文字纠正为固定 80 epochs，不把它隐匿成运行后改变 selector。P1 stress 与 formal 至此关闭，不得重复运行。
 
 ## 8. P2：有证据才开放的单一融合 arm
 
@@ -392,12 +423,6 @@ P5 当前关闭。
 
 ## 14. 当前唯一下一步
 
-P0/P−1 已关闭，P2 不触发，P1 实现锁已完成。当前唯一下一步是用户决定是否依次运行 W1、W2、W3 三个 isolation stress；Codex 不代跑：
+P0/P−1/P1 已关闭，P2 不触发。当前唯一下一步是实现并验收 P3 的 `W0_FULL_12V_FILM_D4`；先补 variant/config、初始化与参数 identity、定向测试和独立 CUDA stress receipt，再决定是否开放三个 formal seeds。P3 不得与 RESP/CARRIER/6V 组合，不实现 D8，也不访问 research-test。
 
-```bash
-./.venv/bin/python scripts/train_crd.py --config configs/crd_tf_w_v2/crd_tfw_v2_w1_resp_12v_film_d6_stress.yaml
-./.venv/bin/python scripts/train_crd.py --config configs/crd_tf_w_v2/crd_tfw_v2_w2_carrier_12v_film_d6_stress.yaml
-./.venv/bin/python scripts/train_crd.py --config configs/crd_tf_w_v2/crd_tfw_v2_w3_full_6v_film_d6_stress.yaml
-```
-
-三个命令必须从同一新的干净 commit 依次执行；每个命令成功后先返回 run path 与 `p1_stress_receipt.json`，完成核验后再运行下一臂。不要并行运行，不要删除失败/不合格的 engineering run 后重试。三臂 stress 全部登记前不运行任何 formal，不实现 P3，不访问 research-test。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+P3 尚无已冻结的可执行命令；在实现、测试、implementation lock 与 clean commit 完成前，用户不得直接构造 config 运行。P4 仍须等待 P3 完整结束后一次性生成，P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。

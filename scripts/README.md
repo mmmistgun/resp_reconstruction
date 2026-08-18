@@ -1067,7 +1067,7 @@ git status --short
 
 该命令已从干净 commit `4eb9b3c` 完成，固定输出为 `runs/crd_tf_w_v2/p_minus_1_film_statistics_correction/`；manifest SHA-256=`1c6f7218c280b2a1579b2169a2b4752d7c10416d89de67ed5e9a1cc58d104463`，corrected CSV SHA-256=`2b7a4edef8e9828356a336c3c1ec7880235914207b00d164bf016ce1cd7a5203`。correction 与 source audit 均不得重复运行或改写。P−1 已关闭，P2 已关闭；P1 实现与定向测试现已完成。
 
-### CRD-TF-W v2 P1 implementation 与 isolation stress
+### CRD-TF-W v2 P1 implementation、stress 与 formal
 
 P1 implementation lock 为 `docs/experiments/crd_tf_w_v2_p1_implementation_lock_20260817.json`，SHA-256=`fb822ca7f8607e45443e07a94d91150bcc108217fb25c47f0b4504fbdf644f58`。只注册 W1 RESP、W2 CARRIER、W3 full-band 6V；P2/P3 未注册。
 
@@ -1085,7 +1085,7 @@ P1 implementation lock 为 `docs/experiments/crd_tf_w_v2_p1_implementation_lock_
   tests/test_crd_training.py
 ```
 
-结果固定登记为 `112 passed`。GPU stress 尚未运行；只有用户明确确认后，才按以下顺序逐臂执行，并在每条命令后返回 run path 与 `p1_stress_receipt.json` 供核验：
+结果固定登记为 `112 passed`。三个 GPU stress 已从干净 commit `1d1b22e` 完成，receipt SHA-256 依 W1/W2/W3 为 `489b49cd4765f13ddd30908931eed1604862ad7395080b1c3c07b89045c05a6c / c1db21673ec58e25b16c345944e31c9fda8adb2ada64ad429bd4ae18a772fce8 / b1bc8a1dcb14b4213a84cf6a9f20fd701515ecb0af9288e2ffaf19cd309f8414`。以下 stress 命令只保留 provenance，不得重复运行：
 
 ```bash
 git status --short
@@ -1099,7 +1099,24 @@ git status --short
   --config configs/crd_tf_w_v2/crd_tfw_v2_w3_full_6v_film_d6_stress.yaml
 ```
 
-首行必须无输出。每臂固定 5 epochs、physical batch `128×1`、完整 train/validation、400 optimizer updates；输出根为 `runs/crd_tf_w_v2/engineering/<variant>/`，存在任意 run 即拒绝重复。成功 receipt 必须确认 finite、degeneracy=0、batch-1 bf16 input/parameter gradients、throughput/latency/validation peak 与显存线。formal 配置虽已登记，但 stress receipt 未全部通过并冻结前不得运行；`scripts/train_crd.py` 内置 preflight 会拒绝。
+每臂均完成 5 epochs、physical batch `128×1`、完整 train/validation、400 optimizer updates，并通过 finite、degeneracy、梯度、throughput/latency/validation peak 与显存线。
+
+P1 9/9 formal 也已从同一 commit 完成；W1/W2/W3 selected epoch 分别为 `9/18/29`、`10/9/15`、`9/12/12`。所有 run 完整 80 epochs / 6,400 updates，checkpoint 与 validation 指标核验通过。三组 formal 命令现同样只保留 provenance，不得重复运行：
+
+```bash
+for variant in \
+  crd_tfw_v2_w1_resp_12v_film_d6 \
+  crd_tfw_v2_w2_carrier_12v_film_d6 \
+  crd_tfw_v2_w3_full_6v_film_d6; do
+  for seed in 20260811 20260812 20260813; do
+    ./.venv/bin/python scripts/train_crd.py \
+      --config "configs/crd_tf_w_v2/${variant}_formal.yaml" \
+      --set training.seed="$seed"
+  done
+done
+```
+
+W1/W2 不通过严格质量门槛；W3 进入质量候选池，但 throughput/peak-allocated 不满足效率门槛。P1 已关闭。当前只开放 P3 D4 的实现与工程验收；P3 尚无冻结命令，不得自行运行，P4/P5 与 research-test 继续关闭。
 
 ## 固定呼吸带传统基线
 

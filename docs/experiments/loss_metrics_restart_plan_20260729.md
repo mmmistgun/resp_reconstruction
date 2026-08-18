@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-17
+最后更新：2026-08-18
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction 与 P1 实现锁已完成，P2 关闭，当前等待用户决定是否依次运行三个 P1 isolation stress
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1 已完成并冻结，P2 关闭，当前只开放 P3 D4 的实现与工程验收
 
 ## 1. 定位
 
@@ -2110,6 +2110,10 @@ P0 随后关闭并只保留 provenance。用户明确允许进入 P−1 实现�
 
 FiLM statistics correction 随后从干净 commit `4eb9b3ce937792d151393a40c0f95b5cab0e7c9b` 完成，manifest SHA-256=`1c6f7218c280b2a1579b2169a2b4752d7c10416d89de67ed5e9a1cc58d104463`，corrected CSV SHA-256=`2b7a4edef8e9828356a336c3c1ec7880235914207b00d164bf016ce1cd7a5203`。三个 FULL 锚点通过，8,025 行 identity/finite/nonnegative 通过，gamma/beta 负值数归零，六项非目标统计最大漂移 `<1e-16`；source audit 三项 hash 未变。修正后的 `mean|Δ_t g| / mean|Δ_t b|` 为 `0.02261490 / 0.02396674`。P−1 至此关闭，完整 audit 和 correction 均不得重复运行。
 
-P1 三臂实现随后完成并锁定为 `docs/experiments/crd_tf_w_v2_p1_implementation_lock_20260817.json`，SHA-256=`fb822ca7f8607e45443e07a94d91150bcc108217fb25c47f0b4504fbdf644f58`。W1/W2 为 encoder 前 `[97,360]` input-only mask；W3 为固定 even indices 的 `[49,360]` strided view，source cache 和 host→device tensor 仍为完整 12V，不声称磁盘/传输减半。三臂参数均为 `1,219,850`，W0/C201 同 seed state identity、source/frequency/index hash、六份 config 与定向 receipt/formal gate 均通过；定向回归为 `112 passed`，未运行 GPU。
+P1 三臂实现随后完成并锁定为 `docs/experiments/crd_tf_w_v2_p1_implementation_lock_20260817.json`，SHA-256=`fb822ca7f8607e45443e07a94d91150bcc108217fb25c47f0b4504fbdf644f58`。W1/W2 为 encoder 前 `[97,360]` input-only mask；W3 为固定 even indices 的 `[49,360]` strided view，source cache 和 host→device tensor 仍为完整 12V，不声称磁盘/传输减半。三臂参数均为 `1,219,850`，W0/C201 同 seed state identity、source/frequency/index hash、六份 config 与定向 receipt/formal gate 均通过；定向回归为 `112 passed`。
 
-当前唯一下一步是用户决定是否按 W1→W2→W3 顺序运行三个 isolation stress。每臂固定 5 epochs、`128×1`、完整 train/validation、400 optimizer updates，并生成不可覆盖的 `p1_stress_receipt.json`；每个结果必须先核验再运行下一臂。三臂 stress 全部登记前不运行任何 formal，不实现 P3，不访问 research-test。最终 research-test 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+三个 isolation stress 与 9/9 formal 随后均从干净 commit `1d1b22edc6f1b9b96459c1b05eddf39208041162` 完成。stress receipt 全部 passed；formal 每 run 完整 80 epochs / 6,400 updates，seed/config/cache/view/checkpoint identity、finite 与 degeneracy 复核通过，未修改 source cache、未读取 research-test。W1/W2/W3 selected epoch 分别为 `9/18/29`、`10/9/15`、`9/12/12`。
+
+相对 W0，W1 的 Local RR/PCC 分别变化 `+1.2168% / −0.003938`，不通过质量门槛；W2 虽使 Whole/Local RR 改善 `6.7179% / 2.4838%`，但 global envelope 恶化 `1.7038%`、PCC 下降 `0.003158`，仍不通过严格门槛。W3 的 Whole/Local/trajectory/global-envelope/PCC 变化为 `−3.7254% / −0.7968% / −2.4228% / −0.2133% / −0.002064`，进入质量候选池；其 active elements 减少 `49.4845%`，但 throughput 仅 `+4.2809%` 且 peak allocated 未下降，不进入效率候选池。P4 最终候选池仍等待 P3。
+
+P1 executable config、实现测试与 W0 anchor 均固定 `early_stopping_enabled=false`、完整 80 epochs；附件第 3 节原 `patience 30` 为文档错误，现已透明纠正。所有 P1 selected epoch 均不晚于 29，尾部训练不改变所选 checkpoint。P1 至此关闭且不得重跑。当前唯一下一步是 P3 `W0_FULL_12V_FILM_D4` 的实现、定向测试、implementation lock 与独立 stress；P3 formal、P4/P5 和 research-test 仍关闭。
