@@ -4,7 +4,7 @@
 
 最后更新：2026-08-18
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1 已完成并冻结，P2 关闭，P3 D4 实现锁已完成，当前只开放一次 D4 isolation stress
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3 已完成并冻结，P2 关闭，当前只开放 P4 validation summary 的实现与一次性生成
 
 ## 1. 定位
 
@@ -2120,4 +2120,8 @@ P1 executable config、实现测试与 W0 anchor 均固定 `early_stopping_enabl
 
 P3 D4 实现随后完成并锁定为 `docs/experiments/crd_tf_w_v2_p3_implementation_lock_20260818.json`，SHA-256=`0aa2f520a52a667640ea6550a6d26c48b0f65dd088de6b4616938705a7e40da7`。唯一 variant `crd_tfw_v2_d4_full_12v_film` 保持 full-12V W branch/FiLM 和同 seed 共享 state，只移除 local blocks 4/5；三个固定 seed identity 通过，准确参数为 `902,722`，减少 `317,128 = 25.9973%`。P2/D8/复合 variant 未实现。P3 stress/formal config、专用 receipt 与 same-commit formal preflight 已完成，定向回归为 `123 passed`，未运行 GPU。
 
-当前唯一下一步是用户从新的干净实现 commit 运行一次 D4 isolation stress；固定 5 epochs、`128×1`、400 updates、5 次完整 validation。receipt 核验通过前 P3 formal、P4/P5 和 research-test 仍关闭。
+D4 isolation stress 随后从干净 commit `6c4f6229eda6eb72c82e4cd17571bdc73bd97d54` 完成，receipt SHA-256=`431604d505f10733082ad5a380a75c2544ff45649f86fc3452301d7d0bb61a8c`；400 updates、5 次完整 validation、finite/degeneracy/梯度与显存线全部通过。3/3 formal 继续从同一 commit 完成，selected epoch 为 `13/26/14`，所有 lifecycle、identity、finite 与 degeneracy 复核通过。
+
+D4 相对 W0 的 Whole/Local/trajectory/global-envelope/PCC 变化为 `+0.2519% / +1.8308% / +1.2847% / −0.3187% / −0.002938`。其参数减少 `25.9973%`、throughput 提升 `24.8925%`、peak allocated 降低 `22.5204%`，但 Local RR/trajectory 均超过效率候选的 `1%` 保护线；D4 因此不进入质量或效率池，也不触发 catastrophic failure。P3 已关闭，不开放 D8 或组合补跑。
+
+12 个新 training runs 已全部完成，剩余训练预算为 0。当前唯一下一步是 P4 专用 summarizer、schema 测试与一次性 validation summary；P4 完成前 P5 和 research-test 仍关闭。

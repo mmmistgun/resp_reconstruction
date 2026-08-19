@@ -1122,7 +1122,7 @@ W1/W2 不通过严格质量门槛；W3 进入质量候选池，但 throughput/pe
 
 P3 implementation lock 为 `docs/experiments/crd_tf_w_v2_p3_implementation_lock_20260818.json`，SHA-256=`0aa2f520a52a667640ea6550a6d26c48b0f65dd088de6b4616938705a7e40da7`。唯一 variant 为 `crd_tfw_v2_d4_full_12v_film`：保持 full-12V W branch/FiLM 与同 seed 共享 state，只移除 local blocks 4/5；准确参数为 `902,722`。P2/D8/频带或 6V 复合 D4 均未实现。定向结果为 `123 passed`。
 
-提交实现并确认工作树干净后，当前唯一允许的 GPU 命令为：
+以下 GPU stress 命令已从干净 commit `6c4f622` 完成，现只保留 provenance，不得重复运行：
 
 ```bash
 git status --short
@@ -1130,7 +1130,9 @@ git status --short
   --config configs/crd_tf_w_v2/crd_tfw_v2_d4_full_12v_film_stress.yaml
 ```
 
-首行必须无输出。stress 固定 5 epochs、physical batch `128×1`、完整 train/validation、400 optimizer updates 与 5 次完整 validation；输出根为 `runs/crd_tf_w_v2/engineering/crd_tfw_v2_d4_full_12v_film/`，存在任意 run 即拒绝重复。成功后返回 run path 和 `p3_stress_receipt.json` 供核验。receipt 未通过前不得运行 formal，也不要修改或提交工作树；P4/P5 与 research-test 继续关闭。
+固定 stress receipt SHA-256=`431604d505f10733082ad5a380a75c2544ff45649f86fc3452301d7d0bb61a8c`，finite/degeneracy/梯度与显存线均通过。D4 3/3 formal 也已完成，selected epoch=`13/26/14`；其历史命令同样不得重复运行。
+
+D4 参数/throughput/peak-allocated 改善 `25.9973% / 24.8925% / 22.5204%`，但 Local RR/trajectory 相对 W0 恶化 `1.8308% / 1.2847%`，超过效率池质量保护线，因此不进入质量或效率池。P3 已关闭；当前只开放 P4 summarizer 实现，尚无可执行的冻结 summary 命令。P4/P5 与 research-test 继续关闭。
 
 ## 固定呼吸带传统基线
 

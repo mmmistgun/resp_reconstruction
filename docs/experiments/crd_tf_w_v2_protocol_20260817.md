@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂实现、三个 isolation stress 与 9/9 formal 已从干净 commit `1d1b22e` 完成并核验；W1/W2 不通过严格质量门槛，W3 通过质量门槛但不通过效率门槛。P3 D4 实现、配置、source/depth provenance、专用 stress receipt、formal preflight 与定向回归已完成并锁定，尚未运行 GPU stress。当前唯一下一步是用户执行一次 P3 D4 isolation stress；P3 formal、P4/P5 与 research-test 仍关闭。**
+状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂与 P3 D4 的全部 stress/formal 均已完成并核验；W1/W2/D4 不通过严格候选门槛，W3 通过质量门槛但不通过效率门槛。P1/P3 已关闭并只保留 provenance；当前唯一下一步是实现并生成一次 P4 validation summary，P5 与 research-test 仍关闭。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -358,6 +358,22 @@ D4 继续读取未修改的 full-12V `[97,360]` W input，W branch、FiLM、fron
 
 定向 `py_compile` 与 P1/P3、CRD config/model/experiment/training、v1 model/data/formal-config 回归通过，结果为 `123 passed`。实现期间未运行 GPU、stress、formal 或 research-test，未读写 target test、未修改 cache/checkpoint。P3 implementation 至此关闭并只保留 provenance。
 
+### 9.2 P3 stress 与 formal 完成登记（2026-08-19）
+
+D4 isolation stress 从干净 commit `6c4f6229eda6eb72c82e4cd17571bdc73bd97d54` 完成，固定 run 为 `runs/crd_tf_w_v2/engineering/crd_tfw_v2_d4_full_12v_film/20260818_224221_844176`，`p3_stress_receipt.json` SHA-256=`431604d505f10733082ad5a380a75c2544ff45649f86fc3452301d7d0bb61a8c`。receipt 为 passed：400 updates、5 次完整 validation、history/checkpoint/optimizer/primary 与 batch-1 bf16 input/parameter gradients 全部 finite、degeneracy=0；warm throughput=`280.4775 samples/s`，peak allocated=`6797.5527 MiB`，training/validation 最大 peak reserved=`11012 MiB = 69.0998%`。
+
+随后 3/3 formal 仍从同一干净 commit 完成，每个 run 均完整执行 80 epochs / 6,400 updates；seed/config/cache/full-12V/D4/checkpoint identity、best/final checkpoint、history/summary finite 与 degeneracy=0 全部通过，source cache 未修改、`target_read=false`、`research_test_used=false`。selected epoch 与唯一时间戳为：
+
+- seed `20260811`：epoch 13，`20260818_230002_842674`；
+- seed `20260812`：epoch 26，`20260819_001222_827515`；
+- seed `20260813`：epoch 14，`20260819_012343_109819`。
+
+D4 三-seed validation mean ± sample SD 为：Whole RR `0.500556 ± 0.009903`、Local RR `0.561402 ± 0.023087`、trajectory `0.154691 ± 0.002532`、global envelope `0.190442 ± 0.005560`、signed PCC `0.862363 ± 0.001562`。相对 W0 的变化依次为 `+0.2519% / +1.8308% / +1.2847% / −0.3187% / −0.002938`，paired 改善方向依次为 `1/3 / 1/3 / 0/3 / 1/3 / 0/3`。
+
+D4 没有任何 primary 达到第 4.1 节实质改善要求，且 Local RR 恶化超过质量候选的 `0.5%`，因此不进入质量池。其参数减少 `25.9973%`、formal warm throughput 相对 W0 提升 `24.8925%`、peak allocated 降低 `22.5204%`，三项结构/资源条件均通过；但 Local RR 与 trajectory 分别恶化 `1.8308% / 1.2847%`，超过效率候选对每个 error 的 `1.0%` 保护线，因此也不进入效率池。D4 未触发 catastrophic failure 线；结论固定为“显著工程效率收益，但质量交换超过预注册容忍度”，不开放 D8 或任何组合补跑。
+
+P3 stress 与 formal 至此关闭，不得重复运行。P4 尚未生成；在其一次性汇总完成前，W3 只能称为按单臂门槛通过的 provisional quality candidate，不能提前写成最终 research-test allowlist。
+
 ## 10. 工程验收与显存停止线
 
 每个新 variant 在 formal 前必须完成：
@@ -427,18 +443,12 @@ P5 当前关闭。
 | P4 | validation summary | 0 |
 | P5 | 最终 research-test | 0 |
 
-因此剩余预算固定为 **12 个新 training runs**，原条件硬上限 15 已因 P2 不触发而关闭。Engineering stress 和 checkpoint evaluation 不计为 training runs，但其 GPU 成本必须单独记录。
+原执行预算固定为 **12 个新 training runs**，原条件硬上限 15 已因 P2 不触发而关闭；P1 九 runs 与 P3 三 runs 现已全部完成，剩余新 training run 预算为 **0**。Engineering stress 和 checkpoint evaluation 不计为 training runs，但其 GPU 成本必须单独记录。
 
 禁止执行融合×频带×voices×深度全因子矩阵，也不为形成论文线性故事追加复合候选。
 
 ## 14. 当前唯一下一步
 
-P0/P−1/P1 已关闭，P2 不触发，P3 implementation lock 已完成。当前唯一下一步是用户从新的干净实现 commit 执行一次 D4 isolation stress；Codex 不代跑：
+P0/P−1/P1/P3 已关闭，P2 不触发，训练预算已用完。当前唯一下一步是实现 P4 专用 summarizer 与冻结 schema 测试，然后从新的干净 commit 一次性生成 `runs/crd_tf_w_v2/p4_validation_summary/`。P4 只读复核既有 W0/W1/W2/W3/D4 validation artifacts，不训练、不重选 checkpoint、不读取 research-test，也不做 `samp_id` 分析。
 
-```bash
-git status --short
-./.venv/bin/python scripts/train_crd.py \
-  --config configs/crd_tf_w_v2/crd_tfw_v2_d4_full_12v_film_stress.yaml
-```
-
-首行必须无输出。命令成功后先返回 run path 与 `p3_stress_receipt.json`，完成核验前不运行 formal，也不要修改/提交工作树。不得删除失败或不合格的 engineering run 后重试。P4 仍须等待 P3 三个 formal seeds 完整结束后一次性生成，P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+P4 尚无已冻结的可执行入口；实现、测试和 clean commit 完成前不得手工构造 summary。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
