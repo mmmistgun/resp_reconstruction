@@ -1146,7 +1146,26 @@ git status --short
 
 固定输出 `runs/crd_tf_w_v2/p4_validation_summary/` 的六文件 schema 已完整冻结，summary SHA-256=`0f5a62448aa8db6b3bc9b07633bedf2e857b6369427792d37872851841cbd70b`，manifest SHA-256=`d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97`。严格质量池/Pareto 为 W3，严格效率池/Pareto 为空，描述性质量—效率 Pareto 为 W3/D4。D4 的显著计算收益与轻度、非灾难性质量损失均被保留，但不会越过硬门槛进入 P5 allowlist。
 
-P4 已关闭，上述命令只保留 provenance，不得重复运行。P5 仍需用户明确授权，且只允许 W3 的三个 validation-selected checkpoints；research-test 尚未读取，不做 `samp_id` 分析。
+P4 已关闭，上述命令只保留 provenance，不得重复运行。P5 随后获得明确授权，且只允许 W3 的三个 validation-selected checkpoints；research-test 尚未读取，不做 `samp_id` 分析。
+
+### CRD-TF-W v2 P5 最小 reused research-test
+
+P5 已获用户授权并从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 实现；冻结 checkpoint allowlist SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`，只包含 W3 三个 validation-selected checkpoints（epoch `9/12/12`）。定向回归为 `141 passed`，尚未运行 GPU 或读取 research-test target。
+
+从干净工作树串行评价三个 seed：
+
+```bash
+git status --short
+./.venv/bin/python scripts/eval_crd_tf_w_v2_research_test.py \
+  --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json \
+  --checkpoint-allowlist docs/experiments/crd_tf_w_v2_p5_checkpoint_allowlist_20260819.json \
+  --device cuda:0 \
+  --confirm-research-test
+```
+
+首行必须无输出。固定顺序为 seed `20260811 → 20260812 → 20260813`；隔离输出位于 `runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_<seed>/`。中断恢复可增加 `--seed <seed>`；已存在的完整输出只校验后跳过，任何产物均不覆盖。
+
+3/3 完成后由 Codex 核验并运行一次性 `scripts/summarize_crd_tf_w_v2_research_test.py`。P5 不评价 D4/W1/W2，不重选 checkpoint；D4“显著计算收益、轻微非灾难性质量损失”的 validation trade-off 继续保留，不因未进入 strict allowlist 而被抹除。不做 `samp_id` 分析，不构造总分。
 
 ## 固定呼吸带传统基线
 

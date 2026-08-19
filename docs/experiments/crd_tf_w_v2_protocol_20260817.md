@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂与 P3 D4 的全部 stress/formal 均已完成并核验；P4 validation summary 已从干净 commit `cd81f68b65125f3bf604b25cb2fd010056018077` 一次性生成并冻结。严格质量池/Pareto 仅 W3，严格效率池为空，描述性质量—效率 Pareto 为 W3/D4。下一步仅在用户明确授权后开放 P5；research-test 尚未读取。**
+状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂、P3 D4 与 P4 validation summary 均已完成并冻结。P5 已获得用户明确授权；专用 checkpoint allowlist、隔离 evaluator 与冻结 summarizer 已从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 实现并通过测试，当前唯一下一步是由用户运行 W3 三个 validation-selected checkpoints 的 P5 evaluation。research-test 尚未读取。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -443,7 +443,15 @@ W1/W2/W3/D4/ADD/SCALE 都只使用现有 W transform；可复用锁定的 test i
 reused research/development evidence; research-test-informed; not untouched independent test
 ```
 
-P5 当前关闭。
+### 12.1 P5 授权与实现锁（2026-08-19）
+
+用户已明确授权 P5。专用 checkpoint allowlist 固定为 `docs/experiments/crd_tf_w_v2_p5_checkpoint_allowlist_20260819.json`，SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`；它只包含 W3 三个 validation-selected checkpoints，seed=`20260811/12/13`、selected epoch=`9/12/12`，并锁定 P4 summary/manifest、既有 v1 research-test summary/manifest/access audit、test input-only W cache、full-6V view/index 以及隔离输出契约。D4 继续保留在 validation 描述性质量—效率 Pareto，但 checkpoint allowlist 明确禁止 D4/W1/W2 research-test evaluation；该排除不否定 D4 的计算—质量 trade-off。
+
+专用 `resp_train/crd/tf_w_v2_p5.py`、`scripts/eval_crd_tf_w_v2_research_test.py` 与 `scripts/summarize_crd_tf_w_v2_research_test.py` 从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 实现。evaluation 仅接受冻结 candidate lock/allowlist、显式 CUDA 与 `--confirm-research-test`；逐 seed 原子写入 `runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_<seed>/`，目录已存在时只允许完整校验后跳过，绝不覆盖。manifest 明确区分：test W cache 是 input-only 且 `target_read=false`，而 research-test target 只在已授权模型评价中用于计算指标；同时登记 cache/source/view/index、checkpoint、commit、依赖、耗时、吞吐与显存。
+
+三 seed 完成后，summarizer 将只读复核新增 W3 评价，并直接复用冻结的 C201/W0 六项既有 research-test 证据；只报告三-seed mean ± sample SD、相对 C201/W0 的 paired descriptive comparison，不形成新选择 gate、不重选 checkpoint/候选、不构造总分、不做 `samp_id` 分析。输出固定为 `runs/crd_tf_w_v2/research_test/summary/`，存在即拒绝覆盖。
+
+定向 `py_compile`、CLI help 与 P1–P5、v1 research-test/cache/summary、CRD config/model/experiment/training/data 回归为 `141 passed`。实现和测试期间未启动 GPU、未读取 research-test target、未创建 evaluation/summary；P5 summary 在 3/3 evaluation 完成前保持关闭。
 
 ## 13. 固定预算
 
@@ -464,4 +472,15 @@ P5 当前关闭。
 
 ## 14. 当前唯一下一步
 
-P0/P−1/P1/P3/P4 已关闭，P2 不触发，训练预算已用完。当前无自动开放的运行项；下一步仅在用户明确授权后按第 12 节实现并执行最小 P5 reused research-test。P5 质量 allowlist 仅为 P4 冻结的 W3 三个 validation-selected checkpoints，严格效率候选为空；不得加入 D4、W1、W2，不得重选 checkpoint，也不得做 `samp_id` 分析。
+P0/P−1/P1/P3/P4 已关闭，P2 不触发，训练预算已用完。P5 已授权并完成实现；当前唯一下一步由用户从干净 commit 运行：
+
+```bash
+git status --short
+./.venv/bin/python scripts/eval_crd_tf_w_v2_research_test.py \
+  --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json \
+  --checkpoint-allowlist docs/experiments/crd_tf_w_v2_p5_checkpoint_allowlist_20260819.json \
+  --device cuda:0 \
+  --confirm-research-test
+```
+
+首行必须无输出。命令按 `20260811 → 20260812 → 20260813` 串行评价；每个 seed 完成后打印隔离产物路径。若中断，可在同一命令增加 `--seed <固定 seed>`，已完成且完整的 seed 会验证后跳过。3/3 完成后先核验，再开放一次性 P5 summary；不得加入 D4/W1/W2，不得调用普通/旧 test 入口，不得重选 checkpoint，也不得做 `samp_id` 分析。

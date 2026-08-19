@@ -4,7 +4,7 @@
 
 最后更新：2026-08-19
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4 已完成并冻结，P2 关闭，P5 仅在用户明确授权后开放
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4 已完成并冻结，P2 关闭，P5 已授权并实现，当前等待用户运行 W3 三-seed evaluation
 
 ## 1. 定位
 
@@ -2124,4 +2124,6 @@ D4 isolation stress 随后从干净 commit `6c4f6229eda6eb72c82e4cd17571bdc73bd9
 
 D4 相对 W0 的 Whole/Local/trajectory/global-envelope/PCC 变化为 `+0.2519% / +1.8308% / +1.2847% / −0.3187% / −0.002938`。其参数减少 `25.9973%`、throughput 提升 `24.8925%`、peak allocated 降低 `22.5204%`，但 Local RR/trajectory 均超过效率候选的 `1%` 保护线；D4 因此不进入质量或效率池，也不触发 catastrophic failure。P3 已关闭，不开放 D8 或组合补跑。
 
-12 个新 training runs 已全部完成，剩余训练预算为 0。P4 专用 summarizer 与 schema 测试随后完成，定向回归为 `127 passed`；从干净 commit `cd81f68b65125f3bf604b25cb2fd010056018077` 一次性审计真实 15-run matrix 并冻结六文件 summary。严格质量池/Pareto=W3，严格效率池/Pareto=空，描述性质量—效率 Pareto=W3/D4；summary SHA-256=`0f5a62448aa8db6b3bc9b07633bedf2e857b6369427792d37872851841cbd70b`，manifest SHA-256=`d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97`。该双层口径保留 D4“显著计算收益换取轻度、非灾难性质量损失”的研究信息，但不绕过预注册硬门槛。P4 已关闭；下一步仅在用户明确授权后开放 P5，且仅允许 W3 的三个 validation-selected checkpoints。
+12 个新 training runs 已全部完成，剩余训练预算为 0。P4 专用 summarizer 与 schema 测试随后完成，定向回归为 `127 passed`；从干净 commit `cd81f68b65125f3bf604b25cb2fd010056018077` 一次性审计真实 15-run matrix 并冻结六文件 summary。严格质量池/Pareto=W3，严格效率池/Pareto=空，描述性质量—效率 Pareto=W3/D4；summary SHA-256=`0f5a62448aa8db6b3bc9b07633bedf2e857b6369427792d37872851841cbd70b`，manifest SHA-256=`d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97`。该双层口径保留 D4“显著计算收益换取轻度、非灾难性质量损失”的研究信息，但不绕过预注册硬门槛。
+
+P5 随后获得用户明确授权并从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 完成专用 allowlist/evaluator/summarizer 实现，定向回归为 `141 passed`。allowlist SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`，只允许 W3 三个 validation-selected checkpoints（epoch `9/12/12`）；D4 仍保留为描述性 efficiency trade-off，但不越过 strict gate。当前等待用户运行三项隔离 research-test evaluation，尚未读取 research-test target，也未做 `samp_id` 分析。
