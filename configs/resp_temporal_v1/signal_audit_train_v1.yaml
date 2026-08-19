@@ -1,0 +1,94 @@
+schema_version: rtm-v1-signal-audit-config-v1
+protocol_id: resp-temporal-v1-train-signal-audit-20260820
+source_config_path: configs/tho_research_v2.yaml
+source_config_sha256: 104f6c03e662b530fffb5bd376a5d754fdebdfc5b6edaf92a6c958d47951b8d7
+
+access:
+  split: train
+  require_full_eligible_split: true
+  expected_windows: 10141
+  expected_samp_ids: 32
+  expected_dataset_row_ids_sha256: f290e569140a2ff7745cf1a5cfa6a4da943644d76498c9b85517d3ae0702c45e
+  validation_allowed: false
+  research_test_allowed: false
+  checkpoint_allowed: false
+  model_training_allowed: false
+  model_inference_allowed: false
+
+signal:
+  sample_rate_hz: 100.0
+  duration_seconds: 180.0
+  duration_samples: 18000
+  input_key: bcg_rawish_segment_soft_z_key
+  target_key: target_waveform_segment_soft_z_key
+  scale_eps: 1.0e-8
+  dynamic_eps: 1.0e-8
+  corr_eps: 1.0e-8
+  envelope_eps: 1.0e-8
+
+bands:
+  displacement:
+    low_hz: 0.05
+    high_hz: 0.80
+    low_inclusive: true
+    high_inclusive: true
+  carrier_low:
+    low_hz: 0.80
+    high_hz: 3.00
+    low_inclusive: false
+    high_inclusive: true
+  carrier_high:
+    low_hz: 3.00
+    high_hz: 8.00
+    low_inclusive: false
+    high_inclusive: true
+  target:
+    low_hz: 0.05
+    high_hz: 0.70
+    low_inclusive: true
+    high_inclusive: true
+
+operators:
+  band_extraction: whole_window_rfft_rectangular_float64
+  fft_norm: backward
+  analytic_envelope: scipy_hilbert_log_magnitude
+  log_envelope_eps: 1.0e-8
+  combination: equal_rms_sum_then_target_projection
+  grid_reconstruction: scipy_fourier_resample_with_block_center_phase_alignment
+  grid_decimation_alignment: block_center
+  grid_fir_padding: reflect
+  grid_filter_convolution: scipy_fftconvolve
+  resampling:
+    padtype: line
+    window: kaiser
+    beta: 8.6
+    maps:
+      100_to_20: {up: 1, down: 5, numtaps: 255, cutoff_hz: 9.0}
+      100_to_10: {up: 1, down: 10, numtaps: 511, cutoff_hz: 4.5}
+      20_to_10: {up: 1, down: 2, numtaps: 127, cutoff_hz: 4.5}
+      10_to_2: {up: 1, down: 5, numtaps: 255, cutoff_hz: 0.85}
+      10_to_1: {up: 1, down: 10, numtaps: 255, cutoff_hz: 0.45}
+      10_to_0p5: {up: 1, down: 20, numtaps: 511, cutoff_hz: 0.225}
+
+metrics:
+  whole_rr_segment_seconds: 60.0
+  whole_rr_overlap_fraction: 0.5
+  local_rr_window_seconds: 60.0
+  local_rr_step_seconds: 15.0
+  effort_window_seconds: 10.0
+  effort_step_seconds: 5.0
+  max_lag_seconds: 0.3
+  coherence_segment_seconds: 60.0
+  coherence_overlap_fraction: 0.5
+  low_end_band_hz: [0.05, 0.10]
+  envelope_strata_low: 0.30875308839006915
+  envelope_strata_high: 0.7031542121234101
+  envelope_quantile_method: linear
+  grids_hz: [10.0, 2.0, 1.0, 0.5]
+  full_waveform_min_grid_hz: 2.0
+
+output:
+  directory: runs/resp_temporal_v1/train_signal_audit/rtm_v1_train_only_v1
+  allow_overwrite: false
+  require_clean_git: true
+  csv_float_format: "%.12g"

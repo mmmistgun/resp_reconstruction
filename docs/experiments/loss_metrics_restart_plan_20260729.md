@@ -2129,3 +2129,13 @@ D4 相对 W0 的 Whole/Local/trajectory/global-envelope/PCC 变化为 `+0.2519% 
 P5 随后获得用户明确授权并从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 完成专用 allowlist/evaluator/summarizer 实现，定向回归为 `141 passed`。allowlist SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`，只允许 W3 三个 validation-selected checkpoints（epoch `9/12/12`）；D4 仍保留为描述性 efficiency trade-off，但不越过 strict gate。
 
 W3 三项 P5 evaluation 与一次性 summary 随后从干净 commit `508a936b5c3b997c19c5861b6a6e0874e41dcd43` 完成。summary SHA-256=`d2d2f24ba9628a5f099c0698137c88918b51e802c0aa2ee0faf6f8ff1212f862`，manifest SHA-256=`3169d062b3b93131d1bb20f38f7870ad23cd5c9536706efc50a1854d23ec415e`。W3 相对 C201 五项 mean 均改善；相对 W0 则 Whole/Local RR 恶化 `9.8265% / 7.1294%`，trajectory/global/PCC 改善 `1.7417% / 3.9962% / +0.002117`。结论固定为 W0 保持 RR rate 优势、W3 提供 morphology/correlation 优势，不构造总分或唯一赢家。D4 的显著计算收益与轻度 validation 性能损失继续保留为描述性结果，但未做 research-test。P5 未重选 checkpoint/候选，未做 `samp_id` 分析；本阶段全部关闭。
+
+## 50. RTM-v1 合理容量时序模型家族比较（2026-08-20）
+
+现另立 `Respiration Temporal Modeling v1`，协议 ID 为 `resp-temporal-v1-validation-20260820`，规范性附件为 `docs/experiments/resp_temporal_v1_protocol_20260820.md`。该阶段不续接或重开 CRD/CRD-TF/CRD-TF-W，也不把旧 M1、C1 或 D4 伪装成新实验：M1 继续只解释为 `base_channels=1` 的参数匹配多尺度控制；C1 是合理但单点、H=488 参数匹配的 full-context TCN control；D4 是 W0 条件下的 Mamba 深度效率控制。它们都不能证明多尺度家族无效、TCN 普遍弱于 Mamba或 Mamba 普遍优越。
+
+RTM-v1 的科学选择顺序改为 signal-first：先按 `docs/experiments/resp_temporal_v1_signal_audit_20260820.md` 只读 train，审计 0.05–0.8-Hz displacement、0.8–3/3–8-Hz carrier modulation、carrier 解调与10-Hz降采样顺序、抗混叠以及 cycle/rate/effort/global 时间尺度；再由用户锁定公共 signal substrate、家族集合和每家族唯一核心代表。C0 只证明 target 的10-Hz输出表示近似无损，不证明100-Hz BCG可在未充分解调前直接压到10 Hz。
+
+核心家族假设为 dilated TCN、BiMamba2、BiLSTM 和 feature-level multiscale，T0 仍是 trunk-attribution control；当前所谓 PatchMixer 实为固定1800位置的 global token mixer，只有“弱局部先验的全窗位置混合”构成独立反方假设时才条件进入。现有 Full/Compact 共11项仅为 implementation probes，不是 formal candidates；同家族第二容量点只能另立 capacity-sensitivity control。参数、吞吐、显存与 wall time只作工程 receipt 和描述性质量—效率 Pareto，不能选择 Full/Compact、替换不可运行代表或改变科学家族集合。
+
+当前已实现严格配置 `configs/resp_temporal_v1/signal_audit_train_v1.yaml`、`scripts/audit_resp_temporal_v1_signal.py`、确定性算子、不可覆盖输出与 access receipt schema，并以定向合成测试冻结端点、解调顺序和 grid 语义；完整 train 审计仍未执行。用户返回合格 receipt 前不得形成 signal-substrate/family/candidate lock，不得开放 GPU engineering、formal runner、validation summary 或 research-test。审计入口不接受 split/subset/band/output 覆盖，也不得读取已有 checkpoint 形成结论。

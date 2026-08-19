@@ -48,6 +48,16 @@ CRD S1C 使用严格 CRD 配置 loader 的复现命令：
 
 这些审计不是每个训练 run 的重复前置步骤。协议首次实现或数据/split 发生变化时执行并保存结果；普通 run 只保留加载、shape 与 finite 断言。
 
+### RTM-v1 train-only 信号审计（待用户手动执行）
+
+该入口只允许完整 eligible train，配置哈希、频带、算子、输出目录与 access receipt schema 均已冻结；不接受 split、subset、频带或输出覆盖。它不训练/推理模型，不读取 checkpoint、validation signal/target/prediction 或 research-test：
+
+```bash
+./.venv/bin/python scripts/audit_resp_temporal_v1_signal.py --config configs/resp_temporal_v1/signal_audit_train_v1.yaml
+```
+
+运行前必须提交本次实现、保持工作树干净，并确认 `runs/resp_temporal_v1/train_signal_audit/rtm_v1_train_only_v1/` 不存在。完整运行属于长 CPU 任务，只由用户执行；receipt、manifest hash 与 summary 返回后才起草 signal-substrate/family/candidate lock。
+
 ## 训练
 
 统一入口：
