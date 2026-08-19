@@ -1132,13 +1132,11 @@ git status --short
 
 固定 stress receipt SHA-256=`431604d505f10733082ad5a380a75c2544ff45649f86fc3452301d7d0bb61a8c`，finite/degeneracy/梯度与显存线均通过。D4 3/3 formal 也已完成，selected epoch=`13/26/14`；其历史命令同样不得重复运行。
 
-D4 参数/throughput/peak-allocated 改善 `25.9973% / 24.8925% / 22.5204%`，但 Local RR/trajectory 相对 W0 恶化 `1.8308% / 1.2847%`，超过效率池质量保护线，因此不进入质量或效率池。P3 已关闭；当前只开放 P4 summarizer 实现，尚无可执行的冻结 summary 命令。P4/P5 与 research-test 继续关闭。
+D4 参数/throughput/peak-allocated 改善 `25.9973% / 24.8925% / 22.5204%`，但 Local RR/trajectory 相对 W0 恶化 `1.8308% / 1.2847%`，超过效率池质量保护线，因此不进入质量或效率池。P3 已关闭；P4 随后将 D4 冻结为描述性、非灾难性效率 trade-off。
 
 ### CRD-TF-W v2 P4 validation summary
 
-P4 summarizer 已实现并通过 `127 passed`；真实 15-run 只读预审为：严格质量池 W3、严格效率池为空、描述性质量—效率 Pareto 为 W3/D4。D4 的描述性 trade-off 会被保留，但不会越过硬门槛进入 P5 allowlist。
-
-提交实现并确认工作树干净后，当前唯一允许的 P4 命令为：
+P4 summarizer 已实现并通过 `127 passed`；随后从干净 commit `cd81f68b65125f3bf604b25cb2fd010056018077` 一次性运行：
 
 ```bash
 git status --short
@@ -1146,7 +1144,9 @@ git status --short
   --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json
 ```
 
-首行必须无输出。固定输出为 `runs/crd_tf_w_v2/p4_validation_summary/`，目录存在即拒绝覆盖；命令只读 validation artifacts，不训练、不读取 research-test、不重选 checkpoint、不做 `samp_id` 分析。完成并冻结前不得运行 P5。
+固定输出 `runs/crd_tf_w_v2/p4_validation_summary/` 的六文件 schema 已完整冻结，summary SHA-256=`0f5a62448aa8db6b3bc9b07633bedf2e857b6369427792d37872851841cbd70b`，manifest SHA-256=`d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97`。严格质量池/Pareto 为 W3，严格效率池/Pareto 为空，描述性质量—效率 Pareto 为 W3/D4。D4 的显著计算收益与轻度、非灾难性质量损失均被保留，但不会越过硬门槛进入 P5 allowlist。
+
+P4 已关闭，上述命令只保留 provenance，不得重复运行。P5 仍需用户明确授权，且只允许 W3 的三个 validation-selected checkpoints；research-test 尚未读取，不做 `samp_id` 分析。
 
 ## 固定呼吸带传统基线
 

@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂与 P3 D4 的全部 stress/formal 均已完成并核验；W1/W2/D4 不通过严格候选门槛，W3 通过质量门槛但不通过效率门槛。P4 专用 summarizer、artifact/hash 审计、严格 eligibility 与描述性 trade-off Pareto 已实现并通过真实 15-run 只读预审；当前唯一下一步是从干净 commit 一次性生成 P4 summary，P5 与 research-test 仍关闭。**
+状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂与 P3 D4 的全部 stress/formal 均已完成并核验；P4 validation summary 已从干净 commit `cd81f68b65125f3bf604b25cb2fd010056018077` 一次性生成并冻结。严格质量池/Pareto 仅 W3，严格效率池为空，描述性质量—效率 Pareto 为 W3/D4。下一步仅在用户明确授权后开放 P5；research-test 尚未读取。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -372,7 +372,7 @@ D4 三-seed validation mean ± sample SD 为：Whole RR `0.500556 ± 0.009903`�
 
 D4 没有任何 primary 达到第 4.1 节实质改善要求，且 Local RR 恶化超过质量候选的 `0.5%`，因此不进入质量池。其参数减少 `25.9973%`、formal warm throughput 相对 W0 提升 `24.8925%`、peak allocated 降低 `22.5204%`，三项结构/资源条件均通过；但 Local RR 与 trajectory 分别恶化 `1.8308% / 1.2847%`，超过效率候选对每个 error 的 `1.0%` 保护线，因此也不进入效率池。D4 未触发 catastrophic failure 线；结论固定为“显著工程效率收益，但质量交换超过预注册容忍度”，不开放 D8 或任何组合补跑。
 
-P3 stress 与 formal 至此关闭，不得重复运行。P4 尚未生成；在其一次性汇总完成前，W3 只能称为按单臂门槛通过的 provisional quality candidate，不能提前写成最终 research-test allowlist。
+P3 stress 与 formal 至此关闭，不得重复运行。W3 当时仅是按单臂门槛通过的 provisional quality candidate；P4 随后完成全矩阵汇总并将它冻结为唯一 strict quality/Pareto candidate 与唯一 P5 quality allowlist candidate。
 
 ## 10. 工程验收与显存停止线
 
@@ -422,7 +422,9 @@ P4 明确分开两层结论：
 
 因此 D4 若同时满足结构/资源收益和 non-catastrophic，但因轻度质量损失超过 `1%` 保护线而不合格，仍会以 `descriptive_noncatastrophic_efficiency_tradeoff=true` 保留。它不会被简化成“无价值失败”，也不会被偷渡为 strict efficiency candidate。W1/W2 继续作为机制结果保留，不因未晋级而删除。
 
-定向 `py_compile` 与 P1–P4、CRD config/model/experiment/training、v1 model/data/formal-config 回归为 `127 passed`。对真实 15-run matrix 的只读预审已通过：严格质量池预期为 W3，严格效率池为空，描述性质量—效率 Pareto 预期为 W3/D4；预审未创建 summary、未读取 research-test、未做 `samp_id` 分析。P4 尚未生成，以上均不替代一次性冻结产物。
+定向 `py_compile` 与 P1–P4、CRD config/model/experiment/training、v1 model/data/formal-config 回归为 `127 passed`。P4 随后从干净 commit `cd81f68b65125f3bf604b25cb2fd010056018077` 一次性审计 15/15 formal runs 并生成冻结产物 `runs/crd_tf_w_v2/p4_validation_summary/`；六文件 schema 完整，summary SHA-256=`0f5a62448aa8db6b3bc9b07633bedf2e857b6369427792d37872851841cbd70b`，manifest SHA-256=`d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97`，source artifact set SHA-256=`d3fad601cf82da21534621a8c1be88fdb77d4deea78a7819f8b5b6ced5751bfa`。
+
+冻结结论为：严格质量池/Pareto=`W3_FULL_6V_FILM_D6`，严格效率池/Pareto=空，描述性质量—效率 Pareto=`W3_FULL_6V_FILM_D6 / D4_W0`。P5 若后续获得明确授权，其质量 allowlist 仅包含 W3 的 3 个 validation-selected checkpoints（selected epoch=`9/12/12`），不存在严格效率候选。D4 的资源收益与轻度质量代价同时保留：参数、throughput、peak allocated 分别改善 `25.9973% / 24.8925% / 22.5204%`，Local RR/trajectory 分别恶化 `1.8308% / 1.2847%`；它不是 catastrophic failure，但因超过预注册质量保护线不进入 strict efficiency pool。P4 未读取 research-test、未做 `samp_id` 分析，也未构造总分。
 
 ## 12. P5：最小 reused research-test
 
@@ -462,12 +464,4 @@ P5 当前关闭。
 
 ## 14. 当前唯一下一步
 
-P0/P−1/P1/P3 已关闭，P2 不触发，训练预算已用完。P4 implementation 与真实 matrix 只读预审已完成。当前唯一下一步是从新的干净 commit 一次性生成冻结 summary：
-
-```bash
-git status --short
-./.venv/bin/python scripts/summarize_crd_tf_w_v2.py \
-  --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json
-```
-
-首行必须无输出。命令只读既有 validation artifacts，不训练、不重选 checkpoint、不读取 research-test，也不做 `samp_id` 分析；固定输出目录存在即拒绝覆盖。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+P0/P−1/P1/P3/P4 已关闭，P2 不触发，训练预算已用完。当前无自动开放的运行项；下一步仅在用户明确授权后按第 12 节实现并执行最小 P5 reused research-test。P5 质量 allowlist 仅为 P4 冻结的 W3 三个 validation-selected checkpoints，严格效率候选为空；不得加入 D4、W1、W2，不得重选 checkpoint，也不得做 `samp_id` 分析。
