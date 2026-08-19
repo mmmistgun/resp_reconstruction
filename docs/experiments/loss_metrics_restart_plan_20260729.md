@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-19
+最后更新：2026-08-20
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4 已完成并冻结，P2 关闭，P5 已授权并实现，当前等待用户运行 W3 三-seed evaluation
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭，当前协议无开放运行项
 
 ## 1. 定位
 
@@ -2126,4 +2126,6 @@ D4 相对 W0 的 Whole/Local/trajectory/global-envelope/PCC 变化为 `+0.2519% 
 
 12 个新 training runs 已全部完成，剩余训练预算为 0。P4 专用 summarizer 与 schema 测试随后完成，定向回归为 `127 passed`；从干净 commit `cd81f68b65125f3bf604b25cb2fd010056018077` 一次性审计真实 15-run matrix 并冻结六文件 summary。严格质量池/Pareto=W3，严格效率池/Pareto=空，描述性质量—效率 Pareto=W3/D4；summary SHA-256=`0f5a62448aa8db6b3bc9b07633bedf2e857b6369427792d37872851841cbd70b`，manifest SHA-256=`d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97`。该双层口径保留 D4“显著计算收益换取轻度、非灾难性质量损失”的研究信息，但不绕过预注册硬门槛。
 
-P5 随后获得用户明确授权并从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 完成专用 allowlist/evaluator/summarizer 实现，定向回归为 `141 passed`。allowlist SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`，只允许 W3 三个 validation-selected checkpoints（epoch `9/12/12`）；D4 仍保留为描述性 efficiency trade-off，但不越过 strict gate。当前等待用户运行三项隔离 research-test evaluation，尚未读取 research-test target，也未做 `samp_id` 分析。
+P5 随后获得用户明确授权并从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 完成专用 allowlist/evaluator/summarizer 实现，定向回归为 `141 passed`。allowlist SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`，只允许 W3 三个 validation-selected checkpoints（epoch `9/12/12`）；D4 仍保留为描述性 efficiency trade-off，但不越过 strict gate。
+
+W3 三项 P5 evaluation 与一次性 summary 随后从干净 commit `508a936b5c3b997c19c5861b6a6e0874e41dcd43` 完成。summary SHA-256=`d2d2f24ba9628a5f099c0698137c88918b51e802c0aa2ee0faf6f8ff1212f862`，manifest SHA-256=`3169d062b3b93131d1bb20f38f7870ad23cd5c9536706efc50a1854d23ec415e`。W3 相对 C201 五项 mean 均改善；相对 W0 则 Whole/Local RR 恶化 `9.8265% / 7.1294%`，trajectory/global/PCC 改善 `1.7417% / 3.9962% / +0.002117`。结论固定为 W0 保持 RR rate 优势、W3 提供 morphology/correlation 优势，不构造总分或唯一赢家。D4 的显著计算收益与轻度 validation 性能损失继续保留为描述性结果，但未做 research-test。P5 未重选 checkpoint/候选，未做 `samp_id` 分析；本阶段全部关闭。

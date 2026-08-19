@@ -1146,11 +1146,11 @@ git status --short
 
 固定输出 `runs/crd_tf_w_v2/p4_validation_summary/` 的六文件 schema 已完整冻结，summary SHA-256=`0f5a62448aa8db6b3bc9b07633bedf2e857b6369427792d37872851841cbd70b`，manifest SHA-256=`d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97`。严格质量池/Pareto 为 W3，严格效率池/Pareto 为空，描述性质量—效率 Pareto 为 W3/D4。D4 的显著计算收益与轻度、非灾难性质量损失均被保留，但不会越过硬门槛进入 P5 allowlist。
 
-P4 已关闭，上述命令只保留 provenance，不得重复运行。P5 随后获得明确授权，且只允许 W3 的三个 validation-selected checkpoints；research-test 尚未读取，不做 `samp_id` 分析。
+P4 已关闭，上述命令只保留 provenance，不得重复运行。P5 随后获得明确授权，且只允许 W3 的三个 validation-selected checkpoints；其完成登记见下节。
 
 ### CRD-TF-W v2 P5 最小 reused research-test
 
-P5 已获用户授权并从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 实现；冻结 checkpoint allowlist SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`，只包含 W3 三个 validation-selected checkpoints（epoch `9/12/12`）。定向回归为 `141 passed`，尚未运行 GPU 或读取 research-test target。
+P5 获用户授权后从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 实现；冻结 checkpoint allowlist SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`，只包含 W3 三个 validation-selected checkpoints（epoch `9/12/12`）。实现阶段定向回归为 `141 passed`，当时尚未运行 GPU 或读取 research-test target。
 
 从干净工作树串行评价三个 seed：
 
@@ -1165,7 +1165,11 @@ git status --short
 
 首行必须无输出。固定顺序为 seed `20260811 → 20260812 → 20260813`；隔离输出位于 `runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_<seed>/`。中断恢复可增加 `--seed <seed>`；已存在的完整输出只校验后跳过，任何产物均不覆盖。
 
-3/3 完成后由 Codex 核验并运行一次性 `scripts/summarize_crd_tf_w_v2_research_test.py`。P5 不评价 D4/W1/W2，不重选 checkpoint；D4“显著计算收益、轻微非灾难性质量损失”的 validation trade-off 继续保留，不因未进入 strict allowlist 而被抹除。不做 `samp_id` 分析，不构造总分。
+3/3 evaluation 与一次性 `scripts/summarize_crd_tf_w_v2_research_test.py` 随后从干净 commit `508a936b5c3b997c19c5861b6a6e0874e41dcd43` 完成。固定 summary 位于 `runs/crd_tf_w_v2/research_test/summary/`，summary SHA-256=`d2d2f24ba9628a5f099c0698137c88918b51e802c0aa2ee0faf6f8ff1212f862`，manifest SHA-256=`3169d062b3b93131d1bb20f38f7870ad23cd5c9536706efc50a1854d23ec415e`。
+
+W3 research-test mean ± sample SD 为 Whole/Local/trajectory/global/PCC=`0.677887 ± 0.024346 / 0.653025 ± 0.011574 / 0.137116 ± 0.001865 / 0.166488 ± 0.001985 / 0.878694 ± 0.001267`。相对 W0，Whole/Local RR 恶化 `9.8265% / 7.1294%`（均 `0/3` seed 更优），trajectory/global/PCC 改善 `1.7417% / 3.9962% / +0.002117`（`3/3 / 2/3 / 3/3`）。因此只保留 W0=RR rate 优势、W3=morphology/correlation 优势的混合结论，不宣称唯一赢家。
+
+P5 不评价 D4/W1/W2，不重选 checkpoint；D4“显著计算收益、轻微非灾难性质量损失”的 validation trade-off 继续保留，不因未进入 strict allowlist 而被抹除。不做 `samp_id` 分析，不构造总分。P5 已关闭，上述 evaluation/summarizer 命令只保留 provenance，不得重复运行。
 
 ## 固定呼吸带传统基线
 
