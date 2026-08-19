@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "lock_id": "crd-tf-w-v2-p5-checkpoint-allowlist-20260819",
+  "protocol": "crd-tf-w-v2-research-informed-20260817",
+  "phase": "p5_minimal_reused_research_test",
+  "created_date": "2026-08-19",
+  "user_authorized": true,
+  "evidence_role": "reused research/development evidence; research-test-informed; not untouched independent test",
+  "selection_source": {
+    "candidate_lock": {
+      "path": "docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json",
+      "sha256": "6ae35076bbd89bec688bfd4918cfecd20c7d5ea7f845f460034a88045432c7b6"
+    },
+    "p4_summary": {
+      "path": "runs/crd_tf_w_v2/p4_validation_summary/p4_summary.json",
+      "size_bytes": 3336,
+      "sha256": "0f5a62448aa8db6b3bc9b07633bedf2e857b6369427792d37872851841cbd70b"
+    },
+    "p4_summary_manifest": {
+      "path": "runs/crd_tf_w_v2/p4_validation_summary/p4_summary_manifest.json",
+      "size_bytes": 1223,
+      "sha256": "d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97"
+    },
+    "source_artifact_set_sha256": "d3fad601cf82da21534621a8c1be88fdb77d4deea78a7819f8b5b6ced5751bfa",
+    "strict_quality_candidate": "W3_FULL_6V_FILM_D6",
+    "strict_efficiency_candidate": null,
+    "descriptive_quality_efficiency_pareto": [
+      "W3_FULL_6V_FILM_D6",
+      "D4_W0"
+    ],
+    "d4_exclusion_reason": "retained as a descriptive non-catastrophic efficiency trade-off; excluded from P5 by the preregistered strict efficiency quality guardrails"
+  },
+  "reused_reference_evidence": {
+    "summary": {
+      "path": "runs/crd_tf_v1/research_test_summary/research_test_summary.json",
+      "size_bytes": 1249,
+      "sha256": "e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0"
+    },
+    "manifest": {
+      "path": "runs/crd_tf_v1/research_test_summary/research_test_summary_manifest.json",
+      "size_bytes": 1126,
+      "sha256": "1c1a4571eaf281a2dbbbd86da633f45e9e44bed2f7d31b7b4320bd38e411e180"
+    },
+    "access_audit": {
+      "path": "runs/crd_tf_v1/research_test_summary/access_audit.csv",
+      "size_bytes": 9293,
+      "sha256": "eb75cce11e1827b983f6540719e772c1e0288e8ffda06b7f3ae917bc2920d377"
+    },
+    "variants": [
+      "crd_c201_decoder_10hz_cap",
+      "crd_tf102_w"
+    ],
+    "reuse_only": true
+  },
+  "test_w_cache": {
+    "root": "runs/crd_tf_v1/research_test_cache/40a24df424b2ff9182cfcc6f5b7c12d287578b0df1ed1e25b56b7af1c7f73839",
+    "cache_identity_sha256": "40a24df424b2ff9182cfcc6f5b7c12d287578b0df1ed1e25b56b7af1c7f73839",
+    "manifest_size_bytes": 6555,
+    "manifest_sha256": "5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745",
+    "source_train_validation_w_manifest_sha256": "6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8",
+    "target_read": false,
+    "view": "full_6v",
+    "source_shape_per_sample": [97, 360],
+    "model_input_shape_per_sample": [49, 360],
+    "active_scale_count": 49,
+    "view_index_sha256": "3734c4183c17744eb4779ac65ac8521de1897f6a12f364e913aeb02528e250d6",
+    "application": "input-only strided view [:,::2,:] after cache copy; source cache remains unmodified"
+  },
+  "candidate_id": "W3_FULL_6V_FILM_D6",
+  "model_variant": "crd_tfw_v2_w3_full_6v_film_d6",
+  "fixed_seeds": [20260811, 20260812, 20260813],
+  "checkpoints": [
+    {
+      "seed": 20260811,
+      "selected_epoch": 9,
+      "run_dir": "runs/crd_tf_w_v2/formal/crd_tfw_v2_w3_full_6v_film_d6/seed_20260811/20260818_142005_581105",
+      "checkpoint": {
+        "filename": "checkpoint_best_local_rr.pt",
+        "size_bytes": 14892765,
+        "sha256": "7528378ee8ae2f4010974ddb01ab6dd36697aa8b2864709acea2d7960f28542b"
+      },
+      "config": {
+        "filename": "config.yaml",
+        "size_bytes": 2593,
+        "sha256": "7b9894f244eab507af5d04e3b596ca6fd3eb9534dd951b17a585ac9102b32a66"
+      },
+      "training_manifest": {
+        "filename": "run_manifest.json",
+        "size_bytes": 2429,
+        "sha256": "3bf0d2a6a57f16a47c9c428d3718c18cf20fc2c6d964dba92b274db87e354a2d"
+      }
+    },
+    {
+      "seed": 20260812,
+      "selected_epoch": 12,
+      "run_dir": "runs/crd_tf_w_v2/formal/crd_tfw_v2_w3_full_6v_film_d6/seed_20260812/20260818_154254_103140",
+      "checkpoint": {
+        "filename": "checkpoint_best_local_rr.pt",
+        "size_bytes": 14892765,
+        "sha256": "9a6f4f7280bbe8b17417fd428e417aed0cf671ebd734031258ffda9372c6d506"
+      },
+      "config": {
+        "filename": "config.yaml",
+        "size_bytes": 2593,
+        "sha256": "fb1d7a0bf9111c004651c09387f7217037068eee76e947d6ec4241cc7bd86006"
+      },
+      "training_manifest": {
+        "filename": "run_manifest.json",
+        "size_bytes": 2429,
+        "sha256": "7191525b9df9f526236a1628f29501ca6b25b15d1fc7cbe317bcb1f0f46be613"
+      }
+    },
+    {
+      "seed": 20260813,
+      "selected_epoch": 12,
+      "run_dir": "runs/crd_tf_w_v2/formal/crd_tfw_v2_w3_full_6v_film_d6/seed_20260813/20260818_142041_877481",
+      "checkpoint": {
+        "filename": "checkpoint_best_local_rr.pt",
+        "size_bytes": 14892765,
+        "sha256": "1fd1eee75c94f4adaad34318f6be28bf4d9c710c8b517580c49c7d792d7df210"
+      },
+      "config": {
+        "filename": "config.yaml",
+        "size_bytes": 2593,
+        "sha256": "26d2f2e70512d5bbef2c3206591182e2e76986f08ec37daa05e09488fd2e0de2"
+      },
+      "training_manifest": {
+        "filename": "run_manifest.json",
+        "size_bytes": 2429,
+        "sha256": "aed8acecc652ccb6b594d1162df0137b00dfc6b121f47e11a0f592649200b8d4"
+      }
+    }
+  ],
+  "output_contract": {
+    "root": "runs/crd_tf_w_v2/research_test",
+    "evaluation_root_template": "runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_<seed>",
+    "summary_root": "runs/crd_tf_w_v2/research_test/summary",
+    "overwrite_allowed": false,
+    "resume_by_validated_skip_allowed": true
+  },
+  "constraints": {
+    "checkpoint_reselection_allowed": false,
+    "retraining_allowed": false,
+    "new_training_runs": 0,
+    "ordinary_eval_crd_test_allowed": false,
+    "old_research_test_entry_allowed": false,
+    "samp_id_analysis_allowed": false,
+    "total_score_allowed": false,
+    "d4_evaluation_allowed": false,
+    "w1_w2_evaluation_allowed": false
+  }
+}
