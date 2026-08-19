@@ -2,7 +2,7 @@
 
 日期：2026-08-17
 
-状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂与 P3 D4 的全部 stress/formal 均已完成并核验；W1/W2/D4 不通过严格候选门槛，W3 通过质量门槛但不通过效率门槛。P1/P3 已关闭并只保留 provenance；当前唯一下一步是实现并生成一次 P4 validation summary，P5 与 research-test 仍关闭。**
+状态：**P0、P−1 与 FiLM statistics correction 均已完成并冻结，P2 关闭。P1 三臂与 P3 D4 的全部 stress/formal 均已完成并核验；W1/W2/D4 不通过严格候选门槛，W3 通过质量门槛但不通过效率门槛。P4 专用 summarizer、artifact/hash 审计、严格 eligibility 与描述性 trade-off Pareto 已实现并通过真实 15-run 只读预审；当前唯一下一步是从干净 commit 一次性生成 P4 summary，P5 与 research-test 仍关闭。**
 
 ## 1. 权威性、替代关系与证据边界
 
@@ -409,7 +409,20 @@ P1–P3 完成后生成一次性、不可覆盖的 validation summary：
 
 若质量 Pareto 有多个候选，P5 的单一质量主候选按三-seed mean Local RR 最低者选择；精确相同时依次取 Whole RR 更低、PCC 更高者。若效率 Pareto 有多个候选，P5 的单一效率候选按 measured throughput gain 最大者选择；精确相同时依次取 peak allocated 更低、结构缩减比例更大者。该规则只限制 research-test allowlist，不把其他 Pareto 候选改写为失败。
 
-P4 不新增训练，也不补组合回退。P4 当前关闭。
+P4 不新增训练，也不补组合回退。
+
+### 11.1 P4 实现与 D4 双层报告口径（2026-08-19）
+
+专用 `resp_train/crd/tf_w_v2_p4.py` 与 `scripts/summarize_crd_tf_w_v2.py` 已实现。summarizer 从 candidate/P1/P3/source-cache 四项冻结 hash 开始，逐一复核 W0/W1/W2/W3/D4 共 15 个 seed-level run 的 config、manifest、commit、cache/view/depth contract、80 epochs / 6,400 updates、checkpoint epoch/hash/finite、2,675 行逐 sample direct mean、degeneracy 与资源记录；输出严格限制为 candidate lock 预注册的六个文件，并通过临时目录完成后原子落盘，目标目录存在即拒绝覆盖。
+
+P4 明确分开两层结论：
+
+1. `strict_quality_pool / strict_efficiency_pool` 严格应用第 4 节硬门槛，并唯一控制未来 P5 allowlist；
+2. `descriptive_quality_efficiency_pareto` 只描述非灾难性的资源—质量交换，不得推翻硬门槛。
+
+因此 D4 若同时满足结构/资源收益和 non-catastrophic，但因轻度质量损失超过 `1%` 保护线而不合格，仍会以 `descriptive_noncatastrophic_efficiency_tradeoff=true` 保留。它不会被简化成“无价值失败”，也不会被偷渡为 strict efficiency candidate。W1/W2 继续作为机制结果保留，不因未晋级而删除。
+
+定向 `py_compile` 与 P1–P4、CRD config/model/experiment/training、v1 model/data/formal-config 回归为 `127 passed`。对真实 15-run matrix 的只读预审已通过：严格质量池预期为 W3，严格效率池为空，描述性质量—效率 Pareto 预期为 W3/D4；预审未创建 summary、未读取 research-test、未做 `samp_id` 分析。P4 尚未生成，以上均不替代一次性冻结产物。
 
 ## 12. P5：最小 reused research-test
 
@@ -449,6 +462,12 @@ P5 当前关闭。
 
 ## 14. 当前唯一下一步
 
-P0/P−1/P1/P3 已关闭，P2 不触发，训练预算已用完。当前唯一下一步是实现 P4 专用 summarizer 与冻结 schema 测试，然后从新的干净 commit 一次性生成 `runs/crd_tf_w_v2/p4_validation_summary/`。P4 只读复核既有 W0/W1/W2/W3/D4 validation artifacts，不训练、不重选 checkpoint、不读取 research-test，也不做 `samp_id` 分析。
+P0/P−1/P1/P3 已关闭，P2 不触发，训练预算已用完。P4 implementation 与真实 matrix 只读预审已完成。当前唯一下一步是从新的干净 commit 一次性生成冻结 summary：
 
-P4 尚无已冻结的可执行入口；实现、测试和 clean commit 完成前不得手工构造 summary。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。
+```bash
+git status --short
+./.venv/bin/python scripts/summarize_crd_tf_w_v2.py \
+  --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json
+```
+
+首行必须无输出。命令只读既有 validation artifacts，不训练、不重选 checkpoint、不读取 research-test，也不做 `samp_id` 分析；固定输出目录存在即拒绝覆盖。P5 仍须在 P4 allowlist 冻结后另行获得用户明确授权。

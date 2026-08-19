@@ -1134,6 +1134,20 @@ git status --short
 
 D4 参数/throughput/peak-allocated 改善 `25.9973% / 24.8925% / 22.5204%`，但 Local RR/trajectory 相对 W0 恶化 `1.8308% / 1.2847%`，超过效率池质量保护线，因此不进入质量或效率池。P3 已关闭；当前只开放 P4 summarizer 实现，尚无可执行的冻结 summary 命令。P4/P5 与 research-test 继续关闭。
 
+### CRD-TF-W v2 P4 validation summary
+
+P4 summarizer 已实现并通过 `127 passed`；真实 15-run 只读预审为：严格质量池 W3、严格效率池为空、描述性质量—效率 Pareto 为 W3/D4。D4 的描述性 trade-off 会被保留，但不会越过硬门槛进入 P5 allowlist。
+
+提交实现并确认工作树干净后，当前唯一允许的 P4 命令为：
+
+```bash
+git status --short
+./.venv/bin/python scripts/summarize_crd_tf_w_v2.py \
+  --candidate-lock docs/experiments/crd_tf_w_v2_candidate_lock_20260817.json
+```
+
+首行必须无输出。固定输出为 `runs/crd_tf_w_v2/p4_validation_summary/`，目录存在即拒绝覆盖；命令只读 validation artifacts，不训练、不读取 research-test、不重选 checkpoint、不做 `samp_id` 分析。完成并冻结前不得运行 P5。
+
 ## 固定呼吸带传统基线
 
 `F0_fixed_band_bcg` 直接使用当前数据集的
