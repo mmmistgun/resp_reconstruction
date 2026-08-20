@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -19,7 +20,15 @@ def main() -> None:
     parser.add_argument("--candidate-id", required=True, choices=list(EXPECTED_CANDIDATES))
     parser.add_argument("--seed", required=True, type=int, choices=list(FORMAL_SEEDS))
     args = parser.parse_args()
-    command = "env -u LD_LIBRARY_PATH -u LD_PRELOAD " + shlex.join([sys.executable, *sys.argv])
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    visible_assignment = (
+        f"CUDA_VISIBLE_DEVICES={shlex.quote(visible)} " if visible is not None else ""
+    )
+    command = (
+        "env -u LD_LIBRARY_PATH -u LD_PRELOAD "
+        + visible_assignment
+        + shlex.join([sys.executable, *sys.argv])
+    )
     receipt = run_formal_training(
         plan_path=args.plan,
         candidate_id=args.candidate_id,

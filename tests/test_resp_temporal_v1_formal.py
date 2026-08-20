@@ -40,6 +40,9 @@ def test_frozen_formal_plan_is_exact_and_has_15_run_matrix() -> None:
     assert tuple(row["candidate_id"] for row in plan.raw["candidates"]) == EXPECTED_CANDIDATES
     assert plan.raw["seeds"] == [20260811, 20260812, 20260813]
     assert len(plan.raw["candidates"]) * len(plan.raw["seeds"]) == 15
+    assert [group["group_id"] for group in plan.raw["execution_groups"]] == ["gpu_0", "gpu_1"]
+    assert [len(group["runs"]) for group in plan.raw["execution_groups"]] == [8, 7]
+    assert [str(group["cuda_visible_devices"]) for group in plan.raw["execution_groups"]] == ["0", "1"]
     assert plan.raw["data"]["expected_train_windows"] == 10141
     assert plan.raw["data"]["expected_validation_windows"] == 2675
     assert plan.raw["authorization"]["research_test_evaluation"] is False
@@ -64,6 +67,17 @@ def test_formal_plan_rejects_contract_drift(section: str, key: str, value: objec
         validate_formal_plan(raw)
 
 
+def test_formal_plan_rejects_dual_gpu_group_drift_or_duplicate_identity() -> None:
+    raw = copy.deepcopy(load_formal_plan().raw)
+    raw["execution_groups"][0]["cuda_visible_devices"] = "1"
+    with pytest.raises(ValueError, match="dual-GPU"):
+        validate_formal_plan(raw)
+    raw = copy.deepcopy(load_formal_plan().raw)
+    raw["execution_groups"][1]["runs"][0] = copy.deepcopy(raw["execution_groups"][0]["runs"][0])
+    with pytest.raises(ValueError, match="dual-GPU|15-run"):
+        validate_formal_plan(raw)
+
+
 def test_derive_formal_config_closes_all_15_identities_without_data_or_gpu() -> None:
     plan = load_formal_plan()
     observed = []
@@ -82,6 +96,9 @@ def test_derive_formal_config_closes_all_15_identities_without_data_or_gpu() -> 
             assert cfg.protocol.formal_training_enabled is True
             assert cfg.protocol.validation_evaluation_enabled is True
             assert cfg.protocol.research_test_enabled is False
+            group = formal.formal_execution_group(plan, candidate_id, seed)
+            assert cfg.formal.execution_group.group_id == group["group_id"]
+            assert str(cfg.formal.execution_group.cuda_visible_devices) == group["cuda_visible_devices"]
             assert str(cfg.outputs.run_root).endswith(f"{candidate_id}/seed_{seed}")
     assert len(observed) == 15
     with pytest.raises(ValueError, match="allowlist"):
@@ -178,6 +195,29 @@ def test_existing_output_is_rejected_before_provenance_or_cuda(monkeypatch, tmp_
         )
 
 
+def test_dual_gpu_group_rejects_missing_or_wrong_visibility_before_provenance(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(formal, "formal_run_dir", lambda *_: tmp_path / "new_run")
+    monkeypatch.setattr(
+        formal,
+        "_verify_formal_provenance",
+        lambda *_: (_ for _ in ()).throw(AssertionError("must not reach provenance")),
+    )
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    with pytest.raises(RuntimeError, match="CUDA_VISIBLE_DEVICES"):
+        preflight_formal_run(
+            plan_path=formal.DEFAULT_PLAN_PATH,
+            candidate_id=EXPECTED_CANDIDATES[0],
+            seed=20260811,
+        )
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1")
+    with pytest.raises(RuntimeError, match="expected='0'.*actual='1'"):
+        preflight_formal_run(
+            plan_path=formal.DEFAULT_PLAN_PATH,
+            candidate_id=EXPECTED_CANDIDATES[0],
+            seed=20260811,
+        )
+
+
 def test_failure_keeps_fail_closed_lifecycle_without_data_or_gpu(monkeypatch, tmp_path: Path) -> None:
     plan = load_formal_plan()
     cfg, record = derive_formal_config(plan, EXPECTED_CANDIDATES[0], 20260811)
@@ -189,7 +229,13 @@ def test_failure_keeps_fail_closed_lifecycle_without_data_or_gpu(monkeypatch, tm
         cfg=cfg,
         run_dir=run_dir,
         git_commit="a" * 40,
-        gpu_device_info={"device": "cuda:0"},
+        gpu_device_info={
+            "device": "cuda:0",
+            "execution_group_id": "gpu_0",
+            "cuda_visible_devices": "0",
+            "logical_device_after_visibility_filter": "cuda:0",
+        },
+        execution_group={"group_id": "gpu_0", "cuda_visible_devices": "0", "logical_device": "cuda:0"},
     )
     monkeypatch.setattr(formal, "preflight_formal_run", lambda **_: spec)
     monkeypatch.setattr(formal, "save_config", lambda *_: (_ for _ in ()).throw(RuntimeError("stop")))
@@ -256,10 +302,17 @@ def _valid_receipt() -> dict:
             "cwd": str(formal.REPO_ROOT),
             "git_commit": "a" * 40,
             "git_dirty": False,
-            "plan_path": "configs/resp_temporal_v1/formal_v1.yaml",
+            "plan_path": "configs/resp_temporal_v1/formal_dual_gpu_v2.yaml",
             "plan_sha256": FROZEN_PLAN_SHA256,
+            "execution_group_id": "gpu_0",
+            "cuda_visible_devices": "0",
             "dependencies": {},
-            "device": {"device": "cuda:0"},
+            "device": {
+                "device": "cuda:0",
+                "execution_group_id": "gpu_0",
+                "cuda_visible_devices": "0",
+                "logical_device_after_visibility_filter": "cuda:0",
+            },
         },
         "data": {
             "train_windows": 10141,
@@ -343,6 +396,10 @@ def test_formal_receipt_schema_closes_access_counts_finite_and_hashes() -> None:
     bad = _valid_receipt()
     bad["counts"]["validation_metrics_rows"] = 2674
     with pytest.raises(ValueError, match="count"):
+        validate_formal_receipt(bad)
+    bad = _valid_receipt()
+    bad["execution"]["cuda_visible_devices"] = "1"
+    with pytest.raises(ValueError, match="dual-GPU"):
         validate_formal_receipt(bad)
 
 

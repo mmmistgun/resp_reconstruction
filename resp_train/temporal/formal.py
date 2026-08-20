@@ -37,17 +37,47 @@ from resp_train.utils.run import save_config, set_seed
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PLAN_PATH = REPO_ROOT / "configs/resp_temporal_v1/formal_v1.yaml"
-PLAN_SCHEMA_VERSION = "rtm-v1-formal-plan-v1"
+DEFAULT_PLAN_PATH = REPO_ROOT / "configs/resp_temporal_v1/formal_dual_gpu_v2.yaml"
+PLAN_SCHEMA_VERSION = "rtm-v1-formal-plan-v2"
 FORMAL_PROTOCOL_ID = "resp-temporal-v1-formal-validation-20260820"
-FORMAL_RECEIPT_SCHEMA_VERSION = "rtm-v1-formal-run-receipt-v1"
-FROZEN_PLAN_SHA256 = "fb1d4652c3e65bbcb1eb4b4b770e96315dbef04011cdae8e66391a33265d0697"
+FORMAL_CORRECTION_ID = "resp-temporal-v1-formal-dual-gpu-20260820"
+FORMAL_RECEIPT_SCHEMA_VERSION = "rtm-v1-formal-run-receipt-v2"
+FROZEN_PLAN_SHA256 = "c6594d160a3f7ecb1f39a4e036996491dd6f1919aedeea28949ff8533a1dd8c3"
 EXPECTED_CANDIDATES = (
     "rtm_v1_t0_locked_stem_head",
     "rtm_v1_tcn_d9_h384",
     "rtm_v1_bimamba2_d96_l6",
     "rtm_v1_bilstm_h96_l2",
     "rtm_v1_multiscale_10_2_1_h384",
+)
+EXPECTED_EXECUTION_GROUPS = (
+    (
+        "gpu_0",
+        "0",
+        (
+            ("rtm_v1_t0_locked_stem_head", 20260811),
+            ("rtm_v1_t0_locked_stem_head", 20260813),
+            ("rtm_v1_tcn_d9_h384", 20260812),
+            ("rtm_v1_tcn_d9_h384", 20260813),
+            ("rtm_v1_bimamba2_d96_l6", 20260811),
+            ("rtm_v1_bimamba2_d96_l6", 20260813),
+            ("rtm_v1_bilstm_h96_l2", 20260812),
+            ("rtm_v1_multiscale_10_2_1_h384", 20260811),
+        ),
+    ),
+    (
+        "gpu_1",
+        "1",
+        (
+            ("rtm_v1_t0_locked_stem_head", 20260812),
+            ("rtm_v1_tcn_d9_h384", 20260811),
+            ("rtm_v1_bimamba2_d96_l6", 20260812),
+            ("rtm_v1_bilstm_h96_l2", 20260811),
+            ("rtm_v1_bilstm_h96_l2", 20260813),
+            ("rtm_v1_multiscale_10_2_1_h384", 20260812),
+            ("rtm_v1_multiscale_10_2_1_h384", 20260813),
+        ),
+    ),
 )
 
 
@@ -67,6 +97,7 @@ class FormalRunSpec:
     run_dir: Path
     git_commit: str
     gpu_device_info: dict[str, Any]
+    execution_group: dict[str, Any]
 
 
 def _require_exact_keys(value: Mapping[str, Any], expected: set[str], context: str) -> None:
@@ -93,12 +124,14 @@ def validate_formal_plan(raw: Mapping[str, Any]) -> None:
         {
             "schema_version",
             "protocol_id",
+            "correction_id",
             "role",
             "evidence_label",
             "authorization",
             "provenance",
             "candidates",
             "seeds",
+            "execution_groups",
             "data",
             "training",
             "selector",
@@ -107,7 +140,11 @@ def validate_formal_plan(raw: Mapping[str, Any]) -> None:
         },
         "formal plan",
     )
-    if raw["schema_version"] != PLAN_SCHEMA_VERSION or raw["protocol_id"] != FORMAL_PROTOCOL_ID:
+    if (
+        raw["schema_version"] != PLAN_SCHEMA_VERSION
+        or raw["protocol_id"] != FORMAL_PROTOCOL_ID
+        or raw["correction_id"] != FORMAL_CORRECTION_ID
+    ):
         raise ValueError("formal plan schema/protocol 不匹配")
     if raw["role"] != "formal_training" or raw["evidence_label"] != "validation-development evidence":
         raise ValueError("formal plan evidence role 漂移")
@@ -126,6 +163,12 @@ def validate_formal_plan(raw: Mapping[str, Any]) -> None:
         {
             "formal_protocol_path",
             "formal_protocol_sha256",
+            "dual_gpu_correction_path",
+            "dual_gpu_correction_sha256",
+            "superseded_plan_path",
+            "superseded_plan_sha256",
+            "superseded_implementation_receipt_path",
+            "superseded_implementation_receipt_sha256",
             "signal_substrate_lock_path",
             "signal_substrate_lock_sha256",
             "candidate_lock_path",
@@ -147,6 +190,12 @@ def validate_formal_plan(raw: Mapping[str, Any]) -> None:
     if provenance != {
         "formal_protocol_path": "docs/experiments/resp_temporal_v1_formal_protocol_20260820.md",
         "formal_protocol_sha256": "208b8e0f80c4a2bd426e215567702e41ee78f768e513fdb65266be3d8757c05d",
+        "dual_gpu_correction_path": "docs/experiments/resp_temporal_v1_formal_dual_gpu_correction_20260820.md",
+        "dual_gpu_correction_sha256": "1c2cad1c5cc401776d894a0bb039e0ad75a8cd3030f66ea70b48817f2de1b84a",
+        "superseded_plan_path": "configs/resp_temporal_v1/formal_v1.yaml",
+        "superseded_plan_sha256": "fb1d4652c3e65bbcb1eb4b4b770e96315dbef04011cdae8e66391a33265d0697",
+        "superseded_implementation_receipt_path": "docs/experiments/resp_temporal_v1_formal_implementation_receipt_20260820.json",
+        "superseded_implementation_receipt_sha256": "0d2dae3fea51f18821a47a11e69d8a8b2ca765898c3d84c228d2fedffcaff0fa",
         "signal_substrate_lock_path": "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json",
         "signal_substrate_lock_sha256": "11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69",
         "candidate_lock_path": "docs/experiments/resp_temporal_v1_candidate_lock_20260820.json",
@@ -199,6 +248,30 @@ def validate_formal_plan(raw: Mapping[str, Any]) -> None:
         raise ValueError("formal candidate identity/order/hash 漂移")
     if list(raw["seeds"]) != list(FORMAL_SEEDS):
         raise ValueError("formal seeds 漂移")
+    for group in raw["execution_groups"]:
+        _require_exact_keys(
+            group,
+            {"group_id", "cuda_visible_devices", "logical_device", "runs"},
+            "formal execution group",
+        )
+        for run in group["runs"]:
+            _require_exact_keys(run, {"candidate_id", "seed"}, "formal execution group run")
+    observed_groups = tuple(
+        (
+            group["group_id"],
+            str(group["cuda_visible_devices"]),
+            tuple((run["candidate_id"], int(run["seed"])) for run in group["runs"]),
+        )
+        for group in raw["execution_groups"]
+    )
+    if observed_groups != EXPECTED_EXECUTION_GROUPS or any(
+        group.get("logical_device") != "cuda:0" for group in raw["execution_groups"]
+    ):
+        raise ValueError("formal dual-GPU execution group identity/order漂移")
+    flattened = [identity for _, _, identities in observed_groups for identity in identities]
+    expected_matrix = {(candidate_id, seed) for candidate_id in EXPECTED_CANDIDATES for seed in FORMAL_SEEDS}
+    if len(flattened) != 15 or len(set(flattened)) != 15 or set(flattened) != expected_matrix:
+        raise ValueError("formal dual-GPU groups未恰好覆盖15-run矩阵")
     if raw["data"] != {
         "shared_index_metadata_read": True,
         "signal_splits": ["train", "val"],
@@ -283,6 +356,34 @@ def formal_run_dir(plan: FormalPlan, candidate_id: str, seed: int) -> Path:
     return _repo_path(plan.raw["output"]["root"], context="formal output root") / candidate_id / f"seed_{int(seed)}"
 
 
+def formal_execution_group(plan: FormalPlan, candidate_id: str, seed: int) -> dict[str, Any]:
+    identity = (str(candidate_id), int(seed))
+    matches = [
+        group
+        for group in plan.raw["execution_groups"]
+        if identity in {(run["candidate_id"], int(run["seed"])) for run in group["runs"]}
+    ]
+    if len(matches) != 1:
+        raise ValueError("candidate/seed未唯一映射到formal dual-GPU execution group")
+    return {
+        "group_id": str(matches[0]["group_id"]),
+        "cuda_visible_devices": str(matches[0]["cuda_visible_devices"]),
+        "logical_device": str(matches[0]["logical_device"]),
+    }
+
+
+def _expected_execution_group(candidate_id: str, seed: int) -> dict[str, str]:
+    identity = (str(candidate_id), int(seed))
+    matches = [
+        {"group_id": group_id, "cuda_visible_devices": visible, "logical_device": "cuda:0"}
+        for group_id, visible, identities in EXPECTED_EXECUTION_GROUPS
+        if identity in identities
+    ]
+    if len(matches) != 1:
+        raise ValueError("formal receipt identity未唯一映射到冻结execution group")
+    return matches[0]
+
+
 def derive_formal_config(plan: FormalPlan, candidate_id: str, seed: int) -> tuple[DictConfig, dict[str, Any]]:
     if candidate_id not in EXPECTED_CANDIDATES or int(seed) not in FORMAL_SEEDS:
         raise ValueError("candidate/seed不属于RTM-v1 formal 15-run allowlist")
@@ -318,6 +419,7 @@ def derive_formal_config(plan: FormalPlan, candidate_id: str, seed: int) -> tupl
             "selector": plan.raw["selector"],
             "allowed_splits": ["train", "val"],
             "research_test_allowed": False,
+            "execution_group": formal_execution_group(plan, candidate_id, seed),
         }
     )
     return cfg, dict(record)
@@ -346,6 +448,9 @@ def _verify_formal_provenance(plan: FormalPlan) -> tuple[str, dict[str, Any]]:
     verified: dict[str, str] = {}
     for prefix in (
         "formal_protocol",
+        "dual_gpu_correction",
+        "superseded_plan",
+        "superseded_implementation_receipt",
         "signal_substrate_lock",
         "candidate_lock",
         "cpu_implementation_receipt",
@@ -396,12 +501,26 @@ def preflight_formal_run(
     run_dir = formal_run_dir(plan, candidate_id, seed)
     if run_dir.exists():
         raise FileExistsError(f"formal run目录禁止覆盖/resume: {run_dir}")
+    execution_group = formal_execution_group(plan, candidate_id, seed)
+    actual_visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    expected_visible = execution_group["cuda_visible_devices"]
+    if actual_visible != expected_visible:
+        raise RuntimeError(
+            "formal dual-GPU group要求单一CUDA_VISIBLE_DEVICES精确匹配: "
+            f"expected={expected_visible!r}, actual={actual_visible!r}"
+        )
     commit, _ = _verify_formal_provenance(plan)
     problems = check_crd_dependencies()
     if problems:
         raise RuntimeError("; ".join(problems))
     gpu_cfg = load_gpu_engineering_config()
     _, device_info = _cuda_identity(gpu_cfg.raw)
+    device_info = {
+        **device_info,
+        "execution_group_id": execution_group["group_id"],
+        "cuda_visible_devices": actual_visible,
+        "logical_device_after_visibility_filter": str(cfg.training.device),
+    }
     return FormalRunSpec(
         plan=plan,
         candidate_record=record,
@@ -410,6 +529,7 @@ def preflight_formal_run(
         run_dir=run_dir,
         git_commit=commit,
         gpu_device_info=device_info,
+        execution_group=execution_group,
     )
 
 
@@ -659,6 +779,8 @@ def validate_formal_receipt(receipt: Mapping[str, Any]) -> None:
             "git_dirty",
             "plan_path",
             "plan_sha256",
+            "execution_group_id",
+            "cuda_visible_devices",
             "dependencies",
             "device",
         },
@@ -669,10 +791,19 @@ def validate_formal_receipt(receipt: Mapping[str, Any]) -> None:
         or execution["cwd"] != str(REPO_ROOT)
         or not _is_lower_hex(execution["git_commit"], length=40)
         or bool(execution["git_dirty"])
-        or execution["plan_path"] != "configs/resp_temporal_v1/formal_v1.yaml"
+        or execution["plan_path"] != "configs/resp_temporal_v1/formal_dual_gpu_v2.yaml"
         or execution["plan_sha256"] != FROZEN_PLAN_SHA256
     ):
         raise ValueError("formal receipt Git/plan provenance无效")
+    expected_group = _expected_execution_group(receipt["candidate_id"], int(receipt["seed"]))
+    if (
+        execution["execution_group_id"] != expected_group["group_id"]
+        or str(execution["cuda_visible_devices"]) != expected_group["cuda_visible_devices"]
+        or execution["device"].get("execution_group_id") != expected_group["group_id"]
+        or str(execution["device"].get("cuda_visible_devices")) != expected_group["cuda_visible_devices"]
+        or execution["device"].get("logical_device_after_visibility_filter") != "cuda:0"
+    ):
+        raise ValueError("formal receipt dual-GPU execution group provenance无效")
     data = receipt["data"]
     _require_exact_keys(
         data,
@@ -900,6 +1031,8 @@ def _write_complete_receipt(
             "git_dirty": False,
             "plan_path": str(spec.plan.path.relative_to(REPO_ROOT)),
             "plan_sha256": spec.plan.sha256,
+            "execution_group_id": spec.execution_group["group_id"],
+            "cuda_visible_devices": spec.execution_group["cuda_visible_devices"],
             "dependencies": _dependency_versions(),
             "device": spec.gpu_device_info,
         },
@@ -970,6 +1103,8 @@ def run_formal_training(
         "protocol_id": FORMAL_PROTOCOL_ID,
         "candidate_id": candidate_id,
         "seed": int(seed),
+        "execution_group_id": spec.execution_group["group_id"],
+        "cuda_visible_devices": spec.execution_group["cuda_visible_devices"],
         "status": "running",
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "completed_utc": None,
@@ -994,6 +1129,7 @@ def run_formal_training(
                 "git_dirty": False,
                 "candidate_config_sha256": spec.candidate_record["config_sha256"],
                 "plan_sha256": spec.plan.sha256,
+                "execution_group": spec.execution_group,
                 "gpu_engineering_lock_sha256": spec.plan.raw["provenance"]["gpu_engineering_lock_sha256"],
             },
         )

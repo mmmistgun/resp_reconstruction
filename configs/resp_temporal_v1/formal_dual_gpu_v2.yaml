@@ -1,0 +1,137 @@
+schema_version: rtm-v1-formal-plan-v2
+protocol_id: resp-temporal-v1-formal-validation-20260820
+correction_id: resp-temporal-v1-formal-dual-gpu-20260820
+role: formal_training
+evidence_label: validation-development evidence
+
+authorization:
+  formal_training_implementation: true
+  user_manual_formal_execution: true
+  codex_formal_execution: false
+  validation_within_training: true
+  standalone_validation_evaluation: false
+  research_test_evaluation: false
+
+provenance:
+  formal_protocol_path: docs/experiments/resp_temporal_v1_formal_protocol_20260820.md
+  formal_protocol_sha256: 208b8e0f80c4a2bd426e215567702e41ee78f768e513fdb65266be3d8757c05d
+  dual_gpu_correction_path: docs/experiments/resp_temporal_v1_formal_dual_gpu_correction_20260820.md
+  dual_gpu_correction_sha256: 1c2cad1c5cc401776d894a0bb039e0ad75a8cd3030f66ea70b48817f2de1b84a
+  superseded_plan_path: configs/resp_temporal_v1/formal_v1.yaml
+  superseded_plan_sha256: fb1d4652c3e65bbcb1eb4b4b770e96315dbef04011cdae8e66391a33265d0697
+  superseded_implementation_receipt_path: docs/experiments/resp_temporal_v1_formal_implementation_receipt_20260820.json
+  superseded_implementation_receipt_sha256: 0d2dae3fea51f18821a47a11e69d8a8b2ca765898c3d84c228d2fedffcaff0fa
+  signal_substrate_lock_path: docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json
+  signal_substrate_lock_sha256: 11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69
+  candidate_lock_path: docs/experiments/resp_temporal_v1_candidate_lock_20260820.json
+  candidate_lock_sha256: b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b
+  cpu_implementation_receipt_path: docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json
+  cpu_implementation_receipt_sha256: 6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872
+  gpu_engineering_config_path: configs/resp_temporal_v1/gpu_engineering_v2.yaml
+  gpu_engineering_config_sha256: 081fbb0e350997e97838faa5a54478d2a81041dfc1769336573a3a0d267eb8f0
+  gpu_engineering_lock_path: docs/experiments/resp_temporal_v1_gpu_engineering_lock_20260820.json
+  gpu_engineering_lock_sha256: 5632b0e404f943e61c646a8ddcf1761c2391884412915ef1d79aa342f8bc0183
+  gpu_execution_receipt_path: runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/access_receipt.json
+  gpu_execution_receipt_sha256: c8d34d5f1a9f944af58945f74110b0c9ff74e15696c7a7f240465ce4c83de38a
+  gpu_execution_manifest_path: runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/artifact_manifest.json
+  gpu_execution_manifest_sha256: e90df905b2708853a761328995c4fd0c6db1e2564b1bb16eb9328ed709f25812
+  require_clean_git: true
+
+candidates:
+  - candidate_id: rtm_v1_t0_locked_stem_head
+    config_path: configs/resp_temporal_v1/rtm_v1_t0_locked_stem_head.yaml
+    config_sha256: eb7cab872305459f62dac7eb0eb15e699690ea03e5ff7d33b581666ed7a31be6
+  - candidate_id: rtm_v1_tcn_d9_h384
+    config_path: configs/resp_temporal_v1/rtm_v1_tcn_d9_h384.yaml
+    config_sha256: b838396563580bfe19d211bc9cfd86ad09228a1f72a28084c25e003b67077519
+  - candidate_id: rtm_v1_bimamba2_d96_l6
+    config_path: configs/resp_temporal_v1/rtm_v1_bimamba2_d96_l6.yaml
+    config_sha256: 18c98c28240fc5f983feef301e174b13b3be5829f7cb723acd032e412e7917f5
+  - candidate_id: rtm_v1_bilstm_h96_l2
+    config_path: configs/resp_temporal_v1/rtm_v1_bilstm_h96_l2.yaml
+    config_sha256: 05dde416538ea0920f9f4f01b6462baf8e95575551ad1a71c2089315d17b9bb7
+  - candidate_id: rtm_v1_multiscale_10_2_1_h384
+    config_path: configs/resp_temporal_v1/rtm_v1_multiscale_10_2_1_h384.yaml
+    config_sha256: cdef3bd3ac3dd7a0e259d8182bfe7d4aa91944cc5391b945835bfe29bf5a7968
+
+seeds: [20260811, 20260812, 20260813]
+
+execution_groups:
+  - group_id: gpu_0
+    cuda_visible_devices: "0"
+    logical_device: cuda:0
+    runs:
+      - {candidate_id: rtm_v1_t0_locked_stem_head, seed: 20260811}
+      - {candidate_id: rtm_v1_t0_locked_stem_head, seed: 20260813}
+      - {candidate_id: rtm_v1_tcn_d9_h384, seed: 20260812}
+      - {candidate_id: rtm_v1_tcn_d9_h384, seed: 20260813}
+      - {candidate_id: rtm_v1_bimamba2_d96_l6, seed: 20260811}
+      - {candidate_id: rtm_v1_bimamba2_d96_l6, seed: 20260813}
+      - {candidate_id: rtm_v1_bilstm_h96_l2, seed: 20260812}
+      - {candidate_id: rtm_v1_multiscale_10_2_1_h384, seed: 20260811}
+  - group_id: gpu_1
+    cuda_visible_devices: "1"
+    logical_device: cuda:0
+    runs:
+      - {candidate_id: rtm_v1_t0_locked_stem_head, seed: 20260812}
+      - {candidate_id: rtm_v1_tcn_d9_h384, seed: 20260811}
+      - {candidate_id: rtm_v1_bimamba2_d96_l6, seed: 20260812}
+      - {candidate_id: rtm_v1_bilstm_h96_l2, seed: 20260811}
+      - {candidate_id: rtm_v1_bilstm_h96_l2, seed: 20260813}
+      - {candidate_id: rtm_v1_multiscale_10_2_1_h384, seed: 20260812}
+      - {candidate_id: rtm_v1_multiscale_10_2_1_h384, seed: 20260813}
+
+data:
+  shared_index_metadata_read: true
+  signal_splits: [train, val]
+  expected_train_windows: 10141
+  expected_validation_windows: 2675
+  expected_train_samp_ids: 32
+  expected_validation_samp_ids: 7
+  expected_train_batches: 80
+  expected_validation_batches: 21
+  expected_train_row_ids_sha256: f290e569140a2ff7745cf1a5cfa6a4da943644d76498c9b85517d3ae0702c45e
+  expected_validation_row_ids_sha256: b68a51b101bb80033c4de18c9c21cdfbb8924d1bfe134330f047617cf3b0915a
+
+training:
+  epochs: 80
+  expected_updates_per_epoch: 80
+  expected_total_updates: 6400
+  physical_batch_size: 128
+  accumulation_steps: 1
+  effective_batch_size: 128
+  device: cuda:0
+  optimizer: adamw
+  max_learning_rate: 3.0e-4
+  min_learning_rate: 3.0e-5
+  warmup_fraction: 0.05
+  lr_schedule: step_exact_warmup_cosine
+  adam_betas: [0.9, 0.999]
+  adam_eps: 1.0e-8
+  weight_decay: 1.0e-4
+  grad_clip_norm: 1.0
+  use_amp: true
+  amp_dtype: bfloat16
+  allow_tf32: false
+  cudnn_benchmark: false
+  early_stopping: false
+  resume: false
+  drop_last: false
+
+selector:
+  split: validation
+  metric: local_rr_mae_full_split_sample_direct_mean
+  comparison: strict_less_than
+  tie_updates_checkpoint: false
+  checkpoint_filename: checkpoint_best_local_rr.pt
+
+access:
+  allowed_splits: [train, val]
+  research_test_allowed: false
+  checkpoint_input_allowed: false
+  own_best_checkpoint_reload_after_training: true
+
+output:
+  root: runs/resp_temporal_v1/formal
+  allow_overwrite: false
+  allow_resume: false
