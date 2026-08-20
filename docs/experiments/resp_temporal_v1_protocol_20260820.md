@@ -248,7 +248,7 @@ Locked multiscale 对共同 10-Hz latent 构造三个 feature 分支：
 - 若要研究较小容量，必须另立 capacity-sensitivity control，并经用户再次确认；
 - 工程失败不得写成家族能力负证据。
 
-Signal audit receipt 与双 lock 已冻结：signal-substrate lock SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`，candidate lock SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。Exact CPU implementation commit=`6af99466d1ca8861e81dbfa97081f563863c7869`，receipt=`docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json`、SHA-256=`9ac2ead15b123ca87ec0539633222e21ffcbaa7e6938b09c480bf3967e374555`。GPU engineering receipt 尚不存在，因此全部 formal training 继续关闭。
+Signal audit receipt 与双 lock 已冻结：signal-substrate lock SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`，candidate lock SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。Exact CPU implementation commit=`61988b28fe41a429761cc531f1e035141673580d`，receipt=`docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json`、SHA-256=`6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872`。GPU engineering receipt 尚不存在，因此全部 formal training 继续关闭。
 
 ## 8. 最小实验矩阵
 

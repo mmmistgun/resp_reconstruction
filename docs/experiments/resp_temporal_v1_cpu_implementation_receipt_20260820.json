@@ -4,7 +4,7 @@
   "protocol_id": "resp-temporal-v1-validation-20260820",
   "created_date": "2026-08-20",
   "status": "exact_cpu_implementation_verified_gpu_engineering_not_authorized",
-  "implementation_commit": "6af99466d1ca8861e81dbfa97081f563863c7869",
+  "implementation_commit": "61988b28fe41a429761cc531f1e035141673580d",
   "source_locks": {
     "signal_substrate": {
       "path": "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json",
