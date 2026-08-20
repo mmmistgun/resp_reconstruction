@@ -2,7 +2,7 @@
 
 日期：2026-08-20
 
-状态：**完整 train-only signal audit 已验收并关闭，signal-substrate 与五项 scientific candidate 已获用户确认并冻结；exact CPU substrate/model implementation 与轻量确定性测试已完成。GPU engineering、formal training、validation summary 和 research-test 均未开放。旧 Full/Compact 继续仅作 implementation provenance，未被资源规则升格。**
+状态：**完整 train-only signal audit、signal/candidate lock 与exact CPU implementation均已关闭；用户已授权GPU engineering harness，实现与轻量CPU测试已完成，实际GPU benchmark等待用户手动执行。Formal training、validation summary和research-test仍未开放。旧Full/Compact继续仅作implementation provenance。**
 
 ## 1. 权威性、独立命名与当前边界
 
@@ -248,7 +248,7 @@ Locked multiscale 对共同 10-Hz latent 构造三个 feature 分支：
 - 若要研究较小容量，必须另立 capacity-sensitivity control，并经用户再次确认；
 - 工程失败不得写成家族能力负证据。
 
-Signal audit receipt 与双 lock 已冻结：signal-substrate lock SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`，candidate lock SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。Exact CPU implementation commit=`61988b28fe41a429761cc531f1e035141673580d`，receipt=`docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json`、SHA-256=`6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872`。GPU engineering receipt 尚不存在，因此全部 formal training 继续关闭。
+Signal audit receipt 与双 lock 已冻结：signal-substrate lock SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`，candidate lock SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。Exact CPU implementation commit=`61988b28fe41a429761cc531f1e035141673580d`，receipt SHA-256=`6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872`。GPU engineering harness commit=`146fb678522a71cc27571727d720685b42d3d5c6`，implementation receipt=`docs/experiments/resp_temporal_v1_gpu_engineering_implementation_receipt_20260820.json`、SHA-256=`2f27a6582d71036e8480dc839dc563673a93551c32ba38e5d1ce302e6957fdfe`；实际GPU execution receipt尚不存在，因此全部formal training继续关闭。
 
 ## 8. 最小实验矩阵
 
@@ -321,14 +321,15 @@ Tolerance-aware materiality 固定为：
 - fixed-filter 对 audit operator 的float64数值等价、可微性、参数/shape/感受野、五项公共 state tensor identity、invalid config 与非有限输入定向测试；
 - 配置固定 `gpu_engineering_enabled=false / formal_training_enabled=false / validation_evaluation_enabled=false / research_test_enabled=false`；`resource_lock_required=true` 只阻止越阶段运行，不表示资源决定候选；
 - 完整 train-only signal audit、冻结 receipt/manifest/summary 与全部 hash/access/finite 验收；
-- 用户确认的 signal-substrate lock、五项 scientific candidate lock，以及 exact CPU implementation receipt。
+- 用户确认的 signal-substrate lock、五项 scientific candidate lock，以及 exact CPU implementation receipt；
+- `docs/experiments/resp_temporal_v1_gpu_engineering_protocol_20260820.md`、冻结synthetic benchmark config、fail-closed harness、严格receipt/manifest schema与GPU engineering implementation receipt。
 
 当前明确未建立：
 
 - train/eval CLI；
-- GPU engineering benchmark receipt；
+- 用户手动运行后生成的GPU engineering execution receipt；
 - formal config/runner/preflight；
 - validation summary；
 - research-test cache、allowlist 或 evaluator。
 
-Exact CPU implementation 已关闭。下一阶段只能在用户另行明确授权后开展统一 GPU engineering；该阶段只能登记执行可行性与工程成本，不得按参数、显存、吞吐或 wall time 改候选。GPU receipt 登记到主协议前不得开放 formal training，formal 结果完成后也不自动开放 research-test。
+GPU engineering harness已关闭并允许用户按冻结命令手动执行。该阶段只登记执行可行性与工程成本，不得按参数、显存、吞吐或wall time改候选。用户返回完整execution receipt/manifest/hash并完成GPU engineering lock前不得开放formal training；formal结果完成后也不自动开放research-test。

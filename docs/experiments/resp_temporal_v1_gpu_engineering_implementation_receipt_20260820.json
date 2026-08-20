@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "receipt_id": "resp-temporal-v1-gpu-engineering-implementation-20260820",
+  "protocol_id": "resp-temporal-v1-gpu-engineering-20260820",
+  "created_date": "2026-08-20",
+  "status": "gpu_engineering_harness_verified_execution_pending_user",
+  "implementation_commit": "146fb678522a71cc27571727d720685b42d3d5c6",
+  "source_provenance": {
+    "cpu_implementation_receipt": {
+      "path": "docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json",
+      "sha256": "6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872"
+    },
+    "gpu_engineering_protocol": {
+      "path": "docs/experiments/resp_temporal_v1_gpu_engineering_protocol_20260820.md",
+      "sha256": "7b1b946564989b4d3e8b7244d475349a4efe0ecefb023d1df5a53a6d5d5669fa"
+    },
+    "gpu_engineering_config": {
+      "path": "configs/resp_temporal_v1/gpu_engineering_v1.yaml",
+      "sha256": "7ec9c26481a4369e7fea56a5c9c14f2bae1167423365466ce7ce4325bec35300"
+    }
+  },
+  "harness_contract": {
+    "candidate_count": 5,
+    "candidate_order": [
+      "rtm_v1_t0_locked_stem_head",
+      "rtm_v1_tcn_d9_h384",
+      "rtm_v1_bimamba2_d96_l6",
+      "rtm_v1_bilstm_h96_l2",
+      "rtm_v1_multiscale_10_2_1_h384"
+    ],
+    "data_source": "deterministic analytic synthetic tensors only",
+    "target_device": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "precision": "bfloat16 autocast with fixed FIR float32 internals",
+    "batch1_inference": {
+      "warmup": 10,
+      "repeats": 50
+    },
+    "fixed_batch_forward": {
+      "batch_size": 8,
+      "warmup": 5,
+      "repeats": 20
+    },
+    "fixed_batch_forward_backward": {
+      "batch_size": 8,
+      "warmup": 3,
+      "repeats": 10,
+      "loss": "frozen RespirationTaskLoss"
+    },
+    "physical_batch_ladder": [
+      "128x1",
+      "64x2",
+      "32x4"
+    ],
+    "effective_batch_size": 128,
+    "update_warmup": 1,
+    "update_repeats": 3,
+    "formal_optimizer_updates_for_projection": 6400,
+    "planning_wall_time_multiplier": 1.25,
+    "selection_role": "largest finite physical batch for executability only; never candidate selection",
+    "non_oom_error_policy": "fail closed",
+    "output_policy": "non-overwrite temporary bundle followed by atomic publication"
+  },
+  "manual_execution": {
+    "command": "./.venv/bin/python scripts/benchmark_resp_temporal_v1_gpu.py --config configs/resp_temporal_v1/gpu_engineering_v1.yaml",
+    "expected_directory": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1",
+    "expected_files": [
+      "resolved_config.json",
+      "candidate_engineering.json",
+      "candidate_engineering.csv",
+      "artifact_manifest.json",
+      "access_receipt.json",
+      "access_receipt.sha256"
+    ],
+    "executed": false
+  },
+  "verification": {
+    "command": "./.venv/bin/python -m pytest tests/test_resp_temporal_v1_signal_audit.py tests/test_resp_temporal_v1_config.py tests/test_resp_temporal_v1_models.py tests/test_resp_temporal_v1_gpu_engineering.py",
+    "result": "50 passed",
+    "duration_seconds": 20.04,
+    "gpu_tests_executed": false,
+    "full_regression_executed": false
+  },
+  "access_and_execution_flags": {
+    "dataset_accessed": false,
+    "index_accessed": false,
+    "train_split_accessed": false,
+    "validation_accessed": false,
+    "research_test_accessed": false,
+    "checkpoint_accessed": false,
+    "formal_training_used": false,
+    "validation_evaluation_used": false,
+    "research_test_evaluation_used": false,
+    "gpu_used": false,
+    "gpu_smoke_used": false,
+    "gpu_benchmark_used": false,
+    "synthetic_cpu_unit_tests_used": true
+  },
+  "source_artifacts_sha256": {
+    "configs/resp_temporal_v1/gpu_engineering_v1.yaml": "7ec9c26481a4369e7fea56a5c9c14f2bae1167423365466ce7ce4325bec35300",
+    "docs/experiments/resp_temporal_v1_gpu_engineering_protocol_20260820.md": "7b1b946564989b4d3e8b7244d475349a4efe0ecefb023d1df5a53a6d5d5669fa",
+    "resp_train/temporal/gpu_engineering.py": "89d255218813cb987b467b52545f7debf03bc6a7596a3e76afb8a42d81ee2073",
+    "scripts/benchmark_resp_temporal_v1_gpu.py": "643993f2b105e977684b889b3672342bc3f1f44bc74ed12b655e3eb6847194da",
+    "tests/test_resp_temporal_v1_gpu_engineering.py": "2ef309f529e5300bdf674f60e6efb5e97f73b559890ef3c0d79a2a7434bc2e6f"
+  },
+  "authorization": {
+    "gpu_engineering_harness_implementation_complete": true,
+    "gpu_engineering_manual_execution_allowed": true,
+    "formal_training_allowed": false,
+    "validation_evaluation_allowed": false,
+    "research_test_allowed": false,
+    "formal_training_requires_later_separate_user_authorization": true
+  },
+  "interpretation_limit": "This receipt verifies only the non-data GPU engineering harness and CPU tests. No GPU benchmark result or model-quality evidence exists until the user returns the frozen execution receipt."
+}
