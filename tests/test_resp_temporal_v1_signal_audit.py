@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 from omegaconf import OmegaConf
+import pandas as pd
 import pytest
 
 import resp_train.temporal_signal_audit as signal_audit
@@ -23,6 +24,7 @@ from resp_train.temporal_signal_audit import (
     load_signal_audit_config,
     lowpass_block_center_decimate,
     reconstruct_block_center_grid,
+    sample_direct_mean,
     target_timescale_metrics,
     validate_access_receipt,
 )
@@ -242,6 +244,27 @@ def test_runner_fails_before_git_or_data_access_when_output_exists(tmp_path: Pat
     )
     with pytest.raises(FileExistsError, match="禁止覆盖"):
         signal_audit.run_train_signal_audit(config_path=frozen.path, command="test")
+
+
+def test_sample_direct_mean_excludes_numeric_group_dimensions() -> None:
+    frame = pd.DataFrame(
+        {
+            "dataset_row_id": [1, 2, 3, 4],
+            "samp_id": [10, 10, 11, 11],
+            "coupling_state_id": [1, 1, 2, 2],
+            "target_stratum": ["low", "low", "high", "high"],
+            "source": ["target"] * 4,
+            "grid_hz": [2.0] * 4,
+            "method": ["explicit_lowpass_decimation"] * 4,
+            "roundtrip_nrmse": [0.1, 0.3, 0.2, 0.4],
+        }
+    )
+    result = sample_direct_mean(frame, dimensions=["source", "grid_hz", "method"])
+    assert "grid_hz" in result.columns
+    assert not result.columns.duplicated().any()
+    overall = result[result["target_stratum"].eq("all")].sort_values("samp_id")
+    assert overall["grid_hz"].tolist() == [2.0, 2.0]
+    assert np.allclose(overall["roundtrip_nrmse"], [0.2, 0.3])
 
 
 def test_cli_exposes_no_split_output_or_override_arguments() -> None:

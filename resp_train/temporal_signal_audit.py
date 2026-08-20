@@ -1051,12 +1051,14 @@ def sample_direct_mean(frame: pd.DataFrame, *, dimensions: list[str]) -> pd.Data
     all_rows = frame.copy()
     all_rows["target_stratum"] = "all"
     expanded = pd.concat([frame, all_rows], ignore_index=True)
+    keys = ["samp_id", "target_stratum", *dimensions]
     numeric = [
         column
         for column in expanded.columns
-        if column not in _IDENTITY_NUMERIC_COLUMNS and pd.api.types.is_numeric_dtype(expanded[column])
+        if column not in _IDENTITY_NUMERIC_COLUMNS
+        and column not in keys
+        and pd.api.types.is_numeric_dtype(expanded[column])
     ]
-    keys = ["samp_id", "target_stratum", *dimensions]
     grouped = expanded.groupby(keys, dropna=False, sort=True)
     means = grouped[numeric].mean().reset_index()
     means["n_windows"] = grouped.size().to_numpy(dtype=np.int64)
