@@ -60,13 +60,13 @@ Receipt/manifest/summary SHA-256分别为`1dbdc18836c13d8c2cd888c186477c40b044e1
 
 ### RTM-v1 formal（仅用户手动执行）
 
-冻结矩阵固定5项candidate×3 seeds。每条命令只运行一个identity，不接受data/split/checkpoint/epoch/batch/device/output/resume override：
+冻结矩阵固定5项candidate×3 seeds。旧`formal_v1.yaml`在0/15时被双GPU修订取代，不得使用。每条命令只运行一个identity，不接受data/split/checkpoint/epoch/batch/device/output/resume override；`LOCKED_GPU`与candidate/seed分组不匹配时会在数据/GPU访问前失败：
 
 ```bash
-env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python scripts/train_resp_temporal_v1.py --plan configs/resp_temporal_v1/formal_v1.yaml --candidate-id <LOCKED_ID> --seed <LOCKED_SEED>
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<LOCKED_GPU> ./.venv/bin/python scripts/train_resp_temporal_v1.py --plan configs/resp_temporal_v1/formal_dual_gpu_v2.yaml --candidate-id <LOCKED_ID> --seed <LOCKED_SEED>
 ```
 
-输出固定为`runs/resp_temporal_v1/formal/<candidate_id>/seed_<seed>/`，目录必须预先不存在。失败目录必须保留且同identity不得重跑；15/15完成前不得汇总partial validation，也没有独立eval或research-test入口。
+`gpu_0/CUDA_VISIBLE_DEVICES=0`固定8项，`gpu_1/CUDA_VISIBLE_DEVICES=1`固定7项；两组可并行、组内按plan串行。输出固定为`runs/resp_temporal_v1/formal/<candidate_id>/seed_<seed>/`，目录必须预先不存在。失败目录必须保留且同identity不得重跑；15/15完成前不得汇总partial validation，也没有独立eval或research-test入口。
 
 ## 训练
 

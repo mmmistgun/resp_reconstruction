@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "receipt_id": "resp-temporal-v1-formal-dual-gpu-implementation-20260820",
+  "protocol_id": "resp-temporal-v1-formal-validation-20260820",
+  "correction_id": "resp-temporal-v1-formal-dual-gpu-20260820",
+  "created_date": "2026-08-20",
+  "status": "dual_gpu_formal_runner_verified_15_user_runs_pending",
+  "implementation_commit": "ff1fa163b7f9488f226b138c24c3f35ea9d0b92c",
+  "superseded_before_execution": {
+    "plan_path": "configs/resp_temporal_v1/formal_v1.yaml",
+    "plan_sha256": "fb1d4652c3e65bbcb1eb4b4b770e96315dbef04011cdae8e66391a33265d0697",
+    "implementation_receipt_path": "docs/experiments/resp_temporal_v1_formal_implementation_receipt_20260820.json",
+    "implementation_receipt_sha256": "0d2dae3fea51f18821a47a11e69d8a8b2ca765898c3d84c228d2fedffcaff0fa",
+    "formal_runs_created": 0,
+    "execution_allowed": false,
+    "files_preserved": true
+  },
+  "source_provenance": {
+    "base_formal_protocol": {
+      "path": "docs/experiments/resp_temporal_v1_formal_protocol_20260820.md",
+      "sha256": "208b8e0f80c4a2bd426e215567702e41ee78f768e513fdb65266be3d8757c05d"
+    },
+    "dual_gpu_correction": {
+      "path": "docs/experiments/resp_temporal_v1_formal_dual_gpu_correction_20260820.md",
+      "sha256": "1c2cad1c5cc401776d894a0bb039e0ad75a8cd3030f66ea70b48817f2de1b84a"
+    },
+    "dual_gpu_plan": {
+      "path": "configs/resp_temporal_v1/formal_dual_gpu_v2.yaml",
+      "sha256": "c6594d160a3f7ecb1f39a4e036996491dd6f1919aedeea28949ff8533a1dd8c3"
+    },
+    "gpu_engineering_lock": {
+      "path": "docs/experiments/resp_temporal_v1_gpu_engineering_lock_20260820.json",
+      "sha256": "5632b0e404f943e61c646a8ddcf1761c2391884412915ef1d79aa342f8bc0183"
+    }
+  },
+  "hardware_inventory": [
+    {
+      "physical_index": 0,
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_total_mib_nvidia_smi": 16376
+    },
+    {
+      "physical_index": 1,
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_total_mib_nvidia_smi": 16376
+    }
+  ],
+  "execution_groups": [
+    {
+      "group_id": "gpu_0",
+      "cuda_visible_devices": "0",
+      "logical_device": "cuda:0",
+      "run_count": 8
+    },
+    {
+      "group_id": "gpu_1",
+      "cuda_visible_devices": "1",
+      "logical_device": "cuda:0",
+      "run_count": 7
+    }
+  ],
+  "correction_scope": {
+    "scientific_candidate_changed": false,
+    "seed_changed": false,
+    "data_or_split_changed": false,
+    "target_or_pi_changed": false,
+    "loss_or_metrics_changed": false,
+    "selector_changed": false,
+    "batch_or_optimizer_updates_changed": false,
+    "output_identity_changed": false,
+    "execution_schedule_changed": true,
+    "physical_gpu_provenance_added": true,
+    "missing_or_wrong_cuda_visible_devices_fails_before_data_or_cuda": true
+  },
+  "manual_execution": {
+    "group_0_command_template": "env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=0 ./.venv/bin/python scripts/train_resp_temporal_v1.py --plan configs/resp_temporal_v1/formal_dual_gpu_v2.yaml --candidate-id <GPU_0_LOCKED_ID> --seed <GPU_0_LOCKED_SEED>",
+    "group_1_command_template": "env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=1 ./.venv/bin/python scripts/train_resp_temporal_v1.py --plan configs/resp_temporal_v1/formal_dual_gpu_v2.yaml --candidate-id <GPU_1_LOCKED_ID> --seed <GPU_1_LOCKED_SEED>",
+    "group_internal_execution": "serial in frozen listed order",
+    "cross_group_execution": "parallel allowed",
+    "executed_runs": 0,
+    "expected_runs": 15
+  },
+  "verification": {
+    "command": "/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest tests/test_resp_temporal_v1_signal_audit.py tests/test_resp_temporal_v1_config.py tests/test_resp_temporal_v1_models.py tests/test_resp_temporal_v1_gpu_engineering.py tests/test_resp_temporal_v1_formal.py -q",
+    "result": "68 passed",
+    "duration_seconds": 25.42,
+    "formal_output_precheck": "runs/resp_temporal_v1/formal absent",
+    "formal_data_preflight_executed": false,
+    "formal_training_executed": false,
+    "cuda_context_created": false,
+    "gpu_smoke_or_benchmark_executed": false,
+    "full_regression_executed": false
+  },
+  "access_and_execution_flags": {
+    "gpu_inventory_metadata_read": true,
+    "dataset_accessed": false,
+    "shared_index_accessed": false,
+    "train_split_accessed": false,
+    "validation_accessed": false,
+    "research_test_accessed": false,
+    "existing_checkpoint_accessed": false,
+    "formal_training_used": false,
+    "validation_evaluation_used": false,
+    "research_test_evaluation_used": false,
+    "gpu_compute_used": false,
+    "cpu_unit_tests_used": true
+  },
+  "source_artifacts_sha256": {
+    "configs/resp_temporal_v1/formal_dual_gpu_v2.yaml": "c6594d160a3f7ecb1f39a4e036996491dd6f1919aedeea28949ff8533a1dd8c3",
+    "docs/experiments/resp_temporal_v1_formal_dual_gpu_correction_20260820.md": "1c2cad1c5cc401776d894a0bb039e0ad75a8cd3030f66ea70b48817f2de1b84a",
+    "resp_train/temporal/formal.py": "70a0f16b48ee3f15e9ffccfa8d572d69e3081c40a93e71c0d6d6ae32d71e1249",
+    "scripts/train_resp_temporal_v1.py": "11b317d9d8688fd9ae858edfe8de8a545d3efab10f37c322fc5e24cfdfcb9d03",
+    "tests/test_resp_temporal_v1_formal.py": "d5c553d13a8f2b998f1b818bf6f9b17e300d3ef98567902fb7d0026ad230e139"
+  },
+  "authorization": {
+    "dual_gpu_formal_runner_implementation_complete": true,
+    "dual_gpu_formal_manual_execution_allowed": true,
+    "formal_training_codex_execution_allowed": false,
+    "validation_within_formal_training_allowed": true,
+    "standalone_validation_evaluation_allowed": false,
+    "validation_summary_implementation_allowed_after_15_complete_runs": true,
+    "research_test_allowed": false
+  },
+  "interpretation_limit": "This receipt verifies only the dual-GPU scheduling correction, physical visibility provenance and deterministic CPU tests. No formal, validation-quality, GPU-compute or research-test evidence was generated."
+}
