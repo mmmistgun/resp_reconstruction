@@ -2,7 +2,7 @@
 
 日期：2026-08-20
 
-状态：**完整 train-only signal audit、signal/candidate lock 与exact CPU implementation均已关闭；用户已授权GPU engineering harness，实现与轻量CPU测试已完成，实际GPU benchmark等待用户手动执行。Formal training、validation summary和research-test仍未开放。旧Full/Compact继续仅作implementation provenance。**
+状态：**完整train-only signal audit、signal/candidate lock与exact CPU implementation均已关闭。GPU engineering v1因外部cuDNN 9.8覆盖PyTorch要求的9.20而fail closed，产物已冻结；v2只增加进程启动前环境/cuDNN canary并等待用户手动执行。Formal training、validation summary和research-test仍未开放。**
 
 ## 1. 权威性、独立命名与当前边界
 
@@ -248,7 +248,7 @@ Locked multiscale 对共同 10-Hz latent 构造三个 feature 分支：
 - 若要研究较小容量，必须另立 capacity-sensitivity control，并经用户再次确认；
 - 工程失败不得写成家族能力负证据。
 
-Signal audit receipt 与双 lock 已冻结：signal-substrate lock SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`，candidate lock SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。Exact CPU implementation commit=`61988b28fe41a429761cc531f1e035141673580d`，receipt SHA-256=`6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872`。GPU engineering harness commit=`146fb678522a71cc27571727d720685b42d3d5c6`，implementation receipt=`docs/experiments/resp_temporal_v1_gpu_engineering_implementation_receipt_20260820.json`、SHA-256=`2f27a6582d71036e8480dc839dc563673a93551c32ba38e5d1ce302e6957fdfe`；实际GPU execution receipt尚不存在，因此全部formal training继续关闭。
+Signal audit receipt、双lock与exact CPU implementation均已冻结。GPU engineering v1从commit `5d7cea0ea914ab833bb06201d4bf13a1b9c15d5f`执行，failure receipt/manifest SHA-256=`3ae8e96ebfbcb2ef1eeb75134088d364bea085ed37fbe9e72041d569f50d3ad0 / 96b8c5ddddf62df2d890e3293ceb69804c97ca96dee37702981222a8daeae28c`，status=`failed`、actual candidates=`3/5`、numeric nonfinite=`0`；原因是PyTorch编译cuDNN 92000而进程加载90800，不是候选失败。V1不得删除、覆盖或重跑。V2 correction commit=`73e7681d35ea64c3323d9178238e7ddea9736f0a`，implementation receipt SHA-256=`3c2124d6f4b637b8020540fd1e97256bc291972ac70b03c58af323cbf22d6ff9`；v2 execution receipt尚不存在，因此formal training继续关闭。
 
 ## 8. 最小实验矩阵
 
@@ -323,13 +323,14 @@ Tolerance-aware materiality 固定为：
 - 完整 train-only signal audit、冻结 receipt/manifest/summary 与全部 hash/access/finite 验收；
 - 用户确认的 signal-substrate lock、五项 scientific candidate lock，以及 exact CPU implementation receipt；
 - `docs/experiments/resp_temporal_v1_gpu_engineering_protocol_20260820.md`、冻结synthetic benchmark config、fail-closed harness、严格receipt/manifest schema与GPU engineering implementation receipt。
+- v1 cuDNN环境失败的冻结receipt/manifest，以及`docs/experiments/resp_temporal_v1_gpu_engineering_correction_v2_20260820.md`规定的unset环境、cuDNN 92000与LSTM canary preflight。
 
 当前明确未建立：
 
 - train/eval CLI；
-- 用户手动运行后生成的GPU engineering execution receipt；
+- 用户按v2冻结命令手动运行后生成的完整GPU engineering execution receipt；
 - formal config/runner/preflight；
 - validation summary；
 - research-test cache、allowlist 或 evaluator。
 
-GPU engineering harness已关闭并允许用户按冻结命令手动执行。该阶段只登记执行可行性与工程成本，不得按参数、显存、吞吐或wall time改候选。用户返回完整execution receipt/manifest/hash并完成GPU engineering lock前不得开放formal training；formal结果完成后也不自动开放research-test。
+GPU engineering v1已失败关闭；其前三项partial measurements不得形成完整比较。V2仅修正统一环境preflight，不改候选或benchmark合同，并允许用户按唯一冻结命令手动执行。用户返回v2完整execution receipt/manifest/hash并完成GPU engineering lock前不得开放formal training；formal结果完成后也不自动开放research-test。

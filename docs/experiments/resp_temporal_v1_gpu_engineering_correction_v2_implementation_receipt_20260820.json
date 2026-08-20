@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "receipt_id": "resp-temporal-v1-gpu-engineering-correction-v2-implementation-20260820",
+  "protocol_id": "resp-temporal-v1-gpu-engineering-correction-v2-20260820",
+  "created_date": "2026-08-20",
+  "status": "v1_failure_frozen_v2_preflight_verified_execution_pending_user",
+  "implementation_commit": "73e7681d35ea64c3323d9178238e7ddea9736f0a",
+  "v1_failure": {
+    "execution_commit": "5d7cea0ea914ab833bb06201d4bf13a1b9c15d5f",
+    "receipt_path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1/access_receipt.json",
+    "receipt_sha256": "3ae8e96ebfbcb2ef1eeb75134088d364bea085ed37fbe9e72041d569f50d3ad0",
+    "manifest_path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1/artifact_manifest.json",
+    "manifest_sha256": "96b8c5ddddf62df2d890e3293ceb69804c97ca96dee37702981222a8daeae28c",
+    "status": "failed",
+    "actual_candidates": 3,
+    "expected_candidates": 5,
+    "numeric_nonfinite": 0,
+    "failure_class": "environment_cudnn_runtime_incompatibility",
+    "torch_compiled_cudnn": 92000,
+    "loaded_runtime_cudnn": 90800,
+    "candidate_failure_claim_allowed": false,
+    "partial_engineering_comparison_allowed": false,
+    "frozen_no_delete_no_overwrite_no_rerun": true
+  },
+  "v2_correction": {
+    "candidate_model_benchmark_contract_changed": false,
+    "required_unset_environment_variables": [
+      "LD_LIBRARY_PATH",
+      "LD_PRELOAD"
+    ],
+    "required_cudnn_runtime_version": 92000,
+    "cudnn_lstm_canary_before_output_creation": true,
+    "environment_failure_consumes_output_path": false,
+    "v1_failure_receipt_and_manifest_verified_before_run": true,
+    "new_output_directory": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2"
+  },
+  "manual_execution": {
+    "command": "env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python scripts/benchmark_resp_temporal_v1_gpu.py --config configs/resp_temporal_v1/gpu_engineering_v2.yaml",
+    "executed": false,
+    "expected_files": [
+      "resolved_config.json",
+      "candidate_engineering.json",
+      "candidate_engineering.csv",
+      "artifact_manifest.json",
+      "access_receipt.json",
+      "access_receipt.sha256"
+    ]
+  },
+  "verification": {
+    "command": "./.venv/bin/python -m pytest tests/test_resp_temporal_v1_signal_audit.py tests/test_resp_temporal_v1_config.py tests/test_resp_temporal_v1_models.py tests/test_resp_temporal_v1_gpu_engineering.py",
+    "result": "52 passed",
+    "duration_seconds": 19.75,
+    "main_worktree_v2_provenance_check": "passed",
+    "gpu_preflight_or_benchmark_executed_by_codex": false,
+    "full_regression_executed": false
+  },
+  "access_and_execution_flags": {
+    "dataset_accessed": false,
+    "index_accessed": false,
+    "train_split_accessed": false,
+    "validation_accessed": false,
+    "research_test_accessed": false,
+    "checkpoint_accessed": false,
+    "formal_training_used": false,
+    "validation_evaluation_used": false,
+    "research_test_evaluation_used": false,
+    "gpu_used_by_codex": false,
+    "gpu_benchmark_used_by_codex": false
+  },
+  "source_artifacts_sha256": {
+    "resp_train/temporal/gpu_engineering.py": "99a47e4ab753df34c3891a6c9d2e6c160fc95ca4cc658870acd26ba464494701",
+    "tests/test_resp_temporal_v1_gpu_engineering.py": "4b55d8ad90e65cf9189d35c15cc4ba7ddb2e5a0a0760f960a8fd62a2cea7be6d",
+    "configs/resp_temporal_v1/gpu_engineering_v2.yaml": "081fbb0e350997e97838faa5a54478d2a81041dfc1769336573a3a0d267eb8f0",
+    "docs/experiments/resp_temporal_v1_gpu_engineering_correction_v2_20260820.md": "9ccdd32e4f41038d3abb4a5950bb12a6ef490979348de4c5503cac78820089ce",
+    "scripts/benchmark_resp_temporal_v1_gpu.py": "643993f2b105e977684b889b3672342bc3f1f44bc74ed12b655e3eb6847194da"
+  },
+  "authorization": {
+    "gpu_engineering_v2_manual_execution_allowed": true,
+    "formal_training_allowed": false,
+    "validation_evaluation_allowed": false,
+    "research_test_allowed": false,
+    "formal_training_requires_later_separate_user_authorization": true
+  },
+  "interpretation_limit": "v1 partial measurements are incomplete engineering diagnostics only. v2 changes environment preflight and output identity, not candidates or benchmark questions."
+}
