@@ -2,7 +2,7 @@
 
 日期：2026-08-20
 
-状态：**完整 train-only signal audit 已验收并关闭，signal-substrate 与五项 scientific candidate 已获用户确认并冻结；exact substrate/model implementation、GPU engineering、formal training、validation summary 和 research-test 均未开放。旧 Full/Compact 继续仅作 implementation provenance，未被资源规则升格。**
+状态：**完整 train-only signal audit 已验收并关闭，signal-substrate 与五项 scientific candidate 已获用户确认并冻结；exact CPU substrate/model implementation 与轻量确定性测试已完成。GPU engineering、formal training、validation summary 和 research-test 均未开放。旧 Full/Compact 继续仅作 implementation provenance，未被资源规则升格。**
 
 ## 1. 权威性、独立命名与当前边界
 
@@ -136,7 +136,7 @@ resume = false
 
 第一层在 100 Hz 上先提取约 1.01 秒局部宽频信息，再逐级降采样；这避免让 LSTM/Mamba 直接处理 18,000 steps，也避免旧 140-token bridge 对快呼吸时序过粗。但 train-only audit 已确认 learned strided convolution 本身不能充当显式 anti-alias 证明，因此该 probe stem **不得原样升格**。
 
-公共 substrate 的科学顺序现冻结为：显式 anti-aliased `100→20 Hz`，在20 Hz执行所有家族共享的 learned carrier-sensitive filtering + nonlinearity，再显式 anti-aliased `20→10 Hz`，形成 `[B,96,1800]` latent。参考算子固定 Kaiser beta `8.6`、`padtype=line`：100→20 使用255 taps/cutoff 9.0 Hz，20→10 使用127 taps/cutoff 4.5 Hz。未来 torch 实现必须以单独的数值等价测试冻结边界和 tolerance；在此之前 exact substrate implementation 仍未完成。不增加手工 analytic-envelope 或固定等 RMS proxy 输入分支。
+公共 substrate 的科学顺序现冻结为：显式 anti-aliased `100→20 Hz`，在20 Hz执行所有家族共享的 learned carrier-sensitive filtering + nonlinearity，再显式 anti-aliased `20→10 Hz`，形成 `[B,96,1800]` latent。参考算子固定 Kaiser beta `8.6`、`padtype=line`：100→20 使用255 taps/cutoff 9.0 Hz，20→10 使用127 taps/cutoff 4.5 Hz。Exact torch 实现已固定20-Hz `1→48 k21`、48-channel depthwise `k5` 与 `48→96 k5` 学习路径，两次固定降采样分别位于该路径前后；float64 audit 等价 tolerance 固定为 `atol=rtol=5e-12`。四个固定 decimator 的确定性 max-abs error 为 `4.44e-16 / 4.44e-16 / 1.11e-15 / 6.66e-16`，不增加手工 analytic-envelope 或固定等 RMS proxy 输入分支。
 
 公共 decoder 保留 channel-only norm、`96→64 k5`、64-channel depthwise k5、`64→32→1` coarse head，加与 C201 相同的 1,057-parameter zero-init pointwise nonlinear residual；生成 10-Hz raw waveform 后用冻结 Fourier interpolation 恢复 100 Hz。模型内部不执行 `Pi`。
 
@@ -144,7 +144,7 @@ resume = false
 
 ### 5.2 离线边界
 
-所有 trunk 均允许完整 180 秒双向上下文：PatchMixer 全窗 mixing、TCN 对称 padding、Mamba 双向扫描、LSTM 双向 recurrence、多尺度分支对称 pooling/convolution。因此结果只能解释为离线重建能力。
+所有锁定 trunk 均允许完整 180 秒双向上下文：TCN 对称 padding、Mamba 双向扫描、LSTM 双向 recurrence、多尺度分支 reflect-FIR/block-center decimation 与对称 convolution。因此结果只能解释为离线重建能力。
 
 ## 6. 家族信号假设与当前 implementation probes
 
@@ -248,7 +248,7 @@ Locked multiscale 对共同 10-Hz latent 构造三个 feature 分支：
 - 若要研究较小容量，必须另立 capacity-sensitivity control，并经用户再次确认；
 - 工程失败不得写成家族能力负证据。
 
-Signal audit receipt 与双 lock 已冻结：signal-substrate lock SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`，candidate lock SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。Exact implementation 与 GPU engineering receipt 尚不存在，因此全部 formal training 继续关闭。
+Signal audit receipt 与双 lock 已冻结：signal-substrate lock SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`，candidate lock SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。Exact CPU implementation commit=`6af99466d1ca8861e81dbfa97081f563863c7869`，receipt=`docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json`、SHA-256=`9ac2ead15b123ca87ec0539633222e21ffcbaa7e6938b09c480bf3967e374555`。GPU engineering receipt 尚不存在，因此全部 formal training 继续关闭。
 
 ## 8. 最小实验矩阵
 
@@ -316,20 +316,19 @@ Tolerance-aware materiality 固定为：
 
 当前已建立：
 
-- `resp_train/temporal/` 下的独立 initialization、blocks、model 和 config；
-- `configs/resp_temporal_v1/` 下 T0 与五家族 Full/Compact 共11个 implementation-only probes；它们不是 formal candidates；
-- 参数、shape、感受野、公共 state identity、invalid config 与非有限输入的定向测试；
-- 配置固定 `formal_training_enabled=false / research_test_enabled=false`；现有 `resource_lock_required=true` 仅是阻止运行的旧实现字段，不再表示资源决定候选；
+- `resp_train/temporal/` 下 locked common substrate、五项 candidate、config 与命名子 seed 实现；
+- `configs/resp_temporal_v1/` 下恰好五项 strict implementation-only candidate configs；旧11项 Full/Compact probes只作历史 implementation provenance；
+- fixed-filter 对 audit operator 的float64数值等价、可微性、参数/shape/感受野、五项公共 state tensor identity、invalid config 与非有限输入定向测试；
+- 配置固定 `gpu_engineering_enabled=false / formal_training_enabled=false / validation_evaluation_enabled=false / research_test_enabled=false`；`resource_lock_required=true` 只阻止越阶段运行，不表示资源决定候选；
 - 完整 train-only signal audit、冻结 receipt/manifest/summary 与全部 hash/access/finite 验收；
-- 用户确认的 signal-substrate lock 与五项 scientific candidate lock。
+- 用户确认的 signal-substrate lock、五项 scientific candidate lock，以及 exact CPU implementation receipt。
 
 当前明确未建立：
 
 - train/eval CLI；
-- locked substrate 的 exact torch implementation、数值等价 tolerance 与五项 strict implementation configs；
 - GPU engineering benchmark receipt；
 - formal config/runner/preflight；
 - validation summary；
 - research-test cache、allowlist 或 evaluator。
 
-下一阶段只允许实现 locked common substrate、显式 anti-aliased `10/2/1 Hz` multiscale 与恰好五项 strict configs，并运行轻量确定性 CPU 测试。旧11项 probes只能作 provenance，不能原样变成 formal configs。Exact implementation 完成后仍须用户另行授权 GPU engineering；GPU receipt 登记到主协议前不得开放 formal training，formal 结果完成后也不自动开放 research-test。
+Exact CPU implementation 已关闭。下一阶段只能在用户另行明确授权后开展统一 GPU engineering；该阶段只能登记执行可行性与工程成本，不得按参数、显存、吞吐或 wall time 改候选。GPU receipt 登记到主协议前不得开放 formal training，formal 结果完成后也不自动开放 research-test。

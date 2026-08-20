@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "receipt_id": "resp-temporal-v1-exact-cpu-implementation-20260820",
+  "protocol_id": "resp-temporal-v1-validation-20260820",
+  "created_date": "2026-08-20",
+  "status": "exact_cpu_implementation_verified_gpu_engineering_not_authorized",
+  "implementation_commit": "6af99466d1ca8861e81dbfa97081f563863c7869",
+  "source_locks": {
+    "signal_substrate": {
+      "path": "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json",
+      "sha256": "11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69"
+    },
+    "candidate": {
+      "path": "docs/experiments/resp_temporal_v1_candidate_lock_20260820.json",
+      "sha256": "b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b"
+    }
+  },
+  "implementation": {
+    "common_substrate_order": [
+      "fixed Kaiser-beta-8.6 line-boundary 255-tap 9-Hz decimation 100-to-20 Hz",
+      "shared learned 1-to-48 k21 filtering, channel-only normalization and SiLU at 20 Hz",
+      "shared learned 48-channel depthwise k5 and 48-to-96 k5 filtering, channel-only normalization and SiLU at 20 Hz",
+      "fixed Kaiser-beta-8.6 line-boundary 127-tap 4.5-Hz decimation 20-to-10 Hz",
+      "shared D=96, L=1800 latent and common 10-Hz decoder with frozen Fourier 10-to-100-Hz interpolation"
+    ],
+    "multiscale": {
+      "grids_hz": [10.0, 2.0, 1.0],
+      "downsampling": "fixed Kaiser-beta-8.6 reflect-boundary FIR followed by block-center decimation",
+      "stage_10_to_2": {
+        "down": 5,
+        "numtaps": 255,
+        "cutoff_hz": 0.85
+      },
+      "stage_10_to_1": {
+        "down": 10,
+        "numtaps": 255,
+        "cutoff_hz": 0.45
+      },
+      "average_pooling_used": false,
+      "branch_waveform_heads_used": false,
+      "coarse_dilations": [1, 2, 4, 8, 16, 32],
+      "coarse_receptive_field_seconds": 253.0
+    },
+    "candidate_parameter_counts": {
+      "rtm_v1_t0_locked_stem_head": 59042,
+      "rtm_v1_tcn_d9_h384": 729506,
+      "rtm_v1_bimamba2_d96_l6": 1010426,
+      "rtm_v1_bilstm_h96_l2": 449474,
+      "rtm_v1_multiscale_10_2_1_h384": 1129730
+    },
+    "candidate_config_count": 5,
+    "train_or_eval_cli_added": false
+  },
+  "numerical_equivalence": {
+    "input_dtype": "float64",
+    "frozen_atol": 5e-12,
+    "frozen_rtol": 5e-12,
+    "reference_operators": {
+      "common_decimation": "resp_train.temporal_signal_audit.fixed_resample",
+      "multiscale_decimation": "resp_train.temporal_signal_audit.lowpass_block_center_decimate"
+    },
+    "deterministic_max_abs_error": {
+      "100_to_20": 4.440892098500626e-16,
+      "20_to_10": 4.440892098500626e-16,
+      "10_to_2_block_center": 1.1102230246251565e-15,
+      "10_to_1_block_center": 6.661338147750939e-16
+    },
+    "all_within_frozen_tolerance": true,
+    "fixed_filter_parameters_trainable": false,
+    "gradient_through_fixed_filters_verified": true
+  },
+  "common_state_identity": {
+    "seed": 20260811,
+    "all_five_candidate_stem_state_tensors_bit_identical": true,
+    "all_five_candidate_decoder_state_tensors_bit_identical": true
+  },
+  "verification": {
+    "command": "./.venv/bin/python -m pytest tests/test_resp_temporal_v1_signal_audit.py tests/test_resp_temporal_v1_config.py tests/test_resp_temporal_v1_models.py",
+    "result": "37 passed",
+    "duration_seconds": 19.54,
+    "python": "3.12.13",
+    "numpy": "1.26.4",
+    "scipy": "1.17.1",
+    "torch": "2.12.0+cu130",
+    "mamba_ssm": "2.3.2.post1"
+  },
+  "access_and_execution_flags": {
+    "dataset_accessed": false,
+    "train_data_accessed": false,
+    "validation_data_accessed": false,
+    "research_test_accessed": false,
+    "checkpoint_accessed": false,
+    "model_training_used": false,
+    "dataset_model_inference_used": false,
+    "synthetic_tensor_forward_used": true,
+    "gpu_used": false,
+    "gpu_smoke_used": false,
+    "gpu_benchmark_used": false,
+    "full_regression_used": false
+  },
+  "source_artifacts_sha256": {
+    "resp_train/temporal/initialization.py": "1981e087b60d2428d7a88368ba1008d66ac4af1a807e0120f2cd96adf629f666",
+    "resp_train/temporal/blocks.py": "c43b8deca4e5ea185c2808a6e6c8b06172b77f811449cbb3d9e3249a3dd83435",
+    "resp_train/temporal/model.py": "5853c62151d0ab65a205feb949250da172326189ce18103e4ce98e7d59a10cce",
+    "resp_train/temporal/config.py": "8d8667727c9c6bd29074df378dc5c35100f50564ce43f92aab4bbb68a3c1c8aa",
+    "configs/resp_temporal_v1/_base.yaml": "8376120be5f85fd3518250363d4fcbdacf09c9cf51f96f346a0a2b2ac586325b",
+    "tests/test_resp_temporal_v1_config.py": "d67a23440c579e2504d8dcf32dadad6fbbdde28221e9682cd117668def9ddb8b",
+    "tests/test_resp_temporal_v1_models.py": "f93e2ab5087fd458f46f241b597f798626165e7a84c796c29f9a51b5b3414b9d"
+  },
+  "authorization": {
+    "exact_cpu_implementation_complete": true,
+    "gpu_engineering_allowed": false,
+    "formal_training_allowed": false,
+    "validation_evaluation_allowed": false,
+    "research_test_allowed": false,
+    "next_step_requires_new_user_authorization": true
+  },
+  "interpretation_limit": "This receipt verifies exact implementation, numerical substrate equivalence and structural identity on synthetic CPU inputs only; it is not model-quality, validation or research-test evidence."
+}
