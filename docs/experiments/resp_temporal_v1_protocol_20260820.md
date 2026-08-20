@@ -2,7 +2,7 @@
 
 日期：2026-08-20
 
-状态：**signal-first 修订、train-only 信号审计规范、严格配置、脚本、receipt schema 与定向确定性测试已建立；完整 train 审计尚未执行。现有 Full/Compact 结构只保留为 implementation probe，不是正式候选锁；formal runner、GPU engineering、formal training、validation summary 和 research-test 均未开放。**
+状态：**完整 train-only signal audit 已验收并关闭，signal-substrate 与五项 scientific candidate 已获用户确认并冻结；exact substrate/model implementation、GPU engineering、formal training、validation summary 和 research-test 均未开放。旧 Full/Compact 继续仅作 implementation provenance，未被资源规则升格。**
 
 ## 1. 权威性、独立命名与当前边界
 
@@ -121,7 +121,7 @@ resume = false
 
 但 C0 不证明 100-Hz BCG 在进入 temporal trunk 前可直接压到 10 Hz，也不证明高频 carrier 已被充分解调。主协议已有依据认为 BCG 的 0.05–8 Hz 可能同时包含呼吸位移、心动及呼吸调制信息。因此公共 stem、carrier 解调顺序和多尺度降采样必须先通过独立的 train-only signal audit；规范见 `docs/experiments/resp_temporal_v1_signal_audit_20260820.md`。不得用 validation 质量选择 stem 或频带。
 
-当前 implementation probe 的公共 stem 为：
+审计前 implementation probe 的公共 stem 为：
 
 ```text
 [B,1,18000] at 100 Hz
@@ -134,9 +134,11 @@ resume = false
 → [B,96,1800] at 10 Hz
 ```
 
-第一层在 100 Hz 上先提取约 1.01 秒局部宽频信息，再逐级降采样；这避免让 LSTM/Mamba 直接处理 18,000 steps，也避免旧 140-token bridge 对快呼吸时序过粗。Normalization 只沿 channel，不允许公共 stem 通过全窗归一化替代 temporal trunk 的长程建模。该结构尚不能因 shape 与输出采样率合理就称为 signal-locked：审计必须判断 20 Hz 非线性处理是否足以保留 0.8–8 Hz carrier modulation，并明确后续降采样的抗混叠要求。
+第一层在 100 Hz 上先提取约 1.01 秒局部宽频信息，再逐级降采样；这避免让 LSTM/Mamba 直接处理 18,000 steps，也避免旧 140-token bridge 对快呼吸时序过粗。但 train-only audit 已确认 learned strided convolution 本身不能充当显式 anti-alias 证明，因此该 probe stem **不得原样升格**。
 
-公共 decoder 暂定为 channel-only norm、`96→64 k5`、64-channel depthwise k5、`64→32→1` coarse head，加与 C201 相同的 1,057-parameter zero-init pointwise nonlinear residual；生成 10-Hz raw waveform 后用冻结 Fourier interpolation 恢复 100 Hz。模型内部不执行 `Pi`。其输出采样语义已有 C0 支持，但只有 signal audit 登记后，stem + decoder 才能共同写入 signal-substrate lock。
+公共 substrate 的科学顺序现冻结为：显式 anti-aliased `100→20 Hz`，在20 Hz执行所有家族共享的 learned carrier-sensitive filtering + nonlinearity，再显式 anti-aliased `20→10 Hz`，形成 `[B,96,1800]` latent。参考算子固定 Kaiser beta `8.6`、`padtype=line`：100→20 使用255 taps/cutoff 9.0 Hz，20→10 使用127 taps/cutoff 4.5 Hz。未来 torch 实现必须以单独的数值等价测试冻结边界和 tolerance；在此之前 exact substrate implementation 仍未完成。不增加手工 analytic-envelope 或固定等 RMS proxy 输入分支。
+
+公共 decoder 保留 channel-only norm、`96→64 k5`、64-channel depthwise k5、`64→32→1` coarse head，加与 C201 相同的 1,057-parameter zero-init pointwise nonlinear residual；生成 10-Hz raw waveform 后用冻结 Fourier interpolation 恢复 100 Hz。模型内部不执行 `Pi`。
 
 同 seed 的公共 stem/decoder 使用独立命名子 seed并要求跨所有 family 逐 tensor 相同。共同 substrate 用于提高 trunk 归因清晰度，不代表每个家族的端到端最优 frontend。
 
@@ -146,13 +148,13 @@ resume = false
 
 ## 6. 家族信号假设与当前 implementation probes
 
-家族进入正式矩阵的依据是其是否对应独立、可证伪的信号建模假设，而不是参数量、显存或与其他模型的规模接近程度。当前代码中的 Full/Compact 仅用于验证结构可实现、shape 正确和容量范围合理；它们尚未成为 formal candidates，不能通过资源 gate 自动二选一。
+家族进入正式矩阵的依据是其是否对应独立、可证伪的信号建模假设，而不是参数量、显存或与其他模型的规模接近程度。旧 Full/Compact 只用于验证结构可实现、shape 正确和容量范围合理；candidate lock 已按 signal mechanism 与 architecture convention 独立选择代表，未通过资源 gate 二选一。
 
-signal audit 完成后，每个保留家族只锁定一个核心代表。深度、宽度无法由信号唯一推出时，应采用明确的家族标准规则（例如固定 latent width、标准 expansion ratio、最小合理层数），并如实标记为 architecture convention。若确有必要保留第二点，必须另立为 family-internal capacity-sensitivity control，且不允许依据 validation 结果追加。
+唯一核心代表现冻结为：T0 locked stem/head control；9-block dilation `1…256`、H=384 TCN；6×D96 BiMamba2；2×H96 BiLSTM；以及 H=384、`10/2/1 Hz` feature-level multiscale。深度/宽度规则分别来自完整感受野、标准4× expansion、成熟六层项目 convention 和最小非平凡 stacked recurrence。同家族第二容量点全部关闭，只能在新协议中称 capacity-sensitivity control。
 
 ### 6.1 T0 无 trunk 控制
 
-`rtm_v1_t0_stem_head` 只包含公共 stem/decoder，当前 probe 参数 62,882。它是控制实验，不是第六个架构家族，也不因参数小而进入“公平参数排名”。其作用是判断 temporal trunk 是否提供净增益；若 signal audit 修改公共 stem，其参数合同随 substrate lock 一次性更新。
+T0 只包含 locked common stem/decoder。旧 probe 参数62,882仅作 provenance；显式 anti-alias substrate 实现后须重算参数合同。T0 是控制实验，不是第五个架构家族，也不因参数小而进入“公平参数排名”。
 
 ### 6.2 Global token mixer（条件家族）
 
@@ -170,7 +172,7 @@ channel-only norm
 - Compact：2 blocks、`token_hidden=64`，固定 602,482 参数；
 - Full：4 blocks、`token_hidden=96`，固定 1,603,010 参数。
 
-两者都具备完整 180秒 token mixing；Compact 不是短上下文版本。该实现实际是固定 1800 位置上的低秩 global token MLP，不是传统 patch hierarchy，也不具备卷积式时间平移等变性。只有在协议明确保留“弱局部先验的全窗位置混合”这一反方假设时，它才进入正式矩阵；否则关闭该家族，不因已有实现而自动运行。
+两者都具备完整 180秒 token mixing；Compact 不是短上下文版本。该实现实际是固定 1800 位置上的低秩 global token MLP，不是传统 patch hierarchy，也不具备卷积式时间平移等变性。Train-only audit 支持局部、层级与连续状态机制，但没有形成固定位置、弱局部先验 global mixing 的独立信号依据；用户已确认关闭该家族，不因已有实现而运行。
 
 ### 6.3 Dilated TCN
 
@@ -189,7 +191,7 @@ channel-only norm
 - Compact：`H=256`，固定 512,162 参数；
 - Full：`H=384`，固定 733,346 参数。
 
-两个 tier 都覆盖完整 180秒，宽度差异不改变上下文资格。TCN 的信号依据是局部准周期结构、层级 dilation 与完整 180秒上下文；`H=256/384` 只是当前容量 probes，不是由呼吸信号推导的宽度。
+两个 tier 都覆盖完整 180秒，宽度差异不改变上下文资格。TCN 代表固定9 blocks、H=384；九层由204.5秒完整感受野决定，H=384按D96的标准4× expansion锁定。H=256关闭为 capacity-sensitivity control。
 
 ### 6.4 BiMamba2
 
@@ -198,7 +200,7 @@ channel-only norm
 - Compact：4 blocks，固定 697,138 参数；
 - Full：6 blocks，固定 1,014,266 参数。
 
-不得使用卷积式 SSM-like fallback。Mamba 的信号假设是用选择性状态表示长程、非平稳的速率与努力变化；4/6 层是当前容量 probes。依赖或 CUDA fast path 不满足时只能登记当前环境未评估，不得以 fallback 或 Compact 自动替代科学代表。
+不得使用卷积式 SSM-like fallback。Mamba 代表固定6×D96，沿用成熟项目 convention；4层关闭为 capacity-sensitivity control。依赖或 CUDA fast path 不满足时只能登记当前环境未评估，不得以 fallback 或4层版本自动替代。
 
 ### 6.5 BiLSTM
 
@@ -207,24 +209,24 @@ channel-only norm
 - Compact：2 layers，固定 453,314 参数；
 - Full：3 layers，固定 676,034 参数。
 
-不开放 raw 18,000-step LSTM、单向 LSTM、GRU、hidden-size 或 projection 搜索。BiLSTM 的信号假设是显式门控状态能够追踪连续的呼吸相位、速率与努力；2/3 层是当前容量 probes，不是资源分档。
+不开放 raw 18,000-step LSTM、单向 LSTM、GRU、hidden-size 或 projection 搜索。BiLSTM 代表固定2×H96，这是最小非平凡 stacked bidirectional gated recurrence；3层关闭为 capacity-sensitivity control。
 
 ### 6.6 多尺度 feature pyramid
 
-当前 probe 对共同 10-Hz latent 构造三个 feature 分支：
+Locked multiscale 对共同 10-Hz latent 构造三个 feature 分支：
 
 | 分支 | Grid | 长度 | dilation | 主要作用 |
 |---|---:|---:|---|---|
 | fine | 10 Hz | 1800 | 1/2/4/8 | 快速局部形态与相位 |
 | medium | 2 Hz | 360 | 1/2/4/8 | 呼吸周期与局部变化 |
-| coarse | 0.5 Hz | 90 | 1/2/4/8/16 | effort、Local-RR 与整窗上下文 |
+| coarse | 1 Hz | 180 | 1/2/4/8/16/32 | effort 与整窗 context；不得承担完整波形 |
 
-降采样固定为 average pooling，编码后线性插值回1800并在 feature channel 上 concat+1×1融合。Coarse 分支感受野为125个0.5-Hz tokens，即250秒。所有分支保持96 channels，不生成独立 waveform head：
+降采样固定为 signal lock 的显式 low-pass + decimation，关闭 average pooling；编码后回到1800并在 feature channel 上 concat+1×1融合。Coarse 分支增加 dilation32，理论感受野253个1-Hz tokens/253秒，以覆盖完整180秒。所有分支保持96 channels，不生成独立 waveform head：
 
-- Compact：branch expansion H=192，固定 579,842 参数；
-- Full：H=384，固定 1,059,074 参数。
+- 代表固定 branch expansion H=384；旧 H=192 probe 关闭为 capacity-sensitivity control；
+- substrate/grid变化后须重算参数量，旧1,059,074只作0.5-Hz average-pooling probe provenance。
 
-它与旧 M1 的关键区别是 feature-level、合理宽度、多尺度交互，而非四个单通道 waveform 分支的标量融合。正式分支采样率、低通/抗混叠算子和时间尺度必须由 signal audit 锁定。尤其 0.5-Hz 分支 Nyquist 仅0.25 Hz，只能承担慢上下文/努力建模，不能声称保留完整 0.05–0.70 Hz 呼吸波形；简单 average pooling 在审计前不视为充分的抗混叠证明。
+它与旧 M1 的关键区别是 feature-level、合理宽度、多尺度交互，而非四个单通道 waveform 分支的标量融合。审计中2-Hz显式低通对 target 的 round-trip NRMSE/Local RR error 为`0.003213/0.000101 bpm`；1-Hz context effort Spearman为`0.994398`，而0.5-Hz为`0.496835`且47.94% target source power位于其Nyquist以上。因此正式 grid 固定10/2/1 Hz，0.5 Hz与average pooling均关闭。
 
 ## 7. Signal-substrate lock、candidate lock 与工程可行性
 
@@ -246,7 +248,7 @@ channel-only norm
 - 若要研究较小容量，必须另立 capacity-sensitivity control，并经用户再次确认；
 - 工程失败不得写成家族能力负证据。
 
-当前既没有 signal audit receipt、signal-substrate lock 或 formal candidate lock，也没有 GPU engineering receipt，因此全部 formal training 继续关闭。
+Signal audit receipt 与双 lock 已冻结：signal-substrate lock SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`，candidate lock SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。Exact implementation 与 GPU engineering receipt 尚不存在，因此全部 formal training 继续关闭。
 
 ## 8. 最小实验矩阵
 
@@ -260,7 +262,7 @@ signal-first candidate lock 后的核心正式矩阵为：
 | BiLSTM representative | 1 | 同上 | 3 |
 | Multiscale representative | 1 | 同上 | 3 |
 
-核心矩阵共15个 formal runs、96,000 optimizer updates。若 signal audit 后明确保留 global token mixer 的独立反方假设，可在 candidate lock 中增加其唯一代表 ×3 seeds，使绝对上限为18 runs、115,200 updates。当前 Full/Compact 均不是 formal arm；工程 benchmark/implementation smoke 不计为科研 run，但成本单独记录。
+核心矩阵固定15个 future formal runs、96,000 optimizer updates。Global token mixer 已关闭，不再保留18-run分支。五项 locked candidate ID 为 `rtm_v1_t0_locked_stem_head / rtm_v1_tcn_d9_h384 / rtm_v1_bimamba2_d96_l6 / rtm_v1_bilstm_h96_l2 / rtm_v1_multiscale_10_2_1_h384`。旧 Full/Compact 均不是 formal arm；工程 benchmark/implementation smoke 不计为科研 run，但成本单独记录。
 
 任一 formal arm 一旦开始，三个 seed 必须全部完成。不得依据第一个 seed 的 validation 数值取消其余 seed；只有 OOM、非有限、checkpoint/lifecycle、identity 或 prediction-collapse 工程失败可以暂停队列。
 
@@ -318,15 +320,16 @@ Tolerance-aware materiality 固定为：
 - `configs/resp_temporal_v1/` 下 T0 与五家族 Full/Compact 共11个 implementation-only probes；它们不是 formal candidates；
 - 参数、shape、感受野、公共 state identity、invalid config 与非有限输入的定向测试；
 - 配置固定 `formal_training_enabled=false / research_test_enabled=false`；现有 `resource_lock_required=true` 仅是阻止运行的旧实现字段，不再表示资源决定候选；
-- train-only signal audit 的规范、严格冻结配置、确定性算子、不可覆盖输出、receipt schema 与定向测试；完整 train 执行结果和正式 receipt 尚不存在。
+- 完整 train-only signal audit、冻结 receipt/manifest/summary 与全部 hash/access/finite 验收；
+- 用户确认的 signal-substrate lock 与五项 scientific candidate lock。
 
 当前明确未建立：
 
 - train/eval CLI；
-- 完整 train signal-audit execution receipt、signal-substrate lock 与 formal candidate lock；
+- locked substrate 的 exact torch implementation、数值等价 tolerance 与五项 strict implementation configs；
 - GPU engineering benchmark receipt；
 - formal config/runner/preflight；
 - validation summary；
 - research-test cache、allowlist 或 evaluator。
 
-下一阶段只能由用户在提交实现且工作树干净后，手动执行固定的完整 train-only signal audit；Codex 不代跑长 CPU 审计。审计 receipt 登记并由用户确认 signal-substrate/family/candidate lock 后，才可另行授权 GPU engineering。GPU receipt 登记到主协议前不得开放 formal training；formal 结果完成后也不自动开放 research-test。
+下一阶段只允许实现 locked common substrate、显式 anti-aliased `10/2/1 Hz` multiscale 与恰好五项 strict configs，并运行轻量确定性 CPU 测试。旧11项 probes只能作 provenance，不能原样变成 formal configs。Exact implementation 完成后仍须用户另行授权 GPU engineering；GPU receipt 登记到主协议前不得开放 formal training，formal 结果完成后也不自动开放 research-test。

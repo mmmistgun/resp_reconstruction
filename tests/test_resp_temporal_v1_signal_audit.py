@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from hashlib import sha256
+import json
 from pathlib import Path
 
 import numpy as np
@@ -276,3 +278,32 @@ def test_cli_exposes_no_split_output_or_override_arguments() -> None:
     assert "checkpoint" not in script.lower()
     assert "validation" not in script.lower()
     assert "research-test" not in script.lower()
+
+
+def test_confirmed_signal_and_candidate_locks_are_strictly_linked() -> None:
+    signal_path = REPO_ROOT / "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json"
+    candidate_path = REPO_ROOT / "docs/experiments/resp_temporal_v1_candidate_lock_20260820.json"
+    signal_bytes = signal_path.read_bytes()
+    candidate_bytes = candidate_path.read_bytes()
+    signal = json.loads(signal_bytes)
+    candidate = json.loads(candidate_bytes)
+
+    assert sha256(signal_bytes).hexdigest() == "11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69"
+    assert sha256(candidate_bytes).hexdigest() == "b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b"
+    assert candidate["source_lock"]["sha256"] == sha256(signal_bytes).hexdigest()
+    assert signal["multiscale_grid_lock"]["grids_hz"] == [10.0, 2.0, 1.0]
+    assert signal["multiscale_grid_lock"]["average_pooling_allowed"] is False
+    assert signal["common_signal_substrate"]["current_probe_stem_accepted_as_is"] is False
+    assert [record["candidate_id"] for record in candidate["candidates"]] == [
+        "rtm_v1_t0_locked_stem_head",
+        "rtm_v1_tcn_d9_h384",
+        "rtm_v1_bimamba2_d96_l6",
+        "rtm_v1_bilstm_h96_l2",
+        "rtm_v1_multiscale_10_2_1_h384",
+    ]
+    multiscale = candidate["candidates"][-1]
+    assert multiscale["coarse"]["dilations"] == [1, 2, 4, 8, 16, 32]
+    assert multiscale["coarse"]["theoretical_receptive_field_seconds"] >= 180.0
+    assert candidate["closed_candidates_and_search"]["global_token_mixer"]["included"] is False
+    assert candidate["authorization"]["gpu_engineering_allowed"] is False
+    assert candidate["authorization"]["formal_training_allowed"] is False

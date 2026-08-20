@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "lock_id": "resp-temporal-v1-candidate-lock-20260820",
+  "protocol_id": "resp-temporal-v1-validation-20260820",
+  "created_date": "2026-08-20",
+  "status": "scientific_candidates_confirmed_implementation_and_gpu_engineering_not_activated",
+  "evidence_role": "train-only signal-mechanism lock; no validation model-quality comparison and no research-test evidence",
+  "user_confirmation": {
+    "confirmed": true,
+    "confirmation_text": "确认上述 RTM-v1 lock 草案",
+    "confirmed_date": "2026-08-20"
+  },
+  "source_lock": {
+    "path": "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json",
+    "sha256": "11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69"
+  },
+  "common_contract": {
+    "input_sample_rate_hz": 100.0,
+    "input_length": 18000,
+    "latent_sample_rate_hz": 10.0,
+    "latent_length": 1800,
+    "latent_channels": 96,
+    "output_sample_rate_hz": 100.0,
+    "output_band_hz": [0.05, 0.7],
+    "common_stem_and_decoder_required": true,
+    "same_seed_common_state_tensor_identity_required": true,
+    "offline_bidirectional_context_allowed": true,
+    "model_internal_pi": false,
+    "loss_metrics_selector_unchanged": true
+  },
+  "role_separation": {
+    "t0": "temporal-trunk attribution control",
+    "cross_family": "architecture-capability comparison under one common signal substrate",
+    "second_same_family_capacity": "capacity-sensitivity control only; closed in RTM-v1 core",
+    "resource_metrics": "engineering receipt and descriptive quality-efficiency Pareto only"
+  },
+  "formal_seed_set_if_future_training_is_authorized": [20260811, 20260812, 20260813],
+  "core_run_count_if_future_training_is_authorized": 15,
+  "core_optimizer_updates_if_future_training_is_authorized": 96000,
+  "candidates": [
+    {
+      "candidate_id": "rtm_v1_t0_locked_stem_head",
+      "role": "control",
+      "family": "no_temporal_trunk",
+      "representative_rule": "identical locked common stem and decoder with no temporal trunk",
+      "scientific_hypothesis": "quantify whether any temporal trunk adds material task value beyond the signal-locked substrate",
+      "formal_config_exists": false
+    },
+    {
+      "candidate_id": "rtm_v1_tcn_d9_h384",
+      "role": "architecture_capability",
+      "family": "dilated_tcn",
+      "latent_channels": 96,
+      "blocks": 9,
+      "kernel_size": 5,
+      "dilations": [1, 2, 4, 8, 16, 32, 64, 128, 256],
+      "expansion_channels": 384,
+      "theoretical_receptive_field_tokens": 2045,
+      "theoretical_receptive_field_seconds": 204.5,
+      "representative_rule": "full-window receptive field plus standard 4x channel expansion",
+      "scientific_hypothesis": "hierarchical local convolutions model respiratory morphology, rate transitions and full-window context",
+      "formal_config_exists": false
+    },
+    {
+      "candidate_id": "rtm_v1_bimamba2_d96_l6",
+      "role": "architecture_capability",
+      "family": "bimamba2",
+      "latent_channels": 96,
+      "blocks": 6,
+      "directions": "independent forward and backward official Mamba2 scans followed by concat-linear fusion",
+      "fallback_allowed": false,
+      "representative_rule": "retain the mature six-block D96 project convention; four blocks remains a closed capacity-sensitivity control",
+      "scientific_hypothesis": "selective state dynamics model nonstationary rate, effort and long contextual changes",
+      "formal_config_exists": false
+    },
+    {
+      "candidate_id": "rtm_v1_bilstm_h96_l2",
+      "role": "architecture_capability",
+      "family": "bilstm",
+      "input_channels": 96,
+      "hidden_size_per_direction": 96,
+      "layers": 2,
+      "projection": "192-to-96 then residual",
+      "representative_rule": "minimum nontrivial stacked bidirectional gated recurrence; a third layer is only a closed capacity-sensitivity control",
+      "scientific_hypothesis": "explicit gated recurrent state tracks continuous respiratory phase, rate and effort",
+      "formal_config_exists": false
+    },
+    {
+      "candidate_id": "rtm_v1_multiscale_10_2_1_h384",
+      "role": "architecture_capability",
+      "family": "feature_level_multiscale",
+      "latent_channels": 96,
+      "branch_expansion_channels": 384,
+      "fine": {
+        "grid_hz": 10.0,
+        "dilations": [1, 2, 4, 8],
+        "role": "full waveform, local morphology and phase"
+      },
+      "medium": {
+        "grid_hz": 2.0,
+        "dilations": [1, 2, 4, 8],
+        "role": "full waveform, respiratory cycle and local rate context"
+      },
+      "coarse": {
+        "grid_hz": 1.0,
+        "dilations": [1, 2, 4, 8, 16, 32],
+        "theoretical_receptive_field_tokens": 253,
+        "theoretical_receptive_field_seconds": 253.0,
+        "role": "context and effort only",
+        "waveform_head_allowed": false
+      },
+      "downsampling": "signal-lock explicit low-pass plus decimation",
+      "fusion": "feature-level upsample, concatenate and learned 1x1 fusion",
+      "representative_rule": "signal-locked 10/2/1-Hz grids, minimum coarse dilation stack covering the full 180-second window, plus standard 4x branch expansion",
+      "scientific_hypothesis": "explicit feature grids separate waveform, cycle/rate and effort/global-context time scales",
+      "formal_config_exists": false
+    }
+  ],
+  "closed_candidates_and_search": {
+    "global_token_mixer": {
+      "included": false,
+      "reason": "train-only audit supports local, hierarchical and continuous-state mechanisms but does not establish an independent need for fixed-position weak-local-prior global token mixing"
+    },
+    "multiscale_0p5hz_coarse": false,
+    "average_pooling_downsampling": false,
+    "explicit_handcrafted_carrier_input_branch": false,
+    "fixed_equal_rms_proxy_combination_input": false,
+    "same_family_second_capacity_points": false,
+    "parameter_matching": false,
+    "validation_driven_width_depth_search": false,
+    "continuous_band_or_grid_search": false,
+    "family_specific_frontends": false,
+    "research_test_entry": false
+  },
+  "interpretation_limits": {
+    "single_representative_failure_disproves_family": false,
+    "cross_family_result_is_theoretical_capacity_upper_bound": false,
+    "unique_winner_required": false,
+    "parameter_count_selects_candidate": false,
+    "throughput_or_memory_selects_candidate": false,
+    "validation_is_unbiased_held_out": false
+  },
+  "next_required_phase": {
+    "phase": "cpu implementation and deterministic substrate-equivalence tests",
+    "must_complete_before_gpu_engineering": [
+      "implement the exact common 100-to-20-to-10-Hz anti-alias and nonlinearity ordering",
+      "implement 10/2/1-Hz feature multiscale with explicit anti-aliased decimation",
+      "materialize strict configs for exactly the five locked candidates",
+      "prove same-seed common stem and decoder tensor identity",
+      "prove fixed-filter numerical equivalence to the audit operators",
+      "run only lightweight deterministic CPU tests"
+    ],
+    "gpu_engineering_requires_new_user_authorization": true,
+    "formal_training_requires_later_separate_authorization": true
+  },
+  "authorization": {
+    "scientific_candidate_set_locked": true,
+    "exact_implementation_complete": false,
+    "gpu_engineering_allowed": false,
+    "formal_training_allowed": false,
+    "validation_evaluation_allowed": false,
+    "research_test_allowed": false
+  }
+}

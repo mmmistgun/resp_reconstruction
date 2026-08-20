@@ -8,7 +8,7 @@
 resp-temporal-v1-train-signal-audit-20260820
 ```
 
-状态：**实现与定向确定性测试已建立；完整 train 审计尚未执行，receipt 与 signal-substrate/family/candidate lock 均未建立。**
+状态：**完整 train-only 审计已从干净 commit `2ce0050` 执行、验收并关闭；receipt、manifest 与全部 artifact hash 已复核，signal-substrate/family/candidate lock 已获用户确认。不得重跑审计或根据结果改题。**
 
 ## 1. 目的与权威性
 
@@ -191,12 +191,17 @@ Codex 不执行完整数据审计。用户在实现提交后、工作树干净�
 5. access flags 全部满足 train-only/no-model/no-checkpoint/no-GPU 边界；
 6. 固定14项产物齐全，目标目录此前不存在且未覆盖任何旧产物。
 
-用户返回完整 receipt、manifest hash 与必要 summary 后，Codex 才能分析并起草 signal-substrate/family/candidate lock；在此之前不得写 audit 科学结论。
+完整审计随后由用户从干净 commit `2ce00509184954ec764e9cf80041f6c5f6aadfda` 执行。Receipt SHA-256=`1dbdc18836c13d8c2cd888c186477c40b044e190afed3e8817c082bd9b235428`，manifest SHA-256=`19ab1ece34e40b0b970f1f620f20015742c7ae1de57df3f20a2f904403763eb2`，sample-direct summary SHA-256=`61b5c5d17b11b71731bf399ac2d12c684c724ac1aebe4979b577797a96b49483`。固定行数、`10141/32` train identity、row/content hashes、finite/null closure 与全部 access flags 均通过，审计输出未读取 validation、research-test 或 checkpoint，未训练/推理模型且未使用 GPU。
+
+用户随后明确回复“确认上述 RTM-v1 lock 草案”。Signal substrate 固定为显式 anti-aliased `100→20 Hz`、20-Hz learned carrier-sensitive filtering + nonlinearity、再显式 anti-aliased `20→10 Hz`；不增加手工 analytic-envelope 输入。多尺度固定 `10/2/1 Hz`、只允许显式 low-pass + decimation，1 Hz只承担 context/effort，关闭0.5 Hz和普通 average pooling。Family 固定 T0 + TCN + BiMamba2 + BiLSTM + feature-level multiscale，关闭 global token mixer。规范性 lock 为：
+
+- `docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json`，SHA-256=`11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69`；
+- `docs/experiments/resp_temporal_v1_candidate_lock_20260820.json`，SHA-256=`b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b`。
 
 ## 10. 当前停止线
 
-- 本文件不授权 Codex 执行完整审计；
-- 不授权修改正式模型结构或把任一 implementation probe 升格为 formal candidate；
+- 完整审计已关闭，不得重复执行、删改或覆盖冻结产物；
+- 科学 substrate/family/candidate 已锁定，但 exact implementation 尚未完成；不得把旧 implementation probe 原样升格为 formal candidate；
 - 不授权 GPU engineering、formal training、validation summary 或 research-test；
 - 不得借用 `train_tho.py`、`train_crd.py`、旧 evaluator 或已有 checkpoint 旁路推进；
-- 若发现 train identity/hash、finite/count、filter alignment 或 access receipt 不闭合，必须 fail closed 并暂停，不得生成部分科学结论。
+- 下一阶段只允许实现 locked common substrate、10/2/1-Hz multiscale 与五项 strict configs，并运行轻量确定性 CPU 测试；GPU engineering 仍需新的用户授权。

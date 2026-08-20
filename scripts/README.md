@@ -48,15 +48,15 @@ CRD S1C 使用严格 CRD 配置 loader 的复现命令：
 
 这些审计不是每个训练 run 的重复前置步骤。协议首次实现或数据/split 发生变化时执行并保存结果；普通 run 只保留加载、shape 与 finite 断言。
 
-### RTM-v1 train-only 信号审计（待用户手动执行）
+### RTM-v1 train-only 信号审计（已完成并关闭）
 
-该入口只允许完整 eligible train，配置哈希、频带、算子、输出目录与 access receipt schema 均已冻结；不接受 split、subset、频带或输出覆盖。它不训练/推理模型，不读取 checkpoint、validation signal/target/prediction 或 research-test：
+该入口只允许完整 eligible train，配置哈希、频带、算子、输出目录与 access receipt schema 均已冻结；不接受 split、subset、频带或输出覆盖。完整审计已成功完成，以下命令只作 provenance，**不得重复运行**：
 
 ```bash
 ./.venv/bin/python scripts/audit_resp_temporal_v1_signal.py --config configs/resp_temporal_v1/signal_audit_train_v1.yaml
 ```
 
-运行前必须提交本次实现、保持工作树干净，并确认 `runs/resp_temporal_v1/train_signal_audit/rtm_v1_train_only_v1/` 不存在。完整运行属于长 CPU 任务，只由用户执行；receipt、manifest hash 与 summary 返回后才起草 signal-substrate/family/candidate lock。
+Receipt/manifest/summary SHA-256分别为`1dbdc18836c13d8c2cd888c186477c40b044e190afed3e8817c082bd9b235428 / 19ab1ece34e40b0b970f1f620f20015742c7ae1de57df3f20a2f904403763eb2 / 61b5c5d17b11b71731bf399ac2d12c684c724ac1aebe4979b577797a96b49483`。Signal/candidate lock已获用户确认；下一阶段只允许exact CPU implementation和轻量确定性测试，尚无GPU或formal入口。
 
 ## 训练
 

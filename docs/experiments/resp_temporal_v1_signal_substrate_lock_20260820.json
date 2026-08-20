@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "lock_id": "resp-temporal-v1-signal-substrate-lock-20260820",
+  "protocol_id": "resp-temporal-v1-validation-20260820",
+  "audit_protocol_id": "resp-temporal-v1-train-signal-audit-20260820",
+  "created_date": "2026-08-20",
+  "status": "scientific_substrate_confirmed_implementation_not_activated",
+  "evidence_role": "train-only signal audit; validation/research-test/checkpoint blind; not model-quality evidence",
+  "user_confirmation": {
+    "confirmed": true,
+    "confirmation_text": "确认上述 RTM-v1 lock 草案",
+    "confirmed_date": "2026-08-20"
+  },
+  "audit_basis": {
+    "execution_commit": "2ce00509184954ec764e9cf80041f6c5f6aadfda",
+    "receipt_path": "runs/resp_temporal_v1/train_signal_audit/rtm_v1_train_only_v1/access_receipt.json",
+    "receipt_sha256": "1dbdc18836c13d8c2cd888c186477c40b044e190afed3e8817c082bd9b235428",
+    "manifest_path": "runs/resp_temporal_v1/train_signal_audit/rtm_v1_train_only_v1/artifact_manifest.json",
+    "manifest_sha256": "19ab1ece34e40b0b970f1f620f20015742c7ae1de57df3f20a2f904403763eb2",
+    "summary_path": "runs/resp_temporal_v1/train_signal_audit/rtm_v1_train_only_v1/sample_direct_summary.csv",
+    "summary_sha256": "61b5c5d17b11b71731bf399ac2d12c684c724ac1aebe4979b577797a96b49483",
+    "train_windows": 10141,
+    "train_samp_ids": 32,
+    "train_row_ids_sha256": "f290e569140a2ff7745cf1a5cfa6a4da943644d76498c9b85517d3ae0702c45e",
+    "validation_accessed": false,
+    "research_test_accessed": false,
+    "checkpoint_accessed": false,
+    "model_training_used": false,
+    "model_inference_used": false,
+    "gpu_used": false,
+    "all_artifact_hashes_verified": true,
+    "all_numeric_infinite_counts_zero": true
+  },
+  "fixed_signal_bands_hz": {
+    "displacement": {
+      "interval": "[0.05,0.80]"
+    },
+    "carrier_low": {
+      "interval": "(0.80,3.00]"
+    },
+    "carrier_high": {
+      "interval": "(3.00,8.00]"
+    },
+    "target": {
+      "interval": "[0.05,0.70]"
+    }
+  },
+  "observability_evidence_sample_direct_mean": {
+    "target": {
+      "whole_rr_bpm": 15.3467133603,
+      "local_rr_mean_bpm": 15.2027019874,
+      "local_rr_range_bpm": 4.21551340197,
+      "effort_autocorr_decay_sec": 12.0310175203,
+      "spectral_centroid_hz": 0.250737812096,
+      "spectral_bandwidth_hz": 0.0629721816699
+    },
+    "displacement": {
+      "whole_rr_abs_error_bpm": 1.520086,
+      "local_rr_mae_bpm": 2.1416,
+      "effort_spearman": 0.393338,
+      "respiratory_band_coherence": 0.572578
+    },
+    "carrier_low_envelope": {
+      "effort_spearman": 0.173398,
+      "respiratory_band_coherence": 0.323698
+    },
+    "carrier_high_envelope": {
+      "effort_spearman": 0.209966,
+      "respiratory_band_coherence": 0.305593
+    },
+    "fixed_equal_rms_combination": {
+      "whole_rr_abs_error_bpm": 4.521058,
+      "local_rr_mae_bpm": 5.528437,
+      "effort_spearman": 0.274771,
+      "respiratory_band_coherence": 0.383625,
+      "better_than_displacement_alone": false
+    }
+  },
+  "sampling_order_evidence": {
+    "carrier_low_path2_vs_path1": {
+      "nrmse": 0.022314,
+      "zero_lag_corr": 0.999679,
+      "coherence_delta": -0.000069
+    },
+    "carrier_high_path2_vs_path1": {
+      "nrmse": 0.069958,
+      "zero_lag_corr": 0.996978,
+      "coherence_delta": -0.000676
+    },
+    "carrier_high_path3_vs_path1": {
+      "nrmse": 1.103839,
+      "zero_lag_corr": 0.62481,
+      "target_band_energy_ratio": 2.18312,
+      "coherence_delta": -0.021071,
+      "coherence_worse_samp_ids": 30,
+      "coherence_total_samp_ids": 32
+    }
+  },
+  "common_signal_substrate": {
+    "input": {
+      "key": "bcg_rawish_segment_soft_z_key",
+      "shape": [1, 18000],
+      "sample_rate_hz": 100.0,
+      "duration_sec": 180.0
+    },
+    "ordering": [
+      "explicit anti-aliased 100-to-20-Hz reduction preserving the fixed 0.05-to-8-Hz observable band",
+      "shared learned carrier-sensitive filtering and nonlinearity at 20 Hz",
+      "explicit anti-aliased 20-to-10-Hz reduction after the nonlinearity",
+      "shared D=96 temporal latent at 10 Hz",
+      "shared 10-Hz decoder and frozen Fourier interpolation to 100 Hz"
+    ],
+    "anti_alias_reference": {
+      "window": "kaiser",
+      "beta": 8.6,
+      "padtype": "line",
+      "100_to_20": {
+        "up": 1,
+        "down": 5,
+        "numtaps": 255,
+        "cutoff_hz": 9.0
+      },
+      "20_to_10": {
+        "up": 1,
+        "down": 2,
+        "numtaps": 127,
+        "cutoff_hz": 4.5
+      },
+      "implementation_requirement": "future torch implementation must match the deterministic audit operator and boundary semantics within a separately frozen numerical tolerance"
+    },
+    "explicit_analytic_envelope_input_branch": false,
+    "fixed_equal_rms_proxy_combination_input": false,
+    "current_probe_stem_accepted_as_is": false,
+    "current_probe_stem_reason": "ordering is directionally correct, but learned strided convolution alone is not an explicit anti-alias guarantee",
+    "model_internal_pi": false,
+    "output_grid_hz": 10.0,
+    "output_interpolation": "frozen Fourier interpolation 10-to-100 Hz"
+  },
+  "multiscale_grid_lock": {
+    "grids_hz": [10.0, 2.0, 1.0],
+    "fine_role": "full waveform, local morphology, phase and fast respiratory-cycle features",
+    "medium_role": "full 0.05-to-0.70-Hz waveform plus cycle and local rate context",
+    "coarse_role": "context and effort only; never an independent waveform head",
+    "grid_0p5_hz_retained": false,
+    "grid_0p5_hz_reason": "target roundtrip NRMSE 0.754698, effort Spearman 0.496835, and 0.479357 source power above Nyquist",
+    "downsampling": "explicit low-pass plus decimation aligned to block centers",
+    "average_pooling_allowed": false,
+    "feature_level_fusion_only": true,
+    "branch_waveform_heads_allowed": false,
+    "validation_tuned_branch_weights_allowed": false,
+    "target_2hz_explicit_lowpass": {
+      "roundtrip_nrmse": 0.003213,
+      "whole_rr_abs_error_bpm": 0.000003,
+      "local_rr_mae_bpm": 0.000101,
+      "respiratory_band_coherence": 0.999851
+    },
+    "target_1hz_explicit_lowpass": {
+      "roundtrip_nrmse": 0.094527,
+      "context_effort_spearman": 0.994398,
+      "full_waveform_role_allowed": false
+    }
+  },
+  "scientific_interpretation": {
+    "primary_observable_mechanism": "displacement",
+    "carrier_information_observable": true,
+    "carrier_information_proven_complementary_to_displacement": false,
+    "carrier_preservation_required_before_10hz": true,
+    "reason_for_preservation": "irreversible pre-demodulation reduction to 10 Hz alters the independently observable high-carrier envelope even though downstream proxy target metrics are mixed",
+    "explicit_handcrafted_carrier_branch_supported": false,
+    "multiscale_time_structure_supported": true,
+    "architecture_family_ranking_claim_allowed": false
+  },
+  "authorization": {
+    "signal_substrate_scientifically_locked": true,
+    "exact_torch_substrate_implementation_complete": false,
+    "candidate_scientific_lock_allowed": true,
+    "gpu_engineering_allowed": false,
+    "formal_training_allowed": false,
+    "validation_evaluation_allowed": false,
+    "research_test_allowed": false
+  }
+}
