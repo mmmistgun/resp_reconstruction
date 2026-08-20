@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "lock_id": "resp-temporal-v1-gpu-engineering-lock-20260820",
+  "protocol_id": "resp-temporal-v1-validation-20260820",
+  "gpu_engineering_protocol_id": "resp-temporal-v1-gpu-engineering-correction-v2-20260820",
+  "created_date": "2026-08-20",
+  "status": "gpu_engineering_confirmed_formal_training_not_authorized",
+  "decision": "all_five_hardware_feasible_at_128x1",
+  "evidence_role": "synthetic GPU engineering feasibility and descriptive cost only; no model-quality, validation or research-test evidence",
+  "user_confirmation": {
+    "confirmed": true,
+    "confirmation_text": "确认上述 RTM-v1 GPU engineering lock 草案",
+    "confirmed_date": "2026-08-20"
+  },
+  "scientific_locks": {
+    "signal_substrate": {
+      "path": "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json",
+      "sha256": "11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69"
+    },
+    "candidate": {
+      "path": "docs/experiments/resp_temporal_v1_candidate_lock_20260820.json",
+      "sha256": "b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b"
+    },
+    "cpu_implementation": {
+      "path": "docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json",
+      "sha256": "6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872"
+    }
+  },
+  "v1_failure_provenance": {
+    "status": "failed_and_frozen",
+    "execution_commit": "5d7cea0ea914ab833bb06201d4bf13a1b9c15d5f",
+    "receipt_path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1/access_receipt.json",
+    "receipt_sha256": "3ae8e96ebfbcb2ef1eeb75134088d364bea085ed37fbe9e72041d569f50d3ad0",
+    "manifest_sha256": "96b8c5ddddf62df2d890e3293ceb69804c97ca96dee37702981222a8daeae28c",
+    "actual_candidates": 3,
+    "failure_class": "environment_cudnn_runtime_incompatibility",
+    "torch_compiled_cudnn": 92000,
+    "loaded_runtime_cudnn": 90800,
+    "candidate_failure_claim_allowed": false,
+    "partial_comparison_allowed": false,
+    "delete_overwrite_or_rerun_allowed": false
+  },
+  "v2_execution": {
+    "execution_commit": "d51659d18c8905a5dc62e9a00ed399df198c89fc",
+    "config_path": "configs/resp_temporal_v1/gpu_engineering_v2.yaml",
+    "config_sha256": "081fbb0e350997e97838faa5a54478d2a81041dfc1769336573a3a0d267eb8f0",
+    "correction_protocol_path": "docs/experiments/resp_temporal_v1_gpu_engineering_correction_v2_20260820.md",
+    "correction_protocol_sha256": "9ccdd32e4f41038d3abb4a5950bb12a6ef490979348de4c5503cac78820089ce",
+    "correction_implementation_receipt_sha256": "3c2124d6f4b637b8020540fd1e97256bc291972ac70b03c58af323cbf22d6ff9",
+    "receipt_path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/access_receipt.json",
+    "receipt_sha256": "c8d34d5f1a9f944af58945f74110b0c9ff74e15696c7a7f240465ce4c83de38a",
+    "manifest_path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/artifact_manifest.json",
+    "manifest_sha256": "e90df905b2708853a761328995c4fd0c6db1e2564b1bb16eb9328ed709f25812",
+    "candidate_json_sha256": "662f6580bd464a660ae8648fb429c2c9d36f4d77e770cf0096d435b4ad9d065e",
+    "candidate_csv_sha256": "2bc076af9cdd48ee2355eff9640c6de339a158ab35fe9ea2ce6a4ce674d08521",
+    "resolved_config_sha256": "a6c4c0503f46616603c6e26c2732bc6a7892d55a7c3f69e838ce9803efc1b7d7",
+    "status": "complete",
+    "expected_candidates": 5,
+    "actual_candidates": 5,
+    "passed_candidates": 5,
+    "unavailable_candidates": 0,
+    "numeric_finite": 315,
+    "numeric_null": 10,
+    "numeric_nonfinite": 0,
+    "all_artifact_hashes_verified": true,
+    "receipt_hash_verified": true,
+    "git_dirty": false
+  },
+  "device_lock": {
+    "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "device": "cuda:0",
+    "total_memory_gib": 15.5628662109375,
+    "compute_capability": [8, 9],
+    "torch": "2.12.0+cu130",
+    "torch_cuda": "13.0",
+    "cudnn_runtime_version": 92000,
+    "cudnn_lstm_canary_passed": true,
+    "amp_dtype": "bfloat16",
+    "allow_tf32": false,
+    "cudnn_benchmark": false
+  },
+  "access_flags": {
+    "dataset_accessed": false,
+    "index_accessed": false,
+    "train_split_accessed": false,
+    "validation_accessed": false,
+    "validation_target_accessed": false,
+    "validation_prediction_accessed": false,
+    "research_test_accessed": false,
+    "checkpoint_accessed": false,
+    "formal_training_used": false,
+    "validation_evaluation_used": false,
+    "research_test_evaluation_used": false,
+    "synthetic_tensor_used": true,
+    "synthetic_training_like_update_used": true,
+    "gpu_used": true
+  },
+  "physical_batch_lock_if_formal_training_is_later_authorized": {
+    "physical_batch_size": 128,
+    "accumulation_steps": 1,
+    "effective_batch_size": 128,
+    "applies_to_all_five_candidates": true,
+    "reason": "all five candidates passed the first pre-registered 128x1 feasibility scheme with finite outputs, loss, gradients and parameters",
+    "resource_metrics_select_candidate": false
+  },
+  "candidate_engineering_summary": [
+    {
+      "candidate_id": "rtm_v1_t0_locked_stem_head",
+      "family": "no_temporal_trunk",
+      "trainable_parameters": 59042,
+      "status": "passed",
+      "physical_batch_size": 128,
+      "accumulation_steps": 1,
+      "batch1_inference_p50_ms": 1.8059679865837097,
+      "update_throughput_windows_per_second": 1014.0334572940083,
+      "update_peak_allocated_mib": 2460.2431640625,
+      "update_peak_reserved_mib": 3214.0,
+      "peak_reserved_fraction": 0.20167698112023594,
+      "planning_6400_updates_hours": 0.2805079481336805
+    },
+    {
+      "candidate_id": "rtm_v1_tcn_d9_h384",
+      "family": "dilated_tcn",
+      "trainable_parameters": 729506,
+      "status": "passed",
+      "physical_batch_size": 128,
+      "accumulation_steps": 1,
+      "batch1_inference_p50_ms": 4.517951965332031,
+      "update_throughput_windows_per_second": 554.9093915444104,
+      "update_peak_allocated_mib": 8180.06298828125,
+      "update_peak_reserved_mib": 8790.0,
+      "peak_reserved_fraction": 0.5515683460008942,
+      "planning_6400_updates_hours": 0.512596198187934
+    },
+    {
+      "candidate_id": "rtm_v1_bimamba2_d96_l6",
+      "family": "bimamba2",
+      "trainable_parameters": 1010426,
+      "status": "passed",
+      "physical_batch_size": 128,
+      "accumulation_steps": 1,
+      "batch1_inference_p50_ms": 17.278800010681152,
+      "update_throughput_windows_per_second": 280.57039023616244,
+      "update_peak_allocated_mib": 8753.43115234375,
+      "update_peak_reserved_mib": 10398.0,
+      "peak_reserved_fraction": 0.6524695860884297,
+      "planning_6400_updates_hours": 1.0138077799479166
+    },
+    {
+      "candidate_id": "rtm_v1_bilstm_h96_l2",
+      "family": "bilstm",
+      "trainable_parameters": 449474,
+      "status": "passed",
+      "physical_batch_size": 128,
+      "accumulation_steps": 1,
+      "batch1_inference_p50_ms": 5.261215925216675,
+      "update_throughput_windows_per_second": 800.6722563309419,
+      "update_peak_allocated_mib": 3831.0322265625,
+      "update_peak_reserved_mib": 5182.0,
+      "peak_reserved_fraction": 0.3251680510781153,
+      "planning_6400_updates_hours": 0.3552570258246528
+    },
+    {
+      "candidate_id": "rtm_v1_multiscale_10_2_1_h384",
+      "family": "feature_level_multiscale",
+      "trainable_parameters": 1129730,
+      "status": "passed",
+      "physical_batch_size": 128,
+      "accumulation_steps": 1,
+      "batch1_inference_p50_ms": 6.501856088638306,
+      "update_throughput_windows_per_second": 566.2565272062895,
+      "update_peak_allocated_mib": 6311.0166015625,
+      "update_peak_reserved_mib": 6832.0,
+      "peak_reserved_fraction": 0.428704771317191,
+      "planning_6400_updates_hours": 0.5023243543836805
+    }
+  ],
+  "interpretation_limits": {
+    "engineering_metrics_are_model_quality_evidence": false,
+    "parameter_count_selects_candidate": false,
+    "throughput_selects_candidate": false,
+    "memory_selects_candidate": false,
+    "wall_time_selects_candidate": false,
+    "unique_winner_claim_allowed": false,
+    "v1_partial_results_used_for_comparison": false,
+    "planning_wall_time_is_formal_runtime_guarantee": false,
+    "single_representative_failure_disproves_family": false
+  },
+  "authorization": {
+    "gpu_engineering_locked": true,
+    "all_five_candidates_hardware_feasible": true,
+    "formal_training_implementation_allowed": false,
+    "formal_training_execution_allowed": false,
+    "validation_evaluation_allowed": false,
+    "research_test_allowed": false,
+    "next_phase_requires_new_user_authorization": true
+  }
+}
