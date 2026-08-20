@@ -1,0 +1,8 @@
+_base_: _base.yaml
+model:
+  variant: rtm_v1_bimamba2_d96_l6
+  family: bimamba2
+  role: architecture_capability
+  expected_trainable_parameters: 1010426
+outputs:
+  run_root: runs/resp_temporal_v1/rtm_v1_bimamba2_d96_l6

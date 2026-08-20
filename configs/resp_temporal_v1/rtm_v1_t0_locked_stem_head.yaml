@@ -1,0 +1,8 @@
+_base_: _base.yaml
+model:
+  variant: rtm_v1_t0_locked_stem_head
+  family: no_temporal_trunk
+  role: control
+  expected_trainable_parameters: 59042
+outputs:
+  run_root: runs/resp_temporal_v1/rtm_v1_t0_locked_stem_head

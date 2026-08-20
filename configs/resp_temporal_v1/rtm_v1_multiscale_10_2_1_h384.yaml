@@ -1,0 +1,8 @@
+_base_: _base.yaml
+model:
+  variant: rtm_v1_multiscale_10_2_1_h384
+  family: feature_level_multiscale
+  role: architecture_capability
+  expected_trainable_parameters: 1129730
+outputs:
+  run_root: runs/resp_temporal_v1/rtm_v1_multiscale_10_2_1_h384

@@ -1,0 +1,8 @@
+_base_: _base.yaml
+model:
+  variant: rtm_v1_tcn_d9_h384
+  family: dilated_tcn
+  role: architecture_capability
+  expected_trainable_parameters: 729506
+outputs:
+  run_root: runs/resp_temporal_v1/rtm_v1_tcn_d9_h384
