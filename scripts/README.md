@@ -56,7 +56,17 @@ CRD S1C 使用严格 CRD 配置 loader 的复现命令：
 ./.venv/bin/python scripts/audit_resp_temporal_v1_signal.py --config configs/resp_temporal_v1/signal_audit_train_v1.yaml
 ```
 
-Receipt/manifest/summary SHA-256分别为`1dbdc18836c13d8c2cd888c186477c40b044e190afed3e8817c082bd9b235428 / 19ab1ece34e40b0b970f1f620f20015742c7ae1de57df3f20a2f904403763eb2 / 61b5c5d17b11b71731bf399ac2d12c684c724ac1aebe4979b577797a96b49483`。Signal/candidate lock已获用户确认；下一阶段只允许exact CPU implementation和轻量确定性测试，尚无GPU或formal入口。
+Receipt/manifest/summary SHA-256分别为`1dbdc18836c13d8c2cd888c186477c40b044e190afed3e8817c082bd9b235428 / 19ab1ece34e40b0b970f1f620f20015742c7ae1de57df3f20a2f904403763eb2 / 61b5c5d17b11b71731bf399ac2d12c684c724ac1aebe4979b577797a96b49483`。Signal/candidate、exact CPU与GPU engineering均已完成并锁定；这些入口和产物不得重跑或覆盖。
+
+### RTM-v1 formal（仅用户手动执行）
+
+冻结矩阵固定5项candidate×3 seeds。每条命令只运行一个identity，不接受data/split/checkpoint/epoch/batch/device/output/resume override：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python scripts/train_resp_temporal_v1.py --plan configs/resp_temporal_v1/formal_v1.yaml --candidate-id <LOCKED_ID> --seed <LOCKED_SEED>
+```
+
+输出固定为`runs/resp_temporal_v1/formal/<candidate_id>/seed_<seed>/`，目录必须预先不存在。失败目录必须保留且同identity不得重跑；15/15完成前不得汇总partial validation，也没有独立eval或research-test入口。
 
 ## 训练
 

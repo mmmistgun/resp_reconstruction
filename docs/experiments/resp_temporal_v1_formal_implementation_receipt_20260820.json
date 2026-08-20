@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "receipt_id": "resp-temporal-v1-formal-implementation-20260820",
+  "protocol_id": "resp-temporal-v1-formal-validation-20260820",
+  "created_date": "2026-08-20",
+  "status": "formal_runner_verified_15_user_runs_pending",
+  "implementation_commit": "f2b59458d95ba0adac342b38aa0b9994f2b6c549",
+  "source_provenance": {
+    "formal_protocol": {
+      "path": "docs/experiments/resp_temporal_v1_formal_protocol_20260820.md",
+      "sha256": "208b8e0f80c4a2bd426e215567702e41ee78f768e513fdb65266be3d8757c05d"
+    },
+    "formal_plan": {
+      "path": "configs/resp_temporal_v1/formal_v1.yaml",
+      "sha256": "fb1d4652c3e65bbcb1eb4b4b770e96315dbef04011cdae8e66391a33265d0697"
+    },
+    "gpu_engineering_lock": {
+      "path": "docs/experiments/resp_temporal_v1_gpu_engineering_lock_20260820.json",
+      "sha256": "5632b0e404f943e61c646a8ddcf1761c2391884412915ef1d79aa342f8bc0183"
+    },
+    "gpu_execution_receipt": {
+      "path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/access_receipt.json",
+      "sha256": "c8d34d5f1a9f944af58945f74110b0c9ff74e15696c7a7f240465ce4c83de38a"
+    },
+    "gpu_execution_manifest": {
+      "path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/artifact_manifest.json",
+      "sha256": "e90df905b2708853a761328995c4fd0c6db1e2564b1bb16eb9328ed709f25812"
+    }
+  },
+  "formal_contract": {
+    "candidate_count": 5,
+    "seeds": [
+      20260811,
+      20260812,
+      20260813
+    ],
+    "run_count": 15,
+    "epochs_per_run": 80,
+    "optimizer_updates_per_run": 6400,
+    "physical_batch_size": 128,
+    "accumulation_steps": 1,
+    "effective_batch_size": 128,
+    "train_windows": 10141,
+    "validation_windows": 2675,
+    "train_batches_per_epoch": 80,
+    "validation_batches_per_epoch": 21,
+    "selector": "full-validation Local RR sample-direct mean; strict less-than",
+    "early_stopping": false,
+    "resume": false,
+    "research_test_allowed": false,
+    "output_policy": "fixed identity directory; fail closed; no overwrite or rerun"
+  },
+  "manual_execution": {
+    "command_template": "env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python scripts/train_resp_temporal_v1.py --plan configs/resp_temporal_v1/formal_v1.yaml --candidate-id <LOCKED_ID> --seed <LOCKED_SEED>",
+    "expected_directory_template": "runs/resp_temporal_v1/formal/<candidate_id>/seed_<seed>",
+    "expected_files_per_run": [
+      "lifecycle.json",
+      "config.yaml",
+      "formal_plan.json",
+      "run_manifest.json",
+      "data_receipt.json",
+      "audit.csv",
+      "optimizer_parameter_groups.json",
+      "train_history.csv",
+      "checkpoint_best_local_rr.pt",
+      "checkpoint_final.pt",
+      "validation_metrics.csv",
+      "validation_metrics_summary.csv",
+      "runtime_summary.json",
+      "artifact_manifest.json",
+      "formal_receipt.json",
+      "formal_receipt.sha256"
+    ],
+    "executed_runs": 0,
+    "expected_runs": 15
+  },
+  "verification": {
+    "command": "/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest tests/test_resp_temporal_v1_signal_audit.py tests/test_resp_temporal_v1_config.py tests/test_resp_temporal_v1_models.py tests/test_resp_temporal_v1_gpu_engineering.py tests/test_resp_temporal_v1_formal.py -q",
+    "result": "66 passed",
+    "duration_seconds": 25.71,
+    "formal_data_preflight_executed": false,
+    "formal_training_executed": false,
+    "gpu_tests_executed": false,
+    "full_regression_executed": false
+  },
+  "access_and_execution_flags": {
+    "dataset_accessed": false,
+    "shared_index_accessed": false,
+    "train_split_accessed": false,
+    "validation_accessed": false,
+    "research_test_accessed": false,
+    "existing_checkpoint_accessed": false,
+    "temporary_synthetic_test_checkpoint_created_and_read": true,
+    "formal_training_used": false,
+    "validation_evaluation_used": false,
+    "research_test_evaluation_used": false,
+    "gpu_used": false,
+    "cpu_unit_tests_used": true
+  },
+  "source_artifacts_sha256": {
+    "configs/resp_temporal_v1/formal_v1.yaml": "fb1d4652c3e65bbcb1eb4b4b770e96315dbef04011cdae8e66391a33265d0697",
+    "docs/experiments/resp_temporal_v1_formal_protocol_20260820.md": "208b8e0f80c4a2bd426e215567702e41ee78f768e513fdb65266be3d8757c05d",
+    "resp_train/temporal/formal.py": "0bce8aad12f79e00b218de527889df9d4967a4e363a82ff15d188c14ab5219e4",
+    "scripts/train_resp_temporal_v1.py": "80c8ca681384e8bf79fd7ce992eee6da2d6ac2be01270caec1fa6e5ef456fa82",
+    "tests/test_resp_temporal_v1_formal.py": "aed4e4baceb4016895b7b9f87e4bc577a28a6bfcbbf05601daecd7a0eebbc457"
+  },
+  "authorization": {
+    "formal_runner_implementation_complete": true,
+    "formal_training_manual_execution_allowed": true,
+    "formal_training_codex_execution_allowed": false,
+    "validation_within_formal_training_allowed": true,
+    "standalone_validation_evaluation_allowed": false,
+    "validation_summary_implementation_allowed_after_15_complete_runs": true,
+    "research_test_allowed": false
+  },
+  "interpretation_limit": "This receipt verifies only the frozen formal runner and deterministic CPU tests. It contains no dataset, validation-quality, formal-training, GPU-training, or research-test evidence."
+}

@@ -2,7 +2,7 @@
 
 日期：2026-08-20
 
-状态：**完整train-only signal audit、signal/candidate lock、exact CPU implementation与GPU engineering均已关闭。V1环境失败保持冻结；v2五项候选全部在128×1 finite通过，用户已确认GPU engineering lock。Formal training、validation summary和research-test仍未开放。**
+状态：**完整train-only signal audit、signal/candidate lock、exact CPU implementation与GPU engineering均已关闭。用户已授权formal实现与手动执行；冻结15-run plan、单run runner、preflight与receipt schema已建立，15项均待用户运行。Validation summary与research-test仍关闭。**
 
 ## 1. 权威性、独立命名与当前边界
 
@@ -21,7 +21,7 @@ validation-development evidence; research-history-informed;
 not untouched held-out or unbiased generalization evidence
 ```
 
-RTM-v1 只允许读取 train/validation。当前实现不提供训练或评价入口，更不提供 test split；未来若开放 validation runner，也必须保持 validation-only。Research-test 不属于本协议任何阶段，不能因 validation 结果自动开放。
+RTM-v1 formal只允许读取train/validation，并由用户通过唯一单run入口手动执行；入口不提供split、data、checkpoint、epoch、batch、device、output或resume override。当前不提供独立评价入口，更不提供test split。Research-test不属于当前阶段，不能因validation结果自动开放。
 
 ## 2. 现有时序证据的正确角色
 
@@ -324,13 +324,14 @@ Tolerance-aware materiality 固定为：
 - 用户确认的 signal-substrate lock、五项 scientific candidate lock，以及 exact CPU implementation receipt；
 - `docs/experiments/resp_temporal_v1_gpu_engineering_protocol_20260820.md`、冻结synthetic benchmark config、fail-closed harness、严格receipt/manifest schema与GPU engineering implementation receipt。
 - v1 cuDNN环境失败的冻结receipt/manifest，以及`docs/experiments/resp_temporal_v1_gpu_engineering_correction_v2_20260820.md`规定的unset环境、cuDNN 92000与LSTM canary preflight。
-- 完整v2 execution receipt/manifest、五项candidate engineering summary与用户确认的GPU engineering lock；若以后另行授权formal training，五项统一physical batch=128、accumulation=1。
+- 完整v2 execution receipt/manifest、五项candidate engineering summary与用户确认的GPU engineering lock；formal五项据此统一physical batch=128、accumulation=1。
+- `docs/experiments/resp_temporal_v1_formal_protocol_20260820.md`、`configs/resp_temporal_v1/formal_v1.yaml`、`scripts/train_resp_temporal_v1.py`及严格单run preflight/lifecycle/count/finite/hash/access receipt；用户手动矩阵固定5×3=15项且尚未执行。
+- formal implementation receipt SHA-256=`0d2dae3fea51f18821a47a11e69d8a8b2ca765898c3d84c228d2fedffcaff0fa`；66项RTM-v1 CPU定向测试通过，未读取dataset/index/split或既有checkpoint，未使用GPU。
 
 当前明确未建立：
 
-- train/eval CLI；
-- formal config/runner/preflight；
-- validation summary；
+- 15项formal execution receipts与完整性验收；
+- validation summarizer与冻结summary；
 - research-test cache、allowlist 或 evaluator。
 
-GPU engineering已关闭：v1 partial不得比较，v2工程指标只描述可执行性与成本，不选择科学候选。下一阶段无自动授权；formal config/runner或formal training必须由用户另行明确授权，且不得因资源指标改变五项候选。Formal结果完成后也不自动开放research-test。
+GPU engineering已关闭：v1 partial不得比较，v2工程指标只描述可执行性与成本，不选择科学候选。下一步仅允许用户按冻结命令完成15项formal；Codex不得代跑长任务，也不得根据partial validation停止正常arm。15/15 receipt验收后才能实现validation summarizer；formal结果完成后也不自动开放research-test。
