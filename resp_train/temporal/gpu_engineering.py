@@ -27,12 +27,12 @@ from resp_train.temporal.model import build_resp_temporal_model, trainable_param
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG_PATH = REPO_ROOT / "configs/resp_temporal_v1/gpu_engineering_v1.yaml"
-CONFIG_SCHEMA_VERSION = "rtm-v1-gpu-engineering-config-v1"
-RECEIPT_SCHEMA_VERSION = "rtm-v1-gpu-engineering-receipt-v1"
-MANIFEST_SCHEMA_VERSION = "rtm-v1-gpu-engineering-manifest-v1"
-PROTOCOL_ID = "resp-temporal-v1-gpu-engineering-20260820"
-FROZEN_CONFIG_SHA256 = "7ec9c26481a4369e7fea56a5c9c14f2bae1167423365466ce7ce4325bec35300"
+DEFAULT_CONFIG_PATH = REPO_ROOT / "configs/resp_temporal_v1/gpu_engineering_v2.yaml"
+CONFIG_SCHEMA_VERSION = "rtm-v1-gpu-engineering-config-v2"
+RECEIPT_SCHEMA_VERSION = "rtm-v1-gpu-engineering-receipt-v2"
+MANIFEST_SCHEMA_VERSION = "rtm-v1-gpu-engineering-manifest-v2"
+PROTOCOL_ID = "resp-temporal-v1-gpu-engineering-correction-v2-20260820"
+FROZEN_CONFIG_SHA256 = "081fbb0e350997e97838faa5a54478d2a81041dfc1769336573a3a0d267eb8f0"
 EXPECTED_CANDIDATES = (
     "rtm_v1_t0_locked_stem_head",
     "rtm_v1_tcn_d9_h384",
@@ -109,6 +109,7 @@ def validate_gpu_engineering_config(raw: Mapping[str, Any]) -> None:
             "authorization",
             "provenance",
             "candidates",
+            "environment",
             "device",
             "synthetic",
             "benchmark",
@@ -142,8 +143,14 @@ def validate_gpu_engineering_config(raw: Mapping[str, Any]) -> None:
         {
             "protocol_path",
             "protocol_sha256",
+            "correction_protocol_path",
+            "correction_protocol_sha256",
             "implementation_receipt_path",
             "implementation_receipt_sha256",
+            "prior_failure_receipt_path",
+            "prior_failure_receipt_sha256",
+            "prior_failure_manifest_path",
+            "prior_failure_manifest_sha256",
             "verify_implementation_source_artifacts",
             "require_clean_git",
         },
@@ -152,8 +159,14 @@ def validate_gpu_engineering_config(raw: Mapping[str, Any]) -> None:
     expected_provenance = {
         "protocol_path": "docs/experiments/resp_temporal_v1_gpu_engineering_protocol_20260820.md",
         "protocol_sha256": "7b1b946564989b4d3e8b7244d475349a4efe0ecefb023d1df5a53a6d5d5669fa",
+        "correction_protocol_path": "docs/experiments/resp_temporal_v1_gpu_engineering_correction_v2_20260820.md",
+        "correction_protocol_sha256": "9ccdd32e4f41038d3abb4a5950bb12a6ef490979348de4c5503cac78820089ce",
         "implementation_receipt_path": "docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json",
         "implementation_receipt_sha256": "6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872",
+        "prior_failure_receipt_path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1/access_receipt.json",
+        "prior_failure_receipt_sha256": "3ae8e96ebfbcb2ef1eeb75134088d364bea085ed37fbe9e72041d569f50d3ad0",
+        "prior_failure_manifest_path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1/artifact_manifest.json",
+        "prior_failure_manifest_sha256": "96b8c5ddddf62df2d890e3293ceb69804c97ca96dee37702981222a8daeae28c",
         "verify_implementation_source_artifacts": True,
         "require_clean_git": True,
     }
@@ -193,6 +206,11 @@ def validate_gpu_engineering_config(raw: Mapping[str, Any]) -> None:
     if candidates != expected_candidate_records:
         raise ValueError("GPU engineering candidate identity/order/hash 漂移")
 
+    environment = raw["environment"]
+    _require_exact_keys(environment, {"required_unset_variables"}, "environment")
+    if environment != {"required_unset_variables": ["LD_LIBRARY_PATH", "LD_PRELOAD"]}:
+        raise ValueError("GPU engineering v2 environment contract 漂移")
+
     device = raw["device"]
     _require_exact_keys(
         device,
@@ -200,6 +218,8 @@ def validate_gpu_engineering_config(raw: Mapping[str, Any]) -> None:
             "name",
             "expected_device_name",
             "minimum_total_memory_gib",
+            "expected_cudnn_runtime_version",
+            "require_cudnn_lstm_canary",
             "amp_dtype",
             "allow_tf32",
             "cudnn_benchmark",
@@ -210,6 +230,8 @@ def validate_gpu_engineering_config(raw: Mapping[str, Any]) -> None:
         "name": "cuda:0",
         "expected_device_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
         "minimum_total_memory_gib": 15.0,
+        "expected_cudnn_runtime_version": 92000,
+        "require_cudnn_lstm_canary": True,
         "amp_dtype": "bfloat16",
         "allow_tf32": False,
         "cudnn_benchmark": False,
@@ -300,7 +322,7 @@ def validate_gpu_engineering_config(raw: Mapping[str, Any]) -> None:
     output = raw["output"]
     _require_exact_keys(output, {"directory", "allow_overwrite", "csv_float_format"}, "output")
     if output != {
-        "directory": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1",
+        "directory": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2",
         "allow_overwrite": False,
         "csv_float_format": "%.12g",
     }:
@@ -343,14 +365,51 @@ def _git_identity() -> tuple[str, bool]:
 def verify_frozen_provenance(config: GPUConfig) -> dict[str, Any]:
     provenance = config.raw["provenance"]
     protocol_path = _repo_path(provenance["protocol_path"], context="protocol_path")
+    correction_path = _repo_path(
+        provenance["correction_protocol_path"], context="correction_protocol_path"
+    )
     receipt_path = _repo_path(provenance["implementation_receipt_path"], context="implementation_receipt_path")
+    prior_receipt_path = _repo_path(
+        provenance["prior_failure_receipt_path"], context="prior_failure_receipt_path"
+    )
+    prior_manifest_path = _repo_path(
+        provenance["prior_failure_manifest_path"], context="prior_failure_manifest_path"
+    )
     for path, expected in (
         (protocol_path, provenance["protocol_sha256"]),
+        (correction_path, provenance["correction_protocol_sha256"]),
         (receipt_path, provenance["implementation_receipt_sha256"]),
+        (prior_receipt_path, provenance["prior_failure_receipt_sha256"]),
+        (prior_manifest_path, provenance["prior_failure_manifest_sha256"]),
     ):
         actual = sha256_file(path)
         if actual != expected:
             raise RuntimeError(f"冻结 provenance hash 漂移: {path}: {actual} != {expected}")
+
+    prior_receipt = json.loads(prior_receipt_path.read_text(encoding="utf-8"))
+    prior_manifest = json.loads(prior_manifest_path.read_text(encoding="utf-8"))
+    if (
+        prior_receipt.get("schema_version") != "rtm-v1-gpu-engineering-receipt-v1"
+        or prior_receipt.get("protocol_id") != "resp-temporal-v1-gpu-engineering-20260820"
+        or prior_receipt.get("status") != "failed"
+        or int(prior_receipt.get("counts", {}).get("actual_candidates", -1)) != 3
+        or int(prior_receipt.get("finite_audit", {}).get("numeric_nonfinite", -1)) != 0
+    ):
+        raise RuntimeError("v1 failure receipt 身份、状态、count 或 finite closure 漂移")
+    failure_message = str(prior_receipt.get("failure", {}).get("message", ""))
+    runtime_cudnn = str(prior_receipt.get("execution", {}).get("dependencies", {}).get("cudnn", ""))
+    if "cuDNN version incompatibility" not in failure_message or runtime_cudnn != "90800":
+        raise RuntimeError("v1 failure 不再是冻结的 cuDNN 9.8/9.20 环境冲突")
+    if (
+        prior_manifest.get("schema_version") != "rtm-v1-gpu-engineering-manifest-v1"
+        or prior_manifest.get("protocol_id") != "resp-temporal-v1-gpu-engineering-20260820"
+    ):
+        raise RuntimeError("v1 failure manifest schema/protocol 漂移")
+    prior_output_dir = prior_receipt_path.parent
+    for artifact in prior_receipt.get("artifacts", []):
+        artifact_path = prior_output_dir / str(artifact["filename"])
+        if sha256_file(artifact_path) != artifact["sha256"]:
+            raise RuntimeError(f"v1 failure artifact hash 漂移: {artifact_path}")
 
     implementation_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     source_hashes = implementation_receipt.get("source_artifacts_sha256")
@@ -396,9 +455,17 @@ def verify_frozen_provenance(config: GPUConfig) -> dict[str, Any]:
         "git_dirty": False,
         "protocol_path": str(protocol_path.relative_to(REPO_ROOT)),
         "protocol_sha256": sha256_file(protocol_path),
+        "correction_protocol_path": str(correction_path.relative_to(REPO_ROOT)),
+        "correction_protocol_sha256": sha256_file(correction_path),
         "implementation_receipt_path": str(receipt_path.relative_to(REPO_ROOT)),
         "implementation_receipt_sha256": sha256_file(receipt_path),
         "implementation_commit": implementation_commit,
+        "prior_failure_receipt_path": str(prior_receipt_path.relative_to(REPO_ROOT)),
+        "prior_failure_receipt_sha256": sha256_file(prior_receipt_path),
+        "prior_failure_manifest_path": str(prior_manifest_path.relative_to(REPO_ROOT)),
+        "prior_failure_manifest_sha256": sha256_file(prior_manifest_path),
+        "prior_failure_actual_candidates": 3,
+        "prior_failure_runtime_cudnn": 90800,
         "verified_source_artifact_count": len(source_hashes),
         "candidate_config_sha256": config_hashes,
     }
@@ -794,6 +861,13 @@ def benchmark_candidate(record: Mapping[str, Any], config: GPUConfig, device: to
 
 
 def _cuda_identity(raw: Mapping[str, Any]) -> tuple[torch.device, dict[str, Any]]:
+    present = [
+        name for name in raw["environment"]["required_unset_variables"] if name in os.environ
+    ]
+    if present:
+        raise RuntimeError(
+            "GPU engineering v2 要求进程启动前unset环境变量: " + ", ".join(present)
+        )
     if not torch.cuda.is_available():
         raise RuntimeError("GPU engineering 要求 CUDA available")
     device = torch.device(str(raw["device"]["name"]))
@@ -810,9 +884,28 @@ def _cuda_identity(raw: Mapping[str, Any]) -> tuple[torch.device, dict[str, Any]
         raise RuntimeError(f"GPU 显存不足15 GiB合同: {total_gib:.3f} GiB")
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError("目标 GPU/环境不支持 bfloat16")
+    runtime_cudnn = torch.backends.cudnn.version()
+    expected_cudnn = int(raw["device"]["expected_cudnn_runtime_version"])
+    if runtime_cudnn != expected_cudnn:
+        raise RuntimeError(
+            f"GPU engineering v2 cuDNN runtime不匹配: {runtime_cudnn} != {expected_cudnn}；"
+            "不得创建benchmark输出"
+        )
     torch.backends.cuda.matmul.allow_tf32 = bool(raw["device"]["allow_tf32"])
     torch.backends.cudnn.allow_tf32 = bool(raw["device"]["allow_tf32"])
     torch.backends.cudnn.benchmark = bool(raw["device"]["cudnn_benchmark"])
+    canary_passed = False
+    if bool(raw["device"]["require_cudnn_lstm_canary"]):
+        canary = torch.nn.LSTM(input_size=4, hidden_size=4, num_layers=1, batch_first=True).to(device)
+        canary_input = torch.zeros(1, 2, 4, device=device, dtype=torch.float32)
+        with torch.no_grad():
+            canary_output, _ = canary(canary_input)
+        torch.cuda.synchronize(device)
+        if not bool(torch.isfinite(canary_output).all()):
+            raise FloatingPointError("cuDNN LSTM preflight canary 输出非有限")
+        canary_passed = True
+        del canary, canary_input, canary_output
+        _cleanup_cuda()
     return device, {
         "device": str(device),
         "name": properties.name,
@@ -820,6 +913,11 @@ def _cuda_identity(raw: Mapping[str, Any]) -> tuple[torch.device, dict[str, Any]
         "total_memory_gib": total_gib,
         "compute_capability": [int(properties.major), int(properties.minor)],
         "bf16_supported": True,
+        "cudnn_runtime_version": int(runtime_cudnn),
+        "cudnn_lstm_canary_passed": canary_passed,
+        "required_unset_environment_variables": list(
+            raw["environment"]["required_unset_variables"]
+        ),
         "amp_dtype": "bfloat16",
         "allow_tf32": bool(torch.backends.cuda.matmul.allow_tf32),
         "cudnn_benchmark": bool(torch.backends.cudnn.benchmark),
@@ -1135,11 +1233,12 @@ def run_gpu_engineering(*, config_path: str | Path = DEFAULT_CONFIG_PATH, comman
     dependency_problems = check_crd_dependencies()
     if dependency_problems:
         raise RuntimeError("; ".join(dependency_problems))
+    # v2 correction: 依赖/环境/cuDNN canary 必须在创建任何输出路径前通过。
+    device, device_info = _cuda_identity(config.raw)
     config.output_dir.parent.mkdir(parents=True, exist_ok=True)
     temporary = config.output_dir.parent / f".{config.output_dir.name}.{uuid4().hex}.tmp"
     temporary.mkdir(parents=False, exist_ok=False)
     details: list[dict[str, Any]] = []
-    device_info: dict[str, Any] | None = None
     try:
         _json_write(
             temporary / "resolved_config.json",
@@ -1151,7 +1250,6 @@ def run_gpu_engineering(*, config_path: str | Path = DEFAULT_CONFIG_PATH, comman
             },
         )
         try:
-            device, device_info = _cuda_identity(config.raw)
             torch.manual_seed(int(config.raw["synthetic"]["seed"]))
             torch.cuda.manual_seed_all(int(config.raw["synthetic"]["seed"]))
             for index, candidate in enumerate(config.raw["candidates"], start=1):

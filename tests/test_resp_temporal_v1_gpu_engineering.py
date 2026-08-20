@@ -43,7 +43,7 @@ def test_frozen_gpu_engineering_config_is_exact_and_non_scientific() -> None:
         {"physical_batch_size": 64, "accumulation_steps": 2},
         {"physical_batch_size": 32, "accumulation_steps": 4},
     ]
-    for key in ("protocol", "implementation_receipt"):
+    for key in ("protocol", "correction_protocol", "implementation_receipt"):
         relative = config.raw["provenance"][f"{key}_path"]
         assert sha256_file(engineering.REPO_ROOT / relative) == config.raw["provenance"][f"{key}_sha256"]
     for candidate in config.raw["candidates"]:
@@ -166,7 +166,7 @@ def _valid_receipt() -> dict:
             "python_version": "3.12",
             "platform": "linux",
             "dependencies": {},
-            "config_path": "configs/resp_temporal_v1/gpu_engineering_v1.yaml",
+            "config_path": "configs/resp_temporal_v1/gpu_engineering_v2.yaml",
             "config_sha256": FROZEN_CONFIG_SHA256,
             "provenance": {},
         },
@@ -233,6 +233,35 @@ def test_existing_output_is_rejected_before_provenance_or_cuda(monkeypatch, tmp_
     monkeypatch.setattr(engineering, "load_gpu_engineering_config", lambda _: config)
     with pytest.raises(FileExistsError, match="禁止覆盖"):
         run_gpu_engineering(config_path=frozen.path, command="unused")
+
+
+def test_v2_environment_preflight_rejects_library_override_before_cuda(monkeypatch) -> None:
+    raw = load_gpu_engineering_config().raw
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/incompatible/cudnn")
+    with pytest.raises(RuntimeError, match="unset.*LD_LIBRARY_PATH"):
+        engineering._cuda_identity(raw)
+
+
+def test_v2_preflight_failure_does_not_create_output(monkeypatch, tmp_path: Path) -> None:
+    frozen = load_gpu_engineering_config()
+    output = tmp_path / "must_not_exist"
+    config = GPUConfig(path=frozen.path, sha256=frozen.sha256, raw=frozen.raw, output_dir=output)
+    monkeypatch.setattr(engineering, "load_gpu_engineering_config", lambda _: config)
+    monkeypatch.setattr(
+        engineering,
+        "verify_frozen_provenance",
+        lambda _: {"git_commit": "a" * 40, "git_dirty": False},
+    )
+    monkeypatch.setattr(engineering, "check_crd_dependencies", lambda: [])
+    monkeypatch.setattr(
+        engineering,
+        "_cuda_identity",
+        lambda _: (_ for _ in ()).throw(RuntimeError("preflight failed")),
+    )
+    with pytest.raises(RuntimeError, match="preflight failed"):
+        run_gpu_engineering(config_path=frozen.path, command="unused")
+    assert not output.exists()
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_output_bundle_is_atomic_hashed_and_strict_without_cuda(tmp_path: Path) -> None:

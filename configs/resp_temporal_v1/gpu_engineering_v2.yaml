@@ -1,0 +1,90 @@
+schema_version: rtm-v1-gpu-engineering-config-v2
+protocol_id: resp-temporal-v1-gpu-engineering-correction-v2-20260820
+role: engineering_only
+scientific_evidence: false
+
+authorization:
+  gpu_engineering: true
+  formal_training: false
+  validation_evaluation: false
+  research_test_evaluation: false
+
+provenance:
+  protocol_path: docs/experiments/resp_temporal_v1_gpu_engineering_protocol_20260820.md
+  protocol_sha256: 7b1b946564989b4d3e8b7244d475349a4efe0ecefb023d1df5a53a6d5d5669fa
+  correction_protocol_path: docs/experiments/resp_temporal_v1_gpu_engineering_correction_v2_20260820.md
+  correction_protocol_sha256: 9ccdd32e4f41038d3abb4a5950bb12a6ef490979348de4c5503cac78820089ce
+  implementation_receipt_path: docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json
+  implementation_receipt_sha256: 6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872
+  prior_failure_receipt_path: runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1/access_receipt.json
+  prior_failure_receipt_sha256: 3ae8e96ebfbcb2ef1eeb75134088d364bea085ed37fbe9e72041d569f50d3ad0
+  prior_failure_manifest_path: runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v1/artifact_manifest.json
+  prior_failure_manifest_sha256: 96b8c5ddddf62df2d890e3293ceb69804c97ca96dee37702981222a8daeae28c
+  verify_implementation_source_artifacts: true
+  require_clean_git: true
+
+candidates:
+  - candidate_id: rtm_v1_t0_locked_stem_head
+    config_path: configs/resp_temporal_v1/rtm_v1_t0_locked_stem_head.yaml
+    config_sha256: eb7cab872305459f62dac7eb0eb15e699690ea03e5ff7d33b581666ed7a31be6
+  - candidate_id: rtm_v1_tcn_d9_h384
+    config_path: configs/resp_temporal_v1/rtm_v1_tcn_d9_h384.yaml
+    config_sha256: b838396563580bfe19d211bc9cfd86ad09228a1f72a28084c25e003b67077519
+  - candidate_id: rtm_v1_bimamba2_d96_l6
+    config_path: configs/resp_temporal_v1/rtm_v1_bimamba2_d96_l6.yaml
+    config_sha256: 18c98c28240fc5f983feef301e174b13b3be5829f7cb723acd032e412e7917f5
+  - candidate_id: rtm_v1_bilstm_h96_l2
+    config_path: configs/resp_temporal_v1/rtm_v1_bilstm_h96_l2.yaml
+    config_sha256: 05dde416538ea0920f9f4f01b6462baf8e95575551ad1a71c2089315d17b9bb7
+  - candidate_id: rtm_v1_multiscale_10_2_1_h384
+    config_path: configs/resp_temporal_v1/rtm_v1_multiscale_10_2_1_h384.yaml
+    config_sha256: cdef3bd3ac3dd7a0e259d8182bfe7d4aa91944cc5391b945835bfe29bf5a7968
+
+environment:
+  required_unset_variables: [LD_LIBRARY_PATH, LD_PRELOAD]
+
+device:
+  name: cuda:0
+  expected_device_name: NVIDIA GeForce RTX 4070 Ti SUPER
+  minimum_total_memory_gib: 15.0
+  expected_cudnn_runtime_version: 92000
+  require_cudnn_lstm_canary: true
+  amp_dtype: bfloat16
+  allow_tf32: false
+  cudnn_benchmark: false
+
+synthetic:
+  seed: 20260820
+  sample_rate_hz: 100
+  duration_samples: 18000
+  duration_sec: 180
+  input_channels: 1
+  generator: fixed_analytic_bcg_resp_v1
+
+benchmark:
+  batch1_inference: {batch_size: 1, warmup: 10, repeats: 50}
+  fixed_forward: {batch_size: 8, warmup: 5, repeats: 20}
+  fixed_forward_backward: {batch_size: 8, warmup: 3, repeats: 10}
+  physical_batch_schemes:
+    - {physical_batch_size: 128, accumulation_steps: 1}
+    - {physical_batch_size: 64, accumulation_steps: 2}
+    - {physical_batch_size: 32, accumulation_steps: 4}
+  update_warmup: 1
+  update_repeats: 3
+  effective_batch_size: 128
+  formal_optimizer_updates: 6400
+  planning_wall_time_multiplier: 1.25
+  latency_percentiles: [50, 90]
+
+optimizer:
+  name: adamw
+  learning_rate: 3.0e-4
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+  weight_decay: 1.0e-4
+  grad_clip_norm: 1.0
+
+output:
+  directory: runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2
+  allow_overwrite: false
+  csv_float_format: "%.12g"
