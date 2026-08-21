@@ -1,0 +1,125 @@
+schema_version: rtm-v1-validation-summary-config-v1
+protocol_id: resp-temporal-v1-validation-summary-20260821
+role: validation_summary_only
+evidence_label: validation-development evidence
+
+authorization:
+  validation_summary_implementation: true
+  user_manual_summary_execution: true
+  codex_summary_execution: false
+  model_training: false
+  model_inference: false
+  research_test_evaluation: false
+
+provenance:
+  summary_protocol_path: docs/experiments/resp_temporal_v1_validation_summary_protocol_20260821.md
+  summary_protocol_sha256: 500ea2be91c8a8a61f34aedfabeee1ef3b5731bbd24eadaec3e3752de1753db0
+  formal_dual_gpu_plan_path: configs/resp_temporal_v1/formal_dual_gpu_v2.yaml
+  formal_dual_gpu_plan_sha256: c6594d160a3f7ecb1f39a4e036996491dd6f1919aedeea28949ff8533a1dd8c3
+  formal_dual_gpu_correction_path: docs/experiments/resp_temporal_v1_formal_dual_gpu_correction_20260820.md
+  formal_dual_gpu_correction_sha256: 1c2cad1c5cc401776d894a0bb039e0ad75a8cd3030f66ea70b48817f2de1b84a
+  formal_dual_gpu_implementation_receipt_path: docs/experiments/resp_temporal_v1_formal_dual_gpu_implementation_receipt_20260820.json
+  formal_dual_gpu_implementation_receipt_sha256: fa07aae4f83b74c86bf5113840058af99a768d33b16aad883dc6d6368998d888
+  formal_execution_git_commit: 24c54a88ea8b17ad183b48976bd1f690e3867706
+  gpu_engineering_csv_path: runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/candidate_engineering.csv
+  gpu_engineering_csv_sha256: 2bc076af9cdd48ee2355eff9640c6de339a158ab35fe9ea2ce6a4ce674d08521
+  gpu_engineering_receipt_path: runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/access_receipt.json
+  gpu_engineering_receipt_sha256: c8d34d5f1a9f944af58945f74110b0c9ff74e15696c7a7f240465ce4c83de38a
+  gpu_engineering_manifest_path: runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/artifact_manifest.json
+  gpu_engineering_manifest_sha256: e90df905b2708853a761328995c4fd0c6db1e2564b1bb16eb9328ed709f25812
+  require_clean_git: true
+
+candidates:
+  - candidate_id: rtm_v1_t0_locked_stem_head
+    family: no_temporal_trunk
+    role: control
+    trainable_parameters: 59042
+  - candidate_id: rtm_v1_tcn_d9_h384
+    family: dilated_tcn
+    role: representative
+    trainable_parameters: 729506
+  - candidate_id: rtm_v1_bimamba2_d96_l6
+    family: bimamba2
+    role: representative
+    trainable_parameters: 1010426
+  - candidate_id: rtm_v1_bilstm_h96_l2
+    family: bilstm
+    role: representative
+    trainable_parameters: 449474
+  - candidate_id: rtm_v1_multiscale_10_2_1_h384
+    family: feature_level_multiscale
+    role: representative
+    trainable_parameters: 1129730
+
+seeds: [20260811, 20260812, 20260813]
+
+formal_runs:
+  - {candidate_id: rtm_v1_t0_locked_stem_head, seed: 20260811, execution_group: gpu_0, cuda_visible_devices: "0", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_t0_locked_stem_head/seed_20260811/formal_receipt.json, receipt_sha256: e6a9be34418aa4e98e256742ee69855a2100f98024641d74b83ce21cb3d09842}
+  - {candidate_id: rtm_v1_t0_locked_stem_head, seed: 20260812, execution_group: gpu_1, cuda_visible_devices: "1", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_t0_locked_stem_head/seed_20260812/formal_receipt.json, receipt_sha256: 067e75be7d82a435a78d486a7014d20fe2883a89fd48ee11f505cdcf19271e17}
+  - {candidate_id: rtm_v1_t0_locked_stem_head, seed: 20260813, execution_group: gpu_0, cuda_visible_devices: "0", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_t0_locked_stem_head/seed_20260813/formal_receipt.json, receipt_sha256: 994f04f8568940f7da3698b4bd79a84e79d035a706b92620254abd69598b9238}
+  - {candidate_id: rtm_v1_tcn_d9_h384, seed: 20260811, execution_group: gpu_1, cuda_visible_devices: "1", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_tcn_d9_h384/seed_20260811/formal_receipt.json, receipt_sha256: f17b8b4d0e99eb3f19b87c81fe2e44eade8f0c191d25087579e48b2ec6c9b573}
+  - {candidate_id: rtm_v1_tcn_d9_h384, seed: 20260812, execution_group: gpu_0, cuda_visible_devices: "0", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_tcn_d9_h384/seed_20260812/formal_receipt.json, receipt_sha256: dece2f1934a0851e692330cf201c4ba438720dae3bd6385282cae349d8d2fffb}
+  - {candidate_id: rtm_v1_tcn_d9_h384, seed: 20260813, execution_group: gpu_0, cuda_visible_devices: "0", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_tcn_d9_h384/seed_20260813/formal_receipt.json, receipt_sha256: cc04954c0883a14e1fb3718052b01badaedaef37448c19e29b768a79d3d4994c}
+  - {candidate_id: rtm_v1_bimamba2_d96_l6, seed: 20260811, execution_group: gpu_0, cuda_visible_devices: "0", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_bimamba2_d96_l6/seed_20260811/formal_receipt.json, receipt_sha256: 69820533599b398944f4a807883d942655c9540a6c519a2846b5be6926cc476e}
+  - {candidate_id: rtm_v1_bimamba2_d96_l6, seed: 20260812, execution_group: gpu_1, cuda_visible_devices: "1", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_bimamba2_d96_l6/seed_20260812/formal_receipt.json, receipt_sha256: 8b28321196d476c37c309a2b159688d847a9a7d9c10afaf4a98eadfa4e05ee1c}
+  - {candidate_id: rtm_v1_bimamba2_d96_l6, seed: 20260813, execution_group: gpu_0, cuda_visible_devices: "0", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_bimamba2_d96_l6/seed_20260813/formal_receipt.json, receipt_sha256: b3f201355b7f7acf1111715b09d63c7dcf72937d66eb2c5a4f3f8b4b511fab55}
+  - {candidate_id: rtm_v1_bilstm_h96_l2, seed: 20260811, execution_group: gpu_1, cuda_visible_devices: "1", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_bilstm_h96_l2/seed_20260811/formal_receipt.json, receipt_sha256: d1b7039ca19c79a5b559c1340130621563fe02ef882275c97c2f3a4ff509c9e8}
+  - {candidate_id: rtm_v1_bilstm_h96_l2, seed: 20260812, execution_group: gpu_0, cuda_visible_devices: "0", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_bilstm_h96_l2/seed_20260812/formal_receipt.json, receipt_sha256: c6eabc4fbad9db371d5338a4edb95026699f0bedb6814b7a8ac24067e2c8d12f}
+  - {candidate_id: rtm_v1_bilstm_h96_l2, seed: 20260813, execution_group: gpu_1, cuda_visible_devices: "1", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_bilstm_h96_l2/seed_20260813/formal_receipt.json, receipt_sha256: 0ebacecc56f02d3f3672156f0bcee8d9a9e7b7ff025effe0c0387fdcf974197b}
+  - {candidate_id: rtm_v1_multiscale_10_2_1_h384, seed: 20260811, execution_group: gpu_0, cuda_visible_devices: "0", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_multiscale_10_2_1_h384/seed_20260811/formal_receipt.json, receipt_sha256: 34cc36a15b6049dd6318b35bb0c0f3b897e4208ae4b760af5ed1a61479eb96ce}
+  - {candidate_id: rtm_v1_multiscale_10_2_1_h384, seed: 20260812, execution_group: gpu_1, cuda_visible_devices: "1", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_multiscale_10_2_1_h384/seed_20260812/formal_receipt.json, receipt_sha256: d0528411a5f57b388c4df3a21765168cb53151936a7361c59fe7e67e418c7f61}
+  - {candidate_id: rtm_v1_multiscale_10_2_1_h384, seed: 20260813, execution_group: gpu_1, cuda_visible_devices: "1", receipt_path: runs/resp_temporal_v1/formal/rtm_v1_multiscale_10_2_1_h384/seed_20260813/formal_receipt.json, receipt_sha256: 71111265db2a267c433e5f3e90e09eaaa132b71ea4a3710237ea6695470198db}
+
+aggregation:
+  expected_formal_runs: 15
+  expected_validation_rows_per_run: 2675
+  expected_validation_samp_ids: 7
+  expected_validation_row_ids_sha256: b68a51b101bb80033c4de18c9c21cdfbb8924d1bfe134330f047617cf3b0915a
+  candidate_seed_mean: arithmetic
+  candidate_seed_sd: sample_ddof_1
+  stored_summary_rtol: 1.0e-12
+  stored_summary_atol: 1.0e-12
+
+primary_metrics:
+  - {name: whole_rr_abs_error_bpm_mean, direction: minimize, tolerance_kind: relative, tolerance: 0.005}
+  - {name: local_rr_mae_bpm_mean, direction: minimize, tolerance_kind: relative, tolerance: 0.005}
+  - {name: envelope_trajectory_mae_mean, direction: minimize, tolerance_kind: relative, tolerance: 0.005}
+  - {name: global_envelope_modulation_error_mean, direction: minimize, tolerance_kind: relative, tolerance: 0.005}
+  - {name: lag_aware_signed_pcc_mean, direction: maximize, tolerance_kind: absolute, tolerance: 0.002}
+
+quality_efficiency_metrics:
+  - {name: trainable_parameters, direction: minimize, tolerance_kind: exact, tolerance: 0.0}
+  - {name: update_throughput_windows_per_second, direction: maximize, tolerance_kind: relative, tolerance: 0.05}
+  - {name: update_peak_allocated_mib, direction: minimize, tolerance_kind: relative, tolerance: 0.05}
+
+supplementary_metrics:
+  seed_aggregated:
+    - ibi_medae_sec_mean
+    - ibi_coverage_mean
+    - target_stratified_envelope_spearman_low_mean
+    - target_stratified_envelope_spearman_medium_mean
+    - target_stratified_envelope_spearman_high_mean
+    - joint_prediction_degenerate_fraction
+  engineering:
+    - batch1_inference_p50_ms
+    - batch1_inference_p90_ms
+    - update_peak_reserved_mib
+
+access:
+  validation_metrics_allowed: true
+  validation_summary_allowed: true
+  formal_receipt_allowed: true
+  lifecycle_and_manifest_allowed: true
+  gpu_engineering_artifacts_allowed: true
+  dataset_or_index_allowed: false
+  signal_or_target_array_allowed: false
+  checkpoint_content_allowed: false
+  model_training_allowed: false
+  model_inference_allowed: false
+  gpu_allowed: false
+  research_test_allowed: false
+
+output:
+  directory: runs/resp_temporal_v1/formal_validation_summary_v1
+  allow_overwrite: false
+  csv_float_format: "%.12g"
