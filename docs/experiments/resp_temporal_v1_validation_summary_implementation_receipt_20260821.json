@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "receipt_id": "resp-temporal-v1-validation-summary-implementation-20260821",
+  "protocol_id": "resp-temporal-v1-validation-summary-20260821",
+  "created_date": "2026-08-21",
+  "status": "validation_summarizer_verified_manual_execution_pending",
+  "implementation_commit": "5e8aaae63989087b0803d8850e4be030104679bd",
+  "source_provenance": {
+    "summary_protocol": {
+      "path": "docs/experiments/resp_temporal_v1_validation_summary_protocol_20260821.md",
+      "sha256": "500ea2be91c8a8a61f34aedfabeee1ef3b5731bbd24eadaec3e3752de1753db0"
+    },
+    "summary_config": {
+      "path": "configs/resp_temporal_v1/validation_summary_v1.yaml",
+      "sha256": "21f723580c9cbbe39a3b85c68290e5ace26c6dadf0a9b37abdee9dd8a046816f"
+    },
+    "formal_dual_gpu_implementation_receipt": {
+      "path": "docs/experiments/resp_temporal_v1_formal_dual_gpu_implementation_receipt_20260820.json",
+      "sha256": "fa07aae4f83b74c86bf5113840058af99a768d33b16aad883dc6d6368998d888"
+    },
+    "formal_run_receipts": {
+      "count": 15,
+      "identity_and_sha256_lock": "configs/resp_temporal_v1/validation_summary_v1.yaml#formal_runs",
+      "formal_execution_git_commit": "24c54a88ea8b17ad183b48976bd1f690e3867706"
+    },
+    "gpu_engineering_csv": {
+      "path": "runs/resp_temporal_v1/gpu_engineering/rtm_v1_gpu_engineering_v2/candidate_engineering.csv",
+      "sha256": "2bc076af9cdd48ee2355eff9640c6de339a158ab35fe9ea2ce6a4ce674d08521"
+    }
+  },
+  "summarizer_contract": {
+    "formal_runs": 15,
+    "candidates": 5,
+    "seeds_per_candidate": 3,
+    "validation_rows_per_run": 2675,
+    "total_validation_rows": 40125,
+    "candidate_aggregation": "arithmetic mean and sample SD ddof=1",
+    "paired_seed_direction_rows": 50,
+    "quality_pareto_dimensions": 5,
+    "quality_efficiency_pareto_dimensions": 8,
+    "quality_and_efficiency_pareto_separated": true,
+    "weighted_score": false,
+    "confirmatory_p_value": false,
+    "research_test": false,
+    "checkpoint_content_read_by_summary_command": false,
+    "output_policy": "fail closed, non-overwrite, atomic publication"
+  },
+  "manual_execution": {
+    "command": "./.venv/bin/python scripts/summarize_resp_temporal_v1.py --config configs/resp_temporal_v1/validation_summary_v1.yaml",
+    "expected_directory": "runs/resp_temporal_v1/formal_validation_summary_v1",
+    "expected_files": [
+      "resolved_config.json",
+      "seed_summary.csv",
+      "candidate_summary.csv",
+      "paired_seed_directions.csv",
+      "dominance_audit.csv",
+      "quality_pareto.csv",
+      "quality_efficiency_pareto.csv",
+      "supplementary_metrics.csv",
+      "decision.json",
+      "artifact_manifest.json",
+      "access_receipt.json",
+      "access_receipt.sha256"
+    ],
+    "executed": false
+  },
+  "verification": {
+    "command": "/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest tests/test_resp_temporal_v1_signal_audit.py tests/test_resp_temporal_v1_config.py tests/test_resp_temporal_v1_models.py tests/test_resp_temporal_v1_gpu_engineering.py tests/test_resp_temporal_v1_formal.py tests/test_resp_temporal_v1_formal_summary.py -q",
+    "result": "81 passed",
+    "duration_seconds": 31.21,
+    "synthetic_summary_unit_tests_used": true,
+    "formal_summary_executed": false,
+    "full_regression_executed": false
+  },
+  "implementation_access_disclosure": {
+    "formal_receipt_lifecycle_manifest_accessed": true,
+    "all_formal_artifact_sha256_recomputed_during_preimplementation_15_run_acceptance": true,
+    "checkpoint_binary_content_hashed_during_preimplementation_acceptance": true,
+    "checkpoint_state_deserialized": false,
+    "checkpoint_used_for_metric_or_selection": false,
+    "validation_schema_inspection": "one T0 stored summary row and first two TCN sample rows were displayed before implementation",
+    "candidate_or_family_comparison_computed": false,
+    "formal_summary_output_generated": false,
+    "dataset_or_index_accessed": false,
+    "signal_or_target_array_accessed": false,
+    "model_training_used": false,
+    "model_inference_used": false,
+    "gpu_used": false,
+    "research_test_accessed": false
+  },
+  "source_artifacts_sha256": {
+    "configs/resp_temporal_v1/validation_summary_v1.yaml": "21f723580c9cbbe39a3b85c68290e5ace26c6dadf0a9b37abdee9dd8a046816f",
+    "docs/experiments/resp_temporal_v1_validation_summary_protocol_20260821.md": "500ea2be91c8a8a61f34aedfabeee1ef3b5731bbd24eadaec3e3752de1753db0",
+    "resp_train/temporal/formal_summary.py": "8b4703de2d9e406bc248158bb02bbd3868623fa85aec69b177a305fb5b00103d",
+    "scripts/summarize_resp_temporal_v1.py": "90693266b560451a38d3ea05bc0e0d22d8349c2931be4728f5f17082d323069c",
+    "tests/test_resp_temporal_v1_formal_summary.py": "a232f4a98192fe4ff07ec70a21193172c6269842b830897dc0836053257dab02"
+  },
+  "authorization": {
+    "validation_summarizer_implementation_complete": true,
+    "validation_summary_manual_execution_allowed": true,
+    "validation_summary_codex_execution_allowed": false,
+    "research_test_allowed": false,
+    "result_interpretation_allowed_after_complete_summary_receipt": true
+  },
+  "interpretation_limit": "This receipt verifies only the validation summarizer implementation and synthetic CPU tests. It contains no candidate comparison, Pareto result, stop-line outcome or research-test evidence."
+}

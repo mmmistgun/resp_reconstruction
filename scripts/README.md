@@ -68,6 +68,14 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<LOCKED_GPU> ./.venv/b
 
 `gpu_0/CUDA_VISIBLE_DEVICES=0`固定8项，`gpu_1/CUDA_VISIBLE_DEVICES=1`固定7项；两组可并行、组内按plan串行。输出固定为`runs/resp_temporal_v1/formal/<candidate_id>/seed_<seed>/`，目录必须预先不存在。失败目录必须保留且同identity不得重跑；15/15完成前不得汇总partial validation，也没有独立eval或research-test入口。
 
+Formal 15/15现已完成，以上训练入口只作provenance，不得重跑。冻结validation summary由用户手动执行一次：
+
+```bash
+./.venv/bin/python scripts/summarize_resp_temporal_v1.py --config configs/resp_temporal_v1/validation_summary_v1.yaml
+```
+
+固定输出为`runs/resp_temporal_v1/formal_validation_summary_v1/`且禁止覆盖。命令只读formal validation metrics/receipts与GPU engineering artifacts，不读取checkpoint内容、dataset/signal或research-test；summary receipt返回前不得临时比较候选。
+
 ## 训练
 
 统一入口：

@@ -2,7 +2,7 @@
 
 日期：2026-08-20
 
-状态：**完整train-only signal audit、signal/candidate lock、exact CPU implementation与GPU engineering均已关闭。用户已授权formal实现与手动执行，并在0/15时锁定双GPU 8/7分组；旧formal v1 plan未执行即关闭，dual-GPU v2为唯一入口。15项均待用户运行，validation summary与research-test仍关闭。**
+状态：**Signal-first、candidate/CPU/GPU locks与双GPU formal 15/15均已完成并通过完整性验收。Validation summarizer已实现并冻结，等待用户手动执行一次；尚未形成Pareto/停止线结论，research-test继续关闭。**
 
 ## 1. 权威性、独立命名与当前边界
 
@@ -325,14 +325,14 @@ Tolerance-aware materiality 固定为：
 - `docs/experiments/resp_temporal_v1_gpu_engineering_protocol_20260820.md`、冻结synthetic benchmark config、fail-closed harness、严格receipt/manifest schema与GPU engineering implementation receipt。
 - v1 cuDNN环境失败的冻结receipt/manifest，以及`docs/experiments/resp_temporal_v1_gpu_engineering_correction_v2_20260820.md`规定的unset环境、cuDNN 92000与LSTM canary preflight。
 - 完整v2 execution receipt/manifest、五项candidate engineering summary与用户确认的GPU engineering lock；formal五项据此统一physical batch=128、accumulation=1。
-- `docs/experiments/resp_temporal_v1_formal_protocol_20260820.md`、`configs/resp_temporal_v1/formal_v1.yaml`、`scripts/train_resp_temporal_v1.py`及严格单run preflight/lifecycle/count/finite/hash/access receipt；用户手动矩阵固定5×3=15项且尚未执行。
+- `docs/experiments/resp_temporal_v1_formal_protocol_20260820.md`与dual-GPU v2 runner；用户已完成5×3=15项，每项80 epochs/6400 updates、2675 validation rows，全部receipt/lifecycle/hash/access/finite闭合且无失败。
 - formal implementation receipt SHA-256=`0d2dae3fea51f18821a47a11e69d8a8b2ca765898c3d84c228d2fedffcaff0fa`；66项RTM-v1 CPU定向测试通过，未读取dataset/index/split或既有checkpoint，未使用GPU。
 - 用户在0/15时新增双GPU调度要求；`docs/experiments/resp_temporal_v1_formal_dual_gpu_correction_20260820.md`将旧plan冻结为`superseded_before_execution`，新plan固定`gpu_0` 8项/`gpu_1` 7项并强制、记录`CUDA_VISIBLE_DEVICES`。Correction/plan/implementation receipt SHA-256=`1c2cad1c5cc401776d894a0bb039e0ad75a8cd3030f66ea70b48817f2de1b84a / c6594d160a3f7ecb1f39a4e036996491dd6f1919aedeea28949ff8533a1dd8c3 / fa07aae4f83b74c86bf5113840058af99a768d33b16aad883dc6d6368998d888`，68项RTM-v1 CPU定向测试通过。
+- `docs/experiments/resp_temporal_v1_validation_summary_protocol_20260821.md`冻结三seed mean±sample SD、50项paired-seed方向、独立quality/quality-efficiency tolerance-aware Pareto、T0停止线与validation-only access。Config/implementation receipt SHA-256=`21f723580c9cbbe39a3b85c68290e5ace26c6dadf0a9b37abdee9dd8a046816f / ffe4e658ddf9ddb9fb0f0456cf0425c7b2f58994ef4af4d53c693d4911f6149c`；81项RTM-v1 CPU定向测试通过，正式summary未执行。
 
 当前明确未建立：
 
-- 15项formal execution receipts与完整性验收；
-- validation summarizer与冻结summary；
+- validation summary execution receipt与冻结summary；
 - research-test cache、allowlist 或 evaluator。
 
-GPU engineering已关闭：v1 partial不得比较，v2工程指标只描述可执行性与成本，不选择科学候选。下一步仅允许用户按冻结命令完成15项formal；Codex不得代跑长任务，也不得根据partial validation停止正常arm。15/15 receipt验收后才能实现validation summarizer；formal结果完成后也不自动开放research-test。
+GPU engineering与formal训练均已关闭且不得重跑。下一步仅允许用户手动执行一次冻结validation summary；receipt返回前不得临时解释candidate数值。Summary完成后按预注册Pareto/停止线关闭协议，不追加容量搜索；research-test不自动开放。
