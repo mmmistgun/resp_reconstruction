@@ -1,0 +1,97 @@
+schema_version: rtm-v1-research-test-config-v1
+protocol_id: resp-temporal-v1-reused-research-test-20260821
+role: reused_research_test_evaluation
+evidence_label: reused research-test evidence; candidate and checkpoint selection frozen before RTM-v1 test access; not untouched held-out evidence
+
+authorization:
+  user_authorized_research_test: true
+  user_manual_execution: true
+  codex_execution: false
+  model_training: false
+  checkpoint_reselection: false
+  candidate_reselection: false
+
+provenance:
+  research_test_protocol_path: docs/experiments/resp_temporal_v1_research_test_protocol_20260821.md
+  research_test_protocol_sha256: 1da00281ad435a14cc0b1e9a26b84554cae35ec02784ea7f2f369ec539be8184
+  primary_metrics_table_path: docs/experiments/resp_temporal_v1_primary_metrics_table_20260821.md
+  primary_metrics_table_sha256: 417fe73b491d459fe649a365fdad590d00c1d0aa992df0e150b144dde4ba8f21
+  validation_lock_path: docs/experiments/resp_temporal_v1_validation_lock_20260821.json
+  validation_lock_sha256: 989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6
+  validation_summary_receipt_path: runs/resp_temporal_v1/formal_validation_summary_v1/access_receipt.json
+  validation_summary_receipt_sha256: 6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad
+  validation_summary_manifest_path: runs/resp_temporal_v1/formal_validation_summary_v1/artifact_manifest.json
+  validation_summary_manifest_sha256: aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc
+  formal_root: runs/resp_temporal_v1/formal
+  formal_execution_git_commit: 24c54a88ea8b17ad183b48976bd1f690e3867706
+  require_clean_git: true
+
+candidates:
+  - rtm_v1_t0_locked_stem_head
+  - rtm_v1_tcn_d9_h384
+  - rtm_v1_bimamba2_d96_l6
+  - rtm_v1_bilstm_h96_l2
+  - rtm_v1_multiscale_10_2_1_h384
+
+seeds: [20260811, 20260812, 20260813]
+
+data:
+  dataset_root: /mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf
+  index_csv: training/dataset_index.csv
+  dataset_index_sha256: f65ae6524632187c7c2795bd7b5e25434afb649b5a04fe39084b70cc59f9b04f
+  split: test
+  expected_windows: 2310
+  expected_samp_ids: 8
+  expected_row_ids_sha256: 184e9d6a934b6719a4b679ebf6224e20dda1101c1920ed5b9e22ea80f0f293e8
+  sample_strategy: stratified_random
+  sample_seed: 20260612
+  input_key: bcg_rawish_segment_soft_z_key
+  target_key: target_waveform_segment_soft_z_key
+
+evaluation:
+  checkpoint_filename: checkpoint_best_local_rr.pt
+  device: cuda:0
+  batch_size: 128
+  use_amp: true
+  amp_dtype: bfloat16
+  include_test_only_metrics: false
+  primary_metrics:
+    - whole_rr_abs_error_bpm
+    - local_rr_mae_bpm
+    - envelope_trajectory_mae
+    - global_envelope_modulation_error
+    - lag_aware_signed_pcc
+  sample_aggregation: direct_mean
+  candidate_aggregation: arithmetic_mean_and_sample_sd_ddof_1
+  pareto: false
+  ranking: false
+  weighted_score: false
+  paired_seed_direction: false
+  confirmatory_p_value: false
+
+access:
+  train_signal_target_allowed: false
+  validation_signal_target_prediction_allowed: false
+  research_test_signal_target_allowed: true
+  formal_checkpoint_allowed: true
+  checkpoint_final_allowed: false
+  model_training_allowed: false
+  model_inference_allowed: true
+  gpu_required: true
+
+output:
+  root: runs/resp_temporal_v1/research_test/rtm_v1_research_test_v1
+  overwrite: false
+  resume: false
+  retain_failed_lifecycle: true
+  files:
+    - resolved_config.json
+    - checkpoint_inputs.json
+    - test_data_receipt.json
+    - research_test_metrics.csv
+    - research_test_seed_summary.csv
+    - research_test_primary_mean_sd.csv
+    - runtime_summary.json
+    - artifact_manifest.json
+    - access_receipt.json
+    - access_receipt.sha256
