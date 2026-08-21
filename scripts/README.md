@@ -74,7 +74,15 @@ Formal 15/15与冻结validation summary现均已完成，以上训练及以下su
 ./.venv/bin/python scripts/summarize_resp_temporal_v1.py --config configs/resp_temporal_v1/validation_summary_v1.yaml
 ```
 
-固定输出为`runs/resp_temporal_v1/formal_validation_summary_v1/`且禁止覆盖。Receipt/manifest SHA-256=`6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad / aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc`，用户确认的validation lock为`docs/experiments/resp_temporal_v1_validation_lock_20260821.json`，SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`。命令只读formal validation metrics/receipts与GPU engineering artifacts，不读取checkpoint内容、dataset/signal或research-test；RTM-v1现已关闭，不提供research-test入口。
+固定输出为`runs/resp_temporal_v1/formal_validation_summary_v1/`且禁止覆盖。Receipt/manifest SHA-256=`6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad / aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc`，用户确认的validation lock为`docs/experiments/resp_temporal_v1_validation_lock_20260821.json`，SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`。命令只读formal validation metrics/receipts与GPU engineering artifacts，不读取checkpoint内容、dataset/signal或research-test；RTM-v1 validation阶段现已关闭。
+
+五候选validation `mean ± SD`主指标表已冻结为`docs/experiments/resp_temporal_v1_primary_metrics_table_20260821.md`。用户随后明确授权独立reused research-test；唯一一次性入口为：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=0 ./.venv/bin/python scripts/eval_resp_temporal_v1_research_test.py --config configs/resp_temporal_v1/research_test_v1.yaml
+```
+
+固定输出为`runs/resp_temporal_v1/research_test/rtm_v1_research_test_v1/`，目录必须预先不存在。入口依次评价五候选×三seed的15个冻结`checkpoint_best_local_rr.pt`，保存逐sample metrics、15行seed summary和5行`mean ± sample SD`主指标表；不训练、不重选checkpoint/candidate，不读取validation metrics/target/prediction，也不计算secondary、Pareto、排名或p-value。失败目录必须保留且不得重跑；complete receipt返回后再验收结果。
 
 ## 训练
 

@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "receipt_id": "resp-temporal-v1-research-test-implementation-20260821",
+  "protocol_id": "resp-temporal-v1-reused-research-test-20260821",
+  "created_date": "2026-08-21",
+  "status": "research_test_evaluator_verified_manual_execution_pending",
+  "implementation_commit": "9371764ec31cad8080d708786b3690a8517f68dd",
+  "source_provenance": {
+    "research_test_protocol": {
+      "path": "docs/experiments/resp_temporal_v1_research_test_protocol_20260821.md",
+      "sha256": "1da00281ad435a14cc0b1e9a26b84554cae35ec02784ea7f2f369ec539be8184"
+    },
+    "research_test_config": {
+      "path": "configs/resp_temporal_v1/research_test_v1.yaml",
+      "sha256": "3d8551989fbfa07e8ef9454fbb348f2908151f35c681e15a6191b61a0c60a406"
+    },
+    "validation_primary_metrics_table": {
+      "path": "docs/experiments/resp_temporal_v1_primary_metrics_table_20260821.md",
+      "sha256": "417fe73b491d459fe649a365fdad590d00c1d0aa992df0e150b144dde4ba8f21"
+    },
+    "validation_lock": {
+      "path": "docs/experiments/resp_temporal_v1_validation_lock_20260821.json",
+      "sha256": "989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6"
+    },
+    "validation_summary_receipt": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/access_receipt.json",
+      "sha256": "6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad"
+    },
+    "formal_checkpoint_inputs": {
+      "count": 15,
+      "identity_chain": "validation summary receipt input -> formal receipt -> formal artifact manifest -> checkpoint_best_local_rr.pt SHA-256",
+      "formal_execution_git_commit": "24c54a88ea8b17ad183b48976bd1f690e3867706"
+    }
+  },
+  "evaluation_contract": {
+    "candidates": 5,
+    "seeds_per_candidate": 3,
+    "checkpoints": 15,
+    "checkpoint_selector": "validation_local_rr_mae_full_split_strict_less_than",
+    "research_test_windows_per_checkpoint": 2310,
+    "expected_per_sample_metric_rows": 34650,
+    "primary_metrics": 5,
+    "candidate_aggregation": "arithmetic mean and sample SD ddof=1",
+    "test_only_supplementary_metrics": false,
+    "pareto": false,
+    "ranking": false,
+    "weighted_score": false,
+    "paired_seed_direction": false,
+    "confirmatory_p_value": false,
+    "model_training": false,
+    "checkpoint_reselection": false,
+    "output_policy": "fail closed, non-overwrite, no resume"
+  },
+  "manual_execution": {
+    "command": "env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=0 ./.venv/bin/python scripts/eval_resp_temporal_v1_research_test.py --config configs/resp_temporal_v1/research_test_v1.yaml",
+    "expected_directory": "runs/resp_temporal_v1/research_test/rtm_v1_research_test_v1",
+    "expected_files": [
+      "resolved_config.json",
+      "checkpoint_inputs.json",
+      "test_data_receipt.json",
+      "research_test_metrics.csv",
+      "research_test_seed_summary.csv",
+      "research_test_primary_mean_sd.csv",
+      "runtime_summary.json",
+      "artifact_manifest.json",
+      "access_receipt.json",
+      "access_receipt.sha256",
+      "lifecycle.json"
+    ],
+    "executed": false
+  },
+  "verification": {
+    "command": "/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest tests/test_resp_temporal_v1_signal_audit.py tests/test_resp_temporal_v1_config.py tests/test_resp_temporal_v1_models.py tests/test_resp_temporal_v1_gpu_engineering.py tests/test_resp_temporal_v1_formal.py tests/test_resp_temporal_v1_formal_summary.py tests/test_resp_temporal_v1_research_test.py -q",
+    "result": "93 passed",
+    "duration_seconds": 30.84,
+    "synthetic_cpu_tests_used": true,
+    "read_only_checkpoint_identity_preflight": "15/15 formal receipt/manifest/config/checkpoint hash/lifecycle chains passed",
+    "research_test_evaluation_executed": false,
+    "gpu_smoke_executed": false,
+    "full_regression_executed": false
+  },
+  "implementation_access_disclosure": {
+    "validation_lock_and_summary_receipt_metadata_accessed": true,
+    "one_formal_resolved_config_inspected": true,
+    "all_15_formal_checkpoint_binary_sha256_recomputed": true,
+    "formal_checkpoint_state_deserialized": false,
+    "formal_checkpoint_used_for_inference": false,
+    "historical_research_test_cache_manifest_metadata_accessed": true,
+    "research_test_input_array_accessed": false,
+    "research_test_target_array_accessed": false,
+    "research_test_prediction_generated": false,
+    "model_training_used": false,
+    "model_inference_used": false,
+    "gpu_used": false
+  },
+  "source_artifacts_sha256": {
+    "configs/resp_temporal_v1/research_test_v1.yaml": "3d8551989fbfa07e8ef9454fbb348f2908151f35c681e15a6191b61a0c60a406",
+    "docs/experiments/resp_temporal_v1_primary_metrics_table_20260821.md": "417fe73b491d459fe649a365fdad590d00c1d0aa992df0e150b144dde4ba8f21",
+    "docs/experiments/resp_temporal_v1_research_test_protocol_20260821.md": "1da00281ad435a14cc0b1e9a26b84554cae35ec02784ea7f2f369ec539be8184",
+    "resp_train/temporal/research_test.py": "000e3e0d1895385f0bfa7a308b2d63bd8acb8a9366403bd95dd75c5bda1f242f",
+    "scripts/eval_resp_temporal_v1_research_test.py": "39458aa377e0469766449104d00c8a4dfeea2d89fc4d4441ebb14544606efc4d",
+    "tests/test_resp_temporal_v1_research_test.py": "b1fb203020f85196059c63f1e228159a371196de9f0bdb69336b0da099474cb8"
+  },
+  "authorization": {
+    "research_test_evaluator_implementation_complete": true,
+    "research_test_manual_execution_allowed": true,
+    "research_test_codex_execution_allowed": false,
+    "result_interpretation_allowed_after_complete_receipt": true,
+    "repeat_research_test_allowed": false
+  },
+  "interpretation_limit": "This receipt verifies only the evaluator implementation and synthetic CPU tests. It contains no RTM-v1 research-test signal, target, prediction, metric value or result conclusion."
+}
