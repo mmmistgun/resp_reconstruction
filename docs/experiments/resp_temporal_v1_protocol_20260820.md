@@ -2,7 +2,7 @@
 
 日期：2026-08-20
 
-状态：**Signal-first、candidate/CPU/GPU locks与双GPU formal 15/15均已完成并通过完整性验收。Validation summarizer已实现并冻结，等待用户手动执行一次；尚未形成Pareto/停止线结论，research-test继续关闭。**
+状态：**Signal-first、candidate/CPU/GPU locks、双GPU formal 15/15与validation summary均已完成并通过完整性验收。用户已确认validation lock；质量Pareto仅含冻结的multiscale representative，质量—效率Pareto保留全部五项。协议现已关闭，research-test继续关闭。**
 
 ## 1. 权威性、独立命名与当前边界
 
@@ -292,6 +292,12 @@ Tolerance-aware materiality 固定为：
 - 汇总完成后协议关闭，不追加宽度、LR、epoch、dilation、LSTM hidden、Mamba depth或多尺度分支；
 - 不访问 research-test，不建立 test evaluator。
 
+冻结validation summary从干净commit `670d3bd36182fb4c4b982427616e8d1bc4fef42d`一次性完成。Access receipt/manifest SHA-256=`6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad / aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc`；15项formal、40125行validation、5项candidate summary、50项paired-seed与40项dominance audit均闭合，numeric finite/null/nonfinite=`3425/120/0`，其中null仅为quality-only dominance表中不适用的资源列。Summarizer未读取checkpoint内容、dataset/index、signal/target或research-test，且未使用GPU。
+
+按预注册candidate-mean tolerance，质量Pareto仅含`rtm_v1_multiscale_10_2_1_h384`，其对T0五项primary分别为Whole/Local/trajectory/global相对改善`4.5777% / 5.9896% / 6.9115% / 32.9483%`、signed PCC绝对增加`0.037931`，五项paired-seed material improvement均为`3/3`。它亦在冻结candidate mean/tolerance下支配TCN、BiMamba2和BiLSTM representative；但该关系不是逐seed一致：相对BiLSTM的Whole/trajectory原始更优仅`1/3 / 2/3`，相对BiMamba2的Whole仅`2/3`，相对TCN的trajectory仅`2/3`。因此只能表述为当前冻结representative package的validation-development quality Pareto结果，不得改写为“唯一最佳模型”或multiscale family普遍优越。
+
+加入参数、standardized throughput与peak allocated后，质量—效率Pareto保留全部五项且无overall winner；T0仍只是trunk-attribution control，BiLSTM只构成有竞争力的描述性质量—效率trade-off，资源维度不改写质量锁。停止线固定为`at_least_one_trunk_material_primary_improvement`，不追加容量或超参数搜索。用户确认的不可变validation lock位于`docs/experiments/resp_temporal_v1_validation_lock_20260821.json`，SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`；协议关闭且research-test不开放。
+
 ## 10. 证据边界与反方风险
 
 1. 共同 stem/decoder 提高 trunk 归因清晰度，但不代表 family-specific end-to-end 最优 package。
@@ -328,11 +334,11 @@ Tolerance-aware materiality 固定为：
 - `docs/experiments/resp_temporal_v1_formal_protocol_20260820.md`与dual-GPU v2 runner；用户已完成5×3=15项，每项80 epochs/6400 updates、2675 validation rows，全部receipt/lifecycle/hash/access/finite闭合且无失败。
 - formal implementation receipt SHA-256=`0d2dae3fea51f18821a47a11e69d8a8b2ca765898c3d84c228d2fedffcaff0fa`；66项RTM-v1 CPU定向测试通过，未读取dataset/index/split或既有checkpoint，未使用GPU。
 - 用户在0/15时新增双GPU调度要求；`docs/experiments/resp_temporal_v1_formal_dual_gpu_correction_20260820.md`将旧plan冻结为`superseded_before_execution`，新plan固定`gpu_0` 8项/`gpu_1` 7项并强制、记录`CUDA_VISIBLE_DEVICES`。Correction/plan/implementation receipt SHA-256=`1c2cad1c5cc401776d894a0bb039e0ad75a8cd3030f66ea70b48817f2de1b84a / c6594d160a3f7ecb1f39a4e036996491dd6f1919aedeea28949ff8533a1dd8c3 / fa07aae4f83b74c86bf5113840058af99a768d33b16aad883dc6d6368998d888`，68项RTM-v1 CPU定向测试通过。
-- `docs/experiments/resp_temporal_v1_validation_summary_protocol_20260821.md`冻结三seed mean±sample SD、50项paired-seed方向、独立quality/quality-efficiency tolerance-aware Pareto、T0停止线与validation-only access。Config/implementation receipt SHA-256=`21f723580c9cbbe39a3b85c68290e5ace26c6dadf0a9b37abdee9dd8a046816f / ffe4e658ddf9ddb9fb0f0456cf0425c7b2f58994ef4af4d53c693d4911f6149c`；81项RTM-v1 CPU定向测试通过，正式summary未执行。
+- `docs/experiments/resp_temporal_v1_validation_summary_protocol_20260821.md`冻结三seed mean±sample SD、50项paired-seed方向、独立quality/quality-efficiency tolerance-aware Pareto、T0停止线与validation-only access。Config/implementation receipt SHA-256=`21f723580c9cbbe39a3b85c68290e5ace26c6dadf0a9b37abdee9dd8a046816f / ffe4e658ddf9ddb9fb0f0456cf0425c7b2f58994ef4af4d53c693d4911f6149c`；81项RTM-v1 CPU定向测试通过。
+- Validation summary已一次性完成，receipt/manifest SHA-256=`6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad / aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc`。用户确认的validation lock SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`；质量Pareto仅含multiscale representative，质量—效率Pareto保留全部五项，overall winner为空。
 
 当前明确未建立：
 
-- validation summary execution receipt与冻结summary；
 - research-test cache、allowlist 或 evaluator。
 
-GPU engineering与formal训练均已关闭且不得重跑。下一步仅允许用户手动执行一次冻结validation summary；receipt返回前不得临时解释candidate数值。Summary完成后按预注册Pareto/停止线关闭协议，不追加容量搜索；research-test不自动开放。
+GPU engineering、formal训练与validation summary均已关闭且不得重跑。RTM-v1已按预注册Pareto/停止线关闭，不追加容量搜索或其他candidate；research-test不自动开放，当前不存在下一实验阶段。

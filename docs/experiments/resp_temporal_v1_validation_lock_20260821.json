@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "lock_id": "resp-temporal-v1-validation-lock-20260821",
+  "protocol_id": "resp-temporal-v1-validation-summary-20260821",
+  "created_date": "2026-08-21",
+  "status": "confirmed_and_closed",
+  "user_confirmation": {
+    "confirmed": true,
+    "confirmation_text": "确认上述 RTM-v1 validation lock 草案"
+  },
+  "evidence_label": "validation-development evidence; research-history-informed; not untouched held-out or unbiased generalization evidence",
+  "provenance": {
+    "formal_execution_git_commit": "24c54a88ea8b17ad183b48976bd1f690e3867706",
+    "summary_execution_git_commit": "670d3bd36182fb4c4b982427616e8d1bc4fef42d",
+    "summary_protocol": {
+      "path": "docs/experiments/resp_temporal_v1_validation_summary_protocol_20260821.md",
+      "sha256": "500ea2be91c8a8a61f34aedfabeee1ef3b5731bbd24eadaec3e3752de1753db0"
+    },
+    "summary_config": {
+      "path": "configs/resp_temporal_v1/validation_summary_v1.yaml",
+      "sha256": "21f723580c9cbbe39a3b85c68290e5ace26c6dadf0a9b37abdee9dd8a046816f"
+    },
+    "summary_implementation_receipt": {
+      "path": "docs/experiments/resp_temporal_v1_validation_summary_implementation_receipt_20260821.json",
+      "sha256": "ffe4e658ddf9ddb9fb0f0456cf0425c7b2f58994ef4af4d53c693d4911f6149c"
+    },
+    "summary_access_receipt": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/access_receipt.json",
+      "sha256": "6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad"
+    },
+    "summary_manifest": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/artifact_manifest.json",
+      "sha256": "aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc"
+    },
+    "seed_summary": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/seed_summary.csv",
+      "sha256": "0877f77788ead62261d5d166205deb79d3a14b5d88f5108f1fcb55fdfb7829f4"
+    },
+    "candidate_summary": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/candidate_summary.csv",
+      "sha256": "9f89b1fb41f7d1fad7d90c677ecd393e729ba46a99a6c00ef8df2af6746c0acb"
+    },
+    "paired_seed_directions": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/paired_seed_directions.csv",
+      "sha256": "13d0fac54fdde0a5ca82646e3d359fa73f0243ce3acc1648f79f1cae71a074e2"
+    },
+    "dominance_audit": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/dominance_audit.csv",
+      "sha256": "a29a57745193be53015d3a05cc758593bac28db520671d9c292bd71db66c6966"
+    },
+    "quality_pareto": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/quality_pareto.csv",
+      "sha256": "32d93f7fbe63409baac8beaba83736aeb2596326720471fd80751d6ac5dfdb22"
+    },
+    "quality_efficiency_pareto": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/quality_efficiency_pareto.csv",
+      "sha256": "a1816a7ecdace6294c26ed05c446c631ea615602763fd5101b217a0efb460695"
+    },
+    "supplementary_metrics": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/supplementary_metrics.csv",
+      "sha256": "adbcea5e9b9a8ad56fb9f6740c3e03d297a157e09f4240cfcba27c52b0b472c6"
+    },
+    "decision": {
+      "path": "runs/resp_temporal_v1/formal_validation_summary_v1/decision.json",
+      "sha256": "024051ddd1bbcf33ad0c3624c75ae315a1b64af77627bcf51a553d7e9067752c"
+    }
+  },
+  "integrity": {
+    "formal_runs": 15,
+    "formal_runs_complete": 15,
+    "formal_failed_lifecycles": 0,
+    "optimizer_updates_per_run": 6400,
+    "optimizer_updates_total": 96000,
+    "validation_rows_per_run": 2675,
+    "validation_rows_total": 40125,
+    "candidate_summary_rows": 5,
+    "paired_seed_direction_rows": 50,
+    "dominance_audit_rows": 40,
+    "numeric_finite": 3425,
+    "numeric_null": 120,
+    "numeric_nonfinite": 0,
+    "null_interpretation": "structural nulls in non-applicable quality-only dominance resource columns",
+    "checkpoint_content_read_by_summary": false,
+    "dataset_or_index_accessed_by_summary": false,
+    "signal_or_target_array_accessed_by_summary": false,
+    "gpu_used_by_summary": false,
+    "research_test_accessed": false
+  },
+  "primary_seed_mean_and_sample_sd": {
+    "rtm_v1_t0_locked_stem_head": {
+      "role": "trunk_attribution_control",
+      "whole_rr_abs_error_bpm": [0.474491388747, 0.00863543222892],
+      "local_rr_mae_bpm": [0.581996250999, 0.00672597168935],
+      "envelope_trajectory_mae": [0.165777788205, 0.000910554008786],
+      "global_envelope_modulation_error": [0.283036922983, 0.00268461594426],
+      "lag_aware_signed_pcc": [0.807307420679, 0.00107452131611]
+    },
+    "rtm_v1_tcn_d9_h384": {
+      "role": "representative",
+      "whole_rr_abs_error_bpm": [0.486756598962, 0.0158069633355],
+      "local_rr_mae_bpm": [0.557275903426, 0.00594822447553],
+      "envelope_trajectory_mae": [0.155973773085, 0.00543083516947],
+      "global_envelope_modulation_error": [0.197582922575, 0.0124708171567],
+      "lag_aware_signed_pcc": [0.838345652716, 0.0046352485228]
+    },
+    "rtm_v1_bimamba2_d96_l6": {
+      "role": "representative",
+      "whole_rr_abs_error_bpm": [0.464811483634, 0.0182169240621],
+      "local_rr_mae_bpm": [0.557784919544, 0.0128987635267],
+      "envelope_trajectory_mae": [0.168369450949, 0.0035462420096],
+      "global_envelope_modulation_error": [0.195964938241, 0.00952765482638],
+      "lag_aware_signed_pcc": [0.837072120265, 0.00230171141964]
+    },
+    "rtm_v1_bilstm_h96_l2": {
+      "role": "representative",
+      "whole_rr_abs_error_bpm": [0.453147104902, 0.0238927866984],
+      "local_rr_mae_bpm": [0.578756547825, 0.00336055704299],
+      "envelope_trajectory_mae": [0.156054192486, 0.00327091816051],
+      "global_envelope_modulation_error": [0.208741672888, 0.0231107056812],
+      "lag_aware_signed_pcc": [0.842750594026, 0.00207551221319]
+    },
+    "rtm_v1_multiscale_10_2_1_h384": {
+      "role": "representative",
+      "whole_rr_abs_error_bpm": [0.45277054825, 0.0137738659723],
+      "local_rr_mae_bpm": [0.547136923268, 0.00882653303557],
+      "envelope_trajectory_mae": [0.154320060233, 0.00461198099929],
+      "global_envelope_modulation_error": [0.189781206896, 0.0098251428379],
+      "lag_aware_signed_pcc": [0.845238201797, 0.00139341560331]
+    }
+  },
+  "quality_lock": {
+    "pareto_set": [
+      "rtm_v1_multiscale_10_2_1_h384"
+    ],
+    "unique_nondominated_candidate": "rtm_v1_multiscale_10_2_1_h384",
+    "dominates_on_frozen_candidate_mean_tolerance": [
+      "rtm_v1_t0_locked_stem_head",
+      "rtm_v1_tcn_d9_h384",
+      "rtm_v1_bimamba2_d96_l6",
+      "rtm_v1_bilstm_h96_l2"
+    ],
+    "forbidden_rephrase": "Do not call this a unique best model or universal multiscale-family superiority."
+  },
+  "multiscale_relative_to_t0": {
+    "whole_rr_relative_improvement": 0.0457771015705,
+    "local_rr_relative_improvement": 0.059896137941,
+    "envelope_trajectory_relative_improvement": 0.0691149767171,
+    "global_envelope_relative_improvement": 0.329482510989,
+    "signed_pcc_absolute_gain": 0.037930781118,
+    "paired_seed_material_improvement_counts": {
+      "whole_rr": 3,
+      "local_rr": 3,
+      "envelope_trajectory": 3,
+      "global_envelope": 3,
+      "signed_pcc": 3
+    }
+  },
+  "paired_seed_caveats": {
+    "candidate_mean_dominance_is_not_every_seed_uniform_superiority": true,
+    "multiscale_vs_bilstm_whole_rr_raw_better_count": 1,
+    "multiscale_vs_bilstm_envelope_trajectory_raw_better_count": 2,
+    "multiscale_vs_bimamba_whole_rr_raw_better_count": 2,
+    "multiscale_vs_tcn_envelope_trajectory_raw_better_count": 2
+  },
+  "quality_efficiency_lock": {
+    "pareto_set": [
+      "rtm_v1_t0_locked_stem_head",
+      "rtm_v1_tcn_d9_h384",
+      "rtm_v1_bimamba2_d96_l6",
+      "rtm_v1_bilstm_h96_l2",
+      "rtm_v1_multiscale_10_2_1_h384"
+    ],
+    "overall_winner": null,
+    "resource_metrics_used_to_rewrite_quality_lock": false,
+    "bilstm_descriptive_role": "strong quality-efficiency trade-off among temporal trunks",
+    "t0_role": "trunk attribution control, not a temporal-family winner"
+  },
+  "supplementary_lock": {
+    "bilstm_best_ibi_medae_sec": 0.0872195880701,
+    "bilstm_best_ibi_coverage": 0.826220371211,
+    "multiscale_envelope_spearman_low_medium_high": [
+      0.381631291014,
+      0.537925824727,
+      0.731208650315
+    ],
+    "all_candidate_joint_prediction_degenerate_fraction": 0.0,
+    "secondary_used_for_quality_selection": false
+  },
+  "stop_and_closure": {
+    "stop_line": "at_least_one_trunk_material_primary_improvement",
+    "all_four_trunk_representatives_have_at_least_one_material_primary_improvement_vs_t0": true,
+    "formal_training_closed": true,
+    "validation_summary_closed": true,
+    "capacity_search_closed": true,
+    "additional_width_lr_epoch_dilation_hidden_depth_or_multiscale_branch_search_allowed": false,
+    "research_test_opened": false,
+    "research_test_evaluator_allowed": false,
+    "protocol_closed": true
+  },
+  "interpretation_limits": [
+    "T0 is a trunk-attribution control; cross-family rows compare frozen representative packages, not universal family capability.",
+    "The common stem and decoder improve attribution but are not family-specific end-to-end optima.",
+    "Three seeds describe initialization variability and do not support confirmatory inference.",
+    "Validation served checkpoint selection and family comparison and was historically reused; this is development evidence only.",
+    "The models are offline and non-causal and cannot be extrapolated to streaming.",
+    "Resource dimensions form a separate descriptive Pareto and cannot overturn the quality lock."
+  ]
+}

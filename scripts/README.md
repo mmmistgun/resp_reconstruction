@@ -68,13 +68,13 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<LOCKED_GPU> ./.venv/b
 
 `gpu_0/CUDA_VISIBLE_DEVICES=0`固定8项，`gpu_1/CUDA_VISIBLE_DEVICES=1`固定7项；两组可并行、组内按plan串行。输出固定为`runs/resp_temporal_v1/formal/<candidate_id>/seed_<seed>/`，目录必须预先不存在。失败目录必须保留且同identity不得重跑；15/15完成前不得汇总partial validation，也没有独立eval或research-test入口。
 
-Formal 15/15现已完成，以上训练入口只作provenance，不得重跑。冻结validation summary由用户手动执行一次：
+Formal 15/15与冻结validation summary现均已完成，以上训练及以下summary入口只作provenance，不得重跑、覆盖或补写：
 
 ```bash
 ./.venv/bin/python scripts/summarize_resp_temporal_v1.py --config configs/resp_temporal_v1/validation_summary_v1.yaml
 ```
 
-固定输出为`runs/resp_temporal_v1/formal_validation_summary_v1/`且禁止覆盖。命令只读formal validation metrics/receipts与GPU engineering artifacts，不读取checkpoint内容、dataset/signal或research-test；summary receipt返回前不得临时比较候选。
+固定输出为`runs/resp_temporal_v1/formal_validation_summary_v1/`且禁止覆盖。Receipt/manifest SHA-256=`6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad / aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc`，用户确认的validation lock为`docs/experiments/resp_temporal_v1_validation_lock_20260821.json`，SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`。命令只读formal validation metrics/receipts与GPU engineering artifacts，不读取checkpoint内容、dataset/signal或research-test；RTM-v1现已关闭，不提供research-test入口。
 
 ## 训练
 
