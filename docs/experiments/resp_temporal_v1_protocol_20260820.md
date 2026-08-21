@@ -2,7 +2,7 @@
 
 日期：2026-08-20
 
-状态：**Signal-first、candidate/CPU/GPU locks、双GPU formal 15/15与validation summary均已完成并通过完整性验收，validation阶段已关闭。用户随后明确授权独立reused research-test；其冻结评价器已实现，等待用户手动执行一次。**
+状态：**Signal-first、candidate/CPU/GPU locks、双GPU formal 15/15、validation summary与独立测试集评价均已完成并通过完整性验收。测试结果结论尚待用户确认锁定。**
 
 ## 1. 权威性、独立命名与当前边界
 
@@ -14,14 +14,13 @@ resp-temporal-v1-validation-20260820
 
 简称 `RTM-v1`。它是新的 validation-only 时序模型家族比较，不属于 CRD-v1.1、CRD-TF v1、CRD-TF-W v2 或旧 THO 阶段的补跑。旧阶段的 checkpoint、summary、配置和冻结结论只作只读背景，不进入本协议的候选集合，也不得覆盖或重跑。
 
-本阶段由既有 validation/research-test 历史启发，因此即使未来完成正式矩阵，证据名称也只能是：
+Validation用于checkpoint选择和本阶段模型比较，因此validation结果的证据名称固定为：
 
 ```text
-validation-development evidence; research-history-informed;
-not untouched held-out or unbiased generalization evidence
+validation-development evidence
 ```
 
-RTM-v1 formal只允许读取train/validation，并由用户通过唯一单run入口手动执行；入口不提供split、data、checkpoint、epoch、batch、device、output或resume override。该validation阶段没有独立评价入口或test split，research-test也未由validation结果自动开放。用户确认validation lock后另行明确授权的reused research-test属于后续独立协议，规范为`docs/experiments/resp_temporal_v1_research_test_protocol_20260821.md`。
+RTM-v1 formal只允许读取train/validation，并由用户通过唯一单run入口手动执行；入口不提供split、data、checkpoint、epoch、batch、device、output或resume override。该validation阶段没有独立评价入口或test split。用户确认validation lock后另行明确授权的独立测试集评价属于后续独立协议，规范性执行附件保留为`docs/experiments/resp_temporal_v1_research_test_protocol_20260821.md`。本文后续统一将其称为“独立测试集”：独立性指与train/validation严格隔离，且不参与本阶段candidate、checkpoint或超参数选择；不要求测试集在整个研究过程中只能访问一次。
 
 ## 2. 现有时序证据的正确角色
 
@@ -298,7 +297,7 @@ Tolerance-aware materiality 固定为：
 
 加入参数、standardized throughput与peak allocated后，质量—效率Pareto保留全部五项且无overall winner；T0仍只是trunk-attribution control，BiLSTM只构成有竞争力的描述性质量—效率trade-off，资源维度不改写质量锁。停止线固定为`at_least_one_trunk_material_primary_improvement`，不追加容量或超参数搜索。用户确认的不可变validation lock位于`docs/experiments/resp_temporal_v1_validation_lock_20260821.json`，SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`；协议关闭且research-test不开放。
 
-用户随后要求只固化五候选validation `mean ± SD`主指标表，并明确授权开始research-test。表格固定为`docs/experiments/resp_temporal_v1_primary_metrics_table_20260821.md`，SHA-256=`417fe73b491d459fe649a365fdad590d00c1d0aa992df0e150b144dde4ba8f21`。该后续授权不修改validation lock，也不允许用test重选candidate/checkpoint。
+用户随后要求只固化五候选validation `mean ± SD`主指标表，并明确授权开始独立测试集评价。表格固定为`docs/experiments/resp_temporal_v1_primary_metrics_table_20260821.md`，SHA-256=`417fe73b491d459fe649a365fdad590d00c1d0aa992df0e150b144dde4ba8f21`。该后续授权不修改validation lock，也不允许用test重选candidate/checkpoint。
 
 ## 10. 证据边界与反方风险
 
@@ -338,10 +337,10 @@ Tolerance-aware materiality 固定为：
 - 用户在0/15时新增双GPU调度要求；`docs/experiments/resp_temporal_v1_formal_dual_gpu_correction_20260820.md`将旧plan冻结为`superseded_before_execution`，新plan固定`gpu_0` 8项/`gpu_1` 7项并强制、记录`CUDA_VISIBLE_DEVICES`。Correction/plan/implementation receipt SHA-256=`1c2cad1c5cc401776d894a0bb039e0ad75a8cd3030f66ea70b48817f2de1b84a / c6594d160a3f7ecb1f39a4e036996491dd6f1919aedeea28949ff8533a1dd8c3 / fa07aae4f83b74c86bf5113840058af99a768d33b16aad883dc6d6368998d888`，68项RTM-v1 CPU定向测试通过。
 - `docs/experiments/resp_temporal_v1_validation_summary_protocol_20260821.md`冻结三seed mean±sample SD、50项paired-seed方向、独立quality/quality-efficiency tolerance-aware Pareto、T0停止线与validation-only access。Config/implementation receipt SHA-256=`21f723580c9cbbe39a3b85c68290e5ace26c6dadf0a9b37abdee9dd8a046816f / ffe4e658ddf9ddb9fb0f0456cf0425c7b2f58994ef4af4d53c693d4911f6149c`；81项RTM-v1 CPU定向测试通过。
 - Validation summary已一次性完成，receipt/manifest SHA-256=`6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad / aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc`。用户确认的validation lock SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`；质量Pareto仅含multiscale representative，质量—效率Pareto保留全部五项，overall winner为空。
-- 独立reused research-test协议/config/一次性评价器已建立：固定五候选×三seed的15个validation-selected checkpoint，只输出逐sample metrics、15行seed direct mean与5行candidate `mean ± sample SD`，不计算secondary、Pareto、排名、paired方向或p-value。Protocol/config/implementation receipt SHA-256=`1da00281ad435a14cc0b1e9a26b84554cae35ec02784ea7f2f369ec539be8184 / 3d8551989fbfa07e8ef9454fbb348f2908151f35c681e15a6191b61a0c60a406 / e9e31c01b8f2da7a441d26b115f446c9fd71a7fc213ea3b07b5528b63a1615e6`；93项RTM-v1 CPU定向测试通过，尚未执行research-test。
+- 独立测试集协议/config/一次性评价器已建立并完成执行：固定五候选×三seed的15个validation-selected checkpoint，只输出逐sample metrics、15行seed direct mean与5行candidate `mean ± sample SD`，不计算secondary、Pareto、排名、paired方向或p-value。Protocol/config/implementation receipt SHA-256=`1da00281ad435a14cc0b1e9a26b84554cae35ec02784ea7f2f369ec539be8184 / 3d8551989fbfa07e8ef9454fbb348f2908151f35c681e15a6191b61a0c60a406 / e9e31c01b8f2da7a441d26b115f446c9fd71a7fc213ea3b07b5528b63a1615e6`；execution receipt/manifest/主指标表 SHA-256=`f9b1b216f80c4bde5a7be27aa9df76c66b8e3765ebe491ebe45fa880dd380a1e / a18d1459a3e4e9f11728c2bcebffd64f1f016f65129345c359794eee2a39ce4b / 91be5de5607de03a678b34f597100991ce81051f150b7c5cfdd7dfb508613454`。15/15 checkpoint、34650 rows、finite/nonfinite与access flags全部闭合。
 
 当前明确未建立：
 
-- research-test execution receipt与结果结论。
+- 独立测试集结果的用户确认结论锁。
 
-GPU engineering、formal训练与validation summary均已关闭且不得重跑，validation lock保持不变。下一步只允许用户按独立协议手动执行一次冻结research-test入口；complete receipt返回前不得读取test结果或形成结论，完成后不得重复评价或追加搜索。
+GPU engineering、formal训练、validation summary与独立测试集评价均已关闭且不得重跑，validation lock保持不变。下一步只允许用户确认当前结果结论；不得重复评价、追加搜索或根据测试结果重选candidate/checkpoint。

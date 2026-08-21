@@ -9,14 +9,14 @@
 - 数据：2026-06-20 research v2 soft-z。
 - 输入：`bcg_rawish_segment_soft_z_key`。
 - target：`target_waveform_segment_soft_z_key`。
-- 当前 research-test 集合：B0 PatchMixer、T2 宽频 native、T4 宽频 bandenergy、F0 固定呼吸带和 IEWT。T1/T3 已由 validation 退出。
+- 当前独立测试集评价集合：B0 PatchMixer、T2 宽频 native、T4 宽频 bandenergy、F0 固定呼吸带和 IEWT。T1/T3 已由 validation 退出。
 - 训练 loss：`L_sync + 0.25 L_effort`；rhythm 与短期 polarity 已由消融删除。
 - 正式输出：$\Pi=S\circ B$，统一 `0.05–0.70 Hz`。
 - checkpoint：完整 validation Local RR MAE 最小 epoch。
 - early stopping：关闭。
 - 包络主指标：`envelope_trajectory_mae` 与 `global_envelope_modulation_error`；
   `target_stratified_envelope_spearman` 只按 train-frozen Low/Medium/High 分层补充报告。
-- research-test：现有 `test` 可在阶段性整理后重复观察，并可形成后续独立科研问题；它不是无偏 held-out 证据，不得用于重选既有 run 的 epoch/checkpoint。
+- 独立测试集：现有 `test` 可在阶段性整理后重复评价，并可形成后续独立科研问题；不得用于重选既有run的epoch/checkpoint。
 - CRD 训练与普通 `eval_crd.py` 仍只读 train/validation；S1C 只允许 candidate lock 中的 12 个 checkpoint 通过专用入口各读取一次现有 research-test。
 
 ## 数据与 split 审计
@@ -76,13 +76,13 @@ Formal 15/15与冻结validation summary现均已完成，以上训练及以下su
 
 固定输出为`runs/resp_temporal_v1/formal_validation_summary_v1/`且禁止覆盖。Receipt/manifest SHA-256=`6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad / aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc`，用户确认的validation lock为`docs/experiments/resp_temporal_v1_validation_lock_20260821.json`，SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`。命令只读formal validation metrics/receipts与GPU engineering artifacts，不读取checkpoint内容、dataset/signal或research-test；RTM-v1 validation阶段现已关闭。
 
-五候选validation `mean ± SD`主指标表已冻结为`docs/experiments/resp_temporal_v1_primary_metrics_table_20260821.md`。用户随后明确授权独立reused research-test；唯一一次性入口为：
+五候选validation `mean ± SD`主指标表已冻结为`docs/experiments/resp_temporal_v1_primary_metrics_table_20260821.md`。用户随后明确授权独立测试集评价；以下一次性入口现已完成，只作provenance，不得重跑：
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=0 ./.venv/bin/python scripts/eval_resp_temporal_v1_research_test.py --config configs/resp_temporal_v1/research_test_v1.yaml
 ```
 
-固定输出为`runs/resp_temporal_v1/research_test/rtm_v1_research_test_v1/`，目录必须预先不存在。入口依次评价五候选×三seed的15个冻结`checkpoint_best_local_rr.pt`，保存逐sample metrics、15行seed summary和5行`mean ± sample SD`主指标表；不训练、不重选checkpoint/candidate，不读取validation metrics/target/prediction，也不计算secondary、Pareto、排名或p-value。失败目录必须保留且不得重跑；complete receipt返回后再验收结果。
+固定输出为`runs/resp_temporal_v1/research_test/rtm_v1_research_test_v1/`。入口已依次评价五候选×三seed的15个冻结`checkpoint_best_local_rr.pt`，保存逐sample metrics、15行seed summary和5行`mean ± sample SD`主指标表；不训练、不重选checkpoint/candidate，不读取validation metrics/target/prediction，也不计算secondary、Pareto、排名或p-value。Receipt/manifest/主指标表 SHA-256=`f9b1b216f80c4bde5a7be27aa9df76c66b8e3765ebe491ebe45fa880dd380a1e / a18d1459a3e4e9f11728c2bcebffd64f1f016f65129345c359794eee2a39ce4b / 91be5de5607de03a678b34f597100991ce81051f150b7c5cfdd7dfb508613454`；不得重跑、覆盖或补写。
 
 ## 训练
 
@@ -446,7 +446,7 @@ docs/experiments/crd_v1_candidate_lock_20260809.json
 
 ### CRD S1C research-test 确认
 
-现有 research-test 已为上述 12 个 frozen checkpoints 完成一次评价。它曾在旧模型阶段被观察，因此结果属于 development/research confirmation evidence，不是无偏 held-out。以下冻结命令仅保留作 provenance，12 份 access receipt 已齐备，**不得再次运行**：
+独立测试集已为上述12个frozen checkpoints完成评价，且不参与本阶段checkpoint或candidate选择。以下冻结命令仅保留作provenance，12份access receipt已齐备，**不得再次运行**：
 
 ```bash
 ./.venv/bin/python scripts/verify_crd_candidate_lock.py
@@ -1035,7 +1035,7 @@ SHA-256 = a23c1dd9aca724ecae3d867429911043a0da1843ede61a3784578abbf99040a9
 
 ### CRD-TF v1 冻结候选 research-test cache
 
-用户已明确授权 reused research-test，固定矩阵为 C201/M/W/MS × 3 validation-selected checkpoints。当前只构建一次独立的完整 2310-window test input-only M/W/S cache：
+用户已明确授权独立测试集评价，固定矩阵为 C201/M/W/MS × 3 validation-selected checkpoints。当前只构建一次独立的完整 2310-window test input-only M/W/S cache：
 
 ```bash
 git status --short
@@ -1184,7 +1184,7 @@ git status --short
 
 P4 已关闭，上述命令只保留 provenance，不得重复运行。P5 随后获得明确授权，且只允许 W3 的三个 validation-selected checkpoints；其完成登记见下节。
 
-### CRD-TF-W v2 P5 最小 reused research-test
+### CRD-TF-W v2 P5 最小独立测试集评价
 
 P5 获用户授权后从干净 commit `4ef901c17ef6167f2531232e43e0941361563c81` 实现；冻结 checkpoint allowlist SHA-256=`c3fe1320a8342a9580fff2864218c948c451b21c05a863db63efe269f1358b07`，只包含 W3 三个 validation-selected checkpoints（epoch `9/12/12`）。实现阶段定向回归为 `141 passed`，当时尚未运行 GPU 或读取 research-test target。
 

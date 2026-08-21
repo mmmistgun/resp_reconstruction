@@ -4,7 +4,7 @@
 
 最后更新：2026-08-20
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段 research-test 已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a 与 reused research-test 已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭，当前协议无开放运行项
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭，当前协议无开放运行项
 
 ## 1. 定位
 
@@ -58,7 +58,9 @@ Loss、metrics、聚合方式和 checkpoint 选择规则已经完成一致性检
 
 2026-08-02 在当前配置上完成一次性索引与 split 独立性审计，未读取波形内容：admission 后 train/val/test 分别为 `10141 / 2675 / 2310` 个窗口；train–val、train–test、val–test 的 `samp_id` 与 segment overlap 均为 0。该审计只在本次实现验收以及未来数据/split 口径变化时重跑，不并入每次训练启动流程。
 
-现有 `test` split 已在历史实验中产生过评价结果，2026-08-07 起统一称为 **research-test split**。它保留当前固定 subject/session 隔离，可在阶段性模型整理后重复评价，并允许其结果形成后续独立研究问题；因此所有结果均属于 development/research evidence，而不是无偏 held-out 证据。当前不引入额外测试数据集，也不再声称存在尚未观察的 final test。为保持跨阶段可比性，当前频带、阈值、detector 和 metric 定义仍只依据 train/领域先验冻结；若未来根据 research-test 改变其中任何一项，必须登记为 test-informed 新阶段，既有结果不追溯改写。
+现有 `test` split 统一称为 **独立测试集（independent test split）**。其独立性由固定subject/session隔离以及不参与当前阶段的训练、checkpoint选择和candidate选择保证，并不要求整个研究过程只能访问一次；允许在阶段性模型整理后重复评价，也允许评价结果形成后续独立研究问题。为保持跨阶段可比性，当前频带、阈值、detector和metric定义仍只依据train/领域先验冻结；若未来根据独立测试集结果改变其中任何一项，必须登记为test-informed新阶段，既有结果不追溯改写。
+
+本次术语统一不改变任何数据、split、subject/session隔离、target、Pi、loss、metrics、selector、checkpoint、数值结果或冻结产物hash。
 
 本轮任务目标不是逐点复制原始 THO waveform，也不恢复绝对物理幅值或带外细节，而是恢复：
 
@@ -1057,11 +1059,11 @@ $$
 
 这一设计承认 loss 最低 epoch 与任务 metric 最优 epoch 可能不同，因此直接让最高优先级的 Local RR 决定 checkpoint；同时不在每个 epoch 计算全部任务指标，避免重新形成未预注册的多指标搜索。`val_core_loss` 只回答优化代理量是否继续改善，完整 metrics 回答选中模型是否真正完成任务，二者角色不能互换。
 
-### 7.3 Research-test 角色与暴露规则
+### 7.3 独立测试集角色与评价规则
 
-Research-test 用于在阶段性模型整理后评价固定的 validation-selected checkpoint。每次报告五项 primary、IBI-MedAE + coverage、三层 envelope Spearman，以及 coherence、nDTW。它可以被重复观察，并可用于提出或决定下一项独立科研任务；但不得据此重选同一训练 run 的 epoch/checkpoint，也不得在一组 test 结果中事后只保留表现最好的 seed 或模型。
+独立测试集用于在阶段性模型整理后评价固定的validation-selected checkpoint。每次报告五项primary、IBI-MedAE + coverage、三层envelope Spearman，以及coherence、nDTW。它可以被重复评价，并可用于提出或决定下一项独立科研任务；但不得据此重选同一训练run的epoch/checkpoint，也不得在一组test结果中事后只保留表现最好的seed或模型。
 
-该 split 已有历史观察背景，且当前明确允许影响未来研究，所以结果统一表述为 `research-test evidence` 或 `development evidence`，不能包装成全新的无偏 held-out 证据。当前不引入第二个测试数据集。每次访问必须显式传入 `--confirm-research-test`，并记录日期、模型与 checkpoint、seed、代码 commit、metric 版本、完整逐 sample 结果路径，以及该结果是否影响后续任务。当前阶段一次性同时报告 B0/T2/T4 的全部三个预注册 seed 与无训练 F0/IEWT；T1/T3 已由 validation 退出，不因 test 补做。
+结果统一表述为`独立测试集证据（independent test-set evidence）`。每次评价必须显式传入`--confirm-research-test`，并记录日期、模型与checkpoint、seed、代码commit、metric版本、完整逐sample结果路径，以及该结果是否影响后续任务。当前阶段同时报告B0/T2/T4的全部三个预注册seed与无训练F0/IEWT；T1/T3已由validation退出，不因test补做。
 
 ## 8. 实验比较协议
 
@@ -1944,9 +1946,9 @@ S1E 结束后，CRD_102/104/105 各三个 Local-RR-selected checkpoints 已作�
 
 未来选择采用“相对 CRD_105 的四项资格门槛 + 五项 primary Pareto”规则：Local RR mean 改善至少 0.5%、至少 2/3 paired seed 改善、PCC 下降不超过 0.005、trajectory 恶化不超过 1.5%，全部通过后才进入 Whole/Local/trajectory/global-envelope/PCC 的非支配比较。无唯一非支配候选时保留 Pareto set，不构造加权总分；IBI、三层 Spearman 与 lag-boundary 仅作 secondary。当前只冻结候选和规则，尚未建立独立确认阶段，也不授权读取 CRD research-test；是否建立确认阶段及其数据口径必须在未来另行修订。
 
-## 39. CRD S1C 现有 research-test 确认阶段（2026-08-09）
+## 39. CRD S1C 独立测试集确认阶段（2026-08-09）
 
-现决定使用现有 research-test 建立 S1C 确认阶段，协议标识为 `crd-v1.1-s1c-research-20260809`。第 38 节“尚未激活”的状态至此结束，但其 candidate lock 和选择规则不变。由于该 split 已在旧模型阶段被观察且曾影响 CRD 研究方向，S1C 只能提供 development/research confirmation evidence，不是独立或无偏 held-out 证据。
+现决定使用独立测试集建立S1C确认阶段，协议标识为`crd-v1.1-s1c-research-20260809`。第38节“尚未激活”的状态至此结束，但其candidate lock和选择规则不变；独立测试集不参与本阶段checkpoint、candidate或超参数选择。
 
 S1C 只评价 candidate lock `9a14db8be8af22e1ce1c5a332b4912ab5c13c7fb03cdf1894fc5c6ed6ff7f8cc` 中的 CRD_102/104/105 九个候选 checkpoint 与 CRD_001 三个 reference checkpoint，按 lock 顺序、使用完整 2310-window/8-subject research-test 各评价一次。索引级 split 审计确认 train/validation/test 为 `10141/2675/2310` windows、`32/7/8` 个 `samp_id`，三个 split pair 的 subject 与 segment overlap 均为 0。专用入口为 `scripts/eval_crd_s1c.py --confirm-research-test`；普通 `eval_crd.py` 仍不开放 test，固定隔离输出不得覆盖。
 
@@ -1956,11 +1958,11 @@ S1C 随后在干净 commit `3b280013d898287613709c4dd5648f8b94e14c9d` 下完成�
 
 相对 CRD_105，CRD_102 的 test Local RR 改善 `6.8065%`、三个配对 seed 全部改善，signed PCC 增加 `0.012860`，trajectory 不仅未恶化反而改善 `1.1863%`，故四项资格门槛全部通过；其 Whole RR 与 global-envelope error 还分别改善 `6.0737% / 11.0571%`，因此在五项 primary 上严格 Pareto-dominate CRD_105。CRD_104 的 Local RR 仅改善 `0.2940%`，trajectory 恶化 `6.3707%`，同时未过 `0.5% / 1.5%` 两个门槛，不能进入 Pareto。冻结结果为 `eligible={102,105}`、唯一 Pareto 候选 `CRD_102`。
 
-该结果不回写 S1D 当时“保留 105”的历史结论，但在新 S1C 协议下将 CRD_102 更新为后续阶段的当前结构锚点。它也不表示 CRD_102 在所有模型和指标上全面最优：只读 reference CRD_001 的 Whole RR、IBI-MedAE 与 coherence 仍更好；102 相对 001 的五项 primary 中 Whole RR 恶化 `1.8155%`，其余 Local RR、trajectory、global-envelope、PCC 分别改善 `0.4404% / 2.1736% / 2.1565% / +0.020974`。这些都是已被历史观察的 research-test 上的 development/research evidence，不能表述为无偏泛化结论。S1C 队列至此关闭，不重复读取；S2、AM/Morphology/gate/auxiliary/control 仍未激活。
+该结果不回写S1D当时“保留105”的历史结论，但在新S1C协议下将CRD_102更新为后续阶段的当前结构锚点。它也不表示CRD_102在所有模型和指标上全面最优：只读reference CRD_001的Whole RR、IBI-MedAE与coherence仍更好；102相对001的五项primary中Whole RR恶化`1.8155%`，其余Local RR、trajectory、global-envelope、PCC分别改善`0.4404% / 2.1736% / 2.1565% / +0.020974`。这些结果属于独立测试集证据。S1C队列至此关闭，不重复评价；S2、AM/Morphology/gate/auxiliary/control仍未激活。
 
 ## 40. CRD S1F global-stage 缺失格（2026-08-09）
 
-S1C 选中的 CRD_102 使用 B0/PatchMixer frontend + local Mamba，而现有 global-stage 单因素比较 `104 vs 103` 只覆盖 Direct frontend。由于本阶段已出现明显的 frontend/Mamba 非单调交互，在进入机制启发表征 S2 前，仅允许新增一个 research-test-informed development variant：`CRD_106_B0_HIER_MAMBA = CRD_102 + CRD_104 的同构 1-Hz global Mamba/FiLM`，补齐 frontend × global-stage 的缺失格。
+S1C选中的CRD_102使用B0/PatchMixer frontend + local Mamba，而现有global-stage单因素比较`104 vs 103`只覆盖Direct frontend。由于本阶段已出现明显的frontend/Mamba非单调交互，在进入机制启发表征S2前，仅允许新增一个由独立测试集结果启发的development variant：`CRD_106_B0_HIER_MAMBA = CRD_102 + CRD_104 的同构 1-Hz global Mamba/FiLM`，补齐frontend × global-stage的缺失格。
 
 S1F 不读取 research-test，不修改数据、loss、metrics、selector、训练预算或 seed；正式比较只用 validation。106 相对 102 必须同时达到 Local RR mean 改善 `≥0.5%`、`≥2/3` paired seeds 改善、PCC 下降 `≤0.005`、trajectory 恶化 `≤1.5%`。通过则未来 `S2 BASE=106`，否则 `S2 BASE=102`；无论结果如何均不再增加 S1F variant。完整结构、初始化、参数契约、工程门槛和输出边界见附件第 20 节。S2、AM/Morphology/gate/auxiliary/control 继续关闭。
 
@@ -2074,21 +2076,21 @@ P6a 保持 cache、数据/split/target、loss/metrics、physical batch `128×1`�
 
 P6a 9/9 formal 随后从干净 commit `94033ce` 完成，全部由 patience=30 在 epoch `38–51` 正常停止，selected epoch 为 `8–21`，无 incomplete；最大长期 reserved fraction 为 `85.48%`，所有生命周期均完整且 finite。冻结 summary SHA-256 为 `b970a6ea6d77e6d6858d8b7dbd77ed4c2ed8ff633c7f48eca15aeba227ef6e64`。MWS-ADD 没有任何 primary 实质优于 MS 且 PCC 未过 base 护栏；MWS-GATE 没有任何 primary 实质优于 MWS-ADD。最终无 qualified P6a candidate，保留 P5 的 M/W/MS 候选池，不选唯一赢家。P6a/formal/summary 关闭，P6b 与 research-test 仍须另立协议。
 
-## 48. CRD-TF v1 冻结候选池 research-test（2026-08-16）
+## 48. CRD-TF v1 冻结候选池独立测试集评价（2026-08-16）
 
-用户随后明确表示不要求独立证据并授权开始 research-test。附件 `docs/experiments/crd_tf_v1_research_test_protocol_20260816.md` 由本节纳入唯一协议。证据名称固定为 reused research/development evidence，不得写成未触碰 held-out 或无偏泛化。
+用户随后授权开始独立测试集评价。附件`docs/experiments/crd_tf_v1_research_test_protocol_20260816.md`由本节纳入唯一执行协议；candidate与checkpoint均在本阶段test评价前冻结。
 
 评价矩阵固定为 C201 anchor 与 P5 保留的 M/W/MS，各三个 validation-selected checkpoints，共 12 次；不加入 P6a 失败模型或其他 P4 arms，不重选 epoch、不重训。第一步只开放独立的完整 2310-window test input-only M/W/S cache builder，保持原 train/validation cache 不变且不读取 test target array。Cache manifest 审计写回前，checkpoint evaluation 与 test target 继续关闭。
 
 完整 input-only cache 随后从干净 commit `dfd9313` 生成，覆盖 `2310 windows / 8 samp_id`，目录 514 MiB；manifest SHA-256=`5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745`。7 个受管文件的实际 SHA/size/shape/dtype/finite、row identity 与 manifest 重新计算完全一致，且 `test_target_array_read=false / model_inference_used=false`。现开放只接受冻结 allowlist 的 12-checkpoint 专用入口；普通 CRD eval 仍保持 validation-only，R4 汇总在 12 项齐备前关闭。
 
-12/12 research-test evaluations 随后从干净 commit `9f429da` 完成；全部 checkpoint/cache/row/finite/eligibility/degeneracy identity 通过，无 checkpoint reselection。一次性 summary 从干净 commit `a1ce90c` 生成，SHA-256=`e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0`。M/W/MS 均通过 C201 guardrail 与至少一项 paired material improvement；tolerance-aware Pareto 为 W/MS，M 被支配。W 是 Local-RR lead（mean `0.609566`），但 W 的 global envelope 与若干 secondary 不占优，因此不构造总分或唯一赢家。Research-test 阶段关闭，结果只作 reused research/development evidence。
+12/12独立测试集evaluations随后从干净commit`9f429da`完成；全部checkpoint/cache/row/finite/eligibility/degeneracy identity通过，无checkpoint reselection。一次性summary从干净commit`a1ce90c`生成，SHA-256=`e9430d3449e1e75cbab1804f1c887803ba8c12dcc4b11582f94090a6a1d7c6c0`。M/W/MS均通过C201 guardrail与至少一项paired material improvement；tolerance-aware Pareto为W/MS，M被支配。W是Local-RR lead（mean `0.609566`），但W的global envelope与若干secondary不占优，因此不构造总分或唯一赢家。独立测试集评价阶段关闭。
 
 ## 49. CRD-TF-W v2 机制、频带与效率计划（2026-08-17 修订）
 
 用户已确认以 `docs/experiments/crd_tf_w_v2_protocol_20260817.md` 作为规范性附件；原 `crd_tf_w_v2_protocol_20260816.md` 与 `docs/temp/实验计划20260817.md` 只保留为设计演化记录。新附件冲突时仍以本文为准。
 
-本阶段继续属于 research-test-informed development；现有 test split 已多次评价并影响研究，只能称为 reused research/development evidence。当前明确暂不做 `samp_id` delta、`5/7` 方向门槛或 leave-one-`samp_id`-out；`samp_id` 仅保留作逐 sample 身份追溯，正式汇总继续使用逐 sample direct mean 与三个 paired training seeds。
+本阶段由独立测试集结果启发形成新的development问题；测试集允许在阶段之间重复评价，但不参与当前阶段的训练或validation选择。当前明确暂不做`samp_id` delta、`5/7`方向门槛或leave-one-`samp_id`-out；`samp_id`仅保留作逐sample身份追溯，正式汇总继续使用逐sample direct mean与三个paired training seeds。
 
 修订后的固定顺序为：P0 candidate lock；P−1 对冻结 W 三 checkpoint 做 gamma/beta、频带遮挡和时间负对照的 validation-only 功能审计；P1 运行 RESP-only、CARRIER-only 与 full-band 6-voice 各三个 seed；P2 仅在 P−1 预注册 near 规则触发时运行 ADD 或 SCALE 中一个 arm；P3 只在当前 `W0_FULL_12V_FILM` 上训练 D4 三 seed，并复用既有 D6。各问题保持独立，不构造未经训练的频带/voices/融合/D4 复合候选。
 
@@ -2158,4 +2160,6 @@ V2随后从干净commit `d51659d18c8905a5dc62e9a00ed399df198c89fc`完整执行�
 
 用户随后从干净commit `670d3bd36182fb4c4b982427616e8d1bc4fef42d`一次性完成validation summary。Receipt/manifest SHA-256=`6f9f1e873b8910b22241bc0e9f2c510909835b0bbc2a9edc12f0e1788fa59aad / aab22094d6efd11927c952e9f12bcbab24e30cedc9a2a5f282f61056f1f193dc`；15项formal、40125行validation、5项candidate、50项paired-seed与40项dominance audit闭合，numeric finite/null/nonfinite=`3425/120/0`，null仅为不适用资源列，且summary未读取checkpoint内容、dataset/index、signal/target或research-test。冻结candidate-mean tolerance下，质量Pareto仅含`rtm_v1_multiscale_10_2_1_h384`；其相对T0的Whole/Local/trajectory/global改善为`4.5777% / 5.9896% / 6.9115% / 32.9483%`，PCC绝对增加`0.037931`，五项paired material improvement均为`3/3`。它在mean/tolerance下亦支配TCN、BiMamba2和BiLSTM representative，但相对BiLSTM Whole/trajectory仅`1/3 / 2/3`原始seed更优、相对BiMamba2 Whole仅`2/3`、相对TCN trajectory仅`2/3`，不得称为逐seed一致、唯一最佳模型或multiscale family普遍优越。加入资源维度后全部五项均在质量—效率Pareto且无overall winner；BiLSTM仅作描述性质量—效率trade-off，T0仍是trunk-attribution control。用户确认validation lock，文件SHA-256=`989ef0a3a5941ead3e80aba25606878f88d315bd23a1cf5ca4260317f3cffce6`；停止线=`at_least_one_trunk_material_primary_improvement`，协议关闭且不追加搜索，research-test继续关闭。
 
-用户随后要求将论文交付收窄为五候选validation `mean ± SD`主指标表，并明确授权开始独立reused research-test。主指标表SHA-256=`417fe73b491d459fe649a365fdad590d00c1d0aa992df0e150b144dde4ba8f21`；它只包含五项primary及三seed sample SD。Research-test不改validation lock，固定评价全部五候选×三seed的15个validation-selected best checkpoint，只报告逐sample metrics、15行seed direct mean与5行candidate `mean ± sample SD`；关闭secondary、Pareto、排名、paired方向、总分与p-value。协议/config/implementation receipt SHA-256=`1da00281ad435a14cc0b1e9a26b84554cae35ec02784ea7f2f369ec539be8184 / 3d8551989fbfa07e8ef9454fbb348f2908151f35c681e15a6191b61a0c60a406 / e9e31c01b8f2da7a441d26b115f446c9fd71a7fc213ea3b07b5528b63a1615e6`；93项RTM-v1 CPU定向测试通过，未访问test signal/target、未生成prediction、未使用GPU。下一步仅由用户手动执行一次，complete receipt前不形成test结论。
+用户随后要求将论文交付收窄为五候选validation `mean ± SD`主指标表，并明确授权开始独立测试集评价。主指标表SHA-256=`417fe73b491d459fe649a365fdad590d00c1d0aa992df0e150b144dde4ba8f21`；它只包含五项primary及三seed sample SD。独立测试集不改validation lock，固定评价全部五候选×三seed的15个validation-selected best checkpoint，只报告逐sample metrics、15行seed direct mean与5行candidate `mean ± sample SD`；关闭secondary、Pareto、排名、paired方向、总分与p-value。协议/config/implementation receipt SHA-256=`1da00281ad435a14cc0b1e9a26b84554cae35ec02784ea7f2f369ec539be8184 / 3d8551989fbfa07e8ef9454fbb348f2908151f35c681e15a6191b61a0c60a406 / e9e31c01b8f2da7a441d26b115f446c9fd71a7fc213ea3b07b5528b63a1615e6`；93项RTM-v1 CPU定向测试通过，未访问test signal/target、未生成prediction、未使用GPU。
+
+用户从干净commit `972f158cf459f4d63bffdd5e7850455f70417e78`完成独立测试集一次性评价。Execution receipt/manifest/主指标表 SHA-256=`f9b1b216f80c4bde5a7be27aa9df76c66b8e3765ebe491ebe45fa880dd380a1e / a18d1459a3e4e9f11728c2bcebffd64f1f016f65129345c359794eee2a39ce4b / 91be5de5607de03a678b34f597100991ce81051f150b7c5cfdd7dfb508613454`；15/15 checkpoint、34650逐sample rows、5行candidate、nonfinite=0，且train/validation access=false、training/reselection=false。后续论文口径统一称“独立测试集”：其独立性由split隔离与不参与本阶段选择保证，不要求整个研究过程只能访问一次。当前仅待用户确认测试结论锁，不得重评或根据测试结果重选。
