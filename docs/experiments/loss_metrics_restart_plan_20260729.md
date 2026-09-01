@@ -2,9 +2,9 @@
 
 日期：2026-07-29
 
-最后更新：2026-08-20
+最后更新：2026-09-01
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭，当前协议无开放运行项
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭；第 51 节已建立论文实验补充执行协议，但尚未开放实现、训练、独立测试集访问或效率 benchmark
 
 ## 1. 定位
 
@@ -2163,3 +2163,32 @@ V2随后从干净commit `d51659d18c8905a5dc62e9a00ed399df198c89fc`完整执行�
 用户随后要求将论文交付收窄为五候选validation `mean ± SD`主指标表，并明确授权开始独立测试集评价。主指标表SHA-256=`417fe73b491d459fe649a365fdad590d00c1d0aa992df0e150b144dde4ba8f21`；它只包含五项primary及三seed sample SD。独立测试集不改validation lock，固定评价全部五候选×三seed的15个validation-selected best checkpoint，只报告逐sample metrics、15行seed direct mean与5行candidate `mean ± sample SD`；关闭secondary、Pareto、排名、paired方向、总分与p-value。协议/config/implementation receipt SHA-256=`1da00281ad435a14cc0b1e9a26b84554cae35ec02784ea7f2f369ec539be8184 / 3d8551989fbfa07e8ef9454fbb348f2908151f35c681e15a6191b61a0c60a406 / e9e31c01b8f2da7a441d26b115f446c9fd71a7fc213ea3b07b5528b63a1615e6`；93项RTM-v1 CPU定向测试通过，未访问test signal/target、未生成prediction、未使用GPU。
 
 用户从干净commit `972f158cf459f4d63bffdd5e7850455f70417e78`完成独立测试集一次性评价。Execution receipt/manifest/主指标表 SHA-256=`f9b1b216f80c4bde5a7be27aa9df76c66b8e3765ebe491ebe45fa880dd380a1e / a18d1459a3e4e9f11728c2bcebffd64f1f016f65129345c359794eee2a39ce4b / 91be5de5607de03a678b34f597100991ce81051f150b7c5cfdd7dfb508613454`；15/15 checkpoint、34650逐sample rows、5行candidate、nonfinite=0，且train/validation access=false、training/reselection=false。后续论文口径统一称“独立测试集”：其独立性由split隔离与不参与本阶段选择保证，不要求整个研究过程只能访问一次。当前仅待用户确认测试结论锁，不得重评或根据测试结果重选。
+
+## 51. 论文实验补充与证据闭环执行协议（2026-09-01）
+
+用户要求把论文实验补充转化为可实施的新任务，同时保持设计来源文件
+`/mnt/disk_code/marques/paper/resp_rec/paper_rewriting_output/实验补充与证据闭环计划.md`
+只读。规范性附件现建立为 `docs/experiments/paper_evidence_closure_protocol_20260901.md`，协议 ID 为
+`paper-evidence-closure-v1-20260901`；该附件由本节纳入当前唯一实验协议，若有冲突仍以本文为准。
+
+论文主模型固定为 W0：该选择以 Whole/Local RR 为最高任务优先级，认为 W3 的努力/PCC 收益不足以覆盖其
+RR 退化；这是一项论文任务优先级选择，不改写既有 W0/W3 Pareto 权衡，也不声称 W0 在五项 primary 上逐项支配 W3。
+
+新增窗口任务固定为 C201/`W-reduced-center60` × `60/90/180 s` 输入、统一中心 `60 s` 输出。它是游离于论文
+主模型实验之外的独立上下文敏感性任务，不是严格 W0 窗长消融，也不回写 W0 的主模型定位。W-reduced 固定从原
+97 点全频程名义网格取偶数 indices `0,2,…,96`，形成 direct 49-scale、约 6 voices/octave 的 length-specific CWT；
+三种输入来自同一 180-s 父 row 的嵌套裁剪，中心 target 完全相同；新任务独立定义 6000-point `Pi_60`、
+`L_sync_60 + 0.25 L_effort_60`、严格 center-RR selector，以及 center RR、IBI-MedAE、trajectory、
+global-envelope 和 signed PCC 五项中心指标，IBI 必须配套 coverage。单 seed 诊断矩阵为 6 runs；只有预注册模式
+触发且用户确认成本后，才追加两个 seed 的 12 runs，形成完整 18-run 矩阵。现有固定 180-s 模型、cache、配置、
+runner 和冻结产物不得为此放宽或覆盖。
+
+IoT 阶段只冻结 W0/W3/D4 的 batch-1 cached/online-W、CPU/GPU 分阶段延迟、内存、参数、权重与 profiler coverage
+测量合同。必须报告实际 median/p95/rounds 和 30-s step 数值余量，但不得在结果产生前写入实时、流式、部署通过或
+失败结论；完整 180-s 上下文等待必须与处理开销分开说明。
+
+用户随后授权 P0/P1 实现和定向 CPU 测试，并把窗口任务明确定位为游离于主实验之外的上下文敏感性比较。
+P0 只读审计框架与 P1 数据/cache/model/`Pi_60`/loss/metrics/selector/lifecycle 已实现；22 项新增测试与 64 项相关
+冻结回归共 86 项通过。C201/W-reduced 参数数为 `1,069,802 / 1,219,850`，同 seed 的 165 个共享 state tensors
+逐 tensor 相同。没有运行正式 P0 产物生成、训练、GPU、CPU lifecycle、全量 cache、benchmark 或新的独立测试集访问。
+P2 工程验收、P3/P4 训练、P5 新增功能推理、P6 test target-only 属性访问和 P7 效率 benchmark 仍未开放。

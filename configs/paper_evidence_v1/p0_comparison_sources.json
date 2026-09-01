@@ -1,0 +1,328 @@
+{
+  "protocol_id": "paper-evidence-closure-v1-20260901",
+  "schema_version": "paper-evidence-p0-comparison-audit-v1",
+  "representative_method_rule": {
+    "rule_id": "paper-representatives-predeclared-20260901",
+    "primary_table_method_ids": [
+      "F0_fixed_band_bcg",
+      "IEWT",
+      "B0_final_loss_patchmixer",
+      "T2_g3c_wide_native",
+      "T4_g3c_bandenergy_native",
+      "crd_c201_decoder_10hz_cap",
+      "crd_tf101_m",
+      "crd_tf102_w",
+      "crd_tf203_ms",
+      "crd_tfw_v2_w3_full_6v_film_d6"
+    ],
+    "selection_basis": "retain deterministic references, early protocol baseline/Pareto methods, C201 and qualified CRD-TF representatives, the primary W0 model, and the predeclared W3 scale-density trade-off",
+    "d4_handling": "audit as validation-only efficiency trade-off; exclude from independent-test quality table",
+    "rtm_handling": "audit all five frozen candidates; exclude until the user confirms the independent-test conclusion lock"
+  },
+  "methods": [
+    {
+      "method_id": "F0_fixed_band_bcg",
+      "display_name": "F0 fixed-band BCG",
+      "paper_role": "deterministic traditional baseline",
+      "quality_scope": "independent_test",
+      "deterministic": true,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s",
+        "evaluation_split": "independent_test",
+        "expected_test_rows": 2310,
+        "input_carrier": "bcg_resp_band_state_aligned_segment_soft_z",
+        "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100,
+        "window_samples": 18000,
+        "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five",
+        "checkpoint_selector": "not_applicable_deterministic",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1",
+        "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail",
+        "prediction_uses_target": false
+      },
+      "records": [
+        {
+          "split": "test",
+          "sample_metrics": "runs/tho_fixed_band_research_test/20260807_134222_131480/sample_metrics.csv",
+          "summary": "runs/tho_fixed_band_research_test/20260807_134222_131480/summary.csv"
+        }
+      ]
+    },
+    {
+      "method_id": "IEWT",
+      "display_name": "Protocolized Python IEWT",
+      "paper_role": "deterministic traditional baseline",
+      "quality_scope": "independent_test",
+      "deterministic": true,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s",
+        "evaluation_split": "independent_test",
+        "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_wideband_state_aligned_segment_soft_z",
+        "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100,
+        "window_samples": 18000,
+        "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five",
+        "checkpoint_selector": "not_applicable_deterministic",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1",
+        "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail",
+        "prediction_uses_target": false
+      },
+      "records": [
+        {
+          "split": "test",
+          "sample_metrics": "runs/tho_iewt_research_test/20260807_134559_593049/sample_metrics.csv",
+          "summary": "runs/tho_iewt_research_test/20260807_134559_593049/summary.csv"
+        }
+      ]
+    },
+    {
+      "method_id": "B0_final_loss_patchmixer",
+      "display_name": "B0 PatchMixer",
+      "paper_role": "early learned baseline",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s",
+        "evaluation_split": "independent_test",
+        "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key",
+        "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100,
+        "window_samples": 18000,
+        "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five",
+        "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1",
+        "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail",
+        "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "test", "sample_metrics": "runs/tho_restart_b0_final_loss_patchmixer/seed_20260811/20260803_152242_402834/research_test_metrics.csv", "summary": "runs/tho_restart_b0_final_loss_patchmixer/seed_20260811/20260803_152242_402834/research_test_metrics_summary.csv"},
+        {"seed": 20260812, "split": "test", "sample_metrics": "runs/tho_restart_b0_final_loss_patchmixer/seed_20260812/20260803_154223_477657/research_test_metrics.csv", "summary": "runs/tho_restart_b0_final_loss_patchmixer/seed_20260812/20260803_154223_477657/research_test_metrics_summary.csv"},
+        {"seed": 20260813, "split": "test", "sample_metrics": "runs/tho_restart_b0_final_loss_patchmixer/seed_20260813/20260803_160222_471011/research_test_metrics.csv", "summary": "runs/tho_restart_b0_final_loss_patchmixer/seed_20260813/20260803_160222_471011/research_test_metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "T2_g3c_wide_native",
+      "display_name": "T2 full-band native fusion",
+      "paper_role": "early learned Pareto method",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s", "evaluation_split": "independent_test", "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key", "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100, "window_samples": 18000, "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five", "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1", "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail", "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "test", "sample_metrics": "runs/tho_restart_t2_g3c_wide_native/seed_20260811/20260805_155223_074444/research_test_metrics.csv", "summary": "runs/tho_restart_t2_g3c_wide_native/seed_20260811/20260805_155223_074444/research_test_metrics_summary.csv"},
+        {"seed": 20260812, "split": "test", "sample_metrics": "runs/tho_restart_t2_g3c_wide_native/seed_20260812/20260805_161219_590689/research_test_metrics.csv", "summary": "runs/tho_restart_t2_g3c_wide_native/seed_20260812/20260805_161219_590689/research_test_metrics_summary.csv"},
+        {"seed": 20260813, "split": "test", "sample_metrics": "runs/tho_restart_t2_g3c_wide_native/seed_20260813/20260805_163121_898228/research_test_metrics.csv", "summary": "runs/tho_restart_t2_g3c_wide_native/seed_20260813/20260805_163121_898228/research_test_metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "T4_g3c_bandenergy_native",
+      "display_name": "T4 band-energy native fusion",
+      "paper_role": "early learned Pareto method",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s", "evaluation_split": "independent_test", "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key", "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100, "window_samples": 18000, "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five", "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1", "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail", "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "test", "sample_metrics": "runs/tho_restart_t4_g3c_bandenergy_native/seed_20260811/20260806_163824_315743/research_test_metrics.csv", "summary": "runs/tho_restart_t4_g3c_bandenergy_native/seed_20260811/20260806_163824_315743/research_test_metrics_summary.csv"},
+        {"seed": 20260812, "split": "test", "sample_metrics": "runs/tho_restart_t4_g3c_bandenergy_native/seed_20260812/20260806_165713_349336/research_test_metrics.csv", "summary": "runs/tho_restart_t4_g3c_bandenergy_native/seed_20260812/20260806_165713_349336/research_test_metrics_summary.csv"},
+        {"seed": 20260813, "split": "test", "sample_metrics": "runs/tho_restart_t4_g3c_bandenergy_native/seed_20260813/20260806_171618_688063/research_test_metrics.csv", "summary": "runs/tho_restart_t4_g3c_bandenergy_native/seed_20260813/20260806_171618_688063/research_test_metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "crd_c201_decoder_10hz_cap",
+      "display_name": "C201",
+      "paper_role": "time-domain CRD control",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s", "evaluation_split": "independent_test", "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key", "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100, "window_samples": 18000, "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five", "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1", "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail", "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "test", "sample_metrics": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260811/20260811_162853_343330/research_test_metrics.csv", "summary": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260811/20260811_162853_343330/research_test_metrics_summary.csv"},
+        {"seed": 20260812, "split": "test", "sample_metrics": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260812/20260811_173454_537310/research_test_metrics.csv", "summary": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260812/20260811_173454_537310/research_test_metrics_summary.csv"},
+        {"seed": 20260813, "split": "test", "sample_metrics": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260813/20260811_184113_013380/research_test_metrics.csv", "summary": "runs/crd_v1/crd_c201_decoder_10hz_cap/seed_20260813/20260811_184113_013380/research_test_metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "crd_tf101_m",
+      "display_name": "CRD-TF M",
+      "paper_role": "qualified CRD-TF representative",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s", "evaluation_split": "independent_test", "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key", "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100, "window_samples": 18000, "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five", "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1", "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail", "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf101_m/seed_20260811/20260812_145023_943923/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf101_m/seed_20260811/20260812_145023_943923/research_test_metrics_summary.csv"},
+        {"seed": 20260812, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf101_m/seed_20260812/20260812_161511_858419/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf101_m/seed_20260812/20260812_161511_858419/research_test_metrics_summary.csv"},
+        {"seed": 20260813, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf101_m/seed_20260813/20260812_173913_174272/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf101_m/seed_20260813/20260812_173913_174272/research_test_metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "crd_tf102_w",
+      "display_name": "W0 / CRD-TF W",
+      "paper_role": "primary proposed model",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s", "evaluation_split": "independent_test", "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key", "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100, "window_samples": 18000, "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five", "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1", "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail", "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/research_test_metrics_summary.csv"},
+        {"seed": 20260812, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/research_test_metrics_summary.csv"},
+        {"seed": 20260813, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/research_test_metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "crd_tf203_ms",
+      "display_name": "CRD-TF MS",
+      "paper_role": "qualified Pareto CRD-TF representative",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s", "evaluation_split": "independent_test", "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key", "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100, "window_samples": 18000, "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five", "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1", "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail", "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf203_ms/seed_20260811/20260813_235048_560221/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf203_ms/seed_20260811/20260813_235048_560221/research_test_metrics_summary.csv"},
+        {"seed": 20260812, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf203_ms/seed_20260812/20260814_012558_648620/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf203_ms/seed_20260812/20260814_012558_648620/research_test_metrics_summary.csv"},
+        {"seed": 20260813, "split": "test", "sample_metrics": "runs/crd_tf_v1/formal/crd_tf203_ms/seed_20260813/20260814_030209_734320/research_test_metrics.csv", "summary": "runs/crd_tf_v1/formal/crd_tf203_ms/seed_20260813/20260814_030209_734320/research_test_metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "crd_tfw_v2_w3_full_6v_film_d6",
+      "display_name": "W3 6-voice FiLM",
+      "paper_role": "scale-density trade-off",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": true,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s", "evaluation_split": "independent_test", "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key", "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100, "window_samples": 18000, "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five", "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1", "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail", "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "test", "sample_metrics": "runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_20260811/research_test_metrics.csv", "summary": "runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_20260811/research_test_metrics_summary.csv"},
+        {"seed": 20260812, "split": "test", "sample_metrics": "runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_20260812/research_test_metrics.csv", "summary": "runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_20260812/research_test_metrics_summary.csv"},
+        {"seed": 20260813, "split": "test", "sample_metrics": "runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_20260813/research_test_metrics.csv", "summary": "runs/crd_tf_w_v2/research_test/evaluations/crd_tfw_v2_w3_full_6v_film_d6/seed_20260813/research_test_metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "crd_tfw_v2_d4_full_12v_film",
+      "display_name": "D4 4-layer efficiency trade-off",
+      "paper_role": "validation-only efficiency trade-off",
+      "quality_scope": "validation_only",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "conclusion_lock_confirmed": true,
+      "include_in_primary_table": false,
+      "contracts": {
+        "input_carrier": "bcg_rawish_segment_soft_z_key",
+        "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "prediction_uses_target": false
+      },
+      "records": [
+        {"seed": 20260811, "split": "val", "sample_metrics": "runs/crd_tf_w_v2/formal/crd_tfw_v2_d4_full_12v_film/seed_20260811/20260818_230002_842674/metrics.csv", "summary": "runs/crd_tf_w_v2/formal/crd_tfw_v2_d4_full_12v_film/seed_20260811/20260818_230002_842674/metrics_summary.csv"},
+        {"seed": 20260812, "split": "val", "sample_metrics": "runs/crd_tf_w_v2/formal/crd_tfw_v2_d4_full_12v_film/seed_20260812/20260819_001222_827515/metrics.csv", "summary": "runs/crd_tf_w_v2/formal/crd_tfw_v2_d4_full_12v_film/seed_20260812/20260819_001222_827515/metrics_summary.csv"},
+        {"seed": 20260813, "split": "val", "sample_metrics": "runs/crd_tf_w_v2/formal/crd_tfw_v2_d4_full_12v_film/seed_20260813/20260819_012343_109819/metrics.csv", "summary": "runs/crd_tf_w_v2/formal/crd_tfw_v2_d4_full_12v_film/seed_20260813/20260819_012343_109819/metrics_summary.csv"}
+      ]
+    },
+    {
+      "method_id": "rtm_v1_all_five_unconfirmed",
+      "display_name": "RTM-v1 five-candidate frozen set",
+      "paper_role": "independent task candidates pending conclusion lock",
+      "quality_scope": "independent_test",
+      "deterministic": false,
+      "expected_seed_count": 3,
+      "expected_record_count": 15,
+      "conclusion_lock_confirmed": false,
+      "include_in_primary_table": false,
+      "contracts": {
+        "dataset_family": "research_v2_admitted_180s", "evaluation_split": "independent_test", "expected_test_rows": 2310,
+        "input_carrier": "bcg_rawish_segment_soft_z_key", "target_carrier": "target_waveform_segment_soft_z_key",
+        "sample_rate_hz": 100, "window_samples": 18000, "projection": "fft_hard_0.05_0.70hz_center_rms_eps1e-8",
+        "primary_metric_set": "respiration_primary_v2_five", "checkpoint_selector": "full_validation_local_rr_strict_lower_tie_earlier",
+        "aggregation": "sample_direct_mean_then_seed_mean_sample_sd_ddof1", "prediction_degradation": "rr_39bpm_pcc_minus1_checkpoint_nonfinite_fail", "prediction_uses_target": false
+      },
+      "record_matrix": {
+        "candidate_ids": [
+          "rtm_v1_t0_locked_stem_head",
+          "rtm_v1_tcn_d9_h384",
+          "rtm_v1_bimamba2_d96_l6",
+          "rtm_v1_bilstm_h96_l2",
+          "rtm_v1_multiscale_10_2_1_h384"
+        ],
+        "seeds": [20260811, 20260812, 20260813],
+        "split": "test",
+        "sample_metrics": "runs/resp_temporal_v1/research_test/rtm_v1_research_test_v1/research_test_metrics.csv",
+        "summary": "runs/resp_temporal_v1/research_test/rtm_v1_research_test_v1/research_test_seed_summary.csv",
+        "summary_columns": {
+          "whole_rr_abs_error_bpm": "whole_rr_abs_error_bpm",
+          "local_rr_mae_bpm": "local_rr_mae_bpm",
+          "envelope_trajectory_mae": "envelope_trajectory_mae",
+          "global_envelope_modulation_error": "global_envelope_modulation_error",
+          "lag_aware_signed_pcc": "lag_aware_signed_pcc"
+        }
+      }
+    }
+  ]
+}
