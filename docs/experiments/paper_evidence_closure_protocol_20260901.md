@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0 正式只读审计与 P1 实现已完成；P2 精简 GPU harness 已实现，等待用户手动执行；P3/P4 训练、独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0 正式只读审计、P1 实现与 P2 GPU 工程验收均已完成并冻结；P3/P4 训练、完整 W cache、独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -33,7 +33,7 @@
 |---|---|---:|---|
 | P0 | 既有代表性方法协议兼容性与表格审计 | 否 | 已完成并冻结 |
 | P1 | 中心 60 s 变长输入任务实现与定向测试 | 否 | 已完成 |
-| P2 | 中心任务 synthetic GPU 工程验收 | 否 | 入口已实现；等待用户手动执行 |
+| P2 | 中心任务 synthetic GPU 工程验收 | 否 | 已完成并冻结；统一 `128×1` |
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 未授权执行 |
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 关闭 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
@@ -292,6 +292,22 @@ peak allocated/reserved、设备/依赖/commit、access flags 和最终 decision
 
 P2 只形成实现证据，不形成窗口长度效果结论。按仓库约束，该 GPU 命令由用户执行。
 
+### 6.4 冻结结果
+
+P2 从干净 commit `7249fca27e5a960a3e74e43a5acf6ac0abc3a4b5` 在 NVIDIA GeForce RTX 4070 Ti SUPER
+上完成。固定回执为
+`runs/paper_evidence_v1/center_context/p2_gpu_acceptance/7249fca27e5a/acceptance_receipt.json`，SHA-256 为
+`cb43ee480018afd483ce2bef15342d5bdaf29b6bc999d58ce209abac58df04ce`；artifact manifest SHA-256 为
+`09b9e3347967cd7a4eac45b39c4054c4db689ccbbfe1bdaf2a2e23469957d582`。
+
+六个 batch-1 arms 全部完成且 output/loss/gradient/parameter finite，参数数固定为 C201 `1,069,802`、W-reduced
+`1,219,850`。W-reduced-180 的 physical batch 128 完成一次 AdamW step，peak allocated/reserved 为
+`10,834.94 / 10,948.00 MiB`，reserved 占设备总显存 `68.70%`，decision=`batch128_accepted`。Access receipt 确认
+dataset、cache、train/validation/test、checkpoint 均未访问。Batch-1 序列没有 warmup，首臂包含一次性 CUDA 初始化开销，
+其显存记录只作 finite/shape 工程回执，不用于跨臂效率比较。
+
+P2 据此冻结六臂统一 `physical batch=128 / gradient accumulation=1`，不触发 batch fallback。
+
 ## 7. P3/P4：窗口长度实验矩阵
 
 ### 7.1 固定配置
@@ -493,11 +509,12 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
    最大名义频率绝对误差约 `0.159601 / 0.119571 / 0.077204 Hz`；按第 4.5 节只记录，不删 scale、不改网格。
 6. 新增 P0/P1 测试 22 项均通过。P0 仅读取既有冻结结果 CSV，未评价 checkpoint、生成
    prediction 或读取数据集 signal/target；未运行训练、GPU、CPU lifecycle、全量 cache、benchmark 或新的独立测试集访问。
-7. P2 已实现单一 synthetic GPU harness：六臂 batch-1 后只对 W-reduced-180 做 physical batch 128 单步验收；入口固定
-   synthetic-only access receipt、干净 commit、不可覆盖输出、finite/显存/依赖记录及 OOM fallback decision。P2 CPU 侧
-   固定为定向测试。P2 新增 9 项 CPU 定向测试；当前 31 项 paper-evidence 测试与 64 项相关冻结回归共 95 项通过，GPU 命令
-   尚未执行。
+7. P2 从干净 commit `7249fca27e5a960a3e74e43a5acf6ac0abc3a4b5` 完成；六臂 batch-1 全部 finite，
+   W-reduced-180 physical batch 128 完成 AdamW step，peak allocated/reserved 为 `10,834.94 / 10,948.00 MiB`，
+   decision=`batch128_accepted`。固定 receipt SHA-256 为
+   `cb43ee480018afd483ce2bef15342d5bdaf29b6bc999d58ce209abac58df04ce`，manifest SHA-256 为
+   `09b9e3347967cd7a4eac45b39c4054c4db689ccbbfe1bdaf2a2e23469957d582`；P2 关闭并冻结统一 `128×1`。
 
-下一推进点为用户从包含 P2 harness 的干净 commit 手动执行第 6.3 节唯一命令；P3 六个诊断 runs 不因 P2 实现完成自动开放。
+下一推进点需由用户决定是否开放三种长度的完整 W cache 与 P3 六个单 seed 诊断 runs；P2 完成不自动授权二者。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

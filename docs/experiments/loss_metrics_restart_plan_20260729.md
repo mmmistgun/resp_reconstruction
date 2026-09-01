@@ -4,7 +4,7 @@
 
 最后更新：2026-09-01
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭；第 51 节论文实验补充任务的 P0 正式只读审计与 P1 实现/定向测试已完成，P2 及后续阶段未开放
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭；第 51 节论文实验补充任务的 P0/P1/P2 已完成并冻结，P3 及后续阶段未开放
 
 ## 1. 定位
 
@@ -2195,6 +2195,10 @@ P0 从干净 commit `936d70813b5619c4eedb8be048806cc7ce3637e3` 完成正式只�
 逐 tensor 相同。未运行训练、GPU、CPU lifecycle、全量 cache、benchmark 或新的独立测试集访问。
 P2 固定为 synthetic-only GPU 工程验收：单一入口先执行六臂 batch-1 真实 Mamba forward/loss/backward，再只对
 W-reduced-180 执行 physical batch 128 的 forward/loss/backward/AdamW step；不运行 CPU/真实数据 lifecycle，不访问
-dataset/cache/checkpoint。入口已授权实现，等待用户从干净 commit 手动执行。P3/P4 训练、P5 新增功能推理、P6 test
-target-only 属性访问和 P7 效率 benchmark 仍未开放。当前 31 项 paper-evidence CPU 定向测试与 64 项相关冻结回归
-共 95 项通过。
+dataset/cache/checkpoint。P2 随后从干净 commit `7249fca27e5a960a3e74e43a5acf6ac0abc3a4b5` 完成：六臂 batch-1
+全部 finite，W-reduced-180 physical batch 128 完成 AdamW step，peak allocated/reserved 为
+`10,834.94 / 10,948.00 MiB`，decision=`batch128_accepted`；receipt SHA-256 为
+`cb43ee480018afd483ce2bef15342d5bdaf29b6bc999d58ce209abac58df04ce`，manifest SHA-256 为
+`09b9e3347967cd7a4eac45b39c4054c4db689ccbbfe1bdaf2a2e23469957d582`。六臂统一冻结为 `128×1`，P2 关闭。
+P3/P4 训练、完整 W cache、P5 新增功能推理、P6 test target-only 属性访问和 P7 效率 benchmark 仍未开放。
+当前 31 项 paper-evidence CPU 定向测试与 64 项相关冻结回归共 95 项通过。
