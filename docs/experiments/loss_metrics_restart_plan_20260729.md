@@ -4,7 +4,7 @@
 
 最后更新：2026-09-01
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭；第 51 节论文实验补充任务的 P0/P1/P2 已完成并冻结，P3 及后续阶段未开放
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭；第 51 节论文实验补充任务的 P0/P1/P2 与三份完整 W cache 已完成并冻结，P3 六项配置已冻结并等待用户手动执行
 
 ## 1. 定位
 
@@ -2200,5 +2200,12 @@ dataset/cache/checkpoint。P2 随后从干净 commit `7249fca27e5a960a3e74e43a5a
 `10,834.94 / 10,948.00 MiB`，decision=`batch128_accepted`；receipt SHA-256 为
 `cb43ee480018afd483ce2bef15342d5bdaf29b6bc999d58ce209abac58df04ce`，manifest SHA-256 为
 `09b9e3347967cd7a4eac45b39c4054c4db689ccbbfe1bdaf2a2e23469957d582`。六臂统一冻结为 `128×1`，P2 关闭。
-P3/P4 训练、完整 W cache、P5 新增功能推理、P6 test target-only 属性访问和 P7 效率 benchmark 仍未开放。
-当前 31 项 paper-evidence CPU 定向测试与 64 项相关冻结回归共 95 项通过。
+P3 所需 60/90/180 s 完整 W cache 随后全部完成，manifest SHA-256 分别为
+`e9d270c930d6862f9b5a9cbdb3c26765fe3b57d2573946640cba99e597389793`、
+`9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757`、
+`72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe`；三份均为 `10141/2675` train/validation rows、
+49-scale float32 finite input-only cache，dataset/row identity 一致，target/test access=false。六个 P3 配置固定 seed `20260811`、
+80 epochs、`128×1`、统一输出根和对应 cache path/manifest hash，并显式固定/记录 matmul TF32、cuDNN TF32 与
+cuDNN benchmark 均为 false；P3 gate 拒绝其他 seed。当前 35 项 paper-evidence CPU 定向测试与 64 项相关冻结回归
+共 99 项通过。P3 六项等待用户按附件固定顺序手动执行；P4、P5 新增功能推理、
+P6 test target-only 属性访问和 P7 效率 benchmark 仍未开放。

@@ -170,15 +170,27 @@ def build_center_context_data(cfg: DictConfig) -> CenterContextDataBundle:
     if cache_path:
         from resp_train.paper_evidence.center_context_cache import CenterContextWCacheReader
 
+        resolved_cache = Path(str(cache_path)).resolve()
+        manifest_path = resolved_cache / "cache_manifest.json"
+        expected_manifest_sha256 = str(cfg.data.get("center_w_cache_manifest_sha256") or "")
+        actual_manifest_sha256 = _file_sha256(manifest_path)
+        if expected_manifest_sha256 and actual_manifest_sha256 != expected_manifest_sha256:
+            raise RuntimeError("中心 W cache manifest SHA-256 漂移")
+        identity.update(
+            {
+                "center_w_cache_path": str(resolved_cache),
+                "center_w_cache_manifest_sha256": actual_manifest_sha256,
+            }
+        )
         require_complete = str(cfg.protocol.run_role) == "formal"
         w_train = CenterContextWCacheReader(
-            cache_path,
+            resolved_cache,
             split="train",
             input_samples=int(cfg.window.input_samples),
             require_complete=require_complete,
         )
         w_val = CenterContextWCacheReader(
-            cache_path,
+            resolved_cache,
             split="val",
             input_samples=int(cfg.window.input_samples),
             require_complete=require_complete,
@@ -261,6 +273,14 @@ def audit_nested_view_identity(parent_items: Sequence[Mapping[str, Any]]) -> dic
 def _row_id_hash(values: pd.Series) -> str:
     ids = np.sort(values.to_numpy(dtype=np.int64))
     return hashlib.sha256(ids.tobytes(order="C")).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 __all__ = [

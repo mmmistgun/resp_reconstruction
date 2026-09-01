@@ -1,0 +1,3 @@
+_base_: _p3_base.yaml
+protocol: {template_only: false}
+window: {input_samples: 18000, input_sec: 180}

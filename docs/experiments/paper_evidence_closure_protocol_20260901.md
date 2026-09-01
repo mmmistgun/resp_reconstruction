@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0 正式只读审计、P1 实现与 P2 GPU 工程验收均已完成并冻结；P3/P4 训练、完整 W cache、独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0/P1/P2 与三份完整 W cache 均已完成并冻结；P3 六项单 seed 配置已冻结，等待用户手动执行；P4、独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -34,7 +34,7 @@
 | P0 | 既有代表性方法协议兼容性与表格审计 | 否 | 已完成并冻结 |
 | P1 | 中心 60 s 变长输入任务实现与定向测试 | 否 | 已完成 |
 | P2 | 中心任务 synthetic GPU 工程验收 | 否 | 已完成并冻结；统一 `128×1` |
-| P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 未授权执行 |
+| P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 配置已冻结；等待用户手动执行 |
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 关闭 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
@@ -321,6 +321,18 @@ P2 据此冻结六臂统一 `physical batch=128 / gradient accumulation=1`，不
 | `CCV1_WR_90` | W-reduced-center60 | 90 s | 中心 60 s |
 | `CCV1_WR_180` | W-reduced-center60 | 180 s | 中心 60 s |
 
+三份 W cache 已完成只读验收并冻结：
+
+| 输入 | 固定目录 | manifest SHA-256 | train/validation shape |
+|---:|---|---|---|
+| 60 s | `60s_215c24b05b2e438f311edf13d20903d617131378a952b893234582c670848c6f` | `e9d270c930d6862f9b5a9cbdb3c26765fe3b57d2573946640cba99e597389793` | `[10141/2675,49,120]` |
+| 90 s | `90s_eb33cf00339545a75c459ca864bb97b333e605aa4d6c8f3d78f36b0df162587c` | `9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757` | `[10141/2675,49,180]` |
+| 180 s | `180s_8414c1a1dd1acc27640bc22074805aad2f327ff7d56eca2ee4ea8193ab71b827` | `72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe` | `[10141/2675,49,360]` |
+
+三份 cache 的 dataset index、train row 与 validation row SHA-256 分别完全一致；所有 artifact hash 与 manifest 相符，
+`complete/input_only/target_read/test_read=true/true/false/false`，lifecycle 均为 `complete`。Formal W configs 同时冻结
+cache 目录与 manifest SHA-256，runner 在构建 dataloader 前再次校验。
+
 共同训练合同：
 
 - 完整 train/validation：`10141/2675` 父 rows；
@@ -332,10 +344,54 @@ P2 据此冻结六臂统一 `physical batch=128 / gradient accumulation=1`，不
 - 同 seed 六臂使用相同 train shuffle order、父 row 顺序和初始化 seed；
 - 只读取 train/validation，不创建或读取 test cache。
 
-### 7.2 P3 单 seed 诊断
+### 7.2 P3 单 seed 配置、命令与诊断
 
 P3 固定运行六臂的 seed `20260811`，共 6 runs。六项配置必须在查看任何效果结果前完成冻结；除 OOM、非有限、
 identity、lifecycle 或数据错误外，不得依据先完成 run 的 validation 结果取消其余正常 run。
+
+固定配置为：
+
+```text
+configs/paper_evidence_v1/p3_ccv1_c201_60.yaml
+configs/paper_evidence_v1/p3_ccv1_c201_90.yaml
+configs/paper_evidence_v1/p3_ccv1_c201_180.yaml
+configs/paper_evidence_v1/p3_ccv1_wr_60.yaml
+configs/paper_evidence_v1/p3_ccv1_wr_90.yaml
+configs/paper_evidence_v1/p3_ccv1_wr_180.yaml
+```
+
+用户从包含这些配置与本协议登记的统一干净 commit 按上述顺序逐项执行；每项完成后继续下一项，出现工程失败则保留目录并停止：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/python \
+  scripts/train_paper_center_context_v1.py --config configs/paper_evidence_v1/p3_ccv1_c201_60.yaml \
+  --confirm-formal-training
+
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/python \
+  scripts/train_paper_center_context_v1.py --config configs/paper_evidence_v1/p3_ccv1_c201_90.yaml \
+  --confirm-formal-training
+
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/python \
+  scripts/train_paper_center_context_v1.py --config configs/paper_evidence_v1/p3_ccv1_c201_180.yaml \
+  --confirm-formal-training
+
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/python \
+  scripts/train_paper_center_context_v1.py --config configs/paper_evidence_v1/p3_ccv1_wr_60.yaml \
+  --confirm-formal-training
+
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/python \
+  scripts/train_paper_center_context_v1.py --config configs/paper_evidence_v1/p3_ccv1_wr_90.yaml \
+  --confirm-formal-training
+
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/python \
+  scripts/train_paper_center_context_v1.py --config configs/paper_evidence_v1/p3_ccv1_wr_180.yaml \
+  --confirm-formal-training
+```
+
+P3 gate 只接受 `stage=p3_single_seed / seed=20260811 / 80 epochs / physical batch 128 / accumulation 1`，固定输出根为
+`runs/paper_evidence_v1/center_context/p3_single_seed/`。每项启动时显式设置并校验
+`matmul TF32=false / cuDNN TF32=false / cuDNN benchmark=false`，实际状态写入 artifact manifest。P4 的另外两个 seed
+当前不能通过 P3 gate。
 
 该 seed 在未来 P4 中预注册为三个正式 seed 之一：若 P4 开放，只追加 `20260812/20260813` 的 12 runs，
 不重跑或丢弃 seed `20260811`。P3 单独只能形成方向性诊断，不能写成稳定窗口长度结论。
@@ -514,7 +570,13 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
    decision=`batch128_accepted`。固定 receipt SHA-256 为
    `cb43ee480018afd483ce2bef15342d5bdaf29b6bc999d58ce209abac58df04ce`，manifest SHA-256 为
    `09b9e3347967cd7a4eac45b39c4054c4db689ccbbfe1bdaf2a2e23469957d582`；P2 关闭并冻结统一 `128×1`。
+8. 60/90/180 s 三份完整 W cache 均为 `10141 train / 2675 validation`、49 scales、float32、finite、input-only；
+   manifest SHA-256 分别为 `e9d270c930d6862f9b5a9cbdb3c26765fe3b57d2573946640cba99e597389793`、
+   `9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757`、
+   `72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe`。P3 六配置已冻结为 seed `20260811`，
+   formal gate 拒绝额外 seed、输出根、CUDA 数值运行合同或 cache identity 漂移。当前 35 项 paper-evidence CPU 定向测试
+   与 64 项相关冻结回归共 99 项通过。
 
-下一推进点需由用户决定是否开放三种长度的完整 W cache 与 P3 六个单 seed 诊断 runs；P2 完成不自动授权二者。
+下一推进点为用户从新的统一干净 commit 按第 7.2 节顺序手动执行 P3 六项；Codex 不启动长时间训练。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

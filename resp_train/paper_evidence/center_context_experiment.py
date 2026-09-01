@@ -76,6 +76,11 @@ class CenterContextExperiment:
         logger = setup_logger(run_dir)
         set_seed(int(self.cfg.training.seed))
         device = resolve_device(str(self.cfg.training.device))
+        runtime = _configure_training_runtime(self.cfg, device)
+        (run_dir / "runtime_identity.json").write_text(
+            json.dumps(runtime, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         data = build_center_context_data(self.cfg)
         data_identity = {
             **data.identity_audit,
@@ -210,7 +215,13 @@ class CenterContextExperiment:
         metrics = evaluate_center_predictions(predictions, self.cfg, method=str(self.cfg.model.variant))
         metrics.to_csv(run_dir / "validation_center_metrics.csv", index=False)
         summarize_center_metrics(metrics).to_csv(run_dir / "validation_center_metrics_summary.csv", index=False)
-        self._write_manifest(run_dir, model=model, best_epoch=best_epoch, best_rr=best_rr)
+        self._write_manifest(
+            run_dir,
+            model=model,
+            best_epoch=best_epoch,
+            best_rr=best_rr,
+            runtime=runtime,
+        )
         return run_dir
 
     def _checkpoint_extra(self, *, update_index: int, total_updates: int) -> dict[str, Any]:
@@ -223,7 +234,15 @@ class CenterContextExperiment:
             "resume_supported": False,
         }
 
-    def _write_manifest(self, run_dir: Path, *, model: torch.nn.Module, best_epoch: int, best_rr: float) -> None:
+    def _write_manifest(
+        self,
+        run_dir: Path,
+        *,
+        model: torch.nn.Module,
+        best_epoch: int,
+        best_rr: float,
+        runtime: dict[str, Any],
+    ) -> None:
         artifacts = {}
         for path in sorted(run_dir.iterdir()):
             if path.is_file() and path.name not in {"artifact_manifest.json", "lifecycle.json"}:
@@ -254,6 +273,7 @@ class CenterContextExperiment:
             "early_stopping": False,
             "resume": False,
             "dependencies": _dependency_versions(),
+            "runtime": runtime,
             "git": _git_identity(),
             "command": list(sys.argv),
             "artifacts": artifacts,
@@ -276,6 +296,31 @@ def _show_progress(cfg: DictConfig) -> bool | None:
     if value in (None, "auto"):
         return None
     return bool(value)
+
+
+def _configure_training_runtime(cfg: DictConfig, device: torch.device) -> dict[str, Any]:
+    if device.type != "cuda":
+        raise RuntimeError("中心 formal training runtime 要求 CUDA")
+    allow_tf32 = bool(cfg.training.allow_tf32)
+    cudnn_benchmark = bool(cfg.training.cudnn_benchmark)
+    torch.backends.cuda.matmul.allow_tf32 = allow_tf32
+    torch.backends.cudnn.allow_tf32 = allow_tf32
+    torch.backends.cudnn.benchmark = cudnn_benchmark
+    observed = {
+        "device_type": device.type,
+        "matmul_allow_tf32": bool(torch.backends.cuda.matmul.allow_tf32),
+        "cudnn_allow_tf32": bool(torch.backends.cudnn.allow_tf32),
+        "cudnn_benchmark": bool(torch.backends.cudnn.benchmark),
+        "amp_enabled": bool(cfg.training.use_amp),
+        "amp_dtype": str(cfg.training.amp_dtype),
+    }
+    if (
+        observed["matmul_allow_tf32"] is not allow_tf32
+        or observed["cudnn_allow_tf32"] is not allow_tf32
+        or observed["cudnn_benchmark"] is not cudnn_benchmark
+    ):
+        raise RuntimeError("中心 formal CUDA runtime 状态未按配置生效")
+    return observed
 
 
 def _sha256_file(path: Path) -> str:

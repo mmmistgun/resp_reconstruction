@@ -11,6 +11,30 @@ CENTER_CONTEXT_PROTOCOL_ID = "paper-center-context-v1-20260901"
 CENTER_CONTEXT_MODEL_VARIANTS = ("c201_center60", "w_reduced_center60")
 CENTER_CONTEXT_INPUT_SAMPLES = (6000, 9000, 18000)
 CENTER_CONTEXT_FORMAL_SEEDS = (20260811, 20260812, 20260813)
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+CENTER_CONTEXT_P3_OUTPUT_ROOT = "runs/paper_evidence_v1/center_context/p3_single_seed"
+CENTER_CONTEXT_P3_W_CACHE_PATHS = {
+    6000: str(
+        _REPO_ROOT
+        / "runs/paper_evidence_v1/center_context_w_cache/"
+        "60s_215c24b05b2e438f311edf13d20903d617131378a952b893234582c670848c6f"
+    ),
+    9000: str(
+        _REPO_ROOT
+        / "runs/paper_evidence_v1/center_context_w_cache/"
+        "90s_eb33cf00339545a75c459ca864bb97b333e605aa4d6c8f3d78f36b0df162587c"
+    ),
+    18000: str(
+        _REPO_ROOT
+        / "runs/paper_evidence_v1/center_context_w_cache/"
+        "180s_8414c1a1dd1acc27640bc22074805aad2f327ff7d56eca2ee4ea8193ab71b827"
+    ),
+}
+CENTER_CONTEXT_P3_W_CACHE_MANIFEST_SHA256 = {
+    6000: "e9d270c930d6862f9b5a9cbdb3c26765fe3b57d2573946640cba99e597389793",
+    9000: "9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757",
+    18000: "72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe",
+}
 
 
 def load_center_context_config(path: str | Path, overrides: Iterable[str] | None = None) -> DictConfig:
@@ -18,6 +42,17 @@ def load_center_context_config(path: str | Path, overrides: Iterable[str] | None
     if not config_path.is_file():
         raise FileNotFoundError(f"中心上下文配置不存在: {config_path}")
     cfg = OmegaConf.load(config_path)
+    base_reference = cfg.pop("_base_", None)
+    if base_reference is not None:
+        base_path = (config_path.parent / str(base_reference)).resolve()
+        if base_path.parent != config_path.resolve().parent:
+            raise ValueError("中心上下文 _base_ 只允许引用同目录配置")
+        if not base_path.is_file():
+            raise FileNotFoundError(f"中心上下文 base 配置不存在: {base_path}")
+        base_cfg = OmegaConf.load(base_path)
+        if "_base_" in base_cfg:
+            raise ValueError("中心上下文配置只允许一层 _base_，禁止递归继承")
+        cfg = OmegaConf.merge(base_cfg, cfg)
     if overrides:
         cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(list(overrides)))
     OmegaConf.resolve(cfg)
@@ -51,7 +86,6 @@ def validate_center_context_config(cfg: DictConfig) -> None:
 
     frozen: dict[str, Any] = {
         "protocol.name": CENTER_CONTEXT_PROTOCOL_ID,
-        "protocol.stage": "p1_center_context",
         "data.format": "research_v2",
         "data.input_set": "research_v2_waveform",
         "data.train_split": "train",
@@ -122,19 +156,33 @@ def validate_center_context_config(cfg: DictConfig) -> None:
     if int(cfg.model.initialization_seed) != int(cfg.training.seed):
         raise ValueError("model.initialization_seed 必须与 training.seed 相同")
 
+    role = str(cfg.protocol.run_role)
+    if bool(cfg.protocol.get("template_only", False)):
+        raise ValueError("中心上下文 template_only 配置不得直接执行")
     cache_path = cfg.data.get("center_w_cache_path")
+    cache_manifest_sha256 = cfg.data.get("center_w_cache_manifest_sha256")
     if variant == "w_reduced_center60" and not cache_path:
         raise ValueError("W-reduced-center60 必须显式提供 length-specific center_w_cache_path")
-    if variant == "c201_center60" and cache_path not in (None, ""):
+    if variant == "c201_center60" and (
+        cache_path not in (None, "") or cache_manifest_sha256 not in (None, "")
+    ):
         raise ValueError("C201-center60 不得读取 W cache")
+    if role == "formal" and variant == "w_reduced_center60":
+        expected_path = Path(CENTER_CONTEXT_P3_W_CACHE_PATHS[input_samples]).resolve()
+        if Path(str(cache_path)).resolve() != expected_path:
+            raise ValueError("P3 W-reduced 必须使用冻结的 length-specific W cache path")
+        expected_sha256 = CENTER_CONTEXT_P3_W_CACHE_MANIFEST_SHA256[input_samples]
+        if str(cache_manifest_sha256) != expected_sha256:
+            raise ValueError("P3 W-reduced cache manifest SHA-256 漂移")
     if cfg.data.get("max_test_windows") is not None:
         raise ValueError("中心上下文任务不允许配置 test windows")
 
-    role = str(cfg.protocol.run_role)
     gate = str(cfg.protocol.execution_gate)
     device = str(cfg.training.device)
     maxima = (cfg.data.get("max_train_windows"), cfg.data.get("max_val_windows"))
     if role == "implementation":
+        if str(cfg.protocol.stage) != "p1_center_context":
+            raise ValueError("P1 implementation stage 漂移")
         if gate != "p1_implementation_only" or device != "cpu":
             raise ValueError("P1 implementation 配置固定为 p1_implementation_only + CPU")
         if (int(cfg.training.epochs), int(cfg.training.batch_size), int(cfg.training.gradient_accumulation_steps)) != (1, 2, 1):
@@ -142,6 +190,8 @@ def validate_center_context_config(cfg: DictConfig) -> None:
         if maxima != (2, 2):
             raise ValueError("P1 implementation 配置只允许 2/2 合成契约占位，不授权真实 lifecycle")
     elif role == "formal":
+        if str(cfg.protocol.stage) != "p3_single_seed":
+            raise ValueError("P3 formal stage 漂移")
         if gate != "p3_formal" or not device.startswith("cuda:"):
             raise ValueError("formal 必须使用 p3_formal + 显式 cuda:<index>")
         if maxima != (None, None):
@@ -150,8 +200,14 @@ def validate_center_context_config(cfg: DictConfig) -> None:
             raise ValueError("formal 固定 80 epochs / physical batch 128")
         if int(cfg.training.gradient_accumulation_steps) != 1:
             raise ValueError("当前冻结 formal 固定 accumulation=1；batch fallback 尚未触发")
-        if int(cfg.training.seed) not in CENTER_CONTEXT_FORMAL_SEEDS:
-            raise ValueError(f"formal seed 只允许 {list(CENTER_CONTEXT_FORMAL_SEEDS)}")
+        if cfg.training.get("allow_tf32") is not False:
+            raise ValueError("P3 formal 固定 allow_tf32=false")
+        if cfg.training.get("cudnn_benchmark") is not False:
+            raise ValueError("P3 formal 固定 cudnn_benchmark=false")
+        if int(cfg.training.seed) != CENTER_CONTEXT_FORMAL_SEEDS[0]:
+            raise ValueError("P3 formal 只开放 seed=20260811")
+        if str(cfg.outputs.run_root) != CENTER_CONTEXT_P3_OUTPUT_ROOT:
+            raise ValueError(f"P3 formal outputs.run_root 必须为 {CENTER_CONTEXT_P3_OUTPUT_ROOT}")
     else:
         raise ValueError("protocol.run_role 未注册")
 
@@ -161,6 +217,9 @@ __all__ = [
     "CENTER_CONTEXT_INPUT_SAMPLES",
     "CENTER_CONTEXT_MODEL_VARIANTS",
     "CENTER_CONTEXT_PROTOCOL_ID",
+    "CENTER_CONTEXT_P3_OUTPUT_ROOT",
+    "CENTER_CONTEXT_P3_W_CACHE_MANIFEST_SHA256",
+    "CENTER_CONTEXT_P3_W_CACHE_PATHS",
     "load_center_context_config",
     "validate_center_context_config",
 ]
