@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0/P1 实现与定向 CPU 测试已完成；P0 正式只读审计尚未从干净 commit 执行；P2 工程验收、P3/P4 训练、独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0 正式只读审计已完成，P1 实现与定向 CPU 测试已完成；P2 工程验收、P3/P4 训练、独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -31,7 +31,7 @@
 
 | 阶段 | 内容 | 是否训练 | 当前状态 |
 |---|---|---:|---|
-| P0 | 既有代表性方法协议兼容性与表格审计 | 否 | 实现完成；正式只读审计待干净 commit |
+| P0 | 既有代表性方法协议兼容性与表格审计 | 否 | 已完成并冻结 |
 | P1 | 中心 60 s 变长输入任务实现与定向测试 | 否 | 已完成 |
 | P2 | 中心任务 CPU lifecycle 与 GPU 工程验收 | 仅 smoke/acceptance | 未授权执行 |
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 未授权执行 |
@@ -461,18 +461,23 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
 用户已授权 P0/P1 实现和定向 CPU 测试，并将中心任务明确收窄为游离于主实验之外的
 `C201-center60 / W-reduced-center60` 上下文敏感性比较。实现回执如下：
 
-1. P0 已实现只读 source manifest、artifact/hash、row-set、metric/summary、seed/`ddof=1`、结论锁与不可覆盖审计；
-   未在 dirty implementation worktree 生成正式 P0 目录。
-2. P1 已实现嵌套数据视图、direct 49-scale length-specific input-only cache、C201/W-reduced 变长模型、`Pi_60`、
+1. P0 从干净 commit `936d70813b5619c4eedb8be048806cc7ce3637e3` 完成正式只读审计，固定输出为
+   `runs/paper_evidence_v1/p0_comparison_audit/`；manifest SHA-256 为
+   `1e05c3de9a75c08ee016af379e075adc1b71b4d1162f7bbf81d716b4942d2542`，decision=`audit_complete`。
+2. 12 组来源均为 `compatible`，独立测试集方法的 2310-row `dataset_row_id` 集合哈希一致；10 个预注册方法进入
+   primary table，D4 保持 validation-only efficiency trade-off，RTM-v1 五候选等待结论锁。source manifest SHA-256 为
+   `c1fcf7d55a25763013a9604d544a81c6306b3752e41cbfba2447a8dbb46f5b82`。本次首次记录各 source artifact 的
+   observed SHA-256；因 source manifest 未预填逐 artifact expected SHA-256，`hash_match=true` 仅表示文件存在且未发生
+   可选 expected-hash 冲突，不作为先验哈希比对声明。
+3. P1 已实现嵌套数据视图、direct 49-scale length-specific input-only cache、C201/W-reduced 变长模型、`Pi_60`、
    中心 loss、五项中心指标、strict selector、不可覆盖训练 lifecycle 与独立入口/config gate。
-3. C201/W-reduced 可训练参数分别为 `1,069,802 / 1,219,850`，差值为固定 W branch 的 `150,048`；
+4. C201/W-reduced 可训练参数分别为 `1,069,802 / 1,219,850`，差值为固定 W branch 的 `150,048`；
    165 个共享 state tensors 在同 seed 下逐 tensor 相同。各模型参数数不随输入长度变化。
-4. `ssqueezepy==0.6.6` 的 49-scale 定向 CPU 映射在 60/90/180 s 上观察到实际中心重复数 `1/0/0`，
+5. `ssqueezepy==0.6.6` 的 49-scale 定向 CPU 映射在 60/90/180 s 上观察到实际中心重复数 `1/0/0`，
    最大名义频率绝对误差约 `0.159601 / 0.119571 / 0.077204 Hz`；按第 4.5 节只记录，不删 scale、不改网格。
-5. 新增 P0/P1 测试 22 项与相关冻结回归 64 项，共 86 项通过。未运行训练、GPU、CPU lifecycle、全量 cache、
-   benchmark、正式 P0 审计或任何新的独立测试集访问。
+6. 新增 P0/P1 测试 22 项与相关冻结回归 64 项，共 86 项通过。P0 仅读取既有冻结结果 CSV，未评价 checkpoint、生成
+   prediction 或读取数据集 signal/target；未运行训练、GPU、CPU lifecycle、全量 cache、benchmark 或新的独立测试集访问。
 
-下一步只能由用户决定是否先从干净 commit 执行 P0 正式只读审计，以及是否手动开放 P2 工程验收；P3 六个诊断
-runs 不因实现完成自动开放。
+P0 现已关闭。下一推进点为用户手动开放并执行 P2 工程验收；P3 六个诊断 runs 不因 P0/P1 完成自动开放。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

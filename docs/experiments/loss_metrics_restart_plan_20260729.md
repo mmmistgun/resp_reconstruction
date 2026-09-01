@@ -4,7 +4,7 @@
 
 最后更新：2026-09-01
 
-状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭；第 51 节已建立论文实验补充执行协议，但尚未开放实现、训练、独立测试集访问或效率 benchmark
+状态：最终 loss 与 metrics 已冻结；旧时频模型第一阶段独立测试集评价已完成；CRD-v1.1 与第 45 节 C0/C1/C2 控制线均已关闭；第 46–48 节 CRD-TF v1 P0–P6a与独立测试集评价已完成并冻结；第 49 节 CRD-TF-W v2 的 P0/P−1/correction/P1/P3/P4/P5 已完成并冻结，P2 关闭；第 51 节论文实验补充任务的 P0 正式只读审计与 P1 实现/定向测试已完成，P2 及后续阶段未开放
 
 ## 1. 定位
 
@@ -2188,7 +2188,9 @@ IoT 阶段只冻结 W0/W3/D4 的 batch-1 cached/online-W、CPU/GPU 分阶段延�
 失败结论；完整 180-s 上下文等待必须与处理开销分开说明。
 
 用户随后授权 P0/P1 实现和定向 CPU 测试，并把窗口任务明确定位为游离于主实验之外的上下文敏感性比较。
-P0 只读审计框架与 P1 数据/cache/model/`Pi_60`/loss/metrics/selector/lifecycle 已实现；22 项新增测试与 64 项相关
+P0 从干净 commit `936d70813b5619c4eedb8be048806cc7ce3637e3` 完成正式只读审计，固定 manifest SHA-256 为
+`1e05c3de9a75c08ee016af379e075adc1b71b4d1162f7bbf81d716b4942d2542`，12 组来源均 compatible，10 个预注册方法
+进入 primary table。P1 数据/cache/model/`Pi_60`/loss/metrics/selector/lifecycle 已实现；22 项新增测试与 64 项相关
 冻结回归共 86 项通过。C201/W-reduced 参数数为 `1,069,802 / 1,219,850`，同 seed 的 165 个共享 state tensors
-逐 tensor 相同。没有运行正式 P0 产物生成、训练、GPU、CPU lifecycle、全量 cache、benchmark 或新的独立测试集访问。
+逐 tensor 相同。未运行训练、GPU、CPU lifecycle、全量 cache、benchmark 或新的独立测试集访问。
 P2 工程验收、P3/P4 训练、P5 新增功能推理、P6 test target-only 属性访问和 P7 效率 benchmark 仍未开放。
