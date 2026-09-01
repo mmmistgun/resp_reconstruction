@@ -141,16 +141,6 @@ def validate_center_context_config(cfg: DictConfig) -> None:
             raise ValueError("P1 implementation 配置固定 1 epoch / batch 2 / accumulation 1")
         if maxima != (2, 2):
             raise ValueError("P1 implementation 配置只允许 2/2 合成契约占位，不授权真实 lifecycle")
-    elif role == "cpu_lifecycle":
-        if gate != "p2_cpu_lifecycle" or device != "cpu":
-            raise ValueError("CPU lifecycle 必须使用 p2_cpu_lifecycle + CPU")
-        if not all(value is not None and 1 <= int(value) <= 32 for value in maxima):
-            raise ValueError("CPU lifecycle 只允许最多 32 个 train/validation rows")
-    elif role == "gpu_acceptance":
-        if gate != "p2_gpu_acceptance" or not device.startswith("cuda:"):
-            raise ValueError("GPU acceptance 必须使用 p2_gpu_acceptance + 显式 cuda:<index>")
-        if input_samples != 18000 or int(cfg.training.batch_size) != 128:
-            raise ValueError("GPU acceptance 只开放 180 s / physical batch 128")
     elif role == "formal":
         if gate != "p3_formal" or not device.startswith("cuda:"):
             raise ValueError("formal 必须使用 p3_formal + 显式 cuda:<index>")

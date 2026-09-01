@@ -170,7 +170,7 @@ def build_center_context_data(cfg: DictConfig) -> CenterContextDataBundle:
     if cache_path:
         from resp_train.paper_evidence.center_context_cache import CenterContextWCacheReader
 
-        require_complete = str(cfg.protocol.run_role) in {"gpu_acceptance", "formal"}
+        require_complete = str(cfg.protocol.run_role) == "formal"
         w_train = CenterContextWCacheReader(
             cache_path,
             split="train",

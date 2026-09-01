@@ -31,6 +31,15 @@ def test_center_config_is_strict_and_implementation_role_cannot_become_test() ->
         load_center_context_config(CONFIG, overrides=["data.max_test_windows=1"])
     with pytest.raises(ValueError, match="W-reduced-center60"):
         load_center_context_config(CONFIG, overrides=["model.variant=w_reduced_center60"])
+    for role, gate in (
+        ("cpu_lifecycle", "p2_cpu_lifecycle"),
+        ("gpu_acceptance", "p2_gpu_acceptance"),
+    ):
+        with pytest.raises(ValueError, match="run_role"):
+            load_center_context_config(
+                CONFIG,
+                overrides=[f"protocol.run_role={role}", f"protocol.execution_gate={gate}"],
+            )
 
 
 @pytest.mark.parametrize("length,context", [(6000, 120), (9000, 180), (18000, 360)])

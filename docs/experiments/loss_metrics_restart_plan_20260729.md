@@ -2175,7 +2175,7 @@ V2随后从干净commit `d51659d18c8905a5dc62e9a00ed399df198c89fc`完整执行�
 RR 退化；这是一项论文任务优先级选择，不改写既有 W0/W3 Pareto 权衡，也不声称 W0 在五项 primary 上逐项支配 W3。
 
 新增窗口任务固定为 C201/`W-reduced-center60` × `60/90/180 s` 输入、统一中心 `60 s` 输出。它是游离于论文
-主模型实验之外的独立上下文敏感性任务，不是严格 W0 窗长消融，也不回写 W0 的主模型定位。W-reduced 固定从原
+主模型实验之外的独立上下文敏感性任务，结论限定为合理精简 W 表征下的上下文效应。W-reduced 固定从原
 97 点全频程名义网格取偶数 indices `0,2,…,96`，形成 direct 49-scale、约 6 voices/octave 的 length-specific CWT；
 三种输入来自同一 180-s 父 row 的嵌套裁剪，中心 target 完全相同；新任务独立定义 6000-point `Pi_60`、
 `L_sync_60 + 0.25 L_effort_60`、严格 center-RR selector，以及 center RR、IBI-MedAE、trajectory、
@@ -2190,7 +2190,11 @@ IoT 阶段只冻结 W0/W3/D4 的 batch-1 cached/online-W、CPU/GPU 分阶段延�
 用户随后授权 P0/P1 实现和定向 CPU 测试，并把窗口任务明确定位为游离于主实验之外的上下文敏感性比较。
 P0 从干净 commit `936d70813b5619c4eedb8be048806cc7ce3637e3` 完成正式只读审计，固定 manifest SHA-256 为
 `1e05c3de9a75c08ee016af379e075adc1b71b4d1162f7bbf81d716b4942d2542`，12 组来源均 compatible，10 个预注册方法
-进入 primary table。P1 数据/cache/model/`Pi_60`/loss/metrics/selector/lifecycle 已实现；22 项新增测试与 64 项相关
-冻结回归共 86 项通过。C201/W-reduced 参数数为 `1,069,802 / 1,219,850`，同 seed 的 165 个共享 state tensors
+进入 primary table。P1 数据/cache/model/`Pi_60`/loss/metrics/selector/lifecycle 已实现。C201/W-reduced 参数数为
+`1,069,802 / 1,219,850`，同 seed 的 165 个共享 state tensors
 逐 tensor 相同。未运行训练、GPU、CPU lifecycle、全量 cache、benchmark 或新的独立测试集访问。
-P2 工程验收、P3/P4 训练、P5 新增功能推理、P6 test target-only 属性访问和 P7 效率 benchmark 仍未开放。
+P2 固定为 synthetic-only GPU 工程验收：单一入口先执行六臂 batch-1 真实 Mamba forward/loss/backward，再只对
+W-reduced-180 执行 physical batch 128 的 forward/loss/backward/AdamW step；不运行 CPU/真实数据 lifecycle，不访问
+dataset/cache/checkpoint。入口已授权实现，等待用户从干净 commit 手动执行。P3/P4 训练、P5 新增功能推理、P6 test
+target-only 属性访问和 P7 效率 benchmark 仍未开放。当前 31 项 paper-evidence CPU 定向测试与 64 项相关冻结回归
+共 95 项通过。

@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0 正式只读审计已完成，P1 实现与定向 CPU 测试已完成；P2 工程验收、P3/P4 训练、独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0 正式只读审计与 P1 实现已完成；P2 精简 GPU harness 已实现，等待用户手动执行；P3/P4 训练、独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -33,7 +33,7 @@
 |---|---|---:|---|
 | P0 | 既有代表性方法协议兼容性与表格审计 | 否 | 已完成并冻结 |
 | P1 | 中心 60 s 变长输入任务实现与定向测试 | 否 | 已完成 |
-| P2 | 中心任务 CPU lifecycle 与 GPU 工程验收 | 仅 smoke/acceptance | 未授权执行 |
+| P2 | 中心任务 synthetic GPU 工程验收 | 否 | 入口已实现；等待用户手动执行 |
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 未授权执行 |
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 关闭 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
@@ -241,7 +241,9 @@ resp_train/paper_evidence/center_context_model.py
 resp_train/paper_evidence/center_context_loss.py
 resp_train/paper_evidence/center_context_metrics.py
 resp_train/paper_evidence/center_context_experiment.py
+resp_train/paper_evidence/center_context_acceptance.py
 scripts/train_paper_center_context_v1.py
+scripts/accept_paper_center_context_v1.py
 configs/paper_evidence_v1/center_context_v1.yaml
 tests/test_paper_center_context_v1_*.py
 ```
@@ -262,19 +264,33 @@ tests/test_paper_center_context_v1_*.py
 - 五项中心指标的 identity/error ordering、11 点包络、IBI coverage 和退化失败值；
 - strict center-RR checkpoint tie；
 - train/validation-only access 与 test/cache 拒绝；
-- output 不可覆盖、失败 lifecycle 与 artifact hash。
+- synthetic 输入的确定性、三种长度 shape/finite、CPU 注入 Mamba 下的 loss/backward/optimizer step；
+- P2 六臂 batch-1 与最大臂 batch-128 身份、output 不可覆盖、失败 lifecycle、access flags 与 artifact hash。
 
 ### 6.3 工程执行顺序
 
-实现测试通过后，先做每个模型/长度的 synthetic forward/backward，再做一次最小 CPU lifecycle。GPU 侧先分别对
-C201-180 和 W-reduced-180 做 physical batch 128 acceptance；这是矩阵中显存最高的两个配置。两者均通过后，短窗口复用
-相同 batch，不因长度改变 batch、effective batch 或 LR。
+P2 不运行 CPU lifecycle 或真实数据 lifecycle。官方 Mamba2 fast path 由 CUDA 执行；CPU 仅用定向测试验证结构、
+数据合同和注入 shape-preserving Mamba 后的 model/loss/backward/optimizer plumbing。
 
-若任一 180 s 配置在冻结实现下不能满足 batch 128，必须在任何 P3 run 前为全部六臂统一选择
+用户在实现提交后的干净 commit 手动执行唯一 P2 命令：
+
+```bash
+CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/python scripts/accept_paper_center_context_v1.py \
+  --config configs/paper_evidence_v1/center_context_v1.yaml \
+  --device cuda:0 \
+  --confirm-gpu-acceptance
+```
+
+该入口不读取 dataset/index、train/validation/test、cache 或 checkpoint。它先按固定顺序对 C201/W-reduced ×
+60/90/180 s 六臂各执行一次 batch-1 真实 Mamba forward/loss/backward，再仅对计算上界
+W-reduced-180 执行 physical batch 128 的 forward/loss/backward/AdamW step。W-reduced-180 包含与 C201 相同的主干并
+增加 W branch，故其 batch-128 结果作为全六臂的保守显存准入。回执必须记录六臂完整性、finite、shape、参数数、
+peak allocated/reserved、设备/依赖/commit、access flags 和最终 decision；固定 commit identity 目录禁止覆盖。
+
+若 W-reduced-180 在冻结实现下不能满足 batch 128，必须在任何 P3 run 前为全部六臂统一选择
 `64×2` 或 `32×4`，并增加同 batch 的身份/更新等价测试；不得按长度或模型单独降 batch。
 
-工程验收、CPU/GPU smoke 和 acceptance 只形成实现证据，不形成窗口长度效果结论。按仓库约束，这些长任务默认由
-用户执行。
+P2 只形成实现证据，不形成窗口长度效果结论。按仓库约束，该 GPU 命令由用户执行。
 
 ## 7. P3/P4：窗口长度实验矩阵
 
@@ -475,9 +491,13 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
    165 个共享 state tensors 在同 seed 下逐 tensor 相同。各模型参数数不随输入长度变化。
 5. `ssqueezepy==0.6.6` 的 49-scale 定向 CPU 映射在 60/90/180 s 上观察到实际中心重复数 `1/0/0`，
    最大名义频率绝对误差约 `0.159601 / 0.119571 / 0.077204 Hz`；按第 4.5 节只记录，不删 scale、不改网格。
-6. 新增 P0/P1 测试 22 项与相关冻结回归 64 项，共 86 项通过。P0 仅读取既有冻结结果 CSV，未评价 checkpoint、生成
+6. 新增 P0/P1 测试 22 项均通过。P0 仅读取既有冻结结果 CSV，未评价 checkpoint、生成
    prediction 或读取数据集 signal/target；未运行训练、GPU、CPU lifecycle、全量 cache、benchmark 或新的独立测试集访问。
+7. P2 已实现单一 synthetic GPU harness：六臂 batch-1 后只对 W-reduced-180 做 physical batch 128 单步验收；入口固定
+   synthetic-only access receipt、干净 commit、不可覆盖输出、finite/显存/依赖记录及 OOM fallback decision。P2 CPU 侧
+   固定为定向测试。P2 新增 9 项 CPU 定向测试；当前 31 项 paper-evidence 测试与 64 项相关冻结回归共 95 项通过，GPU 命令
+   尚未执行。
 
-P0 现已关闭。下一推进点为用户手动开放并执行 P2 工程验收；P3 六个诊断 runs 不因 P0/P1 完成自动开放。
+下一推进点为用户从包含 P2 harness 的干净 commit 手动执行第 6.3 节唯一命令；P3 六个诊断 runs 不因 P2 实现完成自动开放。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

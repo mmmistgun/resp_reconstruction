@@ -46,7 +46,7 @@ class CenterContextExperiment:
         role = str(self.cfg.protocol.run_role)
         if role == "implementation":
             raise RuntimeError("P1 implementation_only 配置不授权真实数据 lifecycle 或训练")
-        if role not in {"cpu_lifecycle", "formal"}:
+        if role != "formal":
             raise RuntimeError(f"当前训练入口未开放 run_role={role!r}")
         _assert_clean_repository()
         run_dir = self._create_identity_dir()
