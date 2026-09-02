@@ -1,0 +1,5 @@
+_base_: center30_context_v1.yaml
+protocol: {stage: p4s_single_seed, run_role: formal, execution_gate: p4s_formal}
+data: {max_train_windows: null, max_val_windows: null}
+training: {epochs: 80, batch_size: 128, device: cuda:0}
+outputs: {run_root: runs/paper_evidence_v1/center30_context/p4s_single_seed}

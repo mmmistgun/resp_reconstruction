@@ -82,14 +82,14 @@ def _predictions(pred: np.ndarray, target: np.ndarray) -> dict[str, np.ndarray]:
     }
 
 
-def test_center30_config_freezes_new_task_and_rejects_formal_or_test_drift() -> None:
+def test_center30_config_freezes_new_task_and_rejects_test_drift() -> None:
     cfg = load_center30_config(CONFIG)
     assert cfg.protocol.name == "paper-center30-context-v1-20260902"
     assert cfg.window.output_samples == 3000
     assert cfg.data.access_splits == ["train", "val"]
     with pytest.raises(ValueError, match="test windows"):
         load_center30_config(CONFIG, overrides=["data.max_test_windows=1"])
-    with pytest.raises(ValueError, match="formal gate"):
+    with pytest.raises(ValueError, match="formal 固定"):
         load_center30_config(
             CONFIG,
             overrides=["protocol.run_role=formal", "protocol.stage=p4s_single_seed", "training.device=cuda:0"],

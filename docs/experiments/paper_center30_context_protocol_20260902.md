@@ -4,7 +4,7 @@
 
 协议 ID：`paper-center30-context-v1-20260902`
 
-状态：**实现与定向 CPU 测试已完成；等待用户构建 30/45 s input-only W cache。正式配置、训练与独立测试集访问均未开放。**
+状态：**实现、30/45 s input-only W cache 与八项单 seed formal 配置均已完成并冻结；等待用户手动执行 P4-S2。独立测试集访问未开放。**
 
 ## 1. 科学问题与位置
 
@@ -130,9 +130,34 @@ shape、train/validation-only access 与 cache 不覆盖。实现配置不得执
 完整 cache 必须为 `10141 train / 2675 validation`、49 scales、float32、finite、input-only；目录禁止覆盖。60/90 s
 复用既有冻结 cache 及 manifest SHA-256，不重建。
 
+P4-S1 已从干净 commit `693ce63` 完成并冻结：
+
+- 30 s：`runs/paper_evidence_v1/center30_context_w_cache/30s_127e60642b74716a5afa1255060f52e770e275f8426c12d24775bf1194123b58/`，
+  manifest SHA-256=`d64e696a686ebe3f11ec279c276aa1666a74b81d889ecd3c5fca8075bbdb79ed`；
+- 45 s：`runs/paper_evidence_v1/center30_context_w_cache/45s_9b56099708bccd89b53e8ee6d8716863342f741f13b94a67ae9f772255edd603/`，
+  manifest SHA-256=`f5e525719906ebd4bdf4836f8ad4b7e9b722ebb2e195d48c28d40a643fbe199f`。
+
+两份 cache 均为 `10141 train / 2675 validation`、49 scales、float32、finite、input-only，lifecycle=`complete`；
+target/test 均未读取，manifest 登记的全部文件大小与 SHA-256 已复核。train/validation row hashes 与 center-60 cache
+逐项一致。
+
 ### P4-S2：单 seed 八臂
 
-只有 30/45 s cache 完整、hash 冻结后才创建八项 formal configs。固定 seed `20260811`、80 epochs、统一
+30/45 s cache 完整、hash 冻结后创建以下八项 formal configs：
+
+```text
+configs/paper_evidence_v1/p4s_c30v1_c201_30.yaml
+configs/paper_evidence_v1/p4s_c30v1_c201_45.yaml
+configs/paper_evidence_v1/p4s_c30v1_c201_60.yaml
+configs/paper_evidence_v1/p4s_c30v1_c201_90.yaml
+configs/paper_evidence_v1/p4s_c30v1_wr_30.yaml
+configs/paper_evidence_v1/p4s_c30v1_wr_45.yaml
+configs/paper_evidence_v1/p4s_c30v1_wr_60.yaml
+configs/paper_evidence_v1/p4s_c30v1_wr_90.yaml
+```
+
+固定入口为 `scripts/train_paper_center30_context_v1.py`，stage/gate 为 `p4s_single_seed / p4s_formal`，输出根为
+`runs/paper_evidence_v1/center30_context/p4s_single_seed/`。固定 seed `20260811`、80 epochs、统一
 physical batch `128×1`、bf16、TF32=false、cuDNN benchmark=false、early stopping=false、resume=false。
 现有 W-reduced-180 batch-128 acceptance 比本矩阵最大 W-reduced-90 更保守，不新增 GPU acceptance。
 
@@ -147,7 +172,9 @@ physical batch `128×1`、bf16、TF32=false、cuDNN benchmark=false、early stop
 - 参数数：`1,069,802 / 1,219,850`，W branch 差值 `150,048`；
 - 30/45/60/90 s 输入均输出 3000 点，latent center 均为 300 points；
 - center-30 metric 保持 30 s 自身的 2 bpm FFT spacing、5-point envelope 与 IBI coverage 口径；
-- 新增 11 项 center-30 定向测试，并与 47 项既有 paper-evidence 回归合计 58 项通过；
-- 当前只开放 P4-S0 implementation 与 P4-S1 cache builder；formal、训练、GPU、benchmark 和 test 均未开放。
+- 两份新 cache manifest SHA-256 为
+  `d64e696a686ebe3f11ec279c276aa1666a74b81d889ecd3c5fca8075bbdb79ed / f5e525719906ebd4bdf4836f8ad4b7e9b722ebb2e195d48c28d40a643fbe199f`；
+- 新增 15 项 center-30 定向测试，并与 47 项既有 paper-evidence 回归合计 62 项通过；
+- 当前开放 P4-S2 八项单 seed formal，由用户手动执行；P4-S3、benchmark 和 test 均未开放。
 
-下一推进点是用户在实现提交后构建 30/45 s 完整 W cache，并返回两个 `cache_manifest.json` 路径。
+下一推进点是用户从新的统一干净 commit 按双 GPU 顺序队列执行八项 P4-S2 formal runs。

@@ -12,6 +12,36 @@ CENTER30_MODEL_VARIANTS = ("c201_center30", "w_reduced_center30")
 CENTER30_INPUT_SAMPLES = (3000, 4500, 6000, 9000)
 CENTER30_OUTPUT_SAMPLES = 3000
 CENTER30_FORMAL_SEEDS = (20260811, 20260812, 20260813)
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+CENTER30_P4S_OUTPUT_ROOT = "runs/paper_evidence_v1/center30_context/p4s_single_seed"
+CENTER30_W_CACHE_PATHS = {
+    3000: str(
+        _REPO_ROOT
+        / "runs/paper_evidence_v1/center30_context_w_cache/"
+        "30s_127e60642b74716a5afa1255060f52e770e275f8426c12d24775bf1194123b58"
+    ),
+    4500: str(
+        _REPO_ROOT
+        / "runs/paper_evidence_v1/center30_context_w_cache/"
+        "45s_9b56099708bccd89b53e8ee6d8716863342f741f13b94a67ae9f772255edd603"
+    ),
+    6000: str(
+        _REPO_ROOT
+        / "runs/paper_evidence_v1/center_context_w_cache/"
+        "60s_215c24b05b2e438f311edf13d20903d617131378a952b893234582c670848c6f"
+    ),
+    9000: str(
+        _REPO_ROOT
+        / "runs/paper_evidence_v1/center_context_w_cache/"
+        "90s_eb33cf00339545a75c459ca864bb97b333e605aa4d6c8f3d78f36b0df162587c"
+    ),
+}
+CENTER30_W_CACHE_MANIFEST_SHA256 = {
+    3000: "d64e696a686ebe3f11ec279c276aa1666a74b81d889ecd3c5fca8075bbdb79ed",
+    4500: "f5e525719906ebd4bdf4836f8ad4b7e9b722ebb2e195d48c28d40a643fbe199f",
+    6000: "e9d270c930d6862f9b5a9cbdb3c26765fe3b57d2573946640cba99e597389793",
+    9000: "9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757",
+}
 
 
 def load_center30_config(path: str | Path, overrides: Iterable[str] | None = None) -> DictConfig:
@@ -136,22 +166,49 @@ def validate_center30_config(cfg: DictConfig) -> None:
         raise ValueError("center30 不允许配置 test windows")
 
     role = str(cfg.protocol.run_role)
-    if role != "implementation":
-        raise ValueError("center30 formal gate 尚未冻结，当前只开放 implementation")
-    if (
-        str(cfg.protocol.stage) != "p4s_implementation"
-        or str(cfg.protocol.execution_gate) != "p4s_implementation_only"
-        or str(cfg.training.device) != "cpu"
-    ):
-        raise ValueError("center30 implementation 固定 stage/gate/CPU")
-    if variant != "c201_center30" or cfg.data.get("center_w_cache_path") not in (None, "") or cfg.data.get(
-        "center_w_cache_manifest_sha256"
-    ) not in (None, ""):
-        raise ValueError("center30 implementation config 固定使用无 cache 的 C201-center30")
-    if (int(cfg.training.epochs), int(cfg.training.batch_size), int(cfg.training.gradient_accumulation_steps)) != (1, 2, 1):
-        raise ValueError("center30 implementation 固定 1 epoch / batch 2 / accumulation 1")
-    if (cfg.data.get("max_train_windows"), cfg.data.get("max_val_windows")) != (2, 2):
-        raise ValueError("center30 implementation 只允许 2/2 synthetic contract")
+    stage = str(cfg.protocol.stage)
+    gate = str(cfg.protocol.execution_gate)
+    device = str(cfg.training.device)
+    cache_path = cfg.data.get("center_w_cache_path")
+    cache_hash = cfg.data.get("center_w_cache_manifest_sha256")
+    maxima = (cfg.data.get("max_train_windows"), cfg.data.get("max_val_windows"))
+    if role == "implementation":
+        if stage != "p4s_implementation" or gate != "p4s_implementation_only" or device != "cpu":
+            raise ValueError("center30 implementation 固定 stage/gate/CPU")
+        if variant != "c201_center30" or cache_path not in (None, "") or cache_hash not in (None, ""):
+            raise ValueError("center30 implementation config 固定使用无 cache 的 C201-center30")
+        if (int(cfg.training.epochs), int(cfg.training.batch_size), int(cfg.training.gradient_accumulation_steps)) != (
+            1,
+            2,
+            1,
+        ):
+            raise ValueError("center30 implementation 固定 1 epoch / batch 2 / accumulation 1")
+        if maxima != (2, 2):
+            raise ValueError("center30 implementation 只允许 2/2 synthetic contract")
+    elif role == "formal":
+        if stage != "p4s_single_seed" or gate != "p4s_formal" or not device.startswith("cuda:"):
+            raise ValueError("center30 formal 固定 p4s_single_seed / p4s_formal / cuda:<index>")
+        if int(cfg.training.seed) != CENTER30_FORMAL_SEEDS[0]:
+            raise ValueError("center30 P4-S2 只开放 seed=20260811")
+        if maxima != (None, None) or str(cfg.outputs.run_root) != CENTER30_P4S_OUTPUT_ROOT:
+            raise ValueError(f"center30 formal 必须完整 train/validation 且输出到 {CENTER30_P4S_OUTPUT_ROOT}")
+        if (int(cfg.training.epochs), int(cfg.training.batch_size), int(cfg.training.gradient_accumulation_steps)) != (
+            80,
+            128,
+            1,
+        ):
+            raise ValueError("center30 formal 固定 80 epochs / physical batch 128 / accumulation 1")
+        if variant == "c201_center30":
+            if cache_path not in (None, "") or cache_hash not in (None, ""):
+                raise ValueError("C201-center30 formal 不得读取 W cache")
+        else:
+            expected_path = Path(CENTER30_W_CACHE_PATHS[input_samples]).resolve()
+            if Path(str(cache_path)).resolve() != expected_path:
+                raise ValueError("W-reduced-center30 formal cache path 漂移")
+            if str(cache_hash) != CENTER30_W_CACHE_MANIFEST_SHA256[input_samples]:
+                raise ValueError("W-reduced-center30 formal cache manifest SHA-256 漂移")
+    else:
+        raise ValueError("center30 run_role 未注册")
 
 
 __all__ = [
@@ -160,6 +217,9 @@ __all__ = [
     "CENTER30_MODEL_VARIANTS",
     "CENTER30_OUTPUT_SAMPLES",
     "CENTER30_PROTOCOL_ID",
+    "CENTER30_P4S_OUTPUT_ROOT",
+    "CENTER30_W_CACHE_MANIFEST_SHA256",
+    "CENTER30_W_CACHE_PATHS",
     "load_center30_config",
     "validate_center30_config",
 ]

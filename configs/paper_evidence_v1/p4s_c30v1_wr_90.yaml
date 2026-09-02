@@ -1,0 +1,11 @@
+_base_: center30_context_v1.yaml
+protocol: {stage: p4s_single_seed, run_role: formal, execution_gate: p4s_formal}
+data:
+  center_w_cache_path: /mnt/disk_code/marques/resp_reconstruction/runs/paper_evidence_v1/center_context_w_cache/90s_eb33cf00339545a75c459ca864bb97b333e605aa4d6c8f3d78f36b0df162587c
+  center_w_cache_manifest_sha256: 9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757
+  max_train_windows: null
+  max_val_windows: null
+window: {input_samples: 9000, input_sec: 90}
+model: {variant: w_reduced_center30}
+training: {epochs: 80, batch_size: 128, device: cuda:0}
+outputs: {run_root: runs/paper_evidence_v1/center30_context/p4s_single_seed}

@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0–P4 与三份完整 W cache 均已完成并冻结；三 seed center-60 结果归类为非单调、跨 seed 不一致的描述性上下文敏感性证据。独立 P4-S center-30 短窗口分支已完成实现，等待 30/45 s cache；独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0–P4 与三份完整 W cache 均已完成并冻结；三 seed center-60 结果归类为非单调、跨 seed 不一致的描述性上下文敏感性证据。独立 P4-S center-30 短窗口分支已冻结 cache 与八项单 seed配置，等待用户手动执行；独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -36,7 +36,7 @@
 | P2 | 中心任务 synthetic GPU 工程验收 | 否 | 已完成并冻结；统一 `128×1` |
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 已完成并冻结；触发候选模型×上下文交互 |
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 18/18 完成并冻结；描述性结果留档 |
-| P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，首轮 8 runs | 实现完成；等待 30/45 s W cache |
+| P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，首轮 8 runs | cache/config 已冻结；等待用户执行 8 runs |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -677,7 +677,7 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
 窗口长度辅助任务已在 validation 阶段完成并关闭；不追加训练，不开放独立测试集访问，也不回写论文主模型选择。
 
 P4-S 作为新的独立短窗口分支按
-`docs/experiments/paper_center30_context_protocol_20260902.md` 推进；它不重开 center-60 P4。当前只开放实现和
-30/45 s input-only W cache，formal 训练尚未开放。
+`docs/experiments/paper_center30_context_protocol_20260902.md` 推进；它不重开 center-60 P4。30/45 s input-only W cache
+与八项单 seed formal 配置已冻结，当前等待用户手动执行 P4-S2。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
