@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0/P1/P2、三份完整 W cache 与 P3 六项单 seed 诊断均已完成并冻结；P3 触发候选模型×上下文交互信号。P4 追加 12 runs 已获用户授权，配置与门禁已实现，等待用户手动执行；独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0–P4 与三份完整 W cache 均已完成并冻结；三 seed 结果归类为非单调、跨 seed 不一致的描述性上下文敏感性证据。窗口独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -35,7 +35,7 @@
 | P1 | 中心 60 s 变长输入任务实现与定向测试 | 否 | 已完成 |
 | P2 | 中心任务 synthetic GPU 工程验收 | 否 | 已完成并冻结；统一 `128×1` |
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 已完成并冻结；触发候选模型×上下文交互 |
-| P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 已授权并完成配置；等待用户手动执行 |
+| P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 18/18 完成并冻结；描述性结果留档 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -433,7 +433,7 @@ P3 没有触发单调改善或候选 90 s 饱和条件，但触发了四项候�
 - C201 的 global-envelope error 为改善 `3.3754%`，W-reduced 为恶化 `12.9560%`。
 
 因此 P3 只支持“窗口长度响应依赖模型表征”的单 seed 方向性诊断，不支持稳定上下文效应、统一更长更好、唯一长度或
-唯一模型结论。升级信号只说明追加稳定性证据有价值；P4 仍保持关闭，必须在用户明确接受额外 12 runs 成本后另行开放。
+唯一模型结论。该升级信号只说明追加稳定性证据有价值；用户随后按第 7.3 节确认 P4 的额外 12 runs 成本。
 
 ### 7.3 P4 三 seed 扩展
 
@@ -481,6 +481,37 @@ accumulation 1 / logical device cuda:0`，输出根为
 P4 validation 结果不得用于修改 `Pi_60`、loss、metric、selector、长度或模型。若需要独立测试集，只能在 18/18
 完成、checkpoint 与汇总锁定后另立 test 附件并获得用户授权；为了检验长度效应，test 矩阵必须完整包含六臂×三 seed，
 不得只评价 validation 最好的长度。
+
+### 7.3.1 P4 冻结结果
+
+新增 12 项均从干净 commit `55d515e74adc551a760fdd5914f5c4a1c1ced0a8` 完成，12/12 lifecycle 为
+`complete`；与 P3 合并后为 6 arms × 3 seeds 共 18/18 runs。每项均有 80 个 epoch、6400 次 optimizer update、
+2675 条完整 validation 指标，所有 artifact manifest 登记文件的大小与 SHA-256 均通过只读复核。
+
+只读三 seed 汇总入口 `scripts/summarize_paper_center_context_p4_v1.py` 从干净 commit
+`689344366bdd763932521b8d03aea14d4c8677e6` 执行，固定输出位于
+`runs/paper_evidence_v1/center_context/p4_validation_summary/`。`summary_receipt.json` SHA-256 为
+`7a8e5a3118e5059fc46ff287f4553952f2fea44653501c7ddedfd09145da9cb9`，`artifact_manifest.json` SHA-256 为
+`c0806893d1b4350da46fb9bc02d2056a8b6c8e29d368205709be00aae9bacb2a`。汇总读取 48,150 条 validation metric
+rows，未读取 checkpoint 内容、dataset/index、signal/target 或 test，未执行训练、推理或 GPU 计算。
+
+三 seed 的 RR MAE（arithmetic mean ± sample SD）为：
+
+| 模型 | 60 s | 90 s | 180 s |
+|---|---:|---:|---:|
+| C201-center60 | `0.51457 ± 0.00187` | `0.52245 ± 0.01069` | `0.54020 ± 0.00856` |
+| W-reduced-center60 | `0.51104 ± 0.00593` | `0.51775 ± 0.00954` | `0.53214 ± 0.02195` |
+
+paired-seed 方向显示：C201 的 60→180 RR 在 3/3 seeds 恶化，平均相对变化为恶化 `4.9782%`；W-reduced 的
+60→180 RR 为 1/3 改善、2/3 恶化，平均相对变化为恶化 `4.1537%`。与此同时，C201 的 90→180 trajectory 与
+global-envelope error 均在 3/3 seeds 改善，但其 60→90 两项均在 3/3 seeds 恶化；W-reduced 的 60→90 IBI 与 PCC
+在 3/3 seeds 改善，而 90→180 PCC 在 3/3 seeds 恶化。模型间差异同样依赖长度：90 s 时 W-reduced trajectory
+在 3/3 seeds 更好，180 s 时 W-reduced global-envelope error 在 3/3 seeds 更差。
+
+协议未预注册把三 seed 结果自动判为“稳定”的精确阈值，因此汇总没有在结果可见后新增 gate。按已冻结的 P3 条件逐 seed
+复核，三个 seed 均各自触发升级信号，但没有任何同一单调改善、候选 90 s 饱和或模型×上下文交互条件同时出现在全部
+三个 seeds。最终只支持“窗口长度响应具有模型和 seed 依赖、没有简单单调规律”的 validation 描述，不支持稳定统一收益、
+唯一窗口长度或唯一模型结论；该辅助窗口任务在 validation 阶段关闭并留档。
 
 ## 8. P5：时频条件功能证据
 
@@ -637,8 +668,11 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
    `894acc31e0fa6219dba83774baa818eba632da5151bdbb5c644b53e00b7e9577 / 5eed8250b98462e58be94c02d1bdae377c0a4b1838ef90ffc21f3c3cd1fe2a80`；
    触发模型×上下文交互，但只形成单 seed 方向性诊断。
 10. 用户已确认 P4 追加 12 runs 成本；两个新增 seed 的 12 项显式配置、独立输出根与 `p4_formal` gate 已实现，
-    不重跑 P3 seed。当前 43 项 paper-evidence CPU 定向测试通过。
+    不重跑 P3 seed。
+11. P4 新增 12/12 与总计 18/18 runs 已闭合；冻结汇总 receipt/manifest SHA-256 为
+    `7a8e5a3118e5059fc46ff287f4553952f2fea44653501c7ddedfd09145da9cb9 / c0806893d1b4350da46fb9bc02d2056a8b6c8e29d368205709be00aae9bacb2a`。
+    结果作为非单调、跨 seed 不一致的描述性上下文敏感性证据留档。当前 47 项 paper-evidence CPU 定向测试通过。
 
-下一推进点为用户从新的统一干净 commit 按第 7.3 节的双 GPU 队列手动执行 P4 12 项；Codex 不启动训练。
+窗口长度辅助任务已在 validation 阶段完成并关闭；不追加训练，不开放独立测试集访问，也不回写论文主模型选择。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
