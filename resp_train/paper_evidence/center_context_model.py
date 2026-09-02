@@ -37,7 +37,7 @@ class DynamicCwtBranch(CwtBranch):
         latent_length: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if set(tf) != {"w"}:
-            raise ValueError(f"W-reduced-center60 要求且只允许 TF key=['w']，实际={sorted(tf)}")
+            raise ValueError(f"W-reduced 要求且只允许 TF key=['w']，实际={sorted(tf)}")
         value = tf["w"]
         expected_context = int(input_samples) // 50
         if value.ndim != 3 or tuple(value.shape[1:]) != (49, expected_context):
