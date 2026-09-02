@@ -136,7 +136,13 @@ def audit_p3_runs(run_root: str | Path) -> tuple[pd.DataFrame, list[dict[str, An
     reference_identity: pd.DataFrame | None = None
     for spec in ARM_SPECS:
         run_dir = root / spec.experiment_id / f"seed_{P3_SEED}"
-        row, input_record, identity = _audit_arm(run_dir, spec)
+        row, input_record, identity = audit_formal_arm(
+            run_dir,
+            spec,
+            seed=P3_SEED,
+            expected_commit=P3_RUN_COMMIT,
+            config_filename=spec.config_filename,
+        )
         if reference_identity is None:
             reference_identity = identity
         elif not identity.equals(reference_identity):
@@ -348,9 +354,16 @@ def run_p3_validation_summary(
     return output / "summary_receipt.json"
 
 
-def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
+def audit_formal_arm(
+    run_dir: Path,
+    spec: ArmSpec,
+    *,
+    seed: int,
+    expected_commit: str,
+    config_filename: str,
+) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
     if not run_dir.is_dir():
-        raise FileNotFoundError(f"P3 run 缺失: {run_dir}")
+        raise FileNotFoundError(f"中心 formal run 缺失: {run_dir}")
     lifecycle_path = run_dir / "lifecycle.json"
     manifest_path = run_dir / "artifact_manifest.json"
     lifecycle = _load_json(lifecycle_path)
@@ -361,7 +374,7 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
         "protocol_id": CENTER_CONTEXT_PROTOCOL_ID,
         "task": "paper_center_context_v1",
         "experiment_id": spec.experiment_id,
-        "seed": P3_SEED,
+        "seed": seed,
         "parameter_count": spec.parameter_count,
         "selector": "full_validation_center_rr_mae_bpm_strict_lower_tie_earlier",
         "train_access": True,
@@ -380,12 +393,12 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
     for key, expected in expected_manifest.items():
         if manifest.get(key) != expected:
             raise RuntimeError(f"{spec.experiment_id} manifest {key} 漂移")
-    if manifest.get("git") != {"commit": P3_RUN_COMMIT, "dirty": False, "error": None}:
+    if manifest.get("git") != {"commit": expected_commit, "dirty": False, "error": None}:
         raise RuntimeError(f"{spec.experiment_id} Git identity 漂移")
     expected_command = [
         "scripts/train_paper_center_context_v1.py",
         "--config",
-        f"configs/paper_evidence_v1/{spec.config_filename}",
+        f"configs/paper_evidence_v1/{config_filename}",
         "--confirm-formal-training",
     ]
     if manifest.get("command") != expected_command:
@@ -466,7 +479,7 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
         "model_label": spec.model_label,
         "variant": spec.variant,
         "input_sec": spec.input_sec,
-        "seed": P3_SEED,
+        "seed": seed,
         "parameter_count": spec.parameter_count,
         "w_scale_count": spec.w_scale_count,
         "best_epoch": int(manifest["best_epoch"]),
@@ -475,7 +488,7 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
     }
     input_record = {
         "experiment_id": spec.experiment_id,
-        "seed": P3_SEED,
+        "seed": seed,
         "run_dir": str(run_dir),
         "lifecycle_status": "complete",
         "lifecycle_sha256": sha256_file(lifecycle_path),
@@ -601,6 +614,7 @@ __all__ = [
     "METRIC_SPECS",
     "P3_RUN_COMMIT",
     "P3_SUMMARY_SCHEMA_VERSION",
+    "audit_formal_arm",
     "audit_p3_runs",
     "build_length_changes",
     "build_model_differences",
