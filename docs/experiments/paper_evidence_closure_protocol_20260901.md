@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0/P1/P2 与三份完整 W cache 均已完成并冻结；P3 六项单 seed 配置已冻结，等待用户手动执行；P4、独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0/P1/P2、三份完整 W cache 与 P3 六项单 seed 诊断均已完成并冻结；P3 触发候选模型×上下文交互信号。P4 追加 12 runs、独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -34,8 +34,8 @@
 | P0 | 既有代表性方法协议兼容性与表格审计 | 否 | 已完成并冻结 |
 | P1 | 中心 60 s 变长输入任务实现与定向测试 | 否 | 已完成 |
 | P2 | 中心任务 synthetic GPU 工程验收 | 否 | 已完成并冻结；统一 `128×1` |
-| P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 配置已冻结；等待用户手动执行 |
-| P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 关闭 |
+| P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 已完成并冻结；触发候选模型×上下文交互 |
+| P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 升级信号已满足；追加成本尚未授权，保持关闭 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -360,7 +360,7 @@ configs/paper_evidence_v1/p3_ccv1_wr_90.yaml
 configs/paper_evidence_v1/p3_ccv1_wr_180.yaml
 ```
 
-用户从包含这些配置与本协议登记的统一干净 commit 按上述顺序逐项执行；每项完成后继续下一项，出现工程失败则保留目录并停止：
+用户从包含这些配置与本协议登记的统一干净 commit 执行全部六项；同一 GPU 队列中每项完成后继续下一项，出现工程失败则保留目录并停止：
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/python \
@@ -388,6 +388,10 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> ./.venv/bin/pyth
   --confirm-formal-training
 ```
 
+实际调度使用两张同型号 GPU，各进程配置内均保持逻辑 `cuda:0`，只通过 `CUDA_VISIBLE_DEVICES` 选择物理卡；这只改变
+运行排队，不增加实验维度。两个顺序队列为：物理 GPU 0 执行 `C201-60 → C201-90 → W-reduced-180`，物理 GPU 1
+执行 `W-reduced-60 → W-reduced-90 → C201-180`。六项仍来自同一干净 commit，输出 identity 互不覆盖。
+
 P3 gate 只接受 `stage=p3_single_seed / seed=20260811 / 80 epochs / physical batch 128 / accumulation 1`，固定输出根为
 `runs/paper_evidence_v1/center_context/p3_single_seed/`。每项启动时显式设置并校验
 `matmul TF32=false / cuDNN TF32=false / cuDNN benchmark=false`，实际状态写入 artifact manifest。P4 的另外两个 seed
@@ -407,6 +411,29 @@ P3 汇总按模型分别报告 `60→90`、`90→180`、`60→180` 的五项中�
 
 若所有四个 error 指标的 60→180 绝对相对变化均小于 `0.5%`、PCC 绝对变化小于 `0.002`，且没有一致的单调、
 饱和或交互模式，则窗口队列停止。单 seed gate 只决定是否值得增加稳定性证据，不等于最终效果判决。
+
+### 7.2.1 P3 冻结结果
+
+六项训练均从干净 commit `f57583b91f04e5ab5ea9475042489e8aeabb4e9f` 完成，6/6 lifecycle 为
+`complete`，每项均有 80 个 epoch、6400 次 optimizer update 与 2675 条完整 validation 指标。所有输入 artifact
+manifest 的文件大小与 SHA-256 均通过只读复核；未读取 checkpoint 内容、dataset/index、signal/target 或 test，也未执行
+训练、推理或 GPU 计算。
+
+只读汇总入口 `scripts/summarize_paper_center_context_v1.py` 从干净 commit
+`a7056cd0be489946530bb3954f3a341b136eecdf` 执行，固定输出位于
+`runs/paper_evidence_v1/center_context/p3_validation_summary/`。`summary_receipt.json` SHA-256 为
+`894acc31e0fa6219dba83774baa818eba632da5151bdbb5c644b53e00b7e9577`，`artifact_manifest.json` SHA-256 为
+`5eed8250b98462e58be94c02d1bdae377c0a4b1838ef90ffc21f3c3cd1fe2a80`。
+
+P3 没有触发单调改善或候选 90 s 饱和条件，但触发了四项候选模型×上下文交互：
+
+- C201 的 60→180 RR 相对变化为恶化 `3.6528%`，W-reduced 为改善 `1.5962%`；
+- C201 的 IBI 为改善 `0.2349%`，W-reduced 为恶化 `1.4721%`；
+- C201 的 trajectory 为改善 `1.6855%`，W-reduced 为恶化 `15.0124%`；
+- C201 的 global-envelope error 为改善 `3.3754%`，W-reduced 为恶化 `12.9560%`。
+
+因此 P3 只支持“窗口长度响应依赖模型表征”的单 seed 方向性诊断，不支持稳定上下文效应、统一更长更好、唯一长度或
+唯一模型结论。升级信号只说明追加稳定性证据有价值；P4 仍保持关闭，必须在用户明确接受额外 12 runs 成本后另行开放。
 
 ### 7.3 P4 三 seed 扩展
 
@@ -573,10 +600,12 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
 8. 60/90/180 s 三份完整 W cache 均为 `10141 train / 2675 validation`、49 scales、float32、finite、input-only；
    manifest SHA-256 分别为 `e9d270c930d6862f9b5a9cbdb3c26765fe3b57d2573946640cba99e597389793`、
    `9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757`、
-   `72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe`。P3 六配置已冻结为 seed `20260811`，
-   formal gate 拒绝额外 seed、输出根、CUDA 数值运行合同或 cache identity 漂移。当前 35 项 paper-evidence CPU 定向测试
-   与 64 项相关冻结回归共 99 项通过。
+   `72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe`。P3 六配置冻结为 seed `20260811`，
+   formal gate 拒绝额外 seed、输出根、CUDA 数值运行合同或 cache identity 漂移。
+9. P3 六项已完成，冻结汇总的 receipt/manifest SHA-256 为
+   `894acc31e0fa6219dba83774baa818eba632da5151bdbb5c644b53e00b7e9577 / 5eed8250b98462e58be94c02d1bdae377c0a4b1838ef90ffc21f3c3cd1fe2a80`；
+   触发模型×上下文交互，但只形成单 seed 方向性诊断。当前 40 项 paper-evidence CPU 定向测试通过。
 
-下一推进点为用户从新的统一干净 commit 按第 7.2 节顺序手动执行 P3 六项；Codex 不启动长时间训练。
+下一推进点为用户决定是否接受 P4 的额外 12 runs 成本；在明确授权前不实现 P4 配置或启动训练。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
