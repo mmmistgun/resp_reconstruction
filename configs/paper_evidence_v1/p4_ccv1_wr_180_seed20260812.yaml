@@ -1,0 +1,9 @@
+_base_: _p3_base.yaml
+protocol: {stage: p4_additional_seeds, execution_gate: p4_formal, template_only: false}
+data:
+  center_w_cache_path: /mnt/disk_code/marques/resp_reconstruction/runs/paper_evidence_v1/center_context_w_cache/180s_8414c1a1dd1acc27640bc22074805aad2f327ff7d56eca2ee4ea8193ab71b827
+  center_w_cache_manifest_sha256: 72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe
+window: {input_samples: 18000, input_sec: 180}
+model: {variant: w_reduced_center60}
+training: {seed: 20260812}
+outputs: {run_root: runs/paper_evidence_v1/center_context/p4_additional_seeds}

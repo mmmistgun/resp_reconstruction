@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0/P1/P2、三份完整 W cache 与 P3 六项单 seed 诊断均已完成并冻结；P3 触发候选模型×上下文交互信号。P4 追加 12 runs、独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0/P1/P2、三份完整 W cache 与 P3 六项单 seed 诊断均已完成并冻结；P3 触发候选模型×上下文交互信号。P4 追加 12 runs 已获用户授权，配置与门禁已实现，等待用户手动执行；独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -35,7 +35,7 @@
 | P1 | 中心 60 s 变长输入任务实现与定向测试 | 否 | 已完成 |
 | P2 | 中心任务 synthetic GPU 工程验收 | 否 | 已完成并冻结；统一 `128×1` |
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 已完成并冻结；触发候选模型×上下文交互 |
-| P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 升级信号已满足；追加成本尚未授权，保持关闭 |
+| P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 已授权并完成配置；等待用户手动执行 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -440,6 +440,37 @@ P3 没有触发单调改善或候选 90 s 饱和条件，但触发了四项候�
 P4 只有在 P3 完整汇总、实现/数据身份闭合且用户确认追加 12-run 成本后开放。P4 必须完成全部六臂的另外两个 seed，
 最终共 18 个 formal-compatible runs。不得只扩展 P3 中数值较好的长度或模型。
 
+用户已于 2026-09-02 确认追加成本。P4 只新增 seeds `20260812/20260813`，固定 12 项配置：
+
+```text
+configs/paper_evidence_v1/p4_ccv1_c201_60_seed20260812.yaml
+configs/paper_evidence_v1/p4_ccv1_c201_90_seed20260812.yaml
+configs/paper_evidence_v1/p4_ccv1_c201_180_seed20260812.yaml
+configs/paper_evidence_v1/p4_ccv1_wr_60_seed20260812.yaml
+configs/paper_evidence_v1/p4_ccv1_wr_90_seed20260812.yaml
+configs/paper_evidence_v1/p4_ccv1_wr_180_seed20260812.yaml
+configs/paper_evidence_v1/p4_ccv1_c201_60_seed20260813.yaml
+configs/paper_evidence_v1/p4_ccv1_c201_90_seed20260813.yaml
+configs/paper_evidence_v1/p4_ccv1_c201_180_seed20260813.yaml
+configs/paper_evidence_v1/p4_ccv1_wr_60_seed20260813.yaml
+configs/paper_evidence_v1/p4_ccv1_wr_90_seed20260813.yaml
+configs/paper_evidence_v1/p4_ccv1_wr_180_seed20260813.yaml
+```
+
+P4 gate 固定为 `stage=p4_additional_seeds / execution_gate=p4_formal / 80 epochs / physical batch 128 /
+accumulation 1 / logical device cuda:0`，输出根为
+`runs/paper_evidence_v1/center_context/p4_additional_seeds/`。其余数据、cache、模型、loss、metric、selector、CUDA
+数值开关和训练超参数逐项继承 P3 冻结合同；P4 拒绝 seed `20260811`、其他 seed、其他输出根和 test access。
+
+两张同型号 GPU 各运行六项顺序队列，通过 `CUDA_VISIBLE_DEVICES=0/1` 选择物理卡，进程内均使用逻辑 `cuda:0`：
+
+- 物理 GPU 0：seed 20260812 的 `C201-60 → C201-90 → W-reduced-180`，随后 seed 20260813 的
+  `W-reduced-60 → W-reduced-90 → C201-180`；
+- 物理 GPU 1：seed 20260812 的 `W-reduced-60 → W-reduced-90 → C201-180`，随后 seed 20260813 的
+  `C201-60 → C201-90 → W-reduced-180`。
+
+同一队列用 shell `&&` 串行，任一 run 失败即停止该队列并保留失败 identity。P4 训练仍由用户从统一干净 commit 手动执行。
+
 正式汇总逐 seed 报告，再对三个 seed 报告 arithmetic mean ± sample SD 和 paired-seed 方向；不构造总分或 p-value。
 该辅助实验的记录位置按三 seed 结果决定，但任何分支均不改变论文主模型或既有主实验结论：
 
@@ -604,8 +635,10 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
    formal gate 拒绝额外 seed、输出根、CUDA 数值运行合同或 cache identity 漂移。
 9. P3 六项已完成，冻结汇总的 receipt/manifest SHA-256 为
    `894acc31e0fa6219dba83774baa818eba632da5151bdbb5c644b53e00b7e9577 / 5eed8250b98462e58be94c02d1bdae377c0a4b1838ef90ffc21f3c3cd1fe2a80`；
-   触发模型×上下文交互，但只形成单 seed 方向性诊断。当前 40 项 paper-evidence CPU 定向测试通过。
+   触发模型×上下文交互，但只形成单 seed 方向性诊断。
+10. 用户已确认 P4 追加 12 runs 成本；两个新增 seed 的 12 项显式配置、独立输出根与 `p4_formal` gate 已实现，
+    不重跑 P3 seed。当前 43 项 paper-evidence CPU 定向测试通过。
 
-下一推进点为用户决定是否接受 P4 的额外 12 runs 成本；在明确授权前不实现 P4 配置或启动训练。
+下一推进点为用户从新的统一干净 commit 按第 7.3 节的双 GPU 队列手动执行 P4 12 项；Codex 不启动训练。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

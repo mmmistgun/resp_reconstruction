@@ -1,0 +1,5 @@
+_base_: _p3_base.yaml
+protocol: {stage: p4_additional_seeds, execution_gate: p4_formal, template_only: false}
+window: {input_samples: 9000, input_sec: 90}
+training: {seed: 20260812}
+outputs: {run_root: runs/paper_evidence_v1/center_context/p4_additional_seeds}

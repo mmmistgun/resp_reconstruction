@@ -13,6 +13,7 @@ CENTER_CONTEXT_INPUT_SAMPLES = (6000, 9000, 18000)
 CENTER_CONTEXT_FORMAL_SEEDS = (20260811, 20260812, 20260813)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 CENTER_CONTEXT_P3_OUTPUT_ROOT = "runs/paper_evidence_v1/center_context/p3_single_seed"
+CENTER_CONTEXT_P4_OUTPUT_ROOT = "runs/paper_evidence_v1/center_context/p4_additional_seeds"
 CENTER_CONTEXT_P3_W_CACHE_PATHS = {
     6000: str(
         _REPO_ROOT
@@ -170,10 +171,10 @@ def validate_center_context_config(cfg: DictConfig) -> None:
     if role == "formal" and variant == "w_reduced_center60":
         expected_path = Path(CENTER_CONTEXT_P3_W_CACHE_PATHS[input_samples]).resolve()
         if Path(str(cache_path)).resolve() != expected_path:
-            raise ValueError("P3 W-reduced 必须使用冻结的 length-specific W cache path")
+            raise ValueError("formal W-reduced 必须使用冻结的 length-specific W cache path")
         expected_sha256 = CENTER_CONTEXT_P3_W_CACHE_MANIFEST_SHA256[input_samples]
         if str(cache_manifest_sha256) != expected_sha256:
-            raise ValueError("P3 W-reduced cache manifest SHA-256 漂移")
+            raise ValueError("formal W-reduced cache manifest SHA-256 漂移")
     if cfg.data.get("max_test_windows") is not None:
         raise ValueError("中心上下文任务不允许配置 test windows")
 
@@ -190,10 +191,19 @@ def validate_center_context_config(cfg: DictConfig) -> None:
         if maxima != (2, 2):
             raise ValueError("P1 implementation 配置只允许 2/2 合成契约占位，不授权真实 lifecycle")
     elif role == "formal":
-        if str(cfg.protocol.stage) != "p3_single_seed":
-            raise ValueError("P3 formal stage 漂移")
-        if gate != "p3_formal" or not device.startswith("cuda:"):
-            raise ValueError("formal 必须使用 p3_formal + 显式 cuda:<index>")
+        stage = str(cfg.protocol.stage)
+        if stage == "p3_single_seed":
+            expected_gate = "p3_formal"
+            allowed_seeds = CENTER_CONTEXT_FORMAL_SEEDS[:1]
+            expected_output_root = CENTER_CONTEXT_P3_OUTPUT_ROOT
+        elif stage == "p4_additional_seeds":
+            expected_gate = "p4_formal"
+            allowed_seeds = CENTER_CONTEXT_FORMAL_SEEDS[1:]
+            expected_output_root = CENTER_CONTEXT_P4_OUTPUT_ROOT
+        else:
+            raise ValueError("formal stage 只允许 p3_single_seed 或 p4_additional_seeds")
+        if gate != expected_gate or not device.startswith("cuda:"):
+            raise ValueError(f"formal 必须使用 {expected_gate} + 显式 cuda:<index>")
         if maxima != (None, None):
             raise ValueError("formal 必须使用完整 train/validation")
         if (int(cfg.training.epochs), int(cfg.training.batch_size)) != (80, 128):
@@ -201,13 +211,13 @@ def validate_center_context_config(cfg: DictConfig) -> None:
         if int(cfg.training.gradient_accumulation_steps) != 1:
             raise ValueError("当前冻结 formal 固定 accumulation=1；batch fallback 尚未触发")
         if cfg.training.get("allow_tf32") is not False:
-            raise ValueError("P3 formal 固定 allow_tf32=false")
+            raise ValueError("formal 固定 allow_tf32=false")
         if cfg.training.get("cudnn_benchmark") is not False:
-            raise ValueError("P3 formal 固定 cudnn_benchmark=false")
-        if int(cfg.training.seed) != CENTER_CONTEXT_FORMAL_SEEDS[0]:
-            raise ValueError("P3 formal 只开放 seed=20260811")
-        if str(cfg.outputs.run_root) != CENTER_CONTEXT_P3_OUTPUT_ROOT:
-            raise ValueError(f"P3 formal outputs.run_root 必须为 {CENTER_CONTEXT_P3_OUTPUT_ROOT}")
+            raise ValueError("formal 固定 cudnn_benchmark=false")
+        if int(cfg.training.seed) not in allowed_seeds:
+            raise ValueError(f"{stage} 只开放 seeds={list(allowed_seeds)}")
+        if str(cfg.outputs.run_root) != expected_output_root:
+            raise ValueError(f"{stage} outputs.run_root 必须为 {expected_output_root}")
     else:
         raise ValueError("protocol.run_role 未注册")
 
@@ -218,6 +228,7 @@ __all__ = [
     "CENTER_CONTEXT_MODEL_VARIANTS",
     "CENTER_CONTEXT_PROTOCOL_ID",
     "CENTER_CONTEXT_P3_OUTPUT_ROOT",
+    "CENTER_CONTEXT_P4_OUTPUT_ROOT",
     "CENTER_CONTEXT_P3_W_CACHE_MANIFEST_SHA256",
     "CENTER_CONTEXT_P3_W_CACHE_PATHS",
     "load_center_context_config",
