@@ -4,7 +4,7 @@
 
 协议 ID：`paper-center30-context-v1-20260902`
 
-状态：**P4-S0/S1/S2 均已完成并冻结；八项单 seed validation 方向诊断显示 30 s 输入的 RR 在两种表征下均劣于更长输入，但 45/60 s 的最优位置随表征变化。用户已授权 P4-S3 的 16 项追加运行，配置已冻结并等待用户手动执行；独立测试集访问未开放。**
+状态：**P4-S0–S3 均已完成并冻结；8 arms × 3 seeds 共 24/24 validation runs 闭合。45 s 是两种表征下相对 30 s 唯一均达到 3/3 seed 材料性 RR 改善的最短输入，继续延长到 60/90 s 没有稳定追加 RR 收益。本独立辅助任务在 validation 阶段关闭；独立测试集访问未开放。**
 
 ## 1. 科学问题与位置
 
@@ -247,6 +247,54 @@ runtime 数值开关或 test access 漂移。
 各进程配置内保持逻辑 `cuda:0`，只由 `CUDA_VISIBLE_DEVICES=0/1` 选择物理卡。同一队列使用 shell `&&` 串行，
 任一 run 失败即停止该队列并保留失败 identity；训练仍由用户从统一干净 commit 手动执行。
 
+P4-S3 的 16 项新增训练均从干净 commit `2107cf9935229b28224035aa7272515e91be0706` 完成；16/16 lifecycle
+为 `complete`，与 P4-S2 合并后为 8 arms × 3 seeds 共 24/24 runs。每项均闭合 80 epochs、6400 optimizer
+updates 和 2675 条 validation metrics；全部 artifact manifest 文件大小与 SHA-256 复核通过，resolved config、runtime、
+dataset row 与 cache identity 一致，未访问独立测试集。
+
+只读三 seed 汇总由干净 commit `7211bd3e199fe9b002bfcd3143625e33be797dd3` 生成于
+`runs/paper_evidence_v1/center30_context/p4s3_validation_summary/`：
+
+- `summary_receipt.json` SHA-256=`2c533117c735e5bedb65f31ca77fa9dd22663433c0a284b4ee7bd9dc0beee2ef`；
+- `artifact_manifest.json` SHA-256=`b18bbed8ab826b8a6e415866c4ad1b9d5171fd4eebc0d5c4090544428fc19bba`；
+- 汇总审计 24/24 runs、64,200 条 validation metric rows，按 seed 配对，并使用 arithmetic mean 与
+  sample SD (`ddof=1`)；不构造总分或 p-value；
+- 只读取 lifecycle、manifest、resolved config、runtime/data identity、train history 与 validation metrics；未读取
+  checkpoint 内容、dataset/index、signal/target array 或独立测试集，未执行训练、推理或 GPU 计算。
+
+三 seed validation 指标（arithmetic mean ± sample SD）如下：
+
+| model | input | RR MAE bpm ↓ | IBI MedAE s ↓ | trajectory MAE ↓ | global error ↓ | signed PCC ↑ | IBI coverage | interpretable |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| C201-center30 | 30 | 0.68004±0.00592 | 0.11145±0.00278 | 0.10748±0.00298 | 0.14950±0.00208 | 0.85443±0.00301 | 0.84531±0.00607 | 0.73720±0.01116 |
+| C201-center30 | 45 | 0.66312±0.01008 | 0.10790±0.00251 | 0.11078±0.00323 | 0.14927±0.00167 | 0.86154±0.00140 | 0.84744±0.00224 | 0.74206±0.00099 |
+| C201-center30 | 60 | 0.66452±0.01227 | 0.10661±0.00358 | 0.10635±0.00141 | 0.14837±0.00367 | 0.86103±0.00287 | 0.84857±0.00628 | 0.74280±0.00411 |
+| C201-center30 | 90 | 0.67654±0.01656 | 0.10559±0.00191 | 0.10810±0.00322 | 0.14761±0.00280 | 0.86063±0.00160 | 0.84836±0.00701 | 0.74393±0.00955 |
+| W-reduced-center30 | 30 | 0.68374±0.00252 | 0.11023±0.00384 | 0.10407±0.00391 | 0.14816±0.00246 | 0.85664±0.00335 | 0.84954±0.00472 | 0.74330±0.01032 |
+| W-reduced-center30 | 45 | 0.66351±0.00400 | 0.10826±0.00134 | 0.10456±0.00104 | 0.14415±0.00269 | 0.86125±0.00128 | 0.84711±0.00343 | 0.73595±0.00525 |
+| W-reduced-center30 | 60 | 0.66731±0.01446 | 0.10970±0.00255 | 0.10435±0.00099 | 0.14323±0.00253 | 0.86119±0.00265 | 0.84825±0.00384 | 0.74131±0.00674 |
+| W-reduced-center30 | 90 | 0.66718±0.01688 | 0.10605±0.00412 | 0.10372±0.00263 | 0.14347±0.00098 | 0.86145±0.00268 | 0.84759±0.00523 | 0.74268±0.00659 |
+
+RR 的 paired-seed 方向是本任务的主要窗口判据：
+
+- 30→45：C201 平均改善 `2.4783%`（3/3 seeds 材料改善），W-reduced 平均改善 `2.9589%`
+  （3/3 seeds 材料改善）；
+- 30→60：C201 平均改善 `2.2888%`（3/3 材料改善），W-reduced 平均改善 `2.4058%`
+  （3/3 方向改善、2/3 材料改善）；
+- 45→60：C201 平均变化为恶化 `0.2380%`，且 2/3 改善、1/3 恶化；W-reduced 平均恶化 `0.5707%`，
+  且 1/3 改善、2/3 恶化；
+- 60→90：C201 平均恶化 `1.8026%`，3/3 seeds 均为材料恶化；W-reduced 平均改善仅 `0.0241%`，
+  且 1/3 改善、2/3 恶化。
+
+每个 model×seed 的最低 RR 输入分别为：C201 `60/45/60 s`，W-reduced `45/90/45 s`；30 s 从未成为最低点。
+因此按照第 5 节预注册分支，本任务支持：对固定中心 30 s 输出，30 s 输入上下文不足，45 s 是当前矩阵内最短且在
+两种表征、全部 seed 上稳定获得 RR 收益的合理输入下限；没有证据支持把 60 s 写成唯一合理下限，也没有稳定证据表明
+60/90 s 能在 RR 上继续获益。IBI、trajectory 与 global-effort 指标在部分模型上随更长输入改善，但方向未跨模型、seed
+形成统一排序，所以 45 s 的判断限定为 RR 优先的上下文下限，而不是五项指标的全局最优长度。
+
+该结论只属于 center-30 独立辅助任务，不回写论文主模型或既有 center-60/180→180 结论。P4-S 在 validation 阶段关闭，
+不追加训练、不做独立测试集评价。
+
 ## 7. 当前实现回执
 
 - 实现配置：`configs/paper_evidence_v1/center30_context_v1.yaml`；
@@ -255,7 +303,7 @@ runtime 数值开关或 test access 漂移。
 - center-30 metric 保持 30 s 自身的 2 bpm FFT spacing、5-point envelope 与 IBI coverage 口径；
 - 两份新 cache manifest SHA-256 为
   `d64e696a686ebe3f11ec279c276aa1666a74b81d889ecd3c5fca8075bbdb79ed / f5e525719906ebd4bdf4836f8ad4b7e9b722ebb2e195d48c28d40a643fbe199f`；
-- center-30 训练前实现、冻结汇总与 P4-S3 配置测试共 23 项，并与 47 项既有 paper-evidence 回归合计 70 项通过；
-- P4-S2 八项单 seed formal 与只读冻结汇总均已完成；P4-S3 已授权并冻结配置，benchmark 和 test 均未开放。
+- center-30 训练前实现、配置与冻结汇总测试共 27 项，并与 47 项既有 paper-evidence 回归合计 74 项通过；
+- P4-S2/P4-S3 共 24/24 formal 与只读三 seed 汇总均已完成；本任务在 validation 阶段关闭，benchmark 和 test 均未开放。
 
-下一推进点是用户从 P4-S3 配置提交后的统一干净 commit，在两张 GPU 上手动执行 16 项追加训练。
+本任务无待执行训练；后续只在论文证据整理中引用冻结的相对变化与三 seed 统计。

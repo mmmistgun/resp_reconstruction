@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0–P4 与三份完整 W cache 均已完成并冻结；三 seed center-60 结果归类为非单调、跨 seed 不一致的描述性上下文敏感性证据。独立 P4-S center-30 短窗口分支已完成八项单 seed validation 方向诊断：30 s 输入一致较差，45–60 s 边界具有表征敏感性；用户已授权 16 项 P4-S3 追加训练，配置已冻结并等待手动执行。独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0–P4 与三份完整 W cache 均已完成并冻结；三 seed center-60 结果归类为非单调、跨 seed 不一致的描述性上下文敏感性证据。独立 P4-S center-30 短窗口分支 24/24 validation runs 与三 seed 汇总已冻结：45 s 是相对 30 s 在两种表征、3/3 seeds 均有材料性 RR 改善的最短输入，继续延长没有稳定 RR 收益；该辅助任务已关闭。独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -36,7 +36,7 @@
 | P2 | 中心任务 synthetic GPU 工程验收 | 否 | 已完成并冻结；统一 `128×1` |
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 已完成并冻结；触发候选模型×上下文交互 |
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 18/18 完成并冻结；描述性结果留档 |
-| P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，最终 24 runs | P4-S2 8/8 与单 seed 汇总已冻结；P4-S3 16-run 配置已冻结 |
+| P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，最终 24 runs | 24/24 与三 seed汇总已冻结；validation 阶段关闭 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -680,7 +680,11 @@ P4-S 作为新的独立短窗口分支按
 `docs/experiments/paper_center30_context_protocol_20260902.md` 推进；它不重开 center-60 P4。30/45 s input-only W cache、
 八项单 seed formal 与只读 validation 汇总均已冻结。两种表征的 45/60/90 s RR 均优于 30 s，但 C201 最低点为
 60 s、W-reduced 最低点为 45 s，因此当前只支持“30 s 较差，45–60 s 边界具有表征敏感性”的方向诊断。
-用户已确认 P4-S3 成本；完整追加 seeds `20260812/20260813` 的 16 项配置已冻结到独立输出根，等待用户从统一干净
-commit 通过两张 GPU 手动执行。矩阵、接口、数据、cache、模型、loss、指标和 selector 均未改变。
+用户确认成本后，P4-S3 从干净 commit `2107cf9935229b28224035aa7272515e91be0706` 完成新增 16/16，合计
+24/24 runs。三 seed 冻结汇总 receipt/manifest SHA-256 为
+`2c533117c735e5bedb65f31ca77fa9dd22663433c0a284b4ee7bd9dc0beee2ef / b18bbed8ab826b8a6e415866c4ad1b9d5171fd4eebc0d5c4090544428fc19bba`。
+RR paired-seed 显示 30→45 在 C201/W-reduced 均为 3/3 材料改善，平均改善 `2.4783% / 2.9589%`；45→60
+与 60→90 没有跨模型、seed 的稳定追加收益。故冻结为：center-30 输出下 45 s 是 RR 优先的合理输入下限，不能写成
+五指标全局最优；该分支在 validation 阶段关闭，不回写论文主模型选择。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
