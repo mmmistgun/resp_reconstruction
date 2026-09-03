@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0–P4、P4-S 与 P4-T 均已完成并冻结。Center-60 的 42-checkpoint 附件分支在独立 test 上支持“延长输入没有稳定 RR 收益”，60 s 是该任务当前 RR 优先的合理选择；center-30 的 validation 45 s 下限未获 test 确认，最短合理边界仍未定位。两种输出任务保持独立 panel，不回写论文主模型实验。效率 benchmark 未授权。**
+状态：**P0–P4、P4-S 与 P4-T 均已完成并冻结。Center-60 的 42-checkpoint 附件分支在独立 test 上支持“延长输入没有稳定 RR 收益”，60 s 是该任务当前 RR 优先的合理选择；center-30 的 validation 45 s 下限未获 test 确认，最短合理边界仍未定位。独立 P4-U center-90 输出尺度实验已固定为 18-run validation 矩阵并进入实现阶段。各输出任务保持独立 panel，不回写论文主模型实验。效率 benchmark 未授权。**
 
 ## 1. 定位与边界
 
@@ -38,6 +38,7 @@
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 18/18 完成并冻结；描述性结果留档 |
 | P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，最终 24 runs | 24/24 与三 seed汇总已冻结；validation 阶段关闭 |
 | P4-T | center-30/center-60 上下文任务完整独立测试集附件 | 否；42 checkpoints inference | 42/42 与分任务冻结汇总均完成；附件关闭 |
+| P4-U | center-90 的 90/135/180 s 输出尺度分支 | 是，18 runs | 全量三 seed 矩阵已冻结；P0 完成，等待 cache/工程回执 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -704,5 +705,14 @@ Center-60 中 60→180 RR 平均变化为 C201 `−11.4546%`、W-reduced `−11.
 Center-30 的 30→45 RR 在 test 中两模型均仅 2/3 seeds 材料改善，未确认 validation 的 45 s 稳定下限；30→90
 则两模型均为 3/3 材料改善，说明 30 s 不足但最短边界未定位。两种输出任务始终独立汇总，不比较绝对指标、不重选长度。
 新增 summary 测试后 89 项 `tests/test_paper*.py` 定向 CPU 回归全部通过。
+
+P4-U 按 `docs/experiments/paper_center90_context_protocol_20260904.md` 推进，固定为
+`C201-center90 / W-reduced-center90 × 90/135/180 s × seeds 20260811/12/13`，共 18 个完整 validation runs。
+任务使用中心 9000-point target、独立 `Pi_90`、`center90_*` 五主指标与 full-validation center90 RR selector；90/180 s
+复用输入 transform 完全相同的冻结 W cache，135 s 新建 input-only train/validation cache。正式矩阵统一使用单一输出根，
+三 seed 全部完成后才冻结汇总。该任务形成单独 center-90 panel，只比较任务内 paired-seed 相对变化。
+P0 已完成独立实现；13 项 center90 定向测试与 102 项 paper-evidence 总回归均通过。135 s 映射的 49 个实际 centers
+无重复，全网格/目标频带最大名义误差约 `0.035647 / 0.020064 Hz`。Formal gate 当前等待 135 s cache manifest 与
+最大臂 batch-128 GPU acceptance receipt。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
