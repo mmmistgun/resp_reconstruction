@@ -39,7 +39,7 @@ def reduced_target_frequencies() -> np.ndarray:
     return reduced
 
 
-@lru_cache(maxsize=3)
+@lru_cache(maxsize=5)
 def reduced_scales_and_frequencies(length: int) -> tuple[np.ndarray, np.ndarray]:
     _require_ssqueezepy_066()
     from ssqueezepy import Wavelet
