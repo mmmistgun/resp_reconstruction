@@ -4,7 +4,7 @@
 
 协议 ID：`paper-center30-context-v1-20260902`
 
-状态：**实现、30/45 s input-only W cache 与八项单 seed formal 配置均已完成并冻结；等待用户手动执行 P4-S2。独立测试集访问未开放。**
+状态：**P4-S0/S1/S2 均已完成并冻结；八项单 seed validation 方向诊断显示 30 s 输入的 RR 在两种表征下均劣于更长输入，但 45/60 s 的最优位置随表征变化。P4-S3 的 16 项追加运行尚未授权；独立测试集访问未开放。**
 
 ## 1. 科学问题与位置
 
@@ -161,10 +161,55 @@ configs/paper_evidence_v1/p4s_c30v1_wr_90.yaml
 physical batch `128×1`、bf16、TF32=false、cuDNN benchmark=false、early stopping=false、resume=false。
 现有 W-reduced-180 batch-128 acceptance 比本矩阵最大 W-reduced-90 更保守，不新增 GPU acceptance。
 
+P4-S2 已由用户从干净 commit `bead33307aa79139b8124bdf515700bf7e18379b` 完成。八项 lifecycle 均为
+`complete`；每项均闭合 80 epochs、6400 optimizer updates 与 2675 条 validation metrics，artifact manifest
+登记的文件大小与 SHA-256 全部复核通过。所有 run 均为 train/validation-only，未访问独立测试集。
+
+只读冻结汇总由干净 commit `bb282dcc90c5d2a0824527169c2468b52571063c` 生成于
+`runs/paper_evidence_v1/center30_context/p4s_single_seed_summary/`：
+
+- `summary_receipt.json` SHA-256=`abd524f8f85a13dd8c429be889878a9fabad110efc2f5165726cfb8ca550fb57`；
+- `artifact_manifest.json` SHA-256=`3dfedd16fd50742313f617057df84ca6511c0e9895a436af22c902f752966ee2`；
+- 汇总只读取 lifecycle、manifest、resolved config、runtime/data identity、train history 与 validation metrics；未读取
+  checkpoint 内容、dataset/index、signal/target array 或独立测试集，也未执行训练、推理或 GPU 计算。
+
+单 seed 绝对 validation 指标如下；IBI coverage 与 interpretable fraction 作为覆盖性伴随量列出：
+
+| model | input | RR MAE bpm ↓ | IBI MedAE s ↓ | trajectory MAE ↓ | global modulation error ↓ | signed PCC ↑ | IBI coverage | interpretable |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| C201 | 30 | 0.673933 | 0.111808 | 0.107849 | 0.147557 | 0.856740 | 0.841550 | 0.728972 |
+| C201 | 45 | 0.666152 | 0.107087 | 0.113042 | 0.151122 | 0.862415 | 0.845097 | 0.742430 |
+| C201 | 60 | 0.651425 | 0.107025 | 0.104791 | 0.151762 | 0.863799 | 0.855582 | 0.746916 |
+| C201 | 90 | 0.657702 | 0.103670 | 0.111055 | 0.150755 | 0.859274 | 0.840728 | 0.733458 |
+| W-reduced | 30 | 0.681018 | 0.108139 | 0.099895 | 0.149503 | 0.860502 | 0.853707 | 0.752150 |
+| W-reduced | 45 | 0.658916 | 0.108413 | 0.104582 | 0.141264 | 0.862529 | 0.849886 | 0.740935 |
+| W-reduced | 60 | 0.661286 | 0.106824 | 0.105484 | 0.145643 | 0.858125 | 0.852486 | 0.746916 |
+| W-reduced | 90 | 0.664545 | 0.101679 | 0.101298 | 0.142856 | 0.864434 | 0.850950 | 0.748037 |
+
+以 30 s 输入为 baseline 的有向改善如下；正值表示改善，四个 error 为相对变化，PCC 为绝对差：
+
+| model | input | RR | IBI | trajectory | global | ΔPCC |
+|---|---:|---:|---:|---:|---:|---:|
+| C201 | 45 | +1.1545% | +4.2221% | −4.8149% | −2.4161% | +0.005675 |
+| C201 | 60 | +3.3397% | +4.2780% | +2.8351% | −2.8500% | +0.007060 |
+| C201 | 90 | +2.4083% | +7.2785% | −2.9729% | −2.1679% | +0.002534 |
+| W-reduced | 45 | +3.2454% | −0.2539% | −4.6915% | +5.5106% | +0.002027 |
+| W-reduced | 60 | +2.8974% | +1.2154% | −5.5945% | +2.5816% | −0.002377 |
+| W-reduced | 90 | +2.4189% | +5.9734% | −1.4045% | +4.4463% | +0.003932 |
+
+方向诊断冻结为：两种模型的 45/60/90 s 输入在 RR 上均相对 30 s 达到 `>0.5%` 材料改善，因此 30 s
+输入不足是当前一致信号；但 C201 的最低 RR 在 60 s，W-reduced 的最低 RR 在 45 s。45→60 的 RR 有向变化为
+C201 `+2.2107%`、W-reduced `−0.3597%`；60→90 为 C201 `−0.9636%`、W-reduced `−0.4928%`。
+五项指标也未形成跨模型一致排序。结合 30/45 s W scale mapping 限制，当前只能写作“30 s 较差，45–60 s
+边界具有表征敏感性”的单 seed 方向证据；不得宣称已稳定证明 45 s 或 60 s 是最短合理上下文。
+
 ### P4-S3：条件三 seed
 
 单 seed 八臂全部完成后先冻结方向汇总。若继续稳定性证据，追加 seeds `20260812/20260813` 的 16 runs，最终 24/24；
 不得只扩展数值较好的长度或模型。P4-S3 成本需要用户另行确认。
+
+P4-S2 已满足触发条件，P4-S3 因此被建议但仍未授权。若授权，矩阵、接口和指标均保持不变，仅完整追加两组 seed；
+若不授权，本任务停在单 seed 方向诊断，不进入论文中的稳定窗口下限结论。
 
 ## 7. 当前实现回执
 
@@ -174,7 +219,7 @@ physical batch `128×1`、bf16、TF32=false、cuDNN benchmark=false、early stop
 - center-30 metric 保持 30 s 自身的 2 bpm FFT spacing、5-point envelope 与 IBI coverage 口径；
 - 两份新 cache manifest SHA-256 为
   `d64e696a686ebe3f11ec279c276aa1666a74b81d889ecd3c5fca8075bbdb79ed / f5e525719906ebd4bdf4836f8ad4b7e9b722ebb2e195d48c28d40a643fbe199f`；
-- 新增 15 项 center-30 定向测试，并与 47 项既有 paper-evidence 回归合计 62 项通过；
-- 当前开放 P4-S2 八项单 seed formal，由用户手动执行；P4-S3、benchmark 和 test 均未开放。
+- center-30 训练前实现测试与冻结汇总测试共 19 项，并与 47 项既有 paper-evidence 回归合计 66 项通过；
+- P4-S2 八项单 seed formal 与只读冻结汇总均已完成；P4-S3、benchmark 和 test 均未开放。
 
-下一推进点是用户从新的统一干净 commit 按双 GPU 顺序队列执行八项 P4-S2 formal runs。
+下一推进点是由用户决定是否承担 P4-S3 的 16 项追加训练成本；在明确授权前不创建追加 formal 配置或启动运行。
