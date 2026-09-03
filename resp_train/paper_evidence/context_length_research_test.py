@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+import os
 import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -331,6 +332,7 @@ def evaluate_research_test(
         runtime_identity = {
             **runtime,
             "logical_device": str(resolved_device),
+            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
             "cuda_visible_device_count": int(torch.cuda.device_count()),
             "cuda_device_name": str(torch.cuda.get_device_name(resolved_device)),
         }

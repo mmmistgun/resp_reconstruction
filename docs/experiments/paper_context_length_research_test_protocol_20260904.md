@@ -124,7 +124,7 @@ scripts/eval_paper_context_length_research_test_v1.py
 每次调用必须显式给出 `task / model / input-sec / seed / --confirm-research-test`。入口只接受第 2 节的 42 项 identity，
 从两份冻结 validation summary 的 inputs 链到每项 lifecycle、artifact manifest、resolved config、selected epoch 与
 checkpoint SHA-256；最终 checkpoint 文件在 inference 前再次核验 size/hash。进程内 device 固定为逻辑 `cuda:0`，物理卡
-只通过 `CUDA_VISIBLE_DEVICES` 选择。
+只通过 `CUDA_VISIBLE_DEVICES` 选择，并将该环境变量、逻辑设备、可见设备数和 GPU 型号写入 runtime identity。
 
 每项输出到独立且不可覆盖的：
 
