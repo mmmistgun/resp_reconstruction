@@ -4,7 +4,7 @@
 
 协议 ID：`paper-center30-context-v1-20260902`
 
-状态：**P4-S0–S3 均已完成并冻结；8 arms × 3 seeds 共 24/24 validation runs 闭合。45 s 是两种表征下相对 30 s 唯一均达到 3/3 seed 材料性 RR 改善的最短输入，继续延长到 60/90 s 没有稳定追加 RR 收益。本独立辅助任务在 validation 阶段关闭；独立测试集访问未开放。**
+状态：**P4-S0–S3 均已完成并冻结；8 arms × 3 seeds 共 24/24 validation runs 闭合。45 s 是两种表征下相对 30 s 唯一均达到 3/3 seed 材料性 RR 改善的最短输入，继续延长到 60/90 s 没有稳定追加 RR 收益。Validation 阶段已关闭；用户于 2026-09-04 另行授权完整 24-checkpoint 独立测试集附件，当前等待手动构建 test input-only W cache。**
 
 ## 1. 科学问题与位置
 
@@ -293,7 +293,8 @@ RR 的 paired-seed 方向是本任务的主要窗口判据：
 形成统一排序，所以 45 s 的判断限定为 RR 优先的上下文下限，而不是五项指标的全局最优长度。
 
 该结论只属于 center-30 独立辅助任务，不回写论文主模型或既有 center-60/180→180 结论。P4-S 在 validation 阶段关闭，
-不追加训练、不做独立测试集评价。
+不追加训练。用户随后授权的完整独立测试集确认性评价由
+`docs/experiments/paper_center30_context_research_test_protocol_20260904.md` 单独约束；test 不参与重选。
 
 ## 7. 当前实现回执
 
@@ -303,7 +304,9 @@ RR 的 paired-seed 方向是本任务的主要窗口判据：
 - center-30 metric 保持 30 s 自身的 2 bpm FFT spacing、5-point envelope 与 IBI coverage 口径；
 - 两份新 cache manifest SHA-256 为
   `d64e696a686ebe3f11ec279c276aa1666a74b81d889ecd3c5fca8075bbdb79ed / f5e525719906ebd4bdf4836f8ad4b7e9b722ebb2e195d48c28d40a643fbe199f`；
-- center-30 训练前实现、配置与冻结汇总测试共 27 项，并与 47 项既有 paper-evidence 回归合计 74 项通过；
-- P4-S2/P4-S3 共 24/24 formal 与只读三 seed 汇总均已完成；本任务在 validation 阶段关闭，benchmark 和 test 均未开放。
+- center-30 validation 实现、配置与冻结汇总测试共 27 项，并与 47 项既有 paper-evidence 回归合计 74 项通过；
+- P4-S2/P4-S3 共 24/24 formal 与只读三 seed 汇总均已完成；validation 阶段关闭；
+- 独立测试集附件已授权，P4-ST1 cache builder 通过 5 项不访问 test 的定向 CPU 测试，等待用户手动构建完整 cache。
 
-本任务无待执行训练；后续只在论文证据整理中引用冻结的相对变化与三 seed 统计。
+本任务无待执行训练；下一推进点是 P4-ST1 完整 test input-only W cache。Cache manifest 冻结后才实现 24-checkpoint
+评价入口。
