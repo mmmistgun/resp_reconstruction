@@ -4,7 +4,7 @@
 
 协议 ID：`paper-center30-context-v1-20260902`
 
-状态：**P4-S0/S1/S2 均已完成并冻结；八项单 seed validation 方向诊断显示 30 s 输入的 RR 在两种表征下均劣于更长输入，但 45/60 s 的最优位置随表征变化。P4-S3 的 16 项追加运行尚未授权；独立测试集访问未开放。**
+状态：**P4-S0/S1/S2 均已完成并冻结；八项单 seed validation 方向诊断显示 30 s 输入的 RR 在两种表征下均劣于更长输入，但 45/60 s 的最优位置随表征变化。用户已授权 P4-S3 的 16 项追加运行，配置已冻结并等待用户手动执行；独立测试集访问未开放。**
 
 ## 1. 科学问题与位置
 
@@ -208,8 +208,44 @@ C201 `+2.2107%`、W-reduced `−0.3597%`；60→90 为 C201 `−0.9636%`、W-red
 单 seed 八臂全部完成后先冻结方向汇总。若继续稳定性证据，追加 seeds `20260812/20260813` 的 16 runs，最终 24/24；
 不得只扩展数值较好的长度或模型。P4-S3 成本需要用户另行确认。
 
-P4-S2 已满足触发条件，P4-S3 因此被建议但仍未授权。若授权，矩阵、接口和指标均保持不变，仅完整追加两组 seed；
-若不授权，本任务停在单 seed 方向诊断，不进入论文中的稳定窗口下限结论。
+用户已于 2026-09-03 确认追加成本。P4-S3 不改变数据、cache、模型、loss、指标、selector、四个长度、训练超参数
+或运行成本口径，只增加两个完整 seed。固定 16 项配置为：
+
+```text
+configs/paper_evidence_v1/p4s3_c30v1_c201_30_seed20260812.yaml
+configs/paper_evidence_v1/p4s3_c30v1_c201_45_seed20260812.yaml
+configs/paper_evidence_v1/p4s3_c30v1_c201_60_seed20260812.yaml
+configs/paper_evidence_v1/p4s3_c30v1_c201_90_seed20260812.yaml
+configs/paper_evidence_v1/p4s3_c30v1_wr_30_seed20260812.yaml
+configs/paper_evidence_v1/p4s3_c30v1_wr_45_seed20260812.yaml
+configs/paper_evidence_v1/p4s3_c30v1_wr_60_seed20260812.yaml
+configs/paper_evidence_v1/p4s3_c30v1_wr_90_seed20260812.yaml
+configs/paper_evidence_v1/p4s3_c30v1_c201_30_seed20260813.yaml
+configs/paper_evidence_v1/p4s3_c30v1_c201_45_seed20260813.yaml
+configs/paper_evidence_v1/p4s3_c30v1_c201_60_seed20260813.yaml
+configs/paper_evidence_v1/p4s3_c30v1_c201_90_seed20260813.yaml
+configs/paper_evidence_v1/p4s3_c30v1_wr_30_seed20260813.yaml
+configs/paper_evidence_v1/p4s3_c30v1_wr_45_seed20260813.yaml
+configs/paper_evidence_v1/p4s3_c30v1_wr_60_seed20260813.yaml
+configs/paper_evidence_v1/p4s3_c30v1_wr_90_seed20260813.yaml
+```
+
+同一训练入口继续使用 `scripts/train_paper_center30_context_v1.py`。P4-S3 gate 固定为
+`stage=p4s_additional_seeds / execution_gate=p4s_three_seed_formal`，只接受 seeds `20260812/20260813`、逻辑
+`cuda:0`、80 epochs、physical batch `128×1` 与完整 train/validation；输出根固定为
+`runs/paper_evidence_v1/center30_context/p4s_additional_seeds/`。它拒绝 seed `20260811`、其他 seed、其他输出根、
+runtime 数值开关或 test access 漂移。
+
+两张同型号 GPU 各执行八项顺序队列；两个队列合计覆盖每个新增 `(model,length,seed)` identity 恰好一次，并使每张卡
+跨两个 seed 合计各包含完整八臂模型×长度集合：
+
+- 物理 GPU 0：seed 20260812 的 `C201-30 → C201-60 → W-reduced-45 → W-reduced-90`，随后 seed 20260813 的
+  `C201-45 → C201-90 → W-reduced-30 → W-reduced-60`；
+- 物理 GPU 1：seed 20260812 的 `C201-45 → C201-90 → W-reduced-30 → W-reduced-60`，随后 seed 20260813 的
+  `C201-30 → C201-60 → W-reduced-45 → W-reduced-90`。
+
+各进程配置内保持逻辑 `cuda:0`，只由 `CUDA_VISIBLE_DEVICES=0/1` 选择物理卡。同一队列使用 shell `&&` 串行，
+任一 run 失败即停止该队列并保留失败 identity；训练仍由用户从统一干净 commit 手动执行。
 
 ## 7. 当前实现回执
 
@@ -219,7 +255,7 @@ P4-S2 已满足触发条件，P4-S3 因此被建议但仍未授权。若授权�
 - center-30 metric 保持 30 s 自身的 2 bpm FFT spacing、5-point envelope 与 IBI coverage 口径；
 - 两份新 cache manifest SHA-256 为
   `d64e696a686ebe3f11ec279c276aa1666a74b81d889ecd3c5fca8075bbdb79ed / f5e525719906ebd4bdf4836f8ad4b7e9b722ebb2e195d48c28d40a643fbe199f`；
-- center-30 训练前实现测试与冻结汇总测试共 19 项，并与 47 项既有 paper-evidence 回归合计 66 项通过；
-- P4-S2 八项单 seed formal 与只读冻结汇总均已完成；P4-S3、benchmark 和 test 均未开放。
+- center-30 训练前实现、冻结汇总与 P4-S3 配置测试共 23 项，并与 47 项既有 paper-evidence 回归合计 70 项通过；
+- P4-S2 八项单 seed formal 与只读冻结汇总均已完成；P4-S3 已授权并冻结配置，benchmark 和 test 均未开放。
 
-下一推进点是由用户决定是否承担 P4-S3 的 16 项追加训练成本；在明确授权前不创建追加 formal 配置或启动运行。
+下一推进点是用户从 P4-S3 配置提交后的统一干净 commit，在两张 GPU 上手动执行 16 项追加训练。

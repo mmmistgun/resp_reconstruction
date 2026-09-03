@@ -1,0 +1,11 @@
+_base_: center30_context_v1.yaml
+protocol: {stage: p4s_additional_seeds, run_role: formal, execution_gate: p4s_three_seed_formal}
+data:
+  center_w_cache_path: /mnt/disk_code/marques/resp_reconstruction/runs/paper_evidence_v1/center_context_w_cache/60s_215c24b05b2e438f311edf13d20903d617131378a952b893234582c670848c6f
+  center_w_cache_manifest_sha256: e9d270c930d6862f9b5a9cbdb3c26765fe3b57d2573946640cba99e597389793
+  max_train_windows: null
+  max_val_windows: null
+window: {input_samples: 6000, input_sec: 60}
+model: {variant: w_reduced_center30}
+training: {epochs: 80, batch_size: 128, seed: 20260812, device: cuda:0}
+outputs: {run_root: runs/paper_evidence_v1/center30_context/p4s_additional_seeds}

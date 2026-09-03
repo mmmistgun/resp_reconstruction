@@ -14,6 +14,7 @@ CENTER30_OUTPUT_SAMPLES = 3000
 CENTER30_FORMAL_SEEDS = (20260811, 20260812, 20260813)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 CENTER30_P4S_OUTPUT_ROOT = "runs/paper_evidence_v1/center30_context/p4s_single_seed"
+CENTER30_P4S3_OUTPUT_ROOT = "runs/paper_evidence_v1/center30_context/p4s_additional_seeds"
 CENTER30_W_CACHE_PATHS = {
     3000: str(
         _REPO_ROOT
@@ -186,12 +187,22 @@ def validate_center30_config(cfg: DictConfig) -> None:
         if maxima != (2, 2):
             raise ValueError("center30 implementation 只允许 2/2 synthetic contract")
     elif role == "formal":
-        if stage != "p4s_single_seed" or gate != "p4s_formal" or not device.startswith("cuda:"):
-            raise ValueError("center30 formal 固定 p4s_single_seed / p4s_formal / cuda:<index>")
-        if int(cfg.training.seed) != CENTER30_FORMAL_SEEDS[0]:
-            raise ValueError("center30 P4-S2 只开放 seed=20260811")
-        if maxima != (None, None) or str(cfg.outputs.run_root) != CENTER30_P4S_OUTPUT_ROOT:
-            raise ValueError(f"center30 formal 必须完整 train/validation 且输出到 {CENTER30_P4S_OUTPUT_ROOT}")
+        if stage == "p4s_single_seed":
+            expected_gate = "p4s_formal"
+            allowed_seeds = CENTER30_FORMAL_SEEDS[:1]
+            expected_output_root = CENTER30_P4S_OUTPUT_ROOT
+        elif stage == "p4s_additional_seeds":
+            expected_gate = "p4s_three_seed_formal"
+            allowed_seeds = CENTER30_FORMAL_SEEDS[1:]
+            expected_output_root = CENTER30_P4S3_OUTPUT_ROOT
+        else:
+            raise ValueError("center30 formal stage 只允许 p4s_single_seed 或 p4s_additional_seeds")
+        if gate != expected_gate or not device.startswith("cuda:"):
+            raise ValueError(f"center30 formal 固定 {stage} 使用 {expected_gate} / cuda:<index>")
+        if int(cfg.training.seed) not in allowed_seeds:
+            raise ValueError(f"center30 {stage} 只开放 seeds={list(allowed_seeds)}")
+        if maxima != (None, None) or str(cfg.outputs.run_root) != expected_output_root:
+            raise ValueError(f"center30 formal 必须完整 train/validation 且输出到 {expected_output_root}")
         if (int(cfg.training.epochs), int(cfg.training.batch_size), int(cfg.training.gradient_accumulation_steps)) != (
             80,
             128,
@@ -218,6 +229,7 @@ __all__ = [
     "CENTER30_OUTPUT_SAMPLES",
     "CENTER30_PROTOCOL_ID",
     "CENTER30_P4S_OUTPUT_ROOT",
+    "CENTER30_P4S3_OUTPUT_ROOT",
     "CENTER30_W_CACHE_MANIFEST_SHA256",
     "CENTER30_W_CACHE_PATHS",
     "load_center30_config",
