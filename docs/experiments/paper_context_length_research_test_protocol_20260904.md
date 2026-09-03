@@ -4,7 +4,7 @@
 
 协议 ID：`paper-context-length-research-test-v1-20260904`
 
-状态：**用户已授权 center-30 与 center-60 两种输出任务共 42 个 validation-selected checkpoints 的完整独立测试集评价。P4-T1 联合五长度 input-only W cache 已完成并冻结；当前开放 P4-T2 evaluator 实现与定向 CPU 测试，尚未执行模型 inference 或读取 test target。**
+状态：**用户已授权 center-30 与 center-60 两种输出任务共 42 个 validation-selected checkpoints 的完整独立测试集评价。P4-T1 联合五长度 input-only W cache 已完成并冻结；P4-T2 evaluator、42-checkpoint allowlist 与定向 CPU 测试已实现，等待用户从统一干净 commit 手动执行。尚未执行模型 inference 或读取 test target。**
 
 ## 1. 科学问题与证据边界
 
@@ -114,6 +114,31 @@ Cache 已冻结；下一步实现一个受控 evaluator：
 
 预计成本为 42×2310 次模型推理。具体双 GPU 队列只在 cache path/hash、checkpoint allowlist、输出 schema 与 evaluator
 定向测试全部冻结后给出。
+
+P4-T2 固定入口为：
+
+```text
+scripts/eval_paper_context_length_research_test_v1.py
+```
+
+每次调用必须显式给出 `task / model / input-sec / seed / --confirm-research-test`。入口只接受第 2 节的 42 项 identity，
+从两份冻结 validation summary 的 inputs 链到每项 lifecycle、artifact manifest、resolved config、selected epoch 与
+checkpoint SHA-256；最终 checkpoint 文件在 inference 前再次核验 size/hash。进程内 device 固定为逻辑 `cuda:0`，物理卡
+只通过 `CUDA_VISIBLE_DEVICES` 选择。
+
+每项输出到独立且不可覆盖的：
+
+```text
+runs/paper_evidence_v1/context_length_research_test/<task>/<experiment_id>/seed_<seed>/
+```
+
+输出包含 resolved evaluation config、checkpoint/data/runtime identity、2310-row metrics、metrics summary、evaluation
+receipt、artifact manifest 与 lifecycle。C201 不打开 W feature；W-reduced reader 固定 cache path 与 manifest SHA-256。
+任何失败保留 lifecycle 并使相应 shell `&&` 队列停止。
+
+P4-T2 新增 5 项定向 CPU 测试，覆盖 42 项 allowlist 完整性、两种 target crop、W row-ID 注入、checkpoint payload
+selected-epoch identity 与 CLI confirmation gate；测试只读 validation provenance/checkpoint 文件身份，不读取 checkpoint
+内容、test signal/target，不执行模型 inference。
 
 ## 6. P4-T3：分任务冻结汇总
 

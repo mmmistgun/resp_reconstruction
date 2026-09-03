@@ -4,7 +4,7 @@
 
 协议 ID：`paper-center30-context-v1-20260902`
 
-状态：**P4-S0–S3 均已完成并冻结；8 arms × 3 seeds 共 24/24 validation runs 闭合。45 s 是两种表征下相对 30 s 唯一均达到 3/3 seed 材料性 RR 改善的最短输入，继续延长到 60/90 s 没有稳定追加 RR 收益。Validation 阶段保持关闭；center-30/center-60 联合 test input-only W cache 已冻结，42-checkpoint evaluator 待实现。**
+状态：**P4-S0–S3 均已完成并冻结；8 arms × 3 seeds 共 24/24 validation runs 闭合。45 s 是两种表征下相对 30 s 唯一均达到 3/3 seed 材料性 RR 改善的最短输入，继续延长到 60/90 s 没有稳定追加 RR 收益。Validation 阶段保持关闭；center-30/center-60 联合 test cache 与 42-checkpoint evaluator 已冻结，等待用户手动执行。**
 
 ## 1. 科学问题与位置
 
@@ -309,4 +309,4 @@ RR 的 paired-seed 方向是本任务的主要窗口判据：
 - 联合独立测试集附件的 P4-T1 cache 已完成并冻结，manifest SHA-256=
   `9b475926258d129851fb7b9c10d2b342ac2e833b121842b18437585059bf1b98`。
 
-本任务无待执行训练；下一推进点是实现并冻结 42-checkpoint 评价入口与 checkpoint allowlist。
+本任务无待执行训练；下一推进点是用户从 evaluator 实现后的统一干净 commit 手动执行完整 42 项 test inference。
