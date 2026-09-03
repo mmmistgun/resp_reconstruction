@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import numpy as np
 import pandas as pd
+from omegaconf import OmegaConf
 
 from resp_train.paper_evidence.center30_config import (
     CENTER30_P4S_OUTPUT_ROOT,
@@ -135,7 +136,16 @@ def audit_p4s_runs(run_root: str | Path) -> tuple[pd.DataFrame, list[dict[str, A
     reference_identity: pd.DataFrame | None = None
     for spec in ARM_SPECS:
         run_dir = root / spec.experiment_id / f"seed_{P4S_SEED}"
-        row, input_record, identity = _audit_arm(run_dir, spec)
+        row, input_record, identity = audit_formal_arm(
+            run_dir,
+            spec,
+            seed=P4S_SEED,
+            expected_commit=P4S_RUN_COMMIT,
+            config_filename=spec.config_filename,
+            expected_stage="p4s_single_seed",
+            expected_gate="p4s_formal",
+            expected_output_root=CENTER30_P4S_OUTPUT_ROOT,
+        )
         if reference_identity is None:
             reference_identity = identity
         elif not identity.equals(reference_identity):
@@ -348,7 +358,17 @@ def run_p4s_summary(
     return output / "summary_receipt.json"
 
 
-def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
+def audit_formal_arm(
+    run_dir: Path,
+    spec: ArmSpec,
+    *,
+    seed: int,
+    expected_commit: str,
+    config_filename: str,
+    expected_stage: str,
+    expected_gate: str,
+    expected_output_root: str,
+) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame]:
     if not run_dir.is_dir():
         raise FileNotFoundError(f"P4-S2 run 缺失: {run_dir}")
     lifecycle_path = run_dir / "lifecycle.json"
@@ -361,7 +381,7 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
         "protocol_id": CENTER30_PROTOCOL_ID,
         "task": "paper_center30_context_v1",
         "experiment_id": spec.experiment_id,
-        "seed": P4S_SEED,
+        "seed": seed,
         "parameter_count": spec.parameter_count,
         "selector": "full_validation_center30_rr_mae_bpm_strict_lower_tie_earlier",
         "train_access": True,
@@ -376,11 +396,11 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
         "early_stopping": False,
         "resume": False,
         "runtime": EXPECTED_RUNTIME,
-        "git": {"commit": P4S_RUN_COMMIT, "dirty": False, "error": None},
+        "git": {"commit": expected_commit, "dirty": False, "error": None},
         "command": [
             "scripts/train_paper_center30_context_v1.py",
             "--config",
-            f"configs/paper_evidence_v1/{spec.config_filename}",
+            f"configs/paper_evidence_v1/{config_filename}",
             "--confirm-formal-training",
         ],
     }
@@ -401,6 +421,16 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
         raise RuntimeError(f"{spec.experiment_id} resolved config identity 漂移")
     if str(cfg.model.variant) != spec.variant or int(cfg.window.input_sec) != spec.input_sec:
         raise RuntimeError(f"{spec.experiment_id} model/length 漂移")
+    for key, expected_value in {
+        "protocol.stage": expected_stage,
+        "protocol.execution_gate": expected_gate,
+        "training.seed": seed,
+        "model.initialization_seed": seed,
+        "outputs.run_root": expected_output_root,
+    }.items():
+        actual = OmegaConf.select(cfg, key)
+        if actual != expected_value:
+            raise RuntimeError(f"{spec.experiment_id}/seed_{seed} resolved config {key} 漂移")
     if _load_json(run_dir / "runtime_identity.json") != EXPECTED_RUNTIME:
         raise RuntimeError(f"{spec.experiment_id} runtime identity 漂移")
     data = _load_json(run_dir / "data_identity.json")
@@ -451,7 +481,7 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
         "model_id": spec.model_id,
         "variant": spec.variant,
         "input_sec": spec.input_sec,
-        "seed": P4S_SEED,
+        "seed": seed,
         "parameter_count": spec.parameter_count,
         "w_scale_count": spec.w_scale_count,
         "best_epoch": int(manifest["best_epoch"]),
@@ -459,7 +489,7 @@ def _audit_arm(run_dir: Path, spec: ArmSpec) -> tuple[dict[str, Any], dict[str, 
     }
     input_record = {
         "experiment_id": spec.experiment_id,
-        "seed": P4S_SEED,
+        "seed": seed,
         "run_dir": str(run_dir),
         "lifecycle_status": "complete",
         "lifecycle_sha256": sha256_file(lifecycle_path),
@@ -575,6 +605,7 @@ __all__ = [
     "CONTRASTS",
     "P4S_RUN_COMMIT",
     "P4S_SUMMARY_SCHEMA_VERSION",
+    "audit_formal_arm",
     "audit_p4s_runs",
     "build_companion_changes",
     "build_decision",
