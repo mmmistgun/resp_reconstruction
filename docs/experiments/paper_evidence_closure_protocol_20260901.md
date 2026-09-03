@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0–P4 与三份完整 W cache 均已完成并冻结；三 seed center-60 结果归类为非单调、跨 seed 不一致的描述性上下文敏感性证据。独立 P4-S center-30 短窗口分支 24/24 validation runs 与三 seed 汇总已冻结：45 s 是相对 30 s 在两种表征、3/3 seeds 均有材料性 RR 改善的最短输入，继续延长没有稳定 RR 收益。用户已另行授权该分支完整 24-checkpoint 独立测试集附件；当前只开放 test input-only W cache 构建。其他独立测试集访问与效率 benchmark 均未授权。**
+状态：**P0–P4 与三份完整 W cache 均已完成并冻结；三 seed center-60 结果归类为非单调、跨 seed 不一致的描述性上下文敏感性证据。独立 P4-S center-30 短窗口分支 24/24 validation runs 与三 seed 汇总已冻结：45 s 是相对 30 s 在两种表征、3/3 seeds 均有材料性 RR 改善的最短输入，继续延长没有稳定 RR 收益；该辅助任务已关闭。独立测试集访问与效率 benchmark 均未授权。**
 
 ## 1. 定位与边界
 
@@ -36,7 +36,7 @@
 | P2 | 中心任务 synthetic GPU 工程验收 | 否 | 已完成并冻结；统一 `128×1` |
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 已完成并冻结；触发候选模型×上下文交互 |
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 18/18 完成并冻结；描述性结果留档 |
-| P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，最终 24 runs | validation 24/24 已冻结；完整 test 附件进入 cache 阶段 |
+| P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，最终 24 runs | 24/24 与三 seed汇总已冻结；validation 阶段关闭 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -686,10 +686,5 @@ P4-S 作为新的独立短窗口分支按
 RR paired-seed 显示 30→45 在 C201/W-reduced 均为 3/3 材料改善，平均改善 `2.4783% / 2.9589%`；45→60
 与 60→90 没有跨模型、seed 的稳定追加收益。故冻结为：center-30 输出下 45 s 是 RR 优先的合理输入下限，不能写成
 五指标全局最优；该分支在 validation 阶段关闭，不回写论文主模型选择。
-
-用户于 2026-09-04 明确授权 center-30 完整 8 arms × 3 seeds 独立测试集评价。附件协议为
-`docs/experiments/paper_center30_context_research_test_protocol_20260904.md`。Test 只能检验冻结 validation 结论能否外推，
-不得重选模型、长度、seed、checkpoint 或指标。当前 P4-ST1 只构建 2310-row、四长度联合、input-only W cache；完成并
-冻结 cache manifest SHA-256 后，才实现和开放完整 24-checkpoint GPU inference。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
