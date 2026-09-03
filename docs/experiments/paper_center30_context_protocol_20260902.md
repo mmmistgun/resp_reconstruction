@@ -4,7 +4,7 @@
 
 协议 ID：`paper-center30-context-v1-20260902`
 
-状态：**P4-S0–S3 均已完成并冻结；8 arms × 3 seeds 共 24/24 validation runs 闭合。45 s 是两种表征下相对 30 s 唯一均达到 3/3 seed 材料性 RR 改善的最短输入，继续延长到 60/90 s 没有稳定追加 RR 收益。Validation 阶段保持关闭；center-30/center-60 联合 test cache 与 42-checkpoint evaluator 已冻结，等待用户手动执行。**
+状态：**P4-S0–S3 validation 与后续完整独立测试集评价均已完成并冻结。Validation 中 30→45 的 RR 改善为两种表征各 3/3 seeds，但 test 中降为各 2/3，故 45 s 的 validation 合理下限没有获得独立 test 确认。Test 只稳定支持 30→90 的 RR 收益（两种表征各 3/3）；center-30 最短合理边界仍未定位。本辅助任务关闭，不回写主实验或据 test 重选。**
 
 ## 1. 科学问题与位置
 
@@ -309,4 +309,22 @@ RR 的 paired-seed 方向是本任务的主要窗口判据：
 - 联合独立测试集附件的 P4-T1 cache 已完成并冻结，manifest SHA-256=
   `9b475926258d129851fb7b9c10d2b342ac2e833b121842b18437585059bf1b98`。
 
-本任务无待执行训练；下一推进点是用户从 evaluator 实现后的统一干净 commit 手动执行完整 42 项 test inference。
+## 8. 独立测试集确认结果
+
+Center-30 的 24/24 validation-selected checkpoints 已作为联合 42-checkpoint 附件的一部分完成 test inference 与只读
+冻结汇总。评价 commit=`52d723891e34ad5051f18bdf93f2b0fbe4eb9d7f`；联合 summary receipt/manifest SHA-256=
+`84ac2153f7e30ece4838dfb37645ca5b261a788fbbb6a09f8524b6119100f937 / d69d47a80e514a9556000296938dff642d2642656c61ecff82d57c1a1baeeb66`。
+
+Test RR paired-seed 有向相对变化为：
+
+| 模型 | 30→45 | 30→60 | 30→90 | 45→60 | 60→90 |
+|---|---:|---:|---:|---:|---:|
+| C201-center30 | +3.0408% (2/3 材料改善) | −2.8201% (0/3) | +7.7433% (3/3) | −6.7407% (1/3) | +10.2245% (3/3) |
+| W-reduced-center30 | +2.7733% (2/3 材料改善) | +3.6817% (2/3) | +6.2179% (3/3) | +0.9411% (1/3) | +2.5473% (2/3) |
+
+因此 test 没有复现 validation 中“两种表征的 30→45 均 3/3 材料改善”，不能把 45 s 升格为跨 split 稳定下限；
+30→60 又存在明显表征分歧。两种表征的 30→90 均为 3/3 材料改善，说明 30 s 相对更长上下文不足，但当前矩阵不能
+定位最短合理边界。90 s 的 test 三-seed RR 均值在两种模型中最低只作描述，不用于事后选择。完整五指标、IBI coverage
+与 interpretable fraction 见 `docs/experiments/paper_context_length_research_test_protocol_20260904.md`。
+
+本任务无待执行训练或 test；validation 与独立测试集附件均关闭。

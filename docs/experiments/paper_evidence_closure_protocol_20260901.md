@@ -4,7 +4,7 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0–P4 与三份完整 W cache 均已完成并冻结；三 seed center-60 结果归类为非单调、跨 seed 不一致的描述性上下文敏感性证据。独立 P4-S center-30 短窗口分支 24/24 validation runs 与三 seed 汇总已冻结。用户已授权 center-30/center-60 两种输出任务共 42-checkpoint 的完整独立测试集附件；联合 cache、allowlist 与 evaluator 已冻结，等待手动执行。效率 benchmark 未授权。**
+状态：**P0–P4、P4-S 与 P4-T 均已完成并冻结。Center-60 的 42-checkpoint 附件分支在独立 test 上支持“延长输入没有稳定 RR 收益”，60 s 是该任务当前 RR 优先的合理选择；center-30 的 validation 45 s 下限未获 test 确认，最短合理边界仍未定位。两种输出任务保持独立 panel，不回写论文主模型实验。效率 benchmark 未授权。**
 
 ## 1. 定位与边界
 
@@ -37,7 +37,7 @@
 | P3 | C201/W-reduced × 60/90/180 s 单 seed 诊断矩阵 | 是，6 runs | 已完成并冻结；触发候选模型×上下文交互 |
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 18/18 完成并冻结；描述性结果留档 |
 | P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，最终 24 runs | 24/24 与三 seed汇总已冻结；validation 阶段关闭 |
-| P4-T | center-30/center-60 上下文任务完整独立测试集附件 | 否；42 checkpoints inference | cache/evaluator 已冻结；等待用户执行 42 项 |
+| P4-T | center-30/center-60 上下文任务完整独立测试集附件 | 否；42 checkpoints inference | 42/42 与分任务冻结汇总均完成；附件关闭 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -673,10 +673,10 @@ Manifest 的 `decision` 字段只允许记录 `measurement_complete/incomplete` 
     不重跑 P3 seed。
 11. P4 新增 12/12 与总计 18/18 runs 已闭合；冻结汇总 receipt/manifest SHA-256 为
     `7a8e5a3118e5059fc46ff287f4553952f2fea44653501c7ddedfd09145da9cb9 / c0806893d1b4350da46fb9bc02d2056a8b6c8e29d368205709be00aae9bacb2a`。
-    结果作为非单调、跨 seed 不一致的描述性上下文敏感性证据留档。当前 47 项 paper-evidence CPU 定向测试通过。
+    结果作为非单调、跨 seed 不一致的描述性上下文敏感性证据留档；该阶段当时 47 项 paper-evidence CPU 定向测试通过。
 
 center-60 窗口辅助任务的 validation 阶段已完成并关闭；不追加训练，也不回写论文主模型选择。后续独立测试集确认仅由
-P4-T 附件开放，并保持与 validation 选择隔离。
+P4-T 附件开放，并保持与 validation 选择隔离；该附件现亦已完成并关闭。
 
 P4-S 作为新的独立短窗口分支按
 `docs/experiments/paper_center30_context_protocol_20260902.md` 推进；它不重开 center-60 P4。30/45 s input-only W cache、
@@ -693,8 +693,16 @@ RR paired-seed 显示 30→45 在 C201/W-reduced 均为 3/3 材料改善，平�
 `docs/experiments/paper_context_length_research_test_protocol_20260904.md` 推进。矩阵固定为 center-30 24 个与
 center-60 18 个 validation-selected checkpoints，共 42 项；不得按 validation 或 test 数值缩减。P4-T1 先构建
 30/45/60/90/180 s 五长度联合、2310-row、input-only W cache，只读取 test BCG，不读取 target；冻结 cache manifest
-SHA-256=`9b475926258d129851fb7b9c10d2b342ac2e833b121842b18437585059bf1b98`。受控 evaluator 从冻结 summary、
-per-run manifest 与 checkpoint identity 构造恰好 42 项 allowlist，当前等待用户从统一干净 commit 手动执行；两种输出
-任务独立汇总，不直接比较绝对指标。
+SHA-256=`9b475926258d129851fb7b9c10d2b342ac2e833b121842b18437585059bf1b98`。P4-T2 从干净 commit
+`52d723891e34ad5051f18bdf93f2b0fbe4eb9d7f` 完成 42/42 项，共 97,020 条 test metric rows；全部 lifecycle、
+artifact hash、checkpoint/data/runtime/access identity 通过只读复核。
+
+P4-T3 从干净 commit `241d9ba96373dfd8fa3ff1d71782f7a8f9d7e926` 完成分任务冻结汇总，receipt/manifest
+SHA-256=`84ac2153f7e30ece4838dfb37645ca5b261a788fbbb6a09f8524b6119100f937 / d69d47a80e514a9556000296938dff642d2642656c61ecff82d57c1a1baeeb66`。
+Center-60 中 60→180 RR 平均变化为 C201 `−11.4546%`、W-reduced `−11.7991%`，90→180 在两模型中均
+3/3 seeds 方向恶化，支持“更长输入没有稳定 RR 收益”；在该任务、当前模型与 RR 优先口径内，60 s 是合理选择。
+Center-30 的 30→45 RR 在 test 中两模型均仅 2/3 seeds 材料改善，未确认 validation 的 45 s 稳定下限；30→90
+则两模型均为 3/3 材料改善，说明 30 s 不足但最短边界未定位。两种输出任务始终独立汇总，不比较绝对指标、不重选长度。
+新增 summary 测试后 89 项 `tests/test_paper*.py` 定向 CPU 回归全部通过。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
