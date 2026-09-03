@@ -24,7 +24,6 @@ from resp_train.paper_evidence.center90_cache import (
     open_center90_w_cache,
 )
 from resp_train.paper_evidence.center90_config import (
-    CENTER90_FORMAL_OUTPUT_ROOT,
     CENTER90_FORMAL_SEEDS,
     CENTER90_W_CACHE_MANIFEST_SHA256,
     CENTER90_W_CACHE_PATHS,
@@ -97,34 +96,6 @@ def _predictions(pred: np.ndarray, target: np.ndarray) -> dict[str, np.ndarray]:
     }
 
 
-def _formal_overrides(*, input_sec: int, seed: int, variant: str) -> list[str]:
-    values = [
-        "protocol.stage=formal",
-        "protocol.run_role=formal",
-        "protocol.execution_gate=formal_full_matrix",
-        f"window.input_samples={input_sec * 100}",
-        f"window.input_sec={input_sec}",
-        f"model.variant={variant}",
-        f"training.seed={seed}",
-        f"model.initialization_seed={seed}",
-        "training.device=cuda:0",
-        "training.epochs=80",
-        "training.batch_size=128",
-        "data.max_train_windows=null",
-        "data.max_val_windows=null",
-        f"outputs.run_root={CENTER90_FORMAL_OUTPUT_ROOT}",
-    ]
-    if variant == "w_reduced_center90" and input_sec in {90, 180}:
-        values.extend(
-            [
-                f"data.center_w_cache_path={CENTER90_W_CACHE_PATHS[input_sec * 100]}",
-                "data.center_w_cache_manifest_sha256="
-                f"{CENTER90_W_CACHE_MANIFEST_SHA256[input_sec * 100]}",
-            ]
-        )
-    return values
-
-
 def test_center90_config_freezes_task_and_full_three_seed_matrix() -> None:
     cfg = load_center90_config(CONFIG)
     assert cfg.protocol.name == "paper-center90-context-v1-20260904"
@@ -140,13 +111,9 @@ def test_center90_config_freezes_task_and_full_three_seed_matrix() -> None:
         assert center90_experiment_id(variant, input_sec * 100).startswith("C90V1_")
     with pytest.raises(ValueError, match="test windows"):
         load_center90_config(CONFIG, overrides=["data.max_test_windows=1"])
-    with pytest.raises(ValueError, match="回执冻结后开放"):
-        load_center90_config(
-            CONFIG,
-            overrides=_formal_overrides(
-                input_sec=135, seed=CENTER90_FORMAL_SEEDS[0], variant="w_reduced_center90"
-            ),
-        )
+    formal = load_center90_config(CONFIG.parent / "c90v1_wr_135_seed20260811.yaml")
+    assert formal.model.variant == "w_reduced_center90"
+    assert formal.window.input_sec == 135
 
 
 def test_three_inputs_share_exact_center90_target_and_latent_bounds() -> None:

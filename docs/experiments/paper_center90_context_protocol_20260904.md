@@ -5,8 +5,8 @@
 协议 ID：`paper-center90-context-v1-20260904`
 
 状态：**独立辅助实验已立项，固定为 C201-center90 / W-reduced-center90 × 90/135/180 s 输入 × 3 seeds，
-共 18 个完整 validation runs。P0 实现与定向 CPU 测试已完成；当前等待 135 s input-only W cache 和最大臂 GPU
-工程回执，正式训练 gate 保持关闭。**
+共 18 个完整 validation runs。P0 实现、P1 input-only W cache 与 P2 最大臂 GPU 工程验收均已完成并冻结；18 项
+formal 配置、统一 `128×1` 运行合同与双 GPU 队列已开放，等待用户手动训练。**
 
 ## 1. 科学问题与证据位置
 
@@ -61,8 +61,9 @@ Morlet `mu=13.4`、12-voice 完整网格偶数索引、49 个名义 scales、ref
 - 90 s manifest SHA-256=`9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757`；
 - 180 s manifest SHA-256=`72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe`。
 
-135 s 需要新增一份 `[10141/2675,49,270]`、float32、finite 的 input-only cache，输出根为
-`runs/paper_evidence_v1/center90_context_w_cache/`。其 manifest 完成只读验收并冻结 SHA-256 后，才写入 18 项 formal 配置。
+135 s 使用独立 `[10141/2675,49,270]`、float32、finite 的 input-only cache，输出根为
+`runs/paper_evidence_v1/center90_context_w_cache/`；固定 manifest SHA-256=
+`9454fe918aaa6a4844239a5c8479665cc80f31cf6c64cfb30fc06d069cd7c473`。
 
 ## 5. `Pi_90`、loss、指标与 selector
 
@@ -104,15 +105,51 @@ latent、17 点 envelope、参数身份、49-scale shape、train/validation acce
 完成后只读核对 lifecycle、manifest、全部文件 size/SHA-256、row identity、shape/dtype/finite、frequency identity 与 access
 flags，再冻结 cache path/hash。
 
+P1 已由用户从干净 commit `2c151cba2e41056a115dd5f7f0293fa486666c8d` 完成，耗时 `06:57`。固定目录为：
+
+```text
+runs/paper_evidence_v1/center90_context_w_cache/
+  135s_7bbce891b3e158079f1b6d59b6a97fe273aa8293bec5f6c0964a9eb85d913cd3/
+```
+
+`cache_manifest.json` SHA-256=`9454fe918aaa6a4844239a5c8479665cc80f31cf6c64cfb30fc06d069cd7c473`。
+只读验收确认 lifecycle=`complete`、train/validation=`10141/2675`、row-ID SHA-256 与冻结 split 一致且零交集；feature
+shape=`[10141/2675,49,270]`、float32、全量 finite，49 个 frequency centers 在 split 间完全相同。Manifest 登记的
+5 个 `.npy` 文件 size/SHA-256 均匹配，duplicate center=0，max nominal frequency error=`0.035647 Hz`；access
+identity 为 train/validation input-only，未读取 target 或 test。
+
 ### P2：最大臂 GPU 工程验收
 
 工程验收只用 synthetic tensors，对 `W-reduced-center90 / input 180 s / batch 128` 执行一次真实
 forward/loss/backward/AdamW step，确认 output、loss、gradient、optimizer state 与显存状态。它不读取 dataset、cache、
 checkpoint 或任何 split，只决定统一 `128×1` 运行合同是否成立。
 
+固定命令为：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES=<GPU> \
+./.venv/bin/python scripts/accept_paper_center90_context_v1.py \
+  --config configs/paper_evidence_v1/center90_context_v1.yaml \
+  --device cuda:0 \
+  --confirm-gpu-acceptance
+```
+
+P2 已由用户从同一干净 commit 在 NVIDIA GeForce RTX 4070 Ti SUPER 上完成。固定输出为
+`runs/paper_evidence_v1/center90_context/gpu_acceptance/2c151cba2e41/`；receipt/manifest SHA-256=
+`36ab2e4c9c2d3276078728bf657463619b82e02776aa4ff4238101643c891b87 / 721fe0a8d59460809666723daf9ba9dee9cfde1f4aab28934297d83cd1e25935`。
+最大臂 batch-128 输出 shape=`[128,1,9000] / [128,1,900]`，loss、gradient、parameter 与 optimizer state 均
+finite，peak allocated/reserved=`11021.50 / 11628.00 MiB`，占设备总显存约 `69.16% / 72.97%`，
+decision=`batch128_accepted`。Access receipt 确认仅使用 synthetic tensor，统一 formal 合同冻结为 `128×1`。
+
 ### P3：18 项 formal 与冻结汇总
 
-P1/P2 冻结后一次性生成并执行 18 项显式配置。每项使用独立不可覆盖目录：
+P1/P2 冻结后已生成 18 项显式配置，文件集合为：
+
+```text
+configs/paper_evidence_v1/c90v1_<c201|wr>_<90|135|180>_seed<20260811|20260812|20260813>.yaml
+```
+
+每项使用独立不可覆盖目录：
 
 ```text
 runs/paper_evidence_v1/center90_context/formal/C90V1_<C201|WR>_<90|135|180>/seed_<seed>/
@@ -121,6 +158,10 @@ runs/paper_evidence_v1/center90_context/formal/C90V1_<C201|WR>_<90|135|180>/seed
 全部 18/18 完成前不汇总。正式汇总逐 seed 报告，再报告 arithmetic mean ± sample SD (`ddof=1`)；按模型分别计算
 90→135、135→180、90→180 的 paired-seed 有向变化。四个 error 的材料阈值为相对 `0.5%`，PCC 为绝对 `0.002`。
 结果只形成 center-90 validation 上下文尺度证据。
+
+两张 GPU 各运行 9 项顺序队列；每个 seed 的两个模型×三个长度在两卡间互补分配，每张卡对每个 seed 均覆盖
+90/135/180 s 各一项。进程内统一使用逻辑 `cuda:0`，物理卡只由 `CUDA_VISIBLE_DEVICES=0/1` 指定；同一队列用
+shell `&&` 串行，任一失败使该队列停止并保留 lifecycle。
 
 ## 7. 当前访问边界
 
@@ -142,5 +183,6 @@ P0 已实现独立的 config/data/model/`Pi_90`/loss/metrics/cache/experiment/ac
   manifest hash 打开；
 - 最大臂 synthetic CPU 注入完成 forward/loss/backward；cache、训练和 GPU acceptance CLI 均有显式 confirmation gate。
 
-新增 13 项 center90 定向测试通过，与全部 paper-evidence 回归合计 102 项通过。Formal gate 将保持关闭，直到 P1 cache
-manifest 与 P2 acceptance receipt 完成只读验收并写入协议。
+P1/P2 冻结后新增 4 项 formal 定向测试，覆盖 18-config 矩阵、三份 cache hash、GPU acceptance receipt 与 formal/CLI
+gate；center90 共 17 项定向测试通过，与全部 paper-evidence 回归合计 106 项通过。Formal gate 已开放，固定输入为
+上述 18 项配置。

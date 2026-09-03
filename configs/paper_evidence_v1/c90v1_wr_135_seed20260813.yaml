@@ -1,0 +1,29 @@
+_base_: center90_context_v1.yaml
+
+protocol:
+  stage: formal
+  run_role: formal
+  execution_gate: formal_full_matrix
+
+data:
+  max_train_windows: null
+  max_val_windows: null
+  center_w_cache_path: /mnt/disk_code/marques/resp_reconstruction/runs/paper_evidence_v1/center90_context_w_cache/135s_7bbce891b3e158079f1b6d59b6a97fe273aa8293bec5f6c0964a9eb85d913cd3
+  center_w_cache_manifest_sha256: 9454fe918aaa6a4844239a5c8479665cc80f31cf6c64cfb30fc06d069cd7c473
+
+window:
+  input_samples: 13500
+  input_sec: 135
+
+model:
+  variant: w_reduced_center90
+
+training:
+  epochs: 80
+  batch_size: 128
+  gradient_accumulation_steps: 1
+  seed: 20260813
+  device: cuda:0
+
+outputs:
+  run_root: runs/paper_evidence_v1/center90_context/formal

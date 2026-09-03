@@ -13,13 +13,18 @@ CENTER90_INPUT_SAMPLES = (9000, 13500, 18000)
 CENTER90_OUTPUT_SAMPLES = 9000
 CENTER90_FORMAL_SEEDS = (20260811, 20260812, 20260813)
 CENTER90_FORMAL_OUTPUT_ROOT = "runs/paper_evidence_v1/center90_context/formal"
-CENTER90_FORMAL_ENABLED = False
+CENTER90_FORMAL_ENABLED = True
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 CENTER90_W_CACHE_PATHS = {
     9000: str(
         _REPO_ROOT
         / "runs/paper_evidence_v1/center_context_w_cache/"
         "90s_eb33cf00339545a75c459ca864bb97b333e605aa4d6c8f3d78f36b0df162587c"
+    ),
+    13500: str(
+        _REPO_ROOT
+        / "runs/paper_evidence_v1/center90_context_w_cache/"
+        "135s_7bbce891b3e158079f1b6d59b6a97fe273aa8293bec5f6c0964a9eb85d913cd3"
     ),
     18000: str(
         _REPO_ROOT
@@ -29,6 +34,7 @@ CENTER90_W_CACHE_PATHS = {
 }
 CENTER90_W_CACHE_MANIFEST_SHA256 = {
     9000: "9442a33ea2c633b15642d033efa3d3e09278f30c4692a707abc9de460c784757",
+    13500: "9454fe918aaa6a4844239a5c8479665cc80f31cf6c64cfb30fc06d069cd7c473",
     18000: "72402d8543adf3cda504967b87fc4f9528cacca58b9aa080f0dcfe06707037fe",
 }
 
@@ -176,7 +182,7 @@ def validate_center90_config(cfg: DictConfig) -> None:
             raise ValueError("center90 implementation 只允许 2/2 synthetic contract")
     elif role == "formal":
         if not CENTER90_FORMAL_ENABLED:
-            raise ValueError("center90 formal 将在 cache 与 GPU 工程回执冻结后开放")
+            raise ValueError("center90 formal gate 未开放")
         if stage != "formal" or gate != "formal_full_matrix" or not device.startswith("cuda:"):
             raise ValueError("center90 formal 固定 formal/full-matrix/cuda 合同")
         if int(cfg.training.seed) not in CENTER90_FORMAL_SEEDS:

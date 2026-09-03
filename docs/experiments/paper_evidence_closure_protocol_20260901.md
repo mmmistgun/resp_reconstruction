@@ -38,7 +38,7 @@
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 18/18 完成并冻结；描述性结果留档 |
 | P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，最终 24 runs | 24/24 与三 seed汇总已冻结；validation 阶段关闭 |
 | P4-T | center-30/center-60 上下文任务完整独立测试集附件 | 否；42 checkpoints inference | 42/42 与分任务冻结汇总均完成；附件关闭 |
-| P4-U | center-90 的 90/135/180 s 输出尺度分支 | 是，18 runs | 全量三 seed 矩阵已冻结；P0 完成，等待 cache/工程回执 |
+| P4-U | center-90 的 90/135/180 s 输出尺度分支 | 是，18 runs | P0–P2 已冻结；18 项 formal 配置等待训练 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
@@ -711,8 +711,11 @@ P4-U 按 `docs/experiments/paper_center90_context_protocol_20260904.md` 推进�
 任务使用中心 9000-point target、独立 `Pi_90`、`center90_*` 五主指标与 full-validation center90 RR selector；90/180 s
 复用输入 transform 完全相同的冻结 W cache，135 s 新建 input-only train/validation cache。正式矩阵统一使用单一输出根，
 三 seed 全部完成后才冻结汇总。该任务形成单独 center-90 panel，只比较任务内 paired-seed 相对变化。
-P0 已完成独立实现；13 项 center90 定向测试与 102 项 paper-evidence 总回归均通过。135 s 映射的 49 个实际 centers
-无重复，全网格/目标频带最大名义误差约 `0.035647 / 0.020064 Hz`。Formal gate 当前等待 135 s cache manifest 与
-最大臂 batch-128 GPU acceptance receipt。
+P0 已完成独立实现。P1 的 135 s cache 从干净 commit `2c151cba2e41056a115dd5f7f0293fa486666c8d` 完成并通过
+只读验收，manifest SHA-256=`9454fe918aaa6a4844239a5c8479665cc80f31cf6c64cfb30fc06d069cd7c473`；
+train/validation shapes=`[10141/2675,49,270]`、float32、finite、input-only。P2 最大臂 batch-128 GPU acceptance
+receipt/manifest SHA-256=`36ab2e4c9c2d3276078728bf657463619b82e02776aa4ff4238101643c891b87 / 721fe0a8d59460809666723daf9ba9dee9cfde1f4aab28934297d83cd1e25935`，
+peak allocated/reserved=`11021.50 / 11628.00 MiB`，decision=`batch128_accepted`。18 项 formal 配置与统一
+`128×1` gate 已开放；center90 17 项定向测试与 106 项 paper-evidence 总回归均通过。当前等待用户双 GPU 手动训练。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

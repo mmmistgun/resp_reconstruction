@@ -1,0 +1,29 @@
+_base_: center90_context_v1.yaml
+
+protocol:
+  stage: formal
+  run_role: formal
+  execution_gate: formal_full_matrix
+
+data:
+  max_train_windows: null
+  max_val_windows: null
+  center_w_cache_path: null
+  center_w_cache_manifest_sha256: null
+
+window:
+  input_samples: 18000
+  input_sec: 180
+
+model:
+  variant: c201_center90
+
+training:
+  epochs: 80
+  batch_size: 128
+  gradient_accumulation_steps: 1
+  seed: 20260811
+  device: cuda:0
+
+outputs:
+  run_root: runs/paper_evidence_v1/center90_context/formal
