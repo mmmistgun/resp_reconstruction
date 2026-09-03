@@ -4,7 +4,7 @@
 
 协议 ID：`paper-center30-context-v1-20260902`
 
-状态：**P4-S0–S3 均已完成并冻结；8 arms × 3 seeds 共 24/24 validation runs 闭合。45 s 是两种表征下相对 30 s 唯一均达到 3/3 seed 材料性 RR 改善的最短输入，继续延长到 60/90 s 没有稳定追加 RR 收益。Validation 阶段保持关闭；用户另行授权 center-30/center-60 共 42-checkpoint 独立测试集附件，当前只开放联合 input-only W cache 构建。**
+状态：**P4-S0–S3 均已完成并冻结；8 arms × 3 seeds 共 24/24 validation runs 闭合。45 s 是两种表征下相对 30 s 唯一均达到 3/3 seed 材料性 RR 改善的最短输入，继续延长到 60/90 s 没有稳定追加 RR 收益。Validation 阶段保持关闭；center-30/center-60 联合 test input-only W cache 已冻结，42-checkpoint evaluator 待实现。**
 
 ## 1. 科学问题与位置
 
@@ -306,7 +306,7 @@ RR 的 paired-seed 方向是本任务的主要窗口判据：
   `d64e696a686ebe3f11ec279c276aa1666a74b81d889ecd3c5fca8075bbdb79ed / f5e525719906ebd4bdf4836f8ad4b7e9b722ebb2e195d48c28d40a643fbe199f`；
 - center-30 validation 实现、配置与冻结汇总测试共 27 项，并与 47 项既有 paper-evidence 回归合计 74 项通过；
 - P4-S2/P4-S3 共 24/24 formal 与只读三 seed 汇总均已完成；validation 阶段关闭；
-- 联合独立测试集附件的 P4-T0 cache builder 新增 6 项不访问 test 的定向 CPU 测试，等待用户手动构建完整 cache。
+- 联合独立测试集附件的 P4-T1 cache 已完成并冻结，manifest SHA-256=
+  `9b475926258d129851fb7b9c10d2b342ac2e833b121842b18437585059bf1b98`。
 
-本任务无待执行训练；下一推进点是 center-30/center-60 联合五长度 test input-only W cache。Cache manifest 冻结后
-才实现 42-checkpoint 评价入口。
+本任务无待执行训练；下一推进点是实现并冻结 42-checkpoint 评价入口与 checkpoint allowlist。

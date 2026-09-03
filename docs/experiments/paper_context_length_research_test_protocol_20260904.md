@@ -4,7 +4,7 @@
 
 协议 ID：`paper-context-length-research-test-v1-20260904`
 
-状态：**用户已授权 center-30 与 center-60 两种输出任务共 42 个 validation-selected checkpoints 的完整独立测试集评价。P4-T0 联合五长度 input-only W cache 已实现并通过不访问 test 的定向 CPU 测试；当前只开放用户手动执行 P4-T1 cache 构建。**
+状态：**用户已授权 center-30 与 center-60 两种输出任务共 42 个 validation-selected checkpoints 的完整独立测试集评价。P4-T1 联合五长度 input-only W cache 已完成并冻结；当前开放 P4-T2 evaluator 实现与定向 CPU 测试，尚未执行模型 inference 或读取 test target。**
 
 ## 1. 科学问题与证据边界
 
@@ -88,9 +88,22 @@ runs/paper_evidence_v1/context_length_research_test_w_cache/
 完整 cache 完成后先只读复核 manifest、全部文件 hash、row identity、shape/dtype/finite、frequency identity 与 access
 flags，并冻结 manifest SHA-256；P4-T2 evaluator 在此之前不实现、不访问 test target。
 
+P4-T1 已由用户从干净 commit `f87efd927a87c018888a06b7927cf50df3ada676` 完成，耗时 `03:49`。冻结目录为：
+
+```text
+runs/paper_evidence_v1/context_length_research_test_w_cache/
+  cf89c6e678bb243801c0ca577ec14d69d724603e51b3335c4e1f474e7f999d5c/
+```
+
+`cache_manifest.json` SHA-256=`9b475926258d129851fb7b9c10d2b342ac2e833b121842b18437585059bf1b98`。
+只读验收确认 lifecycle=`complete`、2310 rows、8 samp_id、row-ID SHA-256 固定、非 test row overlap=0；五组
+features 的 shape 分别为 `[2310,49,60/90/120/180/360]`，均为 float32/finite。全部 11 个受管 `.npy`
+文件的 size/SHA-256、五组 frequency identity、duplicate count 与 nominal error 均与 manifest 一致。Access flags 确认
+只读取 test BCG input，未读取 test target、train/validation signal，未执行训练或 inference。
+
 ## 5. P4-T2：完整 42-checkpoint inference
 
-Cache 冻结后实现一个受控 evaluator：
+Cache 已冻结；下一步实现一个受控 evaluator：
 
 - C201 从 test parent 裁对应输入；W-reduced 读取同一冻结联合 cache；
 - center-30 与 center-60 分别恢复原模型和指标 evaluator；
