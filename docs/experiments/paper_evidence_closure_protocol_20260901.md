@@ -728,6 +728,11 @@ validation-selected checkpoints。90/180 s W feature 复用冻结的联合 test 
 2310 次 CWT、shape=`[2310,49,270]`、约 116.6 MiB。补充 cache 已从干净 commit
 `14871006ce42fbbf54f694b9ea6b6d2ef7004506` 完成并通过只读验收，manifest SHA-256=
 `4a7c7ad6bdd8fa21d1d8b2dde05ed5bf2ca8ac3746664e835542661d6e897072`。18-checkpoint evaluator 与双 GPU
-顺序队列已开放；18/18 完成后统一汇总任务内 paired-seed 相对变化。
+顺序队列已从干净 commit `9a48dc39872dcf20b6514e69fd5d7360a62f07a7` 完成 18/18，共 41,580 条逐 sample
+test metrics。冻结汇总 receipt/manifest SHA-256=
+`10342ab143bd92bd6662c329bd5b65fd5bc467e2205e3013b0187d3ab938fbc8 / 2da65f83dc93d6a65b9c9e2c5024c67aa00a0520f2cf36338e35c77589d9f50b`。
+90→180 RR 在 C201/W-reduced 中平均改善 `1.788% / 2.198%`，均为 `2/3` seeds 材料改善；90→135 均值则均
+恶化，其他指标方向混合。P4-U-T 冻结为上下文效应弱、seed-dependent 且非单调，validation 的表征方向分歧未在 test
+稳定复现；不据此重选长度或模型。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

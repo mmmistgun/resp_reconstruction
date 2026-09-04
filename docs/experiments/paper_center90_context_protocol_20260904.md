@@ -200,7 +200,7 @@ SHA-256=`b8e3428ec4f43094ec7508b4897f9d2b07a54c702dc07749e3fd5fbb9f959886 / cc53
 ## 7. 当前访问边界
 
 P0–P3 已关闭并冻结。独立测试集评价由
-`docs/experiments/paper_center90_context_research_test_protocol_20260904.md` 单独约束。
+`docs/experiments/paper_center90_context_research_test_protocol_20260904.md` 单独约束，现已完成并冻结。
 
 ## 8. P0 实现回执
 
