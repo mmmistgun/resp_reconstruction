@@ -4,7 +4,8 @@
 
 协议 ID：`paper-center90-context-research-test-v1-20260904`
 
-状态：**P4-U-T0 cache 实现已完成，等待用户构建 135 s input-only test W cache。冻结 cache 验收后开放 18-checkpoint inference。**
+状态：**P4-U-T1 的 135 s input-only test W cache 已完成并冻结；18-checkpoint evaluator、allowlist 与双 GPU
+顺序队列已开放，等待用户手动执行。**
 
 ## 1. 科学问题与证据边界
 
@@ -58,6 +59,18 @@ Cache 只读取 test BCG input；输出目录、lifecycle 与文件均不可覆�
 返回 `cache_manifest.json` 后，先只读复核 lifecycle、全部文件 size/SHA-256、2310-row identity、shape/dtype/finite、
 frequency identity 与 access flags，并冻结 path/hash。
 
+P4-U-T1 已由用户从干净 commit `14871006ce42fbbf54f694b9ea6b6d2ef7004506` 完成，耗时 `01:24`。固定输出为：
+
+```text
+runs/paper_evidence_v1/center90_context_research_test_w_cache/
+  fff524795f290969e4e3892b15a4f9ac2722c145e1ec3cd40e698c742e327f8a/
+```
+
+`cache_manifest.json` SHA-256=`4a7c7ad6bdd8fa21d1d8b2dde05ed5bf2ca8ac3746664e835542661d6e897072`。
+只读验收确认 lifecycle=`complete`、2310 个严格唯一 row IDs、8 个 `samp_id`、non-test overlap=0；feature
+shape=`[2310,49,270]`、float32、全量 finite，49 个 frequency centers 有限非降且无重复。Manifest 登记的 3 个
+`.npy` 文件 size/SHA-256 全部匹配；access identity 确认只读取 test BCG input，未执行模型 inference。
+
 ## 4. P4-U-T2：18-checkpoint inference
 
 Cache 冻结后实现受控 evaluator。每次调用固定一个 `model/input-sec/seed` identity，只接受本附件 18 项 allowlist：
@@ -69,6 +82,17 @@ Cache 冻结后实现受控 evaluator。每次调用固定一个 `model/input-se
 - 每项使用不可覆盖 evaluation identity，可分配到两张 GPU，进程内均使用逻辑 `cuda:0`。
 
 预计成本为 `18×2310=41,580` 个样本推理。18/18 完成后才进行只读冻结汇总。
+
+固定入口为 `scripts/eval_paper_center90_research_test_v1.py`。每次调用必须显式给出 `model/input-sec/seed` 和
+`--confirm-research-test`；device 固定为逻辑 `cuda:0`，物理卡仅由 `CUDA_VISIBLE_DEVICES` 指定。Evaluator 从冻结
+validation summary 逐项核验 run lifecycle、artifact manifest、resolved config、formal commit、checkpoint size/hash 与
+selected epoch，再首次读取 test target。每项输出到不可覆盖目录：
+
+```text
+runs/paper_evidence_v1/center90_context_research_test/<experiment_id>/seed_<seed>/
+```
+
+定向 CPU 测试覆盖 18 项 allowlist、三种 target/input crop、W cache 分流、checkpoint payload identity 与 CLI gate。
 
 ## 5. P4-U-T3：冻结汇总
 

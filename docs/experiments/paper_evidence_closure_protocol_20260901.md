@@ -725,7 +725,9 @@ C201 的 90→180 RR 平均改善 `1.615%`（`2/3` seeds 改善），W-reduced �
 
 P4-U-T 按 `docs/experiments/paper_center90_context_research_test_protocol_20260904.md` 独立推进，固定评价上述 18 个
 validation-selected checkpoints。90/180 s W feature 复用冻结的联合 test cache，仅补建 135 s input-only cache：
-2310 次 CWT、shape=`[2310,49,270]`、约 116.6 MiB。补充 cache 完成并冻结 path/hash 后开放 evaluator；18/18
-完成后统一汇总任务内 paired-seed 相对变化。
+2310 次 CWT、shape=`[2310,49,270]`、约 116.6 MiB。补充 cache 已从干净 commit
+`14871006ce42fbbf54f694b9ea6b6d2ef7004506` 完成并通过只读验收，manifest SHA-256=
+`4a7c7ad6bdd8fa21d1d8b2dde05ed5bf2ca8ac3746664e835542661d6e897072`。18-checkpoint evaluator 与双 GPU
+顺序队列已开放；18/18 完成后统一汇总任务内 paired-seed 相对变化。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
