@@ -2,7 +2,7 @@
 
 协议 ID：`paper-harmonized-rhythm-test-v1-20260905`；日期：2026-09-05。
 
-状态：实现与定向 CPU 验证阶段；用户已授权从干净实现 commit 执行一次正式只读汇总。
+状态：**已从干净实现 commit 完成一次正式只读汇总并冻结。35 arms、101条评价记录全部闭合；等长轨迹IBI下降在各相邻时长均为3/3 seeds，但可解释子集成员存在变化，仅形成描述性跨任务证据。**
 
 ## 1. 问题、授权与证据边界
 
@@ -105,4 +105,82 @@ Center60 native RR为完整中心60s单窗，虽与历史 Local RR 观测长度�
 
 ## 6. 正式执行结果
 
-待从干净实现 commit 一次性生成后登记。
+正式命令从干净实现 commit `81a78bddd125db10f4f97863c33c2772a28dcd51` 成功执行一次。
+Receipt记录 `git_dirty=false`，Python/NumPy/pandas/PyYAML版本分别为 `3.12.13 / 1.26.4 / 3.0.3 / 6.0.3`。
+读取并登记376个唯一指标/provenance/源码文件，写出前后核验输入hash未改变。
+35 arms、等长轨迹9行、101条评价记录（99学习checkpoint+2确定性记录）、233310条逐样本指标全部闭合。
+原论文主表10方法的native Whole RR mean/SD与逐样本重算结果一致；RTM五候选保持结论锁待确认。
+
+产物size/hash已独立只读复核，SHA-256如下：
+
+| 产物 | SHA-256 |
+|---|---|
+| `native_whole_rr_ibi_all_arms.csv` | `88c32aec337590422f5cf7ce056113a575ec2e205850de2a69b841b1af4463e9` |
+| `equal_input_output_rhythm_ladder.csv` | `920de201fcb44fbf8583b3c732eb6001d6f0d99346fde72bc21fbf9b3fb12bfc` |
+| `per_checkpoint_rhythm_summary.csv` | `bd73e5f61ab61f52c51ad31e274bdd24febfd796ae1971ab7f593b7badcdbac8` |
+| `equal_io_support_overlap.csv` | `2013462eb376fbc5995accb3c48ad1b43748f7bc1bf9babb69e9b17c0d1e8796` |
+| `rhythm_comparability.json` | `d0ec6b366a4491088ae14ce965c263d4229a2304b019504905e7394da3d670ca` |
+| `summary_receipt.json` | `893bf09a8b3988744d05cad22c781c49af045239288861386315b5bfe5abe45a` |
+| `artifact_manifest.json` | `5aaa3c7cc57f53fb71a09c693e8265af5895b85e662355bb5292e1789e97f086` |
+
+### 6.1 等长输入输出轨迹
+
+下表为三个训练seed的arithmetic mean ± sample SD (`ddof=1`)；coverage/interpretable列为seed均值，
+相应SD与每seed有效样本数完整保存在CSV中。
+
+| 输入→输出 | 模型 | native Whole RR bpm | IBI MedAE s | coverage | interpretable fraction |
+|---|---|---:|---:|---:|---:|
+| 30→30 | C201-center30 | 0.821763 ± 0.049124 | 0.1310852 ± 0.0022593 | 0.785745 | 0.625541 |
+| 60→60 | C201-center60 | 0.683730 ± 0.040351 | 0.1118540 ± 0.0027267 | 0.793965 | 0.629293 |
+| 90→90 | C201-center90 | 0.746033 ± 0.054188 | 0.1063477 ± 0.0018755 | 0.806563 | 0.649062 |
+| 180→180 | C201 | 0.702232 ± 0.032241 | 0.0974367 ± 0.0038595 | 0.803597 | 0.638384 |
+| 30→30 | W-reduced-center30 | 0.798812 ± 0.019379 | 0.1306943 ± 0.0041615 | 0.794059 | 0.642857 |
+| 60→60 | W-reduced-center60 | 0.672675 ± 0.044511 | 0.1144094 ± 0.0073710 | 0.795940 | 0.629149 |
+| 90→90 | W-reduced-center90 | 0.716883 ± 0.022310 | 0.1061882 ± 0.0023380 | 0.802780 | 0.644877 |
+| 180→180 | W3 | 0.677887 ± 0.024346 | 0.0985565 ± 0.0004722 | 0.807572 | 0.637229 |
+| 180→180 | W0 | 0.617234 ± 0.027788 | 0.0998704 ± 0.0037630 | 0.807739 | 0.644877 |
+
+用户给定的C201/W0/W3历史IBI锚点均被原summary与逐样本重算双重验证。
+C201的30→60、60→90、90→180以及W-reduced的30→60、60→90、center90→W3、center90→W0，
+每个相邻对比均为3/3 seed的IBI下降。相同seed编号这里只用于描述性对应，跨独立任务不保证同一随机过程或初始化合同。
+因此可写“在已冻结的等长输入输出任务轨迹中，IBI下降方向跨三个seeds一致”，
+不能写“延长输出本身必然/因果地改善IBI”，也不由此确定最佳输出长度。
+
+从三seed均值计算，30→180的IBI下降为C201 `25.6692%`；W-reduced-center30对历史W3/W0为
+`24.5901% / 23.5847%`。后两项跨不同表征身份，只作描述性端点差异，不能解释为同一W模型窗长消融。
+
+### 6.2 Eligible与可解释集合
+
+等长轨迹的每个checkpoint均有2310个target-eligible样本；所有相邻对比eligible改变数为0、Jaccard=1。
+因此该轨迹的target-eligibility集合变化解释可以排除。
+
+等长轨迹的coverage均值范围为 `0.785745–0.807739`，interpretable fraction范围为 `0.625541–0.649062`；
+历史C201/W0/W3的coverage范围为 `0.803597–0.807739`、interpretable fraction为 `0.637229–0.644877`。
+这些比例相近，但相邻任务interpretable集合仍有 `235–464/2310` 个成员改变（`10.1732%–20.0866%`），
+Jaccard范围为 `0.720313–0.852941`。故不能排除IBI有限样本集合成员变化的影响；更长输出也改变周期数、
+端点检测和每样本median的统计支撑。该限制与“target eligibility一致”同时保留，不以比例接近替代集合检查。
+
+### 6.3 RR与上下文解释
+
+Native Whole RR反映各自输出任务上的原生节律误差。C201在60→90的RR均值从 `0.683730` 升至 `0.746033`，
+W-reduced从 `0.672675` 升至 `0.716883`，均未呈现IBI那样的平滑下降。
+这不与IBI趋势冲突：RR是整窗dominant-frequency估计，IBI是对齐后的逐周期误差；
+RR的网格、目标持续时间、Pi_T、训练任务与selector均变化，粗网格还可能把不同节律映射到相同bin。
+现有证据无法把该非单调性归因于某一个因素。
+
+固定输出的全部context arms保留在全表。原任务内center30延长输入有一定收益、center60没有稳定RR收益、
+center90效应弱且seed-dependent的冻结描述均保持原状。它们回答“外侧输入上下文是否有帮助”，
+等长轨迹回答的是另一组同时改变输入/输出时长的任务表现；两者不互相替代。
+
+### 6.4 验证与风险记录
+
+- 定向CPU命令：`./.venv/bin/python -m pytest tests/test_paper_harmonized_rhythm_test_summary.py -q`，
+  最终 `20 passed in 3.86s`；包含冻结CSV只读集成核验、参数/hash/矩阵/错位/NaN失败路径、统计语义与不可覆盖输出。
+- `git diff --cached --check`通过；正式命令见第5节，已从上述干净实现commit成功执行一次；产物manifest全部size/hash通过独立复核。
+- 未运行训练、GPU、cache、benchmark、新checkpoint inference、旧关闭入口或全量回归；本次为独立汇总实现，
+  定向测试覆盖其修改面，未启动额外计算实验。
+- 数据处理、split、subject/session隔离、标签、指标算法与checkpoint选择均未改变；仅新增本附件的字段映射与统计输出。
+- 未发现逐row身份错位、来源hash漂移或本次新数据泄漏。原始波形、train/validation索引和checkpoint内容未重读，
+  隔离与prediction finite依赖原冻结评价证据。部分历史配置仅有本次observed hash，复现保证以receipt登记文件为准。
+- 复现需要保留本地冻结CSV/provenance；`runs/`不入Git。已有固定输出禁止重跑或补写。
+- 主要解释风险为独立任务/selector/表征差异与interpretable集合成员变化；不构造统一排名、不据test重选。
