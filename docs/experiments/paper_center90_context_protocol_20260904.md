@@ -4,9 +4,8 @@
 
 协议 ID：`paper-center90-context-v1-20260904`
 
-状态：**独立辅助实验已立项，固定为 C201-center90 / W-reduced-center90 × 90/135/180 s 输入 × 3 seeds，
-共 18 个完整 validation runs。P0 实现、P1 input-only W cache 与 P2 最大臂 GPU 工程验收均已完成并冻结；18 项
-formal 配置、统一 `128×1` 运行合同与双 GPU 队列已开放，等待用户手动训练。**
+状态：**独立辅助实验已完成并冻结。C201-center90 / W-reduced-center90 × 90/135/180 s 输入 × 3 seeds 的
+18/18 formal lifecycle 与 validation 汇总均闭合；结果支持“center-90 上下文长度效应弱且依赖表征”，不进行长度或模型重选。**
 
 ## 1. 科学问题与证据位置
 
@@ -163,10 +162,44 @@ runs/paper_evidence_v1/center90_context/formal/C90V1_<C201|WR>_<90|135|180>/seed
 90/135/180 s 各一项。进程内统一使用逻辑 `cuda:0`，物理卡只由 `CUDA_VISIBLE_DEVICES=0/1` 指定；同一队列用
 shell `&&` 串行，任一失败使该队列停止并保留 lifecycle。
 
+P3 已由用户从干净 commit `033e3ff2a9fdb793ad0ffc93fbb9f7821c25b24a` 完成。只读冻结汇总从干净 commit
+`572fd51ae236c7b5e55520b624f8eb871977966a` 执行，确认 18/18 lifecycle complete、每项 80 epochs / 6400 updates、
+全部登记 artifact 的 size/SHA-256、相同 2675-row validation identity、逐样本指标重算与 strict-lower selector 均闭合。
+未读取 checkpoint 内容、dataset/signal/target array 或 test，未执行训练、推理或 GPU 计算。
+
+五主指标的三 seed arithmetic mean ± sample SD 如下（四项 error 越小越好，PCC 越大越好）：
+
+| 模型 | 输入 | RR MAE bpm | IBI MedAE s | trajectory MAE | global modulation error | signed PCC |
+|---|---:|---:|---:|---:|---:|---:|
+| C201-center90 | 90 | 0.518453 ± 0.004980 | 0.089797 ± 0.004639 | 0.140956 ± 0.002154 | 0.196425 ± 0.014899 | 0.857213 ± 0.006581 |
+| C201-center90 | 135 | 0.513817 ± 0.010833 | 0.086035 ± 0.001671 | 0.138107 ± 0.002733 | 0.185759 ± 0.006142 | 0.862294 ± 0.002151 |
+| C201-center90 | 180 | 0.510009 ± 0.011051 | 0.088705 ± 0.002945 | 0.145000 ± 0.012126 | 0.185518 ± 0.008555 | 0.860816 ± 0.003082 |
+| W-reduced-center90 | 90 | 0.499880 ± 0.007252 | 0.088859 ± 0.004431 | 0.140258 ± 0.003825 | 0.185696 ± 0.002134 | 0.861503 ± 0.004302 |
+| W-reduced-center90 | 135 | 0.501253 ± 0.003332 | 0.086944 ± 0.001790 | 0.145575 ± 0.007098 | 0.188194 ± 0.002416 | 0.868063 ± 0.001041 |
+| W-reduced-center90 | 180 | 0.502855 ± 0.007258 | 0.089193 ± 0.002589 | 0.147384 ± 0.009732 | 0.191919 ± 0.008453 | 0.864583 ± 0.001802 |
+
+同 seed 有向变化的三 seed 均值如下；正值表示改善。四项 error 为相对变化百分比，PCC 为绝对变化：
+
+| 模型 | 对比 | RR | IBI | trajectory | global modulation | PCC |
+|---|---:|---:|---:|---:|---:|---:|
+| C201-center90 | 90→135 | +0.901% | +4.053% | +2.004% | +4.942% | +0.005081 |
+| C201-center90 | 135→180 | +0.702% | −3.096% | −4.923% | +0.001% | −0.001479 |
+| C201-center90 | 90→180 | +1.615% | +1.020% | −2.841% | +5.388% | +0.003603 |
+| W-reduced-center90 | 90→135 | −0.286% | +1.952% | −3.754% | −1.346% | +0.006560 |
+| W-reduced-center90 | 135→180 | −0.325% | −2.576% | −1.445% | −1.955% | −0.003480 |
+| W-reduced-center90 | 90→180 | −0.623% | −0.616% | −5.193% | −3.344% | +0.003080 |
+
+RR 的逐 seed 最低输入长度为：C201=`180/135/135 s`，W-reduced=`135/180/90 s`。C201 的 90→180 RR
+平均改善 `1.615%`，但仅 `2/3` seeds 改善；W-reduced 平均恶化 `0.623%`，仅 `1/3` seed 改善。其余指标也呈混合方向，
+因此没有稳定的单调上下文收益，也没有共同最优长度。该结果只支持 center-90 validation 上“效应弱且依赖表征”的描述，
+不用于更改主实验、center-30、center-60 或 180→180 的结论。
+
+冻结输出位于 `runs/paper_evidence_v1/center90_context/validation_summary/`。`summary_receipt.json` / `artifact_manifest.json`
+SHA-256=`b8e3428ec4f43094ec7508b4897f9d2b07a54c702dc07749e3fd5fbb9f959886 / cc532fe3930861dd27ef4eb0f8efbb55381ffd26ad5cb88b7cf5f3c0839d47bc`。
+
 ## 7. 当前访问边界
 
-P0–P3 只开放实现、synthetic 工程验收和 train/validation。当前协议不包含独立测试集评价；任何后续数据访问需在 18/18、
-validation summary 与 checkpoint identity 完整冻结后另立附件。
+P0–P3 已关闭并冻结。当前协议不包含独立测试集评价；任何后续数据访问需另立附件。
 
 ## 8. P0 实现回执
 

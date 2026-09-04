@@ -715,7 +715,12 @@ P0 已完成独立实现。P1 的 135 s cache 从干净 commit `2c151cba2e41056a
 只读验收，manifest SHA-256=`9454fe918aaa6a4844239a5c8479665cc80f31cf6c64cfb30fc06d069cd7c473`；
 train/validation shapes=`[10141/2675,49,270]`、float32、finite、input-only。P2 最大臂 batch-128 GPU acceptance
 receipt/manifest SHA-256=`36ab2e4c9c2d3276078728bf657463619b82e02776aa4ff4238101643c891b87 / 721fe0a8d59460809666723daf9ba9dee9cfde1f4aab28934297d83cd1e25935`，
-peak allocated/reserved=`11021.50 / 11628.00 MiB`，decision=`batch128_accepted`。18 项 formal 配置与统一
-`128×1` gate 已开放；center90 17 项定向测试与 106 项 paper-evidence 总回归均通过。当前等待用户双 GPU 手动训练。
+peak allocated/reserved=`11021.50 / 11628.00 MiB`，decision=`batch128_accepted`。18/18 formal 已从干净 commit
+`033e3ff2a9fdb793ad0ffc93fbb9f7821c25b24a` 完成，80 epochs / 6400 updates、artifact hash、2675-row validation identity、
+逐样本指标重算与 selector 全部闭合。冻结汇总 receipt/manifest SHA-256=
+`b8e3428ec4f43094ec7508b4897f9d2b07a54c702dc07749e3fd5fbb9f959886 / cc532fe3930861dd27ef4eb0f8efbb55381ffd26ad5cb88b7cf5f3c0839d47bc`。
+C201 的 90→180 RR 平均改善 `1.615%`（`2/3` seeds 改善），W-reduced 平均恶化 `0.623%`（`1/3` seed 改善）；
+其余主指标方向混合，逐 seed RR 最低长度也不一致。P4-U 结论冻结为 center-90 validation 上下文效应弱且依赖表征，
+不选择长度或模型，不改变其他输出任务与主实验结论。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
