@@ -145,7 +145,7 @@ def test_metric_config_parameter_drift():
 def test_output_manifest_and_exclusive_directory(tmp_path, monkeypatch):
     reader = summary.FrozenReader(tmp_path)
     monkeypatch.setattr(summary, "audit_inputs", lambda _: (seed_rows(), pd.DataFrame({"seed": summary.SEEDS}), reader))
-    monkeypatch.setattr(summary, "build_comparability", lambda *_: {"evidence_scope": "synthetic_test"})
+    monkeypatch.setattr(summary, "build_comparability", lambda *_, **__: {"evidence_scope": "synthetic_test"})
     monkeypatch.setattr(summary.subprocess, "check_output", lambda args, **kwargs: "abc\n" if args[1] == "rev-parse" else "")
     output = summary.run_summary(repo_root=tmp_path, command="synthetic-test")
     manifest = json.loads((output / "artifact_manifest.json").read_text())
@@ -178,6 +178,13 @@ def test_frozen_inputs_cpu_read_only():
         assert row.ibi_medae_sec_mean == pytest.approx(expected, abs=1e-12)
         assert row.ibi_medae_sec_sample_sd == pytest.approx(sd, abs=1e-12)
     assert len(arms.loc[arms.conclusion_lock_status.eq("pending_user_confirmation_audit_only")]) == 5
+    observed_selectors = {
+        task: set(arms.loc[arms.task.eq(task), "checkpoint_selector"])
+        for task in summary.CENTER_SELECTORS
+    }
+    assert observed_selectors == {
+        task: {selector} for task, selector in summary.CENTER_SELECTORS.items()
+    }
     assert arms.loc[arms.deterministic, "seed_count"].eq(0).all()
     assert ladder.fft_rr_spacing_bpm.tolist() == [2., 2., 1., 1., 2 / 3, 2 / 3, 1 / 3, 1 / 3, 1 / 3]
     assert not any("/metrics.csv" in key or key.endswith(".pt") for key in reader.records)
@@ -187,3 +194,19 @@ def test_frozen_inputs_cpu_read_only():
     assert comparability["local_rr"]["cross_task_comparable_column_generated"] is False
     assert len(comparability["ibi"]["adjacent_seed_directions"]) == 7
     reader.verify_unchanged()
+
+
+def test_v2_wrapper_uses_new_identity_and_declares_numerically_stable_correction(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run_summary(**kwargs):
+        captured.update(kwargs)
+        return tmp_path / "done"
+
+    monkeypatch.setattr(summary, "run_summary", fake_run_summary)
+    result = summary.run_summary_v2(repo_root=tmp_path, command="v2-test")
+    assert result == tmp_path / "done"
+    assert captured["output_dir"] == summary.V2_OUTPUT_DIR
+    assert captured["protocol_id"] == summary.V2_PROTOCOL_ID
+    assert captured["schema_version"] == "harmonized-rhythm-test-summary-v2"
+    assert captured["supersedes"]["numeric_metrics_changed"] is False

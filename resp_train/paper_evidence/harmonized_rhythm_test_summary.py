@@ -17,6 +17,8 @@ import yaml
 
 PROTOCOL_ID = "paper-harmonized-rhythm-test-v1-20260905"
 OUTPUT_DIR = Path("runs/paper_evidence_v1/harmonized_rhythm_test_summary")
+V2_PROTOCOL_ID = "paper-harmonized-rhythm-test-v2-20260905"
+V2_OUTPUT_DIR = Path("runs/paper_evidence_v1/harmonized_rhythm_test_summary_v2")
 BASE = Path("runs/paper_evidence_v1")
 SOURCES = Path("configs/paper_evidence_v1/p0_comparison_sources.json")
 SEEDS = (20260811, 20260812, 20260813)
@@ -33,6 +35,11 @@ HISTORICAL_LABELS = {
     "crd_c201_decoder_10hz_cap": "C201",
     "crd_tf102_w": "W0",
     "crd_tfw_v2_w3_full_6v_film_d6": "W3",
+}
+CENTER_SELECTORS = {
+    "center30": "full_validation_center30_rr_mae_bpm_strict_lower_tie_earlier",
+    "center60": "full_validation_center_rr_mae_bpm_strict_lower_tie_earlier",
+    "center90": "full_validation_center90_rr_mae_bpm_strict_lower_tie_earlier",
 }
 
 
@@ -246,6 +253,17 @@ def audit_inputs(root: Path) -> tuple[pd.DataFrame, pd.DataFrame, FrozenReader]:
             frame = reader.read(evaluation / "research_test_metrics.csv", item.get("research_test_metrics_sha256", item.get("metrics_sha256")))
             stored = reader.read(evaluation / "research_test_metrics_summary.csv", item.get("research_test_summary_sha256", item.get("summary_sha256")))
             manifest = reader.read(evaluation / "artifact_manifest.json", item["artifact_manifest_sha256"])
+            evaluation_receipt = reader.read(
+                evaluation / "evaluation_receipt.json", item["evaluation_receipt_sha256"]
+            )
+            evaluation_identity = evaluation_receipt.get("identity", {})
+            formal_manifest = reader.read(
+                Path(evaluation_identity["run_dir"]) / "artifact_manifest.json",
+                evaluation_identity["artifact_manifest_sha256"],
+            )
+            selector = formal_manifest.get("selector")
+            if selector != CENTER_SELECTORS[task]:
+                raise ValueError(f"{task} formal selector identity 漂移")
             config_record = next(r for r in manifest["files"] if r["filename"] == "resolved_evaluation_config.yaml")
             cfg = reader.read(evaluation / "resolved_evaluation_config.yaml", config_record["sha256"], config_record["size_bytes"])
             validate_metric_config(cfg, historical=False)
@@ -259,7 +277,7 @@ def audit_inputs(root: Path) -> tuple[pd.DataFrame, pd.DataFrame, FrozenReader]:
             row = add(frame, stored, {
                 "task": task, "model": model, "method_id": identity["variant"], "input_sec": int(identity["input_sec"]),
                 "output_sec": length, "seed": int(item["seed"]), "deterministic": False, "seed_semantics": "three_training_seeds",
-                "conclusion_lock_status": "confirmed", "checkpoint_selector": f"full_validation_{task}_native_rr_strict_lower_tie_earlier",
+                "conclusion_lock_status": "confirmed", "checkpoint_selector": selector,
                 "source_metrics": str(evaluation.relative_to(root) / "research_test_metrics.csv"), "ibi_summary_source": "verified_existing_summary",
             }, prefix)
             validate_stored(row, identity, prefix)
@@ -358,14 +376,19 @@ def audit_inputs(root: Path) -> tuple[pd.DataFrame, pd.DataFrame, FrozenReader]:
     return seeds, pd.DataFrame(support_rows), reader
 
 
-def build_comparability(arms: pd.DataFrame, supports: pd.DataFrame) -> dict[str, Any]:
+def build_comparability(
+    arms: pd.DataFrame,
+    supports: pd.DataFrame,
+    *,
+    protocol_id: str = PROTOCOL_ID,
+) -> dict[str, Any]:
     ladder = rhythm_ladder(arms)
     directions = [
         {"from_model": left, "to_model": right, "seeds_decreased": int(group.ibi_decreased.sum()), "seed_count": len(group)}
         for (left, right), group in supports.groupby(["from_model", "to_model"], sort=False)
     ]
     return {
-        "protocol_id": PROTOCOL_ID, "evidence_scope": "descriptive_cross_task_only",
+        "protocol_id": protocol_id, "evidence_scope": "descriptive_cross_task_only",
         "native_whole_rr": {"definition": "各自完整输出上去均值、symmetric Hann、N 点 rFFT 的频带 dominant-frequency 绝对误差",
             "output_sec_to_fft_rr_spacing_bpm": {str(n): 60 / n for n in (30, 60, 90, 180)},
             "interpretation": "60/T 是理论 bin 间距，不是误差下界或完整频谱分辨能力；较粗网格可将不同节律量化到同一 bin。",
@@ -417,9 +440,17 @@ def _artifacts(output: Path) -> list[dict[str, Any]]:
     return [{"filename": p.name, "sha256": hashlib.sha256(p.read_bytes()).hexdigest(), "size_bytes": p.stat().st_size} for p in sorted(output.iterdir()) if p.is_file()]
 
 
-def run_summary(*, repo_root: Path, command: str) -> Path:
+def run_summary(
+    *,
+    repo_root: Path,
+    command: str,
+    output_dir: Path = OUTPUT_DIR,
+    protocol_id: str = PROTOCOL_ID,
+    schema_version: str = "harmonized-rhythm-test-summary-v1",
+    supersedes: dict[str, Any] | None = None,
+) -> Path:
     root = repo_root.resolve()
-    output = root / OUTPUT_DIR
+    output = root / output_dir
     if output.exists():
         raise FileExistsError(f"汇总输出目录禁止覆盖: {output}")
     git = lambda *args: subprocess.check_output(["git", *args], cwd=root, text=True).strip()
@@ -429,7 +460,7 @@ def run_summary(*, repo_root: Path, command: str) -> Path:
     seeds, supports, reader = audit_inputs(root)
     arms = aggregate_arms(seeds)
     ladder = rhythm_ladder(arms)
-    comparability = build_comparability(arms, supports)
+    comparability = build_comparability(arms, supports, protocol_id=protocol_id)
     reader.verify_unchanged()
     if git("rev-parse", "HEAD") != commit or git("status", "--porcelain", "--untracked-files=all"):
         raise RuntimeError("汇总读取期间 Git identity 变化")
@@ -442,7 +473,8 @@ def run_summary(*, repo_root: Path, command: str) -> Path:
     _write_json(output / "rhythm_comparability.json", comparability)
     reader.verify_unchanged()
     _write_json(output / "summary_receipt.json", {
-        "protocol_id": PROTOCOL_ID, "schema_version": "harmonized-rhythm-test-summary-v1", "status": "complete",
+        "protocol_id": protocol_id, "schema_version": schema_version, "status": "complete",
+        "supersedes": supersedes,
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "execution": {"command": command, "cwd": str(root), "git_commit": commit, "git_dirty": False,
             "python": platform.python_version(), "numpy": np.__version__, "pandas": pd.__version__, "pyyaml": yaml.__version__},
@@ -457,5 +489,30 @@ def run_summary(*, repo_root: Path, command: str) -> Path:
             "cache_used": False, "benchmark_used": False, "checkpoint_reselection_used": False},
         "artifacts": _artifacts(output),
     })
-    _write_json(output / "artifact_manifest.json", {"protocol_id": PROTOCOL_ID, "status": "complete", "files": _artifacts(output)})
+    _write_json(
+        output / "artifact_manifest.json",
+        {
+            "protocol_id": protocol_id,
+            "schema_version": schema_version,
+            "status": "complete",
+            "supersedes": supersedes,
+            "files": _artifacts(output),
+        },
+    )
     return output
+
+
+def run_summary_v2(*, repo_root: Path, command: str) -> Path:
+    return run_summary(
+        repo_root=repo_root,
+        command=command,
+        output_dir=V2_OUTPUT_DIR,
+        protocol_id=V2_PROTOCOL_ID,
+        schema_version="harmonized-rhythm-test-summary-v2",
+        supersedes={
+            "protocol_id": PROTOCOL_ID,
+            "output_dir": str(OUTPUT_DIR),
+            "scope": "center30_center60_center90_checkpoint_selector_labels",
+            "numeric_metrics_changed": False,
+        },
+    )

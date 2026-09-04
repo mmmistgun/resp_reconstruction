@@ -2,7 +2,8 @@
 
 协议 ID：`paper-harmonized-rhythm-test-v1-20260905`；日期：2026-09-05。
 
-状态：**已从干净实现 commit 完成一次正式只读汇总并冻结。35 arms、101条评价记录全部闭合；等长轨迹IBI下降在各相邻时长均为3/3 seeds，但可解释子集成员存在变化，仅形成描述性跨任务证据。**
+状态：**v1 数值与结论保持冻结；center30/60/90 的 checkpoint selector 标签由 v2 精确 provenance 修正替代，
+见 `docs/experiments/paper_harmonized_rhythm_test_protocol_v2_20260905.md`。**
 
 ## 1. 问题、授权与证据边界
 
