@@ -723,4 +723,9 @@ C201 的 90→180 RR 平均改善 `1.615%`（`2/3` seeds 改善），W-reduced �
 其余主指标方向混合，逐 seed RR 最低长度也不一致。P4-U 结论冻结为 center-90 validation 上下文效应弱且依赖表征，
 不选择长度或模型，不改变其他输出任务与主实验结论。
 
+P4-U-T 按 `docs/experiments/paper_center90_context_research_test_protocol_20260904.md` 独立推进，固定评价上述 18 个
+validation-selected checkpoints。90/180 s W feature 复用冻结的联合 test cache，仅补建 135 s input-only cache：
+2310 次 CWT、shape=`[2310,49,270]`、约 116.6 MiB。补充 cache 完成并冻结 path/hash 后开放 evaluator；18/18
+完成后统一汇总任务内 paired-seed 相对变化。
+
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
