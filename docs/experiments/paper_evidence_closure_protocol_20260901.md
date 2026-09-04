@@ -742,8 +742,12 @@ test metrics。冻结汇总 receipt/manifest SHA-256=
 恶化，其他指标方向混合。P4-U-T 冻结为上下文效应弱、seed-dependent 且非单调，validation 的表征方向分歧未在 test
 稳定复现；不据此重选长度或模型。
 
-P5 已完成冻结 P−1 来源的只读论文表/图实现：固定校验 source audit/decision、correction manifest、intervention summary
-与 corrected FiLM CSV 的五项 SHA-256，只读取 40-row validation summary 和 8025-row corrected FiLM statistics。
-21 项相关定向 CPU 测试通过；正式汇总须在本实现进入干净 commit 后一次性写入不可覆盖目录。
+P5 已从干净 commit `4105e53f3a3b7b8ac164f0e2d54cb5ca20162e38` 完成冻结 P−1 来源的只读论文表/图汇总：
+固定校验 source audit/decision、correction manifest、intervention summary 与 corrected FiLM CSV 的五项 SHA-256，只读取
+40-row validation summary 和 8025-row corrected FiLM statistics。receipt/manifest SHA-256 为
+`d93e54ca6798671d068a0c82c97a530af3cb83df525d1068b3563b093c19292d / 82e4c10c10e85390b2eb3f61657c036c180e97a3927a0d0c15ddf666aea51187`。
+TIME_SHIFT_30S 的四项 error 均恶化 `3.99% / 6.60% / 23.05% / 24.10%`，PCC 下降 `0.02382`，五项均为
+3/3 seeds 恶化；RESP 遮挡稳定损害 RR/trajectory/PCC，carrier 遮挡则呈 RR 与 morphology/PCC trade-off。
+现有十项干预已满足论文功能证据需求，P5 关闭，不启动可选局部 `4×6` inference；21 项相关定向 CPU 测试通过。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
