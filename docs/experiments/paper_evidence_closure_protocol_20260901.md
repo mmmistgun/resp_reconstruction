@@ -529,6 +529,10 @@ CARRIER、CARRIER_L、CARRIER_H、TIME_MEAN、TIME_SHIFT_30S。该审计和 corr
 当前第一动作只允许只读生成论文表/图，保持 source CSV hash 不变。至少报告 FULL 对比 CONDITION_OFF、TIME_MEAN、
 TIME_SHIFT_30S 及四个频率遮挡的五项 primary delta、三 seed 方向和 FiLM corrected statistics。
 
+只读整理的实现、统计合同、冻结输入哈希与不可覆盖输出协议见
+`docs/experiments/paper_p5_w0_functional_evidence_protocol_20260905.md`。实现固定输出 aggregate-mean 变化、paired-seed
+变化 mean ± sample SD 与方向计数；图中 error 使用相对恶化、PCC 使用绝对下降，避免混用单位。
+
 ### 8.2 可选局部频率×时间干预
 
 只有既有 P−1 无法满足论文图件需求时，才另行授权一次新的 validation-only inference protocol。候选网格固定为：
@@ -737,5 +741,9 @@ test metrics。冻结汇总 receipt/manifest SHA-256=
 90→180 RR 在 C201/W-reduced 中平均改善 `1.788% / 2.198%`，均为 `2/3` seeds 材料改善；90→135 均值则均
 恶化，其他指标方向混合。P4-U-T 冻结为上下文效应弱、seed-dependent 且非单调，validation 的表征方向分歧未在 test
 稳定复现；不据此重选长度或模型。
+
+P5 已完成冻结 P−1 来源的只读论文表/图实现：固定校验 source audit/decision、correction manifest、intervention summary
+与 corrected FiLM CSV 的五项 SHA-256，只读取 40-row validation summary 和 8025-row corrected FiLM statistics。
+21 项相关定向 CPU 测试通过；正式汇总须在本实现进入干净 commit 后一次性写入不可覆盖目录。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
