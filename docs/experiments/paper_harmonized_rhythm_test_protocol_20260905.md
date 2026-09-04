@@ -5,6 +5,9 @@
 状态：**v1 数值与结论保持冻结；center30/60/90 的 checkpoint selector 标签由 v2 精确 provenance 修正替代，
 见 `docs/experiments/paper_harmonized_rhythm_test_protocol_v2_20260905.md`。**
 
+当前引用固定为 v2 receipt/manifest SHA-256=
+`f70a72bf5081a06b0b13c8697cbcc99f52a7f7fbb183dbd6f070f66b4314205b / 0cc7a0a7c55a842c54ab49484541e97063d6863eec96f0ff91b85f1ba54f3107`。
+
 ## 1. 问题、授权与证据边界
 
 本附件独立整理 center30/60/90 全部 input/model arms 与历史 180→180 已审计独立测试集方法。
@@ -106,7 +109,8 @@ Center60 native RR为完整中心60s单窗，虽与历史 Local RR 观测长度�
 
 ## 6. 正式执行结果
 
-正式命令从干净实现 commit `81a78bddd125db10f4f97863c33c2772a28dcd51` 成功执行一次。
+以下记录为 v1 正式执行身份；当前论文引用使用 v2。正式命令从干净实现 commit
+`81a78bddd125db10f4f97863c33c2772a28dcd51` 成功执行一次。
 Receipt记录 `git_dirty=false`，Python/NumPy/pandas/PyYAML版本分别为 `3.12.13 / 1.26.4 / 3.0.3 / 6.0.3`。
 读取并登记376个唯一指标/provenance/源码文件，写出前后核验输入hash未改变。
 35 arms、等长轨迹9行、101条评价记录（99学习checkpoint+2确定性记录）、233310条逐样本指标全部闭合。

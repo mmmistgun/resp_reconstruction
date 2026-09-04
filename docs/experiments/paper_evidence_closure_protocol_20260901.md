@@ -4,7 +4,9 @@
 
 协议 ID：`paper-evidence-closure-v1-20260901`
 
-状态：**P0–P4、P4-S 与 P4-T 均已完成并冻结。Center-60 的 42-checkpoint 附件分支在独立 test 上支持“延长输入没有稳定 RR 收益”，60 s 是该任务当前 RR 优先的合理选择；center-30 的 validation 45 s 下限未获 test 确认，最短合理边界仍未定位。独立 P4-U center-90 输出尺度实验已固定为 18-run validation 矩阵并进入实现阶段。各输出任务保持独立 panel，不回写论文主模型实验。效率 benchmark 未授权。**
+状态：**P0–P4、P4-S/P4-T、P4-U/P4-U-T 与节律指标统一只读汇总均已完成并冻结。Center-60 test 支持
+“延长输入没有稳定 RR 收益”；center-30 最短合理边界仍未定位；center-90 test 显示上下文效应弱、seed-dependent
+且非单调。跨输出长度 IBI 仅形成描述性轨迹。各输出任务保持独立 panel，不回写论文主模型实验。**
 
 ## 1. 定位与边界
 
@@ -38,7 +40,8 @@
 | P4 | 条件触发的三 seed 窗口正式矩阵与冻结汇总 | 是，追加 12 runs | 18/18 完成并冻结；描述性结果留档 |
 | P4-S | center-30 的 30/45/60/90 s 短窗口分支 | 条件训练，最终 24 runs | 24/24 与三 seed汇总已冻结；validation 阶段关闭 |
 | P4-T | center-30/center-60 上下文任务完整独立测试集附件 | 否；42 checkpoints inference | 42/42 与分任务冻结汇总均完成；附件关闭 |
-| P4-U | center-90 的 90/135/180 s 输出尺度分支 | 是，18 runs | P0–P2 已冻结；18 项 formal 配置等待训练 |
+| P4-U | center-90 的 90/135/180 s 输出尺度分支与 test 附件 | 是，18 runs；18 checkpoints inference | validation/test 均完成并冻结 |
+| P4-R | center30/60/90 与历史 180→180 节律指标统一只读汇总 | 否 | v2 selector provenance 修正后完成并冻结 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
