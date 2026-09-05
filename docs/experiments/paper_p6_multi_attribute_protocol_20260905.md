@@ -16,14 +16,18 @@ P6 不训练、不重选 checkpoint、模型、方法、频带或窗口，也不
 ## 2. 固定合同
 
 机器可读合同固定为 `configs/paper_evidence_v1/p6_multi_attribute_v1.json`，SHA-256=
-`0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff`。它锁定：
+`0b9c861d3934d1d5f247afb5737838a2d885ac0e1c454400dd7114d79e42af2c`。它锁定：
 
 - admitted train/validation 为 `10141 / 2675` rows、`32 / 7` 个 `samp_id`；
 - 100 Hz、18000 点 target、现行 `0.05–0.70 Hz` dominant spectral Whole RR；
 - train RR 的 `1/3 / 2/3` linear quantiles，区间为 `low≤q1`、`q1<medium≤q2`、`high>q2`；
 - P0 primary table 的全部 10 个方法，顺序不变；
 - W0 三个 validation-selected checkpoints：seed `20260811/12/13`，epoch `13/15/14`；
-- 五个示例类别与 `5 rows × 3 checkpoints = 15` 次 validation forward，不构造 ensemble。
+- 五个示例类别与 `5 rows × 3 checkpoints = 15` 个保存的 validation 输出，不构造 ensemble。
+
+该合同替代实现初版 SHA-256=`0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff`；唯一变更是第 5 节
+历史 batch-shape 数值重放。Train/validation target attributes、RR cutpoints、方法/checkpoint 矩阵、五个 rows、selection
+rule 和 `1e-6` 锚点均不变，初版合同下已冻结的 target/selection 产物继续有效。
 
 ## 3. Target-only 属性
 
@@ -65,6 +69,11 @@ target RR 必须 finite/eligible，否则停止，不静默过滤后重估 cutpo
 whole 180 s target、中心 `[60,120) s`
 target、三个 seed prediction、canonical log-RMS envelope、target RR、五主指标、PNG panel、source/row/checkpoint hashes 和
 access flags。逐 seed 新计算五主指标必须以绝对容差 `1e-6` 锚定原冻结 validation metrics。
+
+历史冻结 metrics 使用 `batch_size=128`，最后一个 validation batch 为 115。为保持 BF16/Mamba 数值路径，导出使用两个
+replay batches/checkpoint：128-shape batch 固定 slots `37/81/95/105`，115-shape batch 固定 slot `5`。Padding 只重复
+五个已选 rows，不读取其他 validation rows；只保存五个目标输出，padding 输出丢弃。实际处理量为每 checkpoint
+`128+115=243` batch elements、三 checkpoints 共 729，但科学矩阵仍为 15 个 row-checkpoint pairs。
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD \
@@ -119,3 +128,14 @@ selection rule SHA-256=`23bd6ab081d457393bf9298b64ba8450ca7c54472cc0ac45ef3e6ce8
 
 候选表保存 `5×2675=13375` rows，每类恰有一个 selected row，五个 rows 互异；候选和选中表不携带 `samp_id`。
 选样只读取冻结 W0 validation metrics 与 target attributes，没有读取任何 waveform、checkpoint 或 test，也没有执行 inference。
+
+## 9. 首次 GPU lifecycle 与修订
+
+初版导出从干净 commit `2a7adbb` 启动，五个 rows 直接组成 batch=5。Seed `20260811` 在 row `16442` 的
+`local_rr_mae_bpm` 未通过 `1e-6` 历史锚点，失败记录保留于
+`runs/paper_evidence_v1/.p6_waveform_export.incomplete_yqlz_snw/failure.json`。此前 checkpoint/config/source/row/target/W
+身份均已通过；失败发生在派生 Local RR 锚点，而历史 metrics 来自 batch=128 的 BF16/Mamba validation 数值路径，现有
+证据与 batch-shape 数值路径差异一致，但须由 replay 是否恢复锚点进一步验证。
+
+没有放宽容差、换 row、重选 checkpoint 或删除失败记录。用户确认后，执行合同仅改为第 5 节历史 batch-shape replay；
+padding 不增加数据访问范围。相关 P6/respiration-metrics 定向 CPU 测试现为 24 项通过。

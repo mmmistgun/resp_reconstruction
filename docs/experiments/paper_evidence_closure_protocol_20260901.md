@@ -585,7 +585,7 @@ Test target-only attribute 读取属于新的 test 访问，必须在 train cutp
 
 P6 的规范性附件为 `docs/experiments/paper_p6_multi_attribute_protocol_20260905.md`，机器合同固定为
 `configs/paper_evidence_v1/p6_multi_attribute_v1.json`，SHA-256=
-`0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff`。用户已确认以下口径：RR 分区方法矩阵使用
+`0b9c861d3934d1d5f247afb5737838a2d885ac0e1c454400dd7114d79e42af2c`。用户已确认以下口径：RR 分区方法矩阵使用
 P0 全部 10 个 primary methods；validation 波形 rows 按 W0 三 seed 的逐 row 五主指标 arithmetic mean 计算 RR/effort
 difficulty ranks，并以五个固定目标规则顺序、自适应排除重复 row；同五个 rows 导出三个 W0 checkpoints，共 15 个
 row-checkpoint pairs，不构造 ensemble。
@@ -787,5 +787,14 @@ P6 P1 target-only 属性已从干净 commit `6220d63c794ff51c0aaa3f9da36492dcd18
 从 13375 条类别候选冻结五个互异 validation rows；selection receipt/manifest SHA-256=
 `c5f72423ff236364555bfac6869117fcd0ff11e8249ea1537817e1f5d7dc91e3 / 7937c9d085c35139993bb7a482797d6f9ffb932d5da92d634a61890b96e8a784`。
 两个阶段均未读取 test target、BCG 或 checkpoint，未执行 inference/GPU；下一步仅开放 15-pair validation 波形导出。
+
+首次 GPU 导出使用 batch=5，在 seed `20260811`、row `16442` 的 Local RR 未通过 `1e-6` 冻结锚点；失败 lifecycle
+固定保留为 `.p6_waveform_export.incomplete_yqlz_snw`。身份检查此前全部通过，未放宽容差、换 row 或重选 checkpoint。
+当前原因假设为历史 metrics 使用 batch=128（末批 115），而 BF16/Mamba 与 Local RR 峰值判定对 batch 数值路径敏感；
+须由 replay 是否恢复锚点验证。
+用户确认后只修订执行合同为历史 batch-shape replay：每 checkpoint 处理 128+115 个 batch elements，padding 只复用
+五个已选 rows，仍只保存 15 个预注册输出；三 checkpoints 总处理量 729。初版 contract hash
+`0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff` 仅由该执行修订替代，既有 target/selection
+产物、RR cutpoints、rule hash、矩阵和 `1e-6` 锚点保持有效；24 项相关定向 CPU 测试通过。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

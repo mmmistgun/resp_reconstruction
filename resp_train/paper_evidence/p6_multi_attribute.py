@@ -27,7 +27,8 @@ from resp_train.metrics.task import (
 PROTOCOL_ID = "paper-p6-multi-attribute-v1-20260905"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = Path("configs/paper_evidence_v1/p6_multi_attribute_v1.json")
-CONTRACT_SHA256 = "0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff"
+CONTRACT_SHA256 = "0b9c861d3934d1d5f247afb5737838a2d885ac0e1c454400dd7114d79e42af2c"
+PRE_REPLAY_CONTRACT_SHA256 = "0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff"
 TARGET_OUTPUT = Path("runs/paper_evidence_v1/p6_target_attributes")
 SELECTION_OUTPUT = Path("runs/paper_evidence_v1/p6_waveform_selection")
 EXPORT_OUTPUT = Path("runs/paper_evidence_v1/p6_waveform_export")
@@ -265,6 +266,76 @@ def build_waveform_selection(
     return candidates, selected, rule_hash
 
 
+def build_numerical_replay_plan(
+    selected: pd.DataFrame,
+    validation_row_ids: Sequence[int],
+    replay_contract: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], list[int]]:
+    """校验冻结 row 的历史 batch slot，并给出只保存五项输出的抽取位置。"""
+
+    row_ids = [int(value) for value in validation_row_ids]
+    if len(row_ids) == 0 or len(set(row_ids)) != len(row_ids):
+        raise ValueError("validation row ids 必须非空且唯一")
+    selected_by_category = selected.set_index("category")
+    if set(selected_by_category.index) != set(CATEGORIES):
+        raise ValueError("numerical replay 必须完整覆盖五类 selected rows")
+    source_batch = int(replay_contract["source_validation_batch_size"])
+    if source_batch <= 0:
+        raise ValueError("source validation batch size 必须为正")
+    positions = {row_id: index for index, row_id in enumerate(row_ids)}
+    observed_categories: set[str] = set()
+    plans: list[dict[str, Any]] = []
+    extraction_by_category: dict[str, int] = {}
+    cumulative = 0
+    for group_index, raw in enumerate(replay_contract["replay_batches"]):
+        batch_size = int(raw["batch_size"])
+        fill_category = str(raw["fill_category"])
+        slots = {str(key): int(value) for key, value in raw["category_slots"].items()}
+        if fill_category not in CATEGORIES or batch_size <= 0 or len(set(slots.values())) != len(slots):
+            raise ValueError("numerical replay batch contract 不合格")
+        entries = []
+        for category, slot in slots.items():
+            if category not in CATEGORIES or category in observed_categories or not 0 <= slot < batch_size:
+                raise ValueError("numerical replay category/slot 重复或越界")
+            row_id = int(selected_by_category.loc[category, "dataset_row_id"])
+            if row_id not in positions:
+                raise ValueError(f"selected row 不在完整 validation rows: {row_id}")
+            source_position = positions[row_id]
+            source_group_start = (source_position // source_batch) * source_batch
+            expected_batch_size = min(source_batch, len(row_ids) - source_group_start)
+            expected_slot = source_position - source_group_start
+            if batch_size != expected_batch_size or slot != expected_slot:
+                raise RuntimeError(
+                    f"numerical replay 历史 batch shape/slot 漂移: {category} "
+                    f"expected=({expected_batch_size},{expected_slot}) observed=({batch_size},{slot})"
+                )
+            observed_categories.add(category)
+            extraction_by_category[category] = cumulative + slot
+            entries.append(
+                {
+                    "category": category,
+                    "dataset_row_id": row_id,
+                    "source_position": source_position,
+                    "slot": slot,
+                }
+            )
+        plans.append(
+            {
+                "group_index": group_index,
+                "batch_size": batch_size,
+                "fill_category": fill_category,
+                "entries": entries,
+            }
+        )
+        cumulative += batch_size
+    if observed_categories != set(CATEGORIES):
+        raise ValueError("numerical replay contract 未完整覆盖五类")
+    if cumulative != int(replay_contract["processed_batch_elements_per_checkpoint"]):
+        raise ValueError("numerical replay processed elements contract 漂移")
+    extraction = [extraction_by_category[category] for category in CATEGORIES]
+    return plans, extraction
+
+
 def build_p6_target_attributes(*, repo_root: str | Path, command: str) -> Path:
     root = Path(repo_root).resolve()
     output = root / TARGET_OUTPUT
@@ -406,7 +477,7 @@ def export_p6_validation_waveforms(
     *, repo_root: str | Path, command: str, device: str
 ) -> Path:
     import torch
-    from torch.utils.data import DataLoader
+    from torch.utils.data._utils.collate import default_collate
 
     from resp_train.crd.experiment import _validate_checkpoint_config
     from resp_train.crd.model import build_crd_model
@@ -429,14 +500,21 @@ def export_p6_validation_waveforms(
         overrides=[f"training.device={device}", "training.show_progress=false"],
     )
     audited = read_research_v2_index(base_cfg.data.dataset_root, base_cfg.data.index_csv, base_cfg)
-    val_rows = filter_index(
+    admitted_val_rows = filter_index(
         audited,
         base_cfg,
         split="val",
         max_windows=None,
         sample_strategy="stratified_random",
         sample_seed=int(base_cfg.data.val_sample_seed),
-    ).set_index("dataset_row_id").loc[selected_ids].reset_index()
+    )
+    replay_contract = contract["waveform_export"]["numerical_replay"]
+    replay_plan, extraction_positions = build_numerical_replay_plan(
+        selected,
+        admitted_val_rows["dataset_row_id"].astype(int).tolist(),
+        replay_contract,
+    )
+    val_rows = admitted_val_rows.set_index("dataset_row_id").loc[selected_ids].reset_index()
     dataset = ResearchV2WindowDataset(
         Path(str(base_cfg.data.dataset_root)) / str(base_cfg.data.index_csv),
         val_rows,
@@ -444,7 +522,18 @@ def export_p6_validation_waveforms(
         preload_windows=True,
         preload_show_progress=False,
     )
-    loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False, num_workers=0)
+    category_to_index = {
+        str(category): index
+        for index, category in enumerate(selected.sort_values("category_order")["category"])
+    }
+    items = [dataset[index] for index in range(len(dataset))]
+    replay_loader = []
+    for group in replay_plan:
+        fill_index = category_to_index[str(group["fill_category"])]
+        replay_items = [items[fill_index] for _ in range(int(group["batch_size"]))]
+        for entry in group["entries"]:
+            replay_items[int(entry["slot"])] = items[category_to_index[str(entry["category"])] ]
+        replay_loader.append(default_collate(replay_items))
     bcg = np.stack([dataset[index]["x"].numpy().reshape(-1) for index in range(len(dataset))])
     target = np.stack([dataset[index]["target"].numpy().reshape(-1) for index in range(len(dataset))])
     predictions = []
@@ -470,11 +559,12 @@ def export_p6_validation_waveforms(
             del checkpoint
             predicted = collect_predictions(
                 model,
-                loader,
+                replay_loader,
                 device=device,
-                max_windows=len(dataset),
+                max_windows=int(replay_contract["processed_batch_elements_per_checkpoint"]),
                 use_amp=True,
             )
+            predicted = _slice_prediction_rows(predicted, extraction_positions)
             observed_ids = np.asarray(predicted["dataset_row_id"], dtype=np.int64).tolist()
             if observed_ids != selected_ids:
                 raise RuntimeError("P6 waveform export row order 漂移")
@@ -553,7 +643,22 @@ def export_p6_validation_waveforms(
             "execution": _execution(commit, command),
             "contract_sha256": CONTRACT_SHA256,
             "inputs": [*source_records, selection_manifest_record],
-            "counts": {"validation_rows": 5, "checkpoint_count": 3, "forward_pairs": 15},
+            "counts": {
+                "validation_rows": 5,
+                "checkpoint_count": 3,
+                "exported_row_checkpoint_pairs": 15,
+                "replay_batches_per_checkpoint": len(replay_plan),
+                "processed_batch_elements_per_checkpoint": int(
+                    replay_contract["processed_batch_elements_per_checkpoint"]
+                ),
+                "processed_batch_elements_total": int(replay_contract["processed_batch_elements_total"]),
+            },
+            "numerical_replay": {
+                "reason": "preserve historical validation batch shape and selected-row slot under BF16/Mamba",
+                "padding_rows_reuse_selected_rows_only": True,
+                "padding_outputs_saved": False,
+                "plan": replay_plan,
+            },
             "center_interval_samples": [center_start, center_stop],
             "input_carrier": str(base_cfg.data.bcg_input_key),
             "target_carrier": str(base_cfg.data.target_key),
@@ -763,7 +868,10 @@ def _load_target_attributes(root: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     receipt_path = directory / "target_attribute_receipt.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    if receipt.get("protocol_id") != PROTOCOL_ID or receipt.get("contract_sha256") != CONTRACT_SHA256:
+    if (
+        receipt.get("protocol_id") != PROTOCOL_ID
+        or receipt.get("contract_sha256") not in {PRE_REPLAY_CONTRACT_SHA256, CONTRACT_SHA256}
+    ):
         raise RuntimeError("P6 target attribute receipt identity 漂移")
     _verify_artifact_manifest(directory, manifest)
     attrs = pd.read_csv(directory / "validation_target_attributes.csv")
@@ -775,7 +883,10 @@ def _load_selected_rows(root: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     manifest_path = directory / "artifact_manifest.json"
     receipt = json.loads((directory / "waveform_selection_receipt.json").read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if receipt.get("protocol_id") != PROTOCOL_ID or receipt.get("contract_sha256") != CONTRACT_SHA256:
+    if (
+        receipt.get("protocol_id") != PROTOCOL_ID
+        or receipt.get("contract_sha256") not in {PRE_REPLAY_CONTRACT_SHA256, CONTRACT_SHA256}
+    ):
         raise RuntimeError("P6 waveform selection receipt identity 漂移")
     _verify_artifact_manifest(directory, manifest)
     selected = pd.read_csv(directory / "waveform_selected_rows.csv")
@@ -793,6 +904,24 @@ def _anchor_export_metrics(observed: pd.DataFrame, frozen: pd.DataFrame, *, atol
         for metric in PRIMARY_METRICS:
             if not np.isclose(float(row[metric]), float(source.loc[row_id, metric]), rtol=0.0, atol=atol):
                 raise RuntimeError(f"P6 export FULL anchor 不一致: row={row_id}/{metric}")
+
+
+def _slice_prediction_rows(
+    predictions: Mapping[str, np.ndarray], positions: Sequence[int]
+) -> dict[str, np.ndarray]:
+    indices = np.asarray(positions, dtype=np.int64)
+    if indices.shape != (len(CATEGORIES),) or len(np.unique(indices)) != len(indices):
+        raise ValueError("P6 numerical replay extraction positions 不合格")
+    output = {}
+    total = len(np.asarray(predictions["dataset_row_id"]))
+    if indices.min() < 0 or indices.max() >= total:
+        raise ValueError("P6 numerical replay extraction position 越界")
+    for key, value in predictions.items():
+        array = np.asarray(value)
+        if array.ndim == 0 or array.shape[0] != total:
+            raise ValueError(f"P6 prediction field 第一维不一致: {key}")
+        output[key] = array[indices]
+    return output
 
 
 def _reject_existing(output: Path) -> None:
@@ -904,6 +1033,7 @@ __all__ = [
     "aggregate_w0_validation_metrics",
     "assign_rr_strata",
     "build_p6_target_attributes",
+    "build_numerical_replay_plan",
     "build_target_attribute_frame",
     "build_waveform_selection",
     "export_p6_validation_waveforms",
