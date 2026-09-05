@@ -44,7 +44,7 @@
 | P4-R | center30/60/90 与历史 180→180 节律指标统一只读汇总 | 否 | v2 selector provenance 修正后完成并冻结 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形与 test RR 区间均冻结；阶段关闭 |
-| P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | v1 完成但 online-W 有顺序混杂；v2 校正等待执行 |
+| P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | v2 校正完成并冻结 |
 
 每个阶段必须使用新目录且禁止覆盖。实现、训练、独立测试集访问和长时间 benchmark 分别需要用户明确授权；
 前一阶段完成不自动授权后一阶段。
@@ -852,7 +852,32 @@ profiler 前置造成 reserved allocator state 不同。因此 v1 只冻结 cach
 用户已确认以不增加 timed iteration 总数的方式执行 P7-v2。独立合同
 `configs/paper_evidence_v1/p7_iot_efficiency_correction_v2.json` 固定 prior manifest、平衡 round schedule、后置
 profiler、CWT 一致性门槛和新不可覆盖输出目录，SHA-256=
-`94d23ed74bdf661c7507845ca7ab7af1da3decd63a3824da957a75868bfc5529`；v1 产物保持不变。当前只完成 v2
-实现，尚未执行校正 benchmark。
+`94d23ed74bdf661c7507845ca7ab7af1da3decd63a3824da957a75868bfc5529`；v1 产物保持不变。
+
+P7-v2 已从干净 commit `0dfc235d84249874f6f266482f6b8b0abc6c8828` 完成，manifest SHA-256=
+`132009e94341a163f326607d6110a4ae8e632776c80e378426366f3996e5e572`，decision=`measurement_complete`。
+3,000 条 timed pipeline iterations、13,500 条 stage records、全部 finite，135 个 model×scenario×round×stage
+分组均恰为 100 条且全部 artifact hash 闭合。相同 online CWT stage 的跨模型 median/p95 relative spread 为
+`2.205% / 2.662%`，通过预注册 `10%` 一致性门槛；v2 替代 v1 作为 P7 正式时延结果。
+
+在 RTX 4070 Ti SUPER、BF16、batch=1、pageable host memory 上，W0/W3/D4 的 cached-W median/p95 分别为
+`19.248/22.306`、`19.029/22.307`、`14.392/16.943 ms`；online-W 分别为
+`79.521/84.461`、`79.352/84.205`、`73.199/78.421 ms`。相对 W0，W3 的 cached median/p95 为
+`−1.139%/+0.005%`，online 为 `−0.213%/−0.303%`，只支持“当前完整 97-scale source pipeline 下没有实质时延收益”；
+D4 的 cached median/p95 改善 `25.230%/24.044%`，online 改善 `7.951%/7.151%`。W0 online median 中
+97-scale CWT 占 `72.527%`，解释了 D4 模型 forward 改善 `23.802%` 却在端到端中被稀释。
+
+W3 相对 W0 的 model input elements 减少 `49.485%`、peak allocated 减少 `26.049%`、profiler-covered FLOPs
+减少 `9.585%`，但参数量不变且 checkpoint 大小近似不变；D4 的参数、checkpoint、covered FLOPs 分别减少
+`25.997%/25.865%/26.848%`，peak allocated 仅减少 `3.558%`。Profiler FLOPs/MACs 仍是未完整覆盖 Mamba custom
+op 的描述值。Peak reserved 受首轮 allocator 初始化影响（W0 cached round range=`54–290 MiB`），只作原始记录，
+不用于跨模型资源结论。
+
+质量-效率解释保持来源边界：W0/W3 使用三 seed 独立测试集质量，W3 的 Whole/Local RR 恶化
+`9.8265%/7.1294%`，trajectory/global/PCC 改善 `1.7417%/3.9962%/+0.002117`；D4 仅有三 seed validation
+质量，Whole/Local/trajectory 变化为 `+0.2519%/+1.8308%/+1.2847%`，global 改善 `0.3187%`、PCC
+下降 `0.002938`。因此 P7 只支持 W3 的输入/显存 trade-off 和 D4 的 validation-only depth-efficiency trade-off，
+不产生唯一赢家或部署结论。30 s sliding-step p95 数值余量约 `29.916–29.983 s`，同时明确完整 180 s 上下文等待；
+桌面 GPU 结果不代表真实边缘设备。P7 完成并关闭。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
