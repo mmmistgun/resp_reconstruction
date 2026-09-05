@@ -203,6 +203,11 @@ def test_historical_batch_shape_replay_plan_and_extraction():
     replay = p6.load_contract()["waveform_export"]["numerical_replay"]
     plan, extraction = p6.build_numerical_replay_plan(selected, list(range(2675)), replay)
     assert [group["batch_size"] for group in plan] == [128, 115]
+    assert [group["materialization"] for group in plan] == [
+        "repeat_selected", "historical_source_batch"
+    ]
+    assert plan[1]["source_position_start"] == 2560
+    assert plan[1]["source_position_stop"] == 2675
     assert extraction == [37, 81, 133, 95, 105]
     predictions = {
         "dataset_row_id": np.arange(243, dtype=np.int64),
@@ -261,6 +266,7 @@ def test_frozen_contract_and_static_sources_are_validation_only():
     assert len(records) == 11
     assert not any(record["path"].endswith("research_test_metrics.csv") for record in records)
     assert contract["waveform_export"]["numerical_replay"]["processed_batch_elements_total"] == 729
+    assert contract["waveform_export"]["numerical_replay"]["unique_validation_rows_read"] == 119
     if (root / p6.SELECTION_OUTPUT / "artifact_manifest.json").is_file():
         attrs, _ = p6._load_target_attributes(root)
         selected, _ = p6._load_selected_rows(root)

@@ -51,6 +51,7 @@
       "replay_batches": [
         {
           "batch_size": 128,
+          "materialization": "repeat_selected",
           "fill_category": "typical",
           "category_slots": {
             "typical": 37,
@@ -61,7 +62,9 @@
         },
         {
           "batch_size": 115,
-          "fill_category": "effort_difficult",
+          "materialization": "historical_source_batch",
+          "source_position_start": 2560,
+          "source_position_stop": 2675,
           "category_slots": {
             "effort_difficult": 5
           }
@@ -69,7 +72,8 @@
       ],
       "processed_batch_elements_per_checkpoint": 243,
       "processed_batch_elements_total": 729,
-      "padding_rows_reuse_selected_rows_only": true,
+      "unique_validation_rows_read": 119,
+      "repeat_padding_uses_selected_rows_only": true,
       "padding_outputs_saved": false
     },
     "ensemble_method_created": false,

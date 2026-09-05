@@ -585,14 +585,15 @@ Test target-only attribute 读取属于新的 test 访问，必须在 train cutp
 
 P6 的规范性附件为 `docs/experiments/paper_p6_multi_attribute_protocol_20260905.md`，机器合同固定为
 `configs/paper_evidence_v1/p6_multi_attribute_v1.json`，SHA-256=
-`0b9c861d3934d1d5f247afb5737838a2d885ac0e1c454400dd7114d79e42af2c`。用户已确认以下口径：RR 分区方法矩阵使用
+`f019042a02726a638832ce47261e14b64c625efe35b26a7a58684a3f3ff94f9a`。用户已确认以下口径：RR 分区方法矩阵使用
 P0 全部 10 个 primary methods；validation 波形 rows 按 W0 三 seed 的逐 row 五主指标 arithmetic mean 计算 RR/effort
 difficulty ranks，并以五个固定目标规则顺序、自适应排除重复 row；同五个 rows 导出三个 W0 checkpoints，共 15 个
 row-checkpoint pairs，不构造 ensemble。
 
 实现分为三个不可覆盖阶段：`p6_target_attributes` 只读取完整 train/validation targets 并冻结 train RR cutpoints；
-`p6_waveform_selection` 只读三份冻结 W0 validation metrics 和 target attributes；`p6_waveform_export` 才读取五个
-validation BCG/target、W cache 与三个 checkpoints。前两阶段不读取 checkpoint、不推理、不用 GPU；第三阶段不读取 test。
+`p6_waveform_selection` 只读三份冻结 W0 validation metrics 和 target attributes；`p6_waveform_export` 为数值重放读取 119 个
+validation BCG/target、W cache 与三个 checkpoints，但只保存五个预注册 rows 的 15 个输出。前两阶段不读取 checkpoint、
+不推理、不用 GPU；第三阶段不读取 test。
 Test target-only 属性及 10 方法 RR 分区汇总在获得新的明确授权前不提供可执行入口。
 
 ## 10. P7：IoT 端到端效率结果
@@ -800,6 +801,13 @@ P6 P1 target-only 属性已从干净 commit `6220d63c794ff51c0aaa3f9da36492dcd18
 Replay 首次执行仍在 seed `20260811`、row `16442` 的 Local RR 超出锚点：observed/expected=
 `0.039869667187182621 / 0.039871286044205499`，绝对差 `1.6188570228781174e-6`；第二个失败 lifecycle
 `.p6_waveform_export.incomplete_ggddr8_o` 保留。没有据首个超限值放宽门槛。实现现改为完成全部 75 项锚点差值后统一
-判定，并在失败目录保存 `validation_anchor_deltas.csv`；下一次运行只作完整数值漂移诊断，不改变科学矩阵或数据访问范围。
+判定，并在失败目录保存 `validation_anchor_deltas.csv`。
+
+完整诊断 lifecycle `.p6_waveform_export.incomplete_ht4mbh3d` 显示 68/75 项通过；7 个超限项全部属于末批 row `16442`，
+其余四个 rows 在三 seeds 下均达到机器精度一致，最大绝对差为 `5.2045859986804555e-05`。该量级不影响波形图或描述性
+结论，但说明只恢复 batch shape/slot 不足。用户确认保留 `1e-6` gate，精确读取历史 validation 末批 positions
+`[2560,2675)`；互异 validation rows 读取数由 5 增至 119，forward 总量仍为 729，只保存 15 个预注册输出，不改变选样、
+方法/checkpoint 矩阵、指标或 test 关闭状态。此前 contract hash `0b9c861d3934d1d5f247afb5737838a2d885ac0e1c454400dd7114d79e42af2c`
+仅由该执行/访问修订替代。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

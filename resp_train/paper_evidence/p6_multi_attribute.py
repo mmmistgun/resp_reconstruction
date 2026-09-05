@@ -27,7 +27,7 @@ from resp_train.metrics.task import (
 PROTOCOL_ID = "paper-p6-multi-attribute-v1-20260905"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = Path("configs/paper_evidence_v1/p6_multi_attribute_v1.json")
-CONTRACT_SHA256 = "0b9c861d3934d1d5f247afb5737838a2d885ac0e1c454400dd7114d79e42af2c"
+CONTRACT_SHA256 = "f019042a02726a638832ce47261e14b64c625efe35b26a7a58684a3f3ff94f9a"
 PRE_REPLAY_CONTRACT_SHA256 = "0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff"
 TARGET_OUTPUT = Path("runs/paper_evidence_v1/p6_target_attributes")
 SELECTION_OUTPUT = Path("runs/paper_evidence_v1/p6_waveform_selection")
@@ -286,13 +286,40 @@ def build_numerical_replay_plan(
     observed_categories: set[str] = set()
     plans: list[dict[str, Any]] = []
     extraction_by_category: dict[str, int] = {}
+    materialized_row_ids: set[int] = set()
     cumulative = 0
     for group_index, raw in enumerate(replay_contract["replay_batches"]):
         batch_size = int(raw["batch_size"])
-        fill_category = str(raw["fill_category"])
+        materialization = str(raw["materialization"])
         slots = {str(key): int(value) for key, value in raw["category_slots"].items()}
-        if fill_category not in CATEGORIES or batch_size <= 0 or len(set(slots.values())) != len(slots):
+        if (
+            materialization not in {"repeat_selected", "historical_source_batch"}
+            or batch_size <= 0
+            or len(set(slots.values())) != len(slots)
+        ):
             raise ValueError("numerical replay batch contract 不合格")
+        fill_category = None
+        source_position_start = None
+        source_position_stop = None
+        if materialization == "repeat_selected":
+            fill_category = str(raw["fill_category"])
+            if fill_category not in CATEGORIES:
+                raise ValueError("numerical replay fill category 不合格")
+            materialized_row_ids.add(
+                int(selected_by_category.loc[fill_category, "dataset_row_id"])
+            )
+        else:
+            source_position_start = int(raw["source_position_start"])
+            source_position_stop = int(raw["source_position_stop"])
+            if (
+                source_position_start < 0
+                or source_position_stop > len(row_ids)
+                or source_position_stop - source_position_start != batch_size
+                or source_position_start % source_batch != 0
+                or source_position_stop != min(source_position_start + source_batch, len(row_ids))
+            ):
+                raise ValueError("numerical replay historical source batch 范围不合格")
+            materialized_row_ids.update(row_ids[source_position_start:source_position_stop])
         entries = []
         for category, slot in slots.items():
             if category not in CATEGORIES or category in observed_categories or not 0 <= slot < batch_size:
@@ -309,7 +336,16 @@ def build_numerical_replay_plan(
                     f"numerical replay 历史 batch shape/slot 漂移: {category} "
                     f"expected=({expected_batch_size},{expected_slot}) observed=({batch_size},{slot})"
                 )
+            if (
+                materialization == "historical_source_batch"
+                and source_group_start != source_position_start
+            ):
+                raise RuntimeError(
+                    f"numerical replay historical source batch 起点漂移: {category} "
+                    f"expected={source_group_start} observed={source_position_start}"
+                )
             observed_categories.add(category)
+            materialized_row_ids.add(row_id)
             extraction_by_category[category] = cumulative + slot
             entries.append(
                 {
@@ -323,7 +359,16 @@ def build_numerical_replay_plan(
             {
                 "group_index": group_index,
                 "batch_size": batch_size,
-                "fill_category": fill_category,
+                "materialization": materialization,
+                **({"fill_category": fill_category} if fill_category is not None else {}),
+                **(
+                    {
+                        "source_position_start": source_position_start,
+                        "source_position_stop": source_position_stop,
+                    }
+                    if source_position_start is not None
+                    else {}
+                ),
                 "entries": entries,
             }
         )
@@ -332,6 +377,8 @@ def build_numerical_replay_plan(
         raise ValueError("numerical replay contract 未完整覆盖五类")
     if cumulative != int(replay_contract["processed_batch_elements_per_checkpoint"]):
         raise ValueError("numerical replay processed elements contract 漂移")
+    if len(materialized_row_ids) != int(replay_contract["unique_validation_rows_read"]):
+        raise ValueError("numerical replay unique validation rows contract 漂移")
     extraction = [extraction_by_category[category] for category in CATEGORIES]
     return plans, extraction
 
@@ -529,10 +576,31 @@ def export_p6_validation_waveforms(
     items = [dataset[index] for index in range(len(dataset))]
     replay_loader = []
     for group in replay_plan:
-        fill_index = category_to_index[str(group["fill_category"])]
-        replay_items = [items[fill_index] for _ in range(int(group["batch_size"]))]
-        for entry in group["entries"]:
-            replay_items[int(entry["slot"])] = items[category_to_index[str(entry["category"])] ]
+        if group["materialization"] == "repeat_selected":
+            fill_index = category_to_index[str(group["fill_category"])]
+            replay_items = [items[fill_index] for _ in range(int(group["batch_size"]))]
+            for entry in group["entries"]:
+                replay_items[int(entry["slot"])] = items[category_to_index[str(entry["category"])] ]
+        else:
+            source_rows = admitted_val_rows.iloc[
+                int(group["source_position_start"]):int(group["source_position_stop"])
+            ].copy()
+            source_dataset = ResearchV2WindowDataset(
+                Path(str(base_cfg.data.dataset_root)) / str(base_cfg.data.index_csv),
+                source_rows,
+                base_cfg,
+                preload_windows=True,
+                preload_show_progress=False,
+            )
+            replay_items = [source_dataset[index] for index in range(len(source_dataset))]
+            if len(replay_items) != int(group["batch_size"]):
+                raise RuntimeError("P6 historical source batch materialization size 漂移")
+            for entry in group["entries"]:
+                observed_row_id = int(
+                    replay_items[int(entry["slot"])]["meta"]["dataset_row_id"]
+                )
+                if observed_row_id != int(entry["dataset_row_id"]):
+                    raise RuntimeError("P6 historical source batch row/slot 漂移")
         replay_loader.append(default_collate(replay_items))
     bcg = np.stack([dataset[index]["x"].numpy().reshape(-1) for index in range(len(dataset))])
     target = np.stack([dataset[index]["target"].numpy().reshape(-1) for index in range(len(dataset))])
@@ -661,7 +729,8 @@ def export_p6_validation_waveforms(
             "contract_sha256": CONTRACT_SHA256,
             "inputs": [*source_records, selection_manifest_record],
             "counts": {
-                "validation_rows": 5,
+                "exported_validation_rows": 5,
+                "unique_validation_rows_read": int(replay_contract["unique_validation_rows_read"]),
                 "checkpoint_count": 3,
                 "exported_row_checkpoint_pairs": 15,
                 "replay_batches_per_checkpoint": len(replay_plan),
@@ -672,7 +741,12 @@ def export_p6_validation_waveforms(
             },
             "numerical_replay": {
                 "reason": "preserve historical validation batch shape and selected-row slot under BF16/Mamba",
-                "padding_rows_reuse_selected_rows_only": True,
+                "repeat_padding_uses_selected_rows_only": bool(
+                    replay_contract["repeat_padding_uses_selected_rows_only"]
+                ),
+                "historical_source_batch_rows_read": int(
+                    replay_contract["source_last_batch_size"]
+                ),
                 "padding_outputs_saved": False,
                 "plan": replay_plan,
             },
