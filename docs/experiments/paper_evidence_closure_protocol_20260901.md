@@ -583,6 +583,18 @@ sample-direct mean；重叠窗口不解释为独立临床样本。连续 RR 误�
 Test target-only attribute 读取属于新的 test 访问，必须在 train cutpoints、代码、方法 allowlist 和输出 schema 全部冻结后
 获得用户明确授权。它不得触发 checkpoint、候选、阈值、频带或方法重选。
 
+P6 的规范性附件为 `docs/experiments/paper_p6_multi_attribute_protocol_20260905.md`，机器合同固定为
+`configs/paper_evidence_v1/p6_multi_attribute_v1.json`，SHA-256=
+`0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff`。用户已确认以下口径：RR 分区方法矩阵使用
+P0 全部 10 个 primary methods；validation 波形 rows 按 W0 三 seed 的逐 row 五主指标 arithmetic mean 计算 RR/effort
+difficulty ranks，并以五个固定目标规则顺序、自适应排除重复 row；同五个 rows 导出三个 W0 checkpoints，共 15 个
+row-checkpoint pairs，不构造 ensemble。
+
+实现分为三个不可覆盖阶段：`p6_target_attributes` 只读取完整 train/validation targets 并冻结 train RR cutpoints；
+`p6_waveform_selection` 只读三份冻结 W0 validation metrics 和 target attributes；`p6_waveform_export` 才读取五个
+validation BCG/target、W cache 与三个 checkpoints。前两阶段不读取 checkpoint、不推理、不用 GPU；第三阶段不读取 test。
+Test target-only 属性及 10 方法 RR 分区汇总在获得新的明确授权前不提供可执行入口。
+
 ## 10. P7：IoT 端到端效率结果
 
 ### 10.1 目标与模型
@@ -761,5 +773,10 @@ TIME_SHIFT_30S 的四项 error 均恶化 `3.99% / 6.60% / 23.05% / 24.10%`，PCC
 3/3 seeds 恶化；仅保留 RESP 低频时 RR/trajectory/PCC 稳定变差，仅保留 CARRIER 高频时呈 RR 与
 morphology/PCC trade-off。这些 keep-only 结果不表述为移除对应频带的损害。
 现有十项干预已满足论文功能证据需求，P5 关闭，不启动可选局部 `4×6` inference；21 项相关定向 CPU 测试通过。
+
+P6 已完成 P0 实现锁：新增 target-only Whole RR/联合属性与 canonical log-RMS 公共只读计算，冻结 10141/2675
+train/validation row identity、三个 W0 checkpoint/config/validation-metrics hashes、五类确定性波形选样规则、15-pair
+validation export 和 10 方法 allowlist。22 项 P6/既有 respiration-metrics 定向 CPU 测试通过；没有读取 waveform 数据、
+checkpoint 内容或 test，没有执行模型 inference、训练、GPU、cache 或 benchmark。正式全量 target-only 生成等待用户执行。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

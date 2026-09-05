@@ -1,0 +1,98 @@
+{
+  "protocol_id": "paper-p6-multi-attribute-v1-20260905",
+  "schema_version": "paper-p6-contract-v1",
+  "evidence_scope": "validation waveform examples plus train-frozen RR strata",
+  "dataset": {
+    "dataset_index_sha256": "f65ae6524632187c7c2795bd7b5e25434afb649b5a04fe39084b70cc59f9b04f",
+    "train_count": 10141,
+    "train_samp_id_count": 32,
+    "train_row_ids_sha256": "f290e569140a2ff7745cf1a5cfa6a4da943644d76498c9b85517d3ae0702c45e",
+    "validation_count": 2675,
+    "validation_samp_id_count": 7,
+    "validation_row_ids_sha256": "b68a51b101bb80033c4de18c9c21cdfbb8924d1bfe134330f047617cf3b0915a",
+    "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+    "target_key": "target_waveform_segment_soft_z_key",
+    "sample_rate_hz": 100,
+    "window_samples": 18000
+  },
+  "rr_strata": {
+    "source": "complete admitted train targets",
+    "algorithm": "current dominant spectral Whole RR",
+    "quantiles": [0.3333333333333333, 0.6666666666666666],
+    "quantile_method": "linear",
+    "boundary_rule": "low<=q1; medium=(q1,q2]; high>q2",
+    "aggregation": "sample_direct_mean; overlapping windows are not independent clinical samples"
+  },
+  "waveform_selection": {
+    "source_model": "crd_tf102_w",
+    "seed_aggregation": "arithmetic mean across three validation-selected checkpoints per dataset_row_id",
+    "rank_method": "average; normalized to [0,1] as (rank-1)/(n-1)",
+    "rate_score": "mean percentile rank of Whole RR and Local RR errors",
+    "effort_score": "mean percentile rank of trajectory error, global error, and negative signed PCC",
+    "selection_order": ["typical", "rr_difficult", "effort_difficult", "rr_effort_inconsistent", "joint_failure"],
+    "rules": {
+      "typical": "minimum Euclidean distance to (rate=0.5, effort=0.5)",
+      "rr_difficult": "minimum Euclidean distance to (rate=1, effort=0)",
+      "effort_difficult": "minimum Euclidean distance to (rate=0, effort=1)",
+      "rr_effort_inconsistent": "maximum absolute rate-effort score difference",
+      "joint_failure": "minimum Euclidean distance to (rate=1, effort=1)"
+    },
+    "distinct_rows": true,
+    "tie_break": "smaller dataset_row_id",
+    "manual_waveform_reselection": false
+  },
+  "waveform_export": {
+    "validation_rows": 5,
+    "checkpoint_seeds": [20260811, 20260812, 20260813],
+    "forward_count": 15,
+    "ensemble_method_created": false,
+    "center_interval_samples": [6000, 12000],
+    "primary_metric_anchor_atol": 1e-6
+  },
+  "method_allowlist": [
+    "F0_fixed_band_bcg",
+    "IEWT",
+    "B0_final_loss_patchmixer",
+    "T2_g3c_wide_native",
+    "T4_g3c_bandenergy_native",
+    "crd_c201_decoder_10hz_cap",
+    "crd_tf101_m",
+    "crd_tf102_w",
+    "crd_tf203_ms",
+    "crd_tfw_v2_w3_full_6v_film_d6"
+  ],
+  "w0_sources": [
+    {
+      "seed": 20260811,
+      "selected_epoch": 13,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861",
+      "config_sha256": "675232d48b7aadb2f0116e43a9cb737a5ac1737013dd54c4544e4f49cc1b2843",
+      "checkpoint_sha256": "18425476831628d9614925dc6835de97ab466aac8cce157f7d95335f504c70f5",
+      "validation_metrics_sha256": "92415b0abc8f915817af21a3b4e50df45d10a61f8af227f76b40c7b34bc803ee"
+    },
+    {
+      "seed": 20260812,
+      "selected_epoch": 15,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130",
+      "config_sha256": "497f6dfab8e350ee145a568deb6d72df631a81ada5dd2c00847b500323f74eeb",
+      "checkpoint_sha256": "f6a174f88067bd88f0739faee6ce3c7cada79e8b43171a6a3d2e12a9798a5a61",
+      "validation_metrics_sha256": "059f87afecdb9adb8650adf004b51028b3c01e32b5de7a8b5223c55a0c108072"
+    },
+    {
+      "seed": 20260813,
+      "selected_epoch": 14,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006",
+      "config_sha256": "572711e26097b089e2e190d7e583ca59da0f162dfd5fb0421331cc7932981cc9",
+      "checkpoint_sha256": "efafbb653507fbee782f5946a07660121737bfd5339ff2b13b81b4b1e3a0fe99",
+      "validation_metrics_sha256": "4d9c7ca6fcb25f26bacb64cec3cfe485f2f8fae0bdd3cc4f4802a02bf86a2dd3"
+    }
+  ],
+  "frozen_sources": {
+    "p0_source_manifest": "configs/paper_evidence_v1/p0_comparison_sources.json",
+    "p0_source_manifest_sha256": "c1fcf7d55a25763013a9604d544a81c6306b3752e41cbfba2447a8dbb46f5b82",
+    "crd_tf_v1_p5_manifest": "runs/crd_tf_v1/p5_validation_summary/p5_summary_manifest.json",
+    "crd_tf_v1_p5_manifest_sha256": "cecd35d862cc975cf7d99af9ad18fce4576ddb6b9aa561ad88322e3888992a65",
+    "train_validation_w_cache_manifest": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/cache_manifest.json",
+    "train_validation_w_cache_manifest_sha256": "6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8"
+  }
+}

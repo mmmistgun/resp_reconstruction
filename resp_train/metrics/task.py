@@ -163,6 +163,101 @@ def compute_target_envelope_modulations(targets: np.ndarray, cfg: DictConfig) ->
     return result
 
 
+def compute_target_whole_rr_bpm(targets: np.ndarray, cfg: DictConfig) -> tuple[np.ndarray, np.ndarray]:
+    """按现行 Whole RR 算法计算 target-only RR，并显式返回 eligibility。"""
+
+    protocol = TaskMetricConfig.from_config(cfg)
+    target = as_batch_waveform_numpy(targets)
+    if target.shape[1] != protocol.length:
+        raise ValueError(f"期望 {protocol.length} 点，实际 {target.shape[1]}")
+    if not np.isfinite(target).all():
+        raise FloatingPointError("target-only RR 输入包含 NaN/Inf")
+
+    values = np.full(target.shape[0], np.nan, dtype=np.float64)
+    eligible = np.zeros(target.shape[0], dtype=np.bool_)
+    for chunk_start in range(0, target.shape[0], _EVALUATION_CHUNK_SIZE):
+        chunk_stop = min(target.shape[0], chunk_start + _EVALUATION_CHUNK_SIZE)
+        target_band, target_x = canonicalize_numpy(
+            target[chunk_start:chunk_stop],
+            fs=protocol.fs,
+            low_hz=protocol.band_low_hz,
+            high_hz=protocol.band_high_hz,
+            scale_eps=protocol.scale_eps,
+        )
+        for offset in range(chunk_stop - chunk_start):
+            index = chunk_start + offset
+            is_eligible = centered_energy_numpy(target_band[offset]) > protocol.dynamic_eps
+            eligible[index] = is_eligible
+            if is_eligible:
+                values[index] = _whole_rr(target_x[offset], protocol)
+    if np.isinf(values).any() or not np.array_equal(np.isfinite(values), eligible):
+        raise FloatingPointError("target-only RR 输出与 eligibility 不一致")
+    return values, eligible
+
+
+def compute_target_waveform_attributes(
+    targets: np.ndarray, cfg: DictConfig
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """一次 canonicalization 联合计算 target RR 与 envelope modulation。"""
+
+    protocol = TaskMetricConfig.from_config(cfg)
+    target = as_batch_waveform_numpy(targets)
+    if target.shape[1] != protocol.length:
+        raise ValueError(f"期望 {protocol.length} 点，实际 {target.shape[1]}")
+    if not np.isfinite(target).all():
+        raise FloatingPointError("target-only 属性输入包含 NaN/Inf")
+    rr = np.full(target.shape[0], np.nan, dtype=np.float64)
+    eligible = np.zeros(target.shape[0], dtype=np.bool_)
+    modulation = np.empty(target.shape[0], dtype=np.float64)
+    for chunk_start in range(0, target.shape[0], _EVALUATION_CHUNK_SIZE):
+        chunk_stop = min(target.shape[0], chunk_start + _EVALUATION_CHUNK_SIZE)
+        target_band, target_x = canonicalize_numpy(
+            target[chunk_start:chunk_stop],
+            fs=protocol.fs,
+            low_hz=protocol.band_low_hz,
+            high_hz=protocol.band_high_hz,
+            scale_eps=protocol.scale_eps,
+        )
+        for offset in range(chunk_stop - chunk_start):
+            index = chunk_start + offset
+            is_eligible = centered_energy_numpy(target_band[offset]) > protocol.dynamic_eps
+            eligible[index] = is_eligible
+            if is_eligible:
+                rr[index] = _whole_rr(target_x[offset], protocol)
+            modulation[index] = _envelope_modulation(
+                _log_rms_envelope(target_x[offset], protocol), protocol
+            )
+    if (
+        np.isinf(rr).any()
+        or not np.array_equal(np.isfinite(rr), eligible)
+        or not np.isfinite(modulation).all()
+    ):
+        raise FloatingPointError("target-only 联合属性输出不完整")
+    return rr, eligible, modulation
+
+
+def compute_log_rms_envelopes(signals: np.ndarray, cfg: DictConfig) -> np.ndarray:
+    """按冻结 10 s / 5 s 等配置导出 canonical waveform 的 log-RMS envelope。"""
+
+    protocol = TaskMetricConfig.from_config(cfg)
+    signal = as_batch_waveform_numpy(signals)
+    if signal.shape[1] != protocol.length:
+        raise ValueError(f"期望 {protocol.length} 点，实际 {signal.shape[1]}")
+    if not np.isfinite(signal).all():
+        raise FloatingPointError("log-RMS 输入包含 NaN/Inf")
+    _, canonical = canonicalize_numpy(
+        signal,
+        fs=protocol.fs,
+        low_hz=protocol.band_low_hz,
+        high_hz=protocol.band_high_hz,
+        scale_eps=protocol.scale_eps,
+    )
+    result = np.stack([_log_rms_envelope(row, protocol) for row in canonical], axis=0)
+    if not np.isfinite(result).all():
+        raise FloatingPointError("log-RMS 输出包含 NaN/Inf")
+    return result
+
+
 def envelope_strata_cutpoints(modulations: np.ndarray, *, method: str = "linear") -> tuple[float, float]:
     """按完整 admitted training targets 的 1/3、2/3 分位数冻结分层边界。"""
 
