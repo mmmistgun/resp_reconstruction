@@ -795,6 +795,6 @@ P6 P1 target-only 属性已从干净 commit `6220d63c794ff51c0aaa3f9da36492dcd18
 用户确认后只修订执行合同为历史 batch-shape replay：每 checkpoint 处理 128+115 个 batch elements，padding 只复用
 五个已选 rows，仍只保存 15 个预注册输出；三 checkpoints 总处理量 729。初版 contract hash
 `0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff` 仅由该执行修订替代，既有 target/selection
-产物、RR cutpoints、rule hash、矩阵和 `1e-6` 锚点保持有效；24 项相关定向 CPU 测试通过。
+产物、RR cutpoints、rule hash、矩阵和 `1e-6` 锚点保持有效；25 项相关定向 CPU 测试通过。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

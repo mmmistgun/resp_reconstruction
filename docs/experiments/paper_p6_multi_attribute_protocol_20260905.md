@@ -138,4 +138,4 @@ selection rule SHA-256=`23bd6ab081d457393bf9298b64ba8450ca7c54472cc0ac45ef3e6ce8
 证据与 batch-shape 数值路径差异一致，但须由 replay 是否恢复锚点进一步验证。
 
 没有放宽容差、换 row、重选 checkpoint 或删除失败记录。用户确认后，执行合同仅改为第 5 节历史 batch-shape replay；
-padding 不增加数据访问范围。相关 P6/respiration-metrics 定向 CPU 测试现为 24 项通过。
+padding 不增加数据访问范围。相关 P6/respiration-metrics 定向 CPU 测试现为 25 项通过。

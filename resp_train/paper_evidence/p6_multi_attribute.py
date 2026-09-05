@@ -902,8 +902,14 @@ def _anchor_export_metrics(observed: pd.DataFrame, frozen: pd.DataFrame, *, atol
         if row_id not in source.index:
             raise RuntimeError(f"冻结 validation metrics 缺少 row={row_id}")
         for metric in PRIMARY_METRICS:
-            if not np.isclose(float(row[metric]), float(source.loc[row_id, metric]), rtol=0.0, atol=atol):
-                raise RuntimeError(f"P6 export FULL anchor 不一致: row={row_id}/{metric}")
+            observed_value = float(row[metric])
+            expected_value = float(source.loc[row_id, metric])
+            if not np.isclose(observed_value, expected_value, rtol=0.0, atol=atol):
+                raise RuntimeError(
+                    f"P6 export FULL anchor 不一致: row={row_id}/{metric}; "
+                    f"observed={observed_value:.17g}; expected={expected_value:.17g}; "
+                    f"abs_delta={abs(observed_value - expected_value):.17g}; atol={atol:.17g}"
+                )
 
 
 def _slice_prediction_rows(
