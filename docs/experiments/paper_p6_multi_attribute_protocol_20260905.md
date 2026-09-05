@@ -2,7 +2,7 @@
 
 协议 ID：`paper-p6-multi-attribute-v1-20260905`；日期：2026-09-05。
 
-状态：**Validation 波形与 test target-only 属性已冻结；等待 10 方法 RR 区间只读汇总。**
+状态：**Validation 波形与 test RR 区间结果均已冻结；P6 完成并关闭。**
 
 ## 1. 研究问题与证据边界
 
@@ -169,3 +169,39 @@ selection rule SHA-256=`23bd6ab081d457393bf9298b64ba8450ca7c54472cc0ac45ef3e6ce8
 log-RMS envelopes；全部数值 finite，row/seed 顺序与合同一致。波形 panel 已完成视觉核验，五类标题、中心区间、三 seed
 轨迹和 envelope 面板均完整可读。该一致性检查只用于确认 row、checkpoint 与指标管线，不参与模型比较、显著性判断或
 结论选择。
+
+## 10. Test RR 区间冻结结果
+
+只读汇总从干净 commit `5cf6acf9328f6c0cc050f9f0f2ad44924255f535` 完成。Receipt/manifest SHA-256=
+`05a84f191c8af98e244e6ea1ba2276a87c514b172af9266598ca63a2e136016b / b0cd08d510adebcfed5255623ae9b659bb251960fda2b4a3af1b9945fa8dc946`。
+34 个输入文件均通过 SHA-256/size 复核；26 个 source records、78 条 record-stratum rows 与 30 条 method-stratum rows
+完整且唯一，所有五主指标 means finite。
+
+W0 的分区绝对指标如下。前四项越低越好，PCC 越高越好：
+
+| RR 区间 | windows / samp_id | Whole RR | Local RR | trajectory | global | PCC |
+|---|---:|---:|---:|---:|---:|---:|
+| low | 1656 / 8 | 0.656562 | 0.636570 | 0.136343 | 0.162823 | 0.884978 |
+| medium | 462 / 6 | 0.301508 | 0.328935 | 0.149061 | 0.212232 | 0.860423 |
+| high | 192 / 7 | 1.037746 | 1.051931 | 0.144285 | 0.171408 | 0.842986 |
+
+相对 medium，W0 在 low 的 Whole/Local RR error 增加 `117.759% / 93.524%`，在 high 增加
+`244.185% / 219.799%`，呈明显的区间依赖。Trajectory/global error 在 low 分别低 `8.532% / 23.280%`，在 high
+分别低 `3.204% / 19.235%`；PCC 相对 medium 在 low 增加 `+0.024555`，在 high 降低 `−0.017437`。因此 RR 误差与
+形态/包络指标没有共同的单调区间趋势。
+
+W3 相对 W0 的描述性变化如下；error 的负值表示改善，PCC 为绝对变化：
+
+| RR 区间 | Whole RR | Local RR | trajectory | global | PCC |
+|---|---:|---:|---:|---:|---:|
+| low | +16.325% | +9.974% | −1.831% | −4.215% | +0.001842 |
+| medium | −2.650% | −1.941% | −1.368% | −3.528% | +0.002930 |
+| high | −16.912% | −0.892% | −1.943% | −3.598% | +0.002530 |
+
+W3 在三个区间的 trajectory/global/PCC 方向一致，但 RR 收益随区间改变：low RR 下 Whole/Local RR 变差，medium/high
+持平或改善，其中 high RR 的 Whole RR 改善最大。C201 相对 W0 也呈混合权衡：medium 的 Local RR/global 分别改善
+`4.783% / 11.432%`，high 的 Whole RR/global 分别改善 `8.451% / 8.457%`，但其余组合并不一致。完整 10 方法结果固定在
+`runs/paper_evidence_v1/p6_rr_strata_summary/rr_stratum_method_summary.csv`。
+
+这些结果支持“性能权衡随 target RR 区间变化”，不支持单一方法跨全部区间和属性统一占优。Low/medium/high 的样本量与
+subject coverage 不平衡，且统计单位仍为重叠窗口的 sample-direct mean，因此只作描述性异质性证据。
