@@ -16,6 +16,7 @@ def dataset_contract(row_ids=(1, 2, 3, 4)):
         "test_samp_id_count": 2,
         "test_row_ids_sha256": hashlib.sha256(ids.tobytes()).hexdigest(),
         "target_key": "target",
+        "target_signal_key": "target",
         "window_samples": 18000,
     }
 

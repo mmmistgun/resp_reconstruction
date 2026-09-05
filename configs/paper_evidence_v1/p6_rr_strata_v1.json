@@ -10,6 +10,7 @@
     "sample_strategy": "stratified_random",
     "sample_seed": 20260612,
     "target_key": "target_waveform_segment_soft_z_key",
+    "target_signal_key": "tho_waveform_segment_soft_z",
     "sample_rate_hz": 100,
     "window_samples": 18000
   },

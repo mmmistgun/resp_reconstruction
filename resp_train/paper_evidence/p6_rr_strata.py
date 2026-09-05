@@ -30,7 +30,7 @@ from resp_train.paper_evidence.p6_multi_attribute import (
 PROTOCOL_ID = "paper-p6-rr-strata-v1-20260905"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = Path("configs/paper_evidence_v1/p6_rr_strata_v1.json")
-CONTRACT_SHA256 = "d062e44868d5a721f9d111da4667ebc0c127f7c05767f2e80c104417a414e195"
+CONTRACT_SHA256 = "393ec90c4c582af35bddc8fdfd878bdebbba0fbb804b06922822fbc3c0434ccf"
 TEST_TARGET_OUTPUT = Path("runs/paper_evidence_v1/p6_test_target_attributes")
 SUMMARY_OUTPUT = Path("runs/paper_evidence_v1/p6_rr_strata_summary")
 
@@ -77,16 +77,19 @@ def validate_test_rows(rows: pd.DataFrame, dataset_contract: Mapping[str, Any]) 
     row_ids = pd.to_numeric(rows["dataset_row_id"], errors="raise").to_numpy(dtype=np.int64)
     if np.unique(row_ids).size != row_ids.size or not np.all(np.diff(row_ids) > 0):
         raise ValueError("P6 test dataset_row_id 必须严格递增且无重复")
-    if (
-        hashlib.sha256(row_ids.astype("<i8", copy=False).tobytes(order="C")).hexdigest()
-        != dataset_contract["test_row_ids_sha256"]
-        or int(rows["samp_id"].nunique()) != int(dataset_contract["test_samp_id_count"])
-        or not rows["target_signal_key"].eq(dataset_contract["target_key"]).all()
-        or not (rows["window_end_sample"] - rows["window_start_sample"]).eq(
-            int(dataset_contract["window_samples"])
-        ).all()
-    ):
-        raise RuntimeError("P6 test row/samp/target identity 漂移")
+    observed_hash = hashlib.sha256(
+        row_ids.astype("<i8", copy=False).tobytes(order="C")
+    ).hexdigest()
+    if observed_hash != dataset_contract["test_row_ids_sha256"]:
+        raise RuntimeError("P6 test row identity 漂移")
+    if int(rows["samp_id"].nunique()) != int(dataset_contract["test_samp_id_count"]):
+        raise RuntimeError("P6 test samp_id coverage 漂移")
+    if not rows["target_signal_key"].eq(dataset_contract["target_signal_key"]).all():
+        raise RuntimeError("P6 test target signal key 漂移")
+    if not (rows["window_end_sample"] - rows["window_start_sample"]).eq(
+        int(dataset_contract["window_samples"])
+    ).all():
+        raise RuntimeError("P6 test window length 漂移")
 
 
 def extract_test_target_attributes(rows: pd.DataFrame, cfg: Any) -> pd.DataFrame:
@@ -268,7 +271,7 @@ def validate_metric_frame(
     validate_test_rows(
         ordered.assign(
             target_source_npz="unused",
-            target_signal_key=dataset_contract["target_key"],
+            target_signal_key=dataset_contract["target_signal_key"],
             window_start_sample=0,
             window_end_sample=int(dataset_contract["window_samples"]),
         ),
@@ -590,7 +593,7 @@ def _load_test_target_attributes(
         raise ValueError("P6 test target attributes schema 缺失")
     identity_rows = attributes.assign(
         target_source_npz="artifact",
-        target_signal_key=contract["dataset"]["target_key"],
+        target_signal_key=contract["dataset"]["target_signal_key"],
         window_start_sample=0,
         window_end_sample=int(contract["dataset"]["window_samples"]),
     )

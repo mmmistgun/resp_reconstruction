@@ -796,7 +796,7 @@ checkpoints、batch size 5，共 15 个 forward elements；完整 `15×5=75` 项
 冻结 NPZ 的 row/seed/shape/finite 与 artifact manifest 均通过只读核验，波形 panel 完整可读。Validation 波形阶段关闭。
 
 用户随后授权 P6 test RR 区间描述性阶段。独立合同 `configs/paper_evidence_v1/p6_rr_strata_v1.json` SHA-256=
-`d062e44868d5a721f9d111da4667ebc0c127f7c05767f2e80c104417a414e195`，固定 2310 test rows、8 个 `samp_id`、
+`393ec90c4c582af35bddc8fdfd878bdebbba0fbb804b06922822fbc3c0434ccf`，固定 2310 test rows、8 个 `samp_id`、
 train cutpoints 与 P0 全部 10 个 primary methods。实现分为 test target-only 属性构建和冻结 metrics 只读汇总；来源矩阵为
 2 个 deterministic records 加 8×3 learned seed records，共 26 项。每个 record 先在 RR 区间内 sample-direct mean，learned
 methods 再作三 seed arithmetic mean/sample SD (`ddof=1`)；不构造总分或重选模型。30 项 P6 RR strata、波形与呼吸指标

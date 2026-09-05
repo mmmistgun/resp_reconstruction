@@ -83,12 +83,13 @@ CUDA_VISIBLE_DEVICES=0 \
 ## 6. Test RR 区间阶段
 
 用户已授权该描述性阶段。独立机器合同为 `configs/paper_evidence_v1/p6_rr_strata_v1.json`，SHA-256=
-`d062e44868d5a721f9d111da4667ebc0c127f7c05767f2e80c104417a414e195`。它固定 2310 个 test windows、8 个
+`393ec90c4c582af35bddc8fdfd878bdebbba0fbb804b06922822fbc3c0434ccf`。它固定 2310 个 test windows、8 个
 `samp_id`、row-ID SHA-256=`184e9d6a934b6719a4b679ebf6224e20dda1101c1920ed5b9e22ea80f0f293e8`，并直接应用
 train-frozen cutpoints `14.327967747931218 / 17.188694745285627 bpm`。
 
 第一阶段只读取 2310 个 test targets，计算 target RR、target envelope modulation 与 target SHA-256，同时核验 test rows
-和 train/validation rows 零交集。它不读取 BCG、W cache、checkpoint 或现有模型指标：
+和 train/validation rows 零交集。配置中的 target selector 为 `target_waveform_segment_soft_z_key`，索引解析后的 NPZ array key
+固定为 `tho_waveform_segment_soft_z`。它不读取 BCG、W cache、checkpoint 或现有模型指标：
 
 ```bash
 ./.venv/bin/python scripts/build_paper_p6_test_target_attributes_v1.py \
