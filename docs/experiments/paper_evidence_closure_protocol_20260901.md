@@ -45,7 +45,7 @@
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形与 test RR 区间均冻结；阶段关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | v2 校正完成并冻结 |
-| P7-60 | 独立 center-60 任务的 60→60 效率附件 | 否 | GPU-only 实现完成，等待用户执行 |
+| P7-60 | 独立 center-60 任务的 60→60 效率附件 | 否 | 完成并冻结 |
 
 每个阶段必须使用新目录且禁止覆盖。实现、训练、独立测试集访问和长时间 benchmark 分别需要用户明确授权；
 前一阶段完成不自动授权后一阶段。
@@ -839,7 +839,7 @@ checkpoint、P6
 不可覆盖的原子目录，生成环境、独立文件物化时延、逐 iteration/stage 时延、汇总、显存、资源与质量-效率表。
 W0/W3 质量列只读三 seed 独立测试集汇总，D4 明确只读三 seed validation 汇总。Profiler 只报告可覆盖的标准 op
 FLOPs/MACs，并标注 Mamba custom op coverage 不完整；manifest decision 只允许 `measurement_complete`，不生成
-实时、流式或部署结论。当前仅完成实现，尚未执行 benchmark。
+实时、流式或部署结论。
 新增 7 项 P7 定向 CPU 合同/汇总测试全部通过；测试没有加载 checkpoint、读取 waveform 或执行模型 benchmark。
 
 P7-v1 已从干净 commit `6b1079da6e8bd1140866a19828a996b721855b36` 完成，manifest SHA-256=
@@ -894,6 +894,26 @@ P7，也不把 60→60 与主任务 180→180 的差值解释为单一窗口长�
 合同 `configs/paper_evidence_v1/p7_center60_efficiency_v1.json` SHA-256=
 `10a8388843b225cdd32fabe8cd9d2f37e7c457076fe8936e226bff771fc08ff9`。输出使用独立不可覆盖目录
 `runs/paper_evidence_v1/p7_center60_efficiency/`，并生成显式 task-scope 的 60 s/180 s 描述性效率并列表；所有
-cross-task 行均固定 `cross_task_causal_window_claim_allowed=false`。当前仅完成实现，尚未执行 GPU benchmark。
+cross-task 行均固定 `cross_task_causal_window_claim_allowed=false`。
+
+P7-60 已从干净 commit `f9e887ac718b2d48f1cf41683061096a992cce3c` 完成，manifest SHA-256=
+`3f12ced0344b2aa32731c049bfd29713238578e9fe1780ff3a2226394c870403`，decision=`measurement_complete`。
+1,500 条 timed pipeline iterations、6,500 条 stage records、全部 finite；65 个 model×scenario×round×stage 分组
+均恰为 100 条，全部 artifact hash 闭合。C201-center60 waveform-only median/p95 为 `17.576/20.142 ms`；
+W-reduced-center60 cached-W 为 `19.107/22.065 ms`，online-W 为 `39.988/44.687 ms`。相对 C201，W-reduced
+cached 端到端增加 `8.706%/9.545%`，online 增加 `127.512%/121.856%`；direct-49 CWT 本身 median/p95=
+`20.228/22.304 ms`，占 W-reduced online median 的 `50.584%`。
+
+W-reduced 相对 C201 的参数、checkpoint、profiler-covered FLOPs 与 peak allocated 分别增加
+`14.026%/14.086%/12.189%/6.361%`；两者 peak allocated 为 `15.361/16.338 MiB`。Peak reserved 仍受首轮
+allocator 初始化影响（C201 range=`28–284 MiB`），只作原始记录。三 seed 独立测试集上，W-reduced 相对 C201 的
+center RR 与 trajectory error 改善 `1.617%/2.958%`，IBI/global error 恶化 `2.285%/2.350%`，PCC 绝对增加
+`0.000310`，体现额外 W 路径的混合质量-效率 trade-off。
+
+60 s W-reduced 与 180 s W3 的描述性并列中，cached median/p95 变化仅 `+0.408%/−1.085%`，online 则观察到
+`−49.607%/−46.931%`；后者同时改变任务、输出长度、CWT 网格/scale 数和 host thread 环境，不能归因于窗口缩短。
+该结果只说明本次 60→60 实现的绝对处理成本：缩短序列显著降低 covered FLOPs 与 online CWT 成本，但 batch-1 GPU
+cached 时延受固定开销主导，没有按长度同比下降。30 s sliding-step 下三场景 p95 数值余量为
+`29.980/29.978/29.955 s`，并明确 60 s 上下文等待；不形成实时、流式或边缘部署结论。P7-60 完成并关闭。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
