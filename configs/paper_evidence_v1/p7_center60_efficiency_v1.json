@@ -1,0 +1,146 @@
+{
+  "schema_version": "paper-p7-center60-efficiency-config-v1",
+  "protocol_id": "paper-p7-center60-efficiency-v1-20260905",
+  "role": "auxiliary_center60_gpu_efficiency_measurement",
+  "scientific_scope": "separate_60s_input_60s_output_task",
+  "authorization": {
+    "gpu_benchmark": true,
+    "cpu_model_benchmark": false,
+    "training": false,
+    "cache_build": false,
+    "research_test_signal_or_target_access": false
+  },
+  "platform": {
+    "kind": "desktop_gpu",
+    "device": "cuda:0",
+    "batch_size": 1,
+    "host_memory": "pageable",
+    "amp_dtype": "bfloat16",
+    "allow_tf32": false,
+    "cudnn_benchmark": false,
+    "required_unset_environment": ["LD_LIBRARY_PATH", "LD_PRELOAD"]
+  },
+  "benchmark": {
+    "warmup_iterations": 20,
+    "timed_iterations": 100,
+    "rounds": 5,
+    "round_model_order": [
+      ["C201_CENTER60_60", "W_REDUCED_CENTER60_60"],
+      ["W_REDUCED_CENTER60_60", "C201_CENTER60_60"],
+      ["C201_CENTER60_60", "W_REDUCED_CENTER60_60"],
+      ["W_REDUCED_CENTER60_60", "C201_CENTER60_60"],
+      ["C201_CENTER60_60", "W_REDUCED_CENTER60_60"]
+    ],
+    "w_round_scenario_order": [
+      ["cached_w", "online_w"],
+      ["online_w", "cached_w"],
+      ["cached_w", "online_w"],
+      ["online_w", "cached_w"],
+      ["cached_w", "online_w"]
+    ],
+    "c201_scenarios": ["waveform_only"],
+    "w_reduced_scenarios": ["cached_w", "online_w"],
+    "fresh_model_load_per_candidate_round": true,
+    "cuda_empty_cache_before_each_scenario": true,
+    "profiler_position": "after_all_latency_and_memory_measurements",
+    "gpu_synchronize_after_each_stage": true,
+    "percentile_method": "numpy_linear",
+    "sample_sd_ddof": 1,
+    "sliding_step_seconds": 30,
+    "context_wait_seconds": 60,
+    "expected_timed_pipeline_iterations": 1500
+  },
+  "input": {
+    "split": "val",
+    "dataset_row_id": 12429,
+    "selection_category": "typical",
+    "selection_manifest": "runs/paper_evidence_v1/p6_waveform_selection/artifact_manifest.json",
+    "selection_manifest_sha256": "7937c9d085c35139993bb7a482797d6f9ffb932d5da92d634a61890b96e8a784",
+    "selection_rows": "runs/paper_evidence_v1/p6_waveform_selection/waveform_selected_rows.csv",
+    "selection_rows_sha256": "6aa1a855d739515c5eaba084bea8b8406b8a95d5166752eb3e9e4560185a72e2",
+    "parent_samples": 18000,
+    "input_samples": 6000,
+    "input_slice": [6000, 12000],
+    "output_samples": 6000,
+    "sample_rate_hz": 100
+  },
+  "w_source": {
+    "cache_root": "runs/paper_evidence_v1/center_context_w_cache/60s_215c24b05b2e438f311edf13d20903d617131378a952b893234582c670848c6f",
+    "cache_manifest_sha256": "e9d270c930d6862f9b5a9cbdb3c26765fe3b57d2573946640cba99e597389793",
+    "shape": [49, 120],
+    "online_extractor": "resp_train.paper_evidence.center_context_cache.center_context_cwt_features",
+    "online_extractor_device": "host_cpu",
+    "online_scale_count": 49,
+    "online_pool_samples": 50,
+    "length_specific_scale_mapping": true,
+    "cached_online_max_abs_tolerance": 1e-5
+  },
+  "canonicalization": {
+    "name": "Pi_60",
+    "sample_rate_hz": 100,
+    "low_hz": 0.05,
+    "high_hz": 0.7,
+    "scale_eps": 1e-8
+  },
+  "models": [
+    {
+      "candidate_id": "C201_CENTER60_60",
+      "experiment_id": "CCV1_C201_60",
+      "model_label": "C201-center60",
+      "variant": "c201_center60",
+      "seed": 20260811,
+      "run_dir": "runs/paper_evidence_v1/center_context/p3_single_seed/CCV1_C201_60/seed_20260811",
+      "artifact_manifest_sha256": "bfea8473f93555ac486fa595226c3ed77a8fcb2840397bbf284ba4bc54b9a8fb",
+      "selected_epoch": 16,
+      "config_sha256": "d4440deff90d7b720a9ed8f22db22894398f7bca602e0382bb8915693abc0dfc",
+      "checkpoint_sha256": "4591901abb50625e7ef8ae9e460d5fa4d976a64f20b2ef07b69102b168efdff3",
+      "checkpoint_size_bytes": 13051371,
+      "trainable_parameters": 1069802,
+      "bcg_input_elements": 6000,
+      "w_input_elements": 0,
+      "w_scales": 0
+    },
+    {
+      "candidate_id": "W_REDUCED_CENTER60_60",
+      "experiment_id": "CCV1_WR_60",
+      "model_label": "W-reduced-center60",
+      "variant": "w_reduced_center60",
+      "seed": 20260811,
+      "run_dir": "runs/paper_evidence_v1/center_context/p3_single_seed/CCV1_WR_60/seed_20260811",
+      "artifact_manifest_sha256": "f26be3a18ec6cb071b5a0452b082b37d3ec8633b8c021b434bc28fa481c13f67",
+      "selected_epoch": 13,
+      "config_sha256": "7b8f583c0a55cd05acb399bdaf0081c503a30035ec42679b8b80706da1f1d90f",
+      "checkpoint_sha256": "e991da1f4c74c3eb452d51f2c55e4f4f72fe6131b2a56bfd8191f8280a4654cc",
+      "checkpoint_size_bytes": 14889835,
+      "trainable_parameters": 1219850,
+      "bcg_input_elements": 6000,
+      "w_input_elements": 5880,
+      "w_scales": 49
+    }
+  ],
+  "quality_source": {
+    "scope": "center60_independent_test_three_seed_mean",
+    "path": "runs/paper_evidence_v1/context_length_research_test_summary/center60_arm_three_seed_test_summary.csv",
+    "sha256": "dc8c82ee06acc1e34e67419a8e6cbd05983ed6e623f7f731e7cce04e9250182e",
+    "manifest_path": "runs/paper_evidence_v1/context_length_research_test_summary/artifact_manifest.json",
+    "manifest_sha256": "d69d47a80e514a9556000296938dff642d2642656c61ecff82d57c1a1baeeb66"
+  },
+  "descriptive_reference": {
+    "scope": "separate_180s_input_180s_output_task",
+    "manifest_path": "runs/paper_evidence_v1/p7_iot_efficiency_correction_v2/manifest.json",
+    "manifest_sha256": "132009e94341a163f326607d6110a4ae8e632776c80e378426366f3996e5e572",
+    "cross_task_causal_window_claim_allowed": false
+  },
+  "profiler": {
+    "scope": "model_forward",
+    "activities": ["cpu", "cuda"],
+    "with_flops": true,
+    "macs_definition": "covered_flops_divided_by_2",
+    "coverage": "partial_standard_ops_only_mamba_custom_ops_may_be_uncovered"
+  },
+  "output": {
+    "directory": "runs/paper_evidence_v1/p7_center60_efficiency",
+    "allow_overwrite": false,
+    "csv_float_format": "%.12g"
+  }
+}

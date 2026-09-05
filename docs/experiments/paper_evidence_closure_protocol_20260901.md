@@ -45,6 +45,7 @@
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形与 test RR 区间均冻结；阶段关闭 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | v2 校正完成并冻结 |
+| P7-60 | 独立 center-60 任务的 60→60 效率附件 | 否 | GPU-only 实现完成，等待用户执行 |
 
 每个阶段必须使用新目录且禁止覆盖。实现、训练、独立测试集访问和长时间 benchmark 分别需要用户明确授权；
 前一阶段完成不自动授权后一阶段。
@@ -879,5 +880,20 @@ op 的描述值。Peak reserved 受首轮 allocator 初始化影响（W0 cached 
 下降 `0.002938`。因此 P7 只支持 W3 的输入/显存 trade-off 和 D4 的 validation-only depth-efficiency trade-off，
 不产生唯一赢家或部署结论。30 s sliding-step p95 数值余量约 `29.916–29.983 s`，同时明确完整 180 s 上下文等待；
 桌面 GPU 结果不代表真实边缘设备。P7 完成并关闭。
+
+用户随后授权独立 P7-60 附件，回答 center-60 辅助任务在输入/输出均为 60 s 时的实际处理成本。该附件不重开
+P7，也不把 60→60 与主任务 180→180 的差值解释为单一窗口长度因果效应。固定矩阵为：
+
+- `C201-center60` seed `20260811` best checkpoint，仅测 `waveform-only`；
+- `W-reduced-center60` seed `20260811` best checkpoint，测 `cached-W/online-W`；
+- validation typical row `12429`、batch=1、BF16、pageable host memory、RTX 4070 Ti SUPER；
+- 每个 model×scenario 严格 `20 warm-up + 100 timed × 5 rounds`，共 1,500 个 timed pipeline iterations；
+- online-W 使用当前 60 s length-specific direct 49-scale CWT 与 `Pi_60`；profiler 后置，模型顺序平衡，W 场景顺序交替；
+- 质量列只读 center-60 三 seed 独立测试集汇总；不读取 test signal/target，不训练、不建 cache。
+
+合同 `configs/paper_evidence_v1/p7_center60_efficiency_v1.json` SHA-256=
+`10a8388843b225cdd32fabe8cd9d2f37e7c457076fe8936e226bff771fc08ff9`。输出使用独立不可覆盖目录
+`runs/paper_evidence_v1/p7_center60_efficiency/`，并生成显式 task-scope 的 60 s/180 s 描述性效率并列表；所有
+cross-task 行均固定 `cross_task_causal_window_claim_allowed=false`。当前仅完成实现，尚未执行 GPU benchmark。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
