@@ -777,6 +777,15 @@ morphology/PCC trade-off。这些 keep-only 结果不表述为移除对应频带
 P6 已完成 P0 实现锁：新增 target-only Whole RR/联合属性与 canonical log-RMS 公共只读计算，冻结 10141/2675
 train/validation row identity、三个 W0 checkpoint/config/validation-metrics hashes、五类确定性波形选样规则、15-pair
 validation export 和 10 方法 allowlist。22 项 P6/既有 respiration-metrics 定向 CPU 测试通过；没有读取 waveform 数据、
-checkpoint 内容或 test，没有执行模型 inference、训练、GPU、cache 或 benchmark。正式全量 target-only 生成等待用户执行。
+checkpoint 内容或 test，没有执行模型 inference、训练、GPU、cache 或 benchmark。
+
+P6 P1 target-only 属性已从干净 commit `6220d63c794ff51c0aaa3f9da36492dcd18d4973` 完成，receipt/manifest SHA-256=
+`887374b0d99c21901f143f2a13bb28ee8ab8658f989faa21289576b464de03fe / bfd5ca354bbd3a84e5f5d2f979ebdf2716297036719db212fbc0377fcbb888ee`。
+10141 train 与 2675 validation rows 全部 eligible/finite；train-frozen RR cutpoints 为
+`14.327967747931218 / 17.188694745285627 bpm`，train 三层计数 `3381/3380/3380`，validation 为
+`1011/474/1190`。随后按 rule SHA-256=`23bd6ab081d457393bf9298b64ba8450ca7c54472cc0ac45ef3e6ce842e11e84`
+从 13375 条类别候选冻结五个互异 validation rows；selection receipt/manifest SHA-256=
+`c5f72423ff236364555bfac6869117fcd0ff11e8249ea1537817e1f5d7dc91e3 / 7937c9d085c35139993bb7a482797d6f9ffb932d5da92d634a61890b96e8a784`。
+两个阶段均未读取 test target、BCG 或 checkpoint，未执行 inference/GPU；下一步仅开放 15-pair validation 波形导出。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

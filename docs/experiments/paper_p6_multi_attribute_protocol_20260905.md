@@ -2,7 +2,7 @@
 
 协议 ID：`paper-p6-multi-attribute-v1-20260905`；日期：2026-09-05。
 
-状态：**P0 实现与定向 CPU 验收通过；等待从干净 commit 生成 train/validation target-only 属性，test 访问保持关闭。**
+状态：**P1 target-only 属性与确定性 validation 选样已冻结；等待 15-pair validation GPU 波形导出，test 访问保持关闭。**
 
 ## 1. 研究问题与证据边界
 
@@ -93,3 +93,29 @@ checkpoint evaluator。该入口和产物在获得新的 test 授权前保持未
   scripts/select_paper_p6_validation_waveforms_v1.py \
   scripts/export_paper_p6_validation_waveforms_v1.py
 ```
+
+## 8. P1 冻结结果
+
+Target-only 属性从干净 commit `6220d63c794ff51c0aaa3f9da36492dcd18d4973` 完成。Receipt/manifest SHA-256 为
+`887374b0d99c21901f143f2a13bb28ee8ab8658f989faa21289576b464de03fe / bfd5ca354bbd3a84e5f5d2f979ebdf2716297036719db212fbc0377fcbb888ee`；
+10141 train 与 2675 validation rows 全部 target RR eligible 且属性 finite，row/`samp_id`/source hashes 通过。
+
+Train-frozen cutpoints 为 `q1=14.327967747931218 bpm`、`q2=17.188694745285627 bpm`。Train 的 low/medium/high
+rows 为 `3381 / 3380 / 3380`；应用相同边界后的 validation rows 为 `1011 / 474 / 1190`。Train/validation target RR
+观测范围分别为 `3.0000–24.8585 / 3.0000–24.7733 bpm`；`3 bpm` 是冻结 `0.05 Hz` 下边界，不在结果可见后追加过滤。
+本阶段读取 train/validation target 和统一 index metadata，没有读取 test target、BCG、checkpoint 或 W cache。
+
+确定性选样随后从同一干净 commit 完成。Receipt/manifest SHA-256 为
+`c5f72423ff236364555bfac6869117fcd0ff11e8249ea1537817e1f5d7dc91e3 / 7937c9d085c35139993bb7a482797d6f9ffb932d5da92d634a61890b96e8a784`，
+selection rule SHA-256=`23bd6ab081d457393bf9298b64ba8450ca7c54472cc0ac45ef3e6ce842e11e84`。五类固定 rows 为：
+
+| 类别 | dataset_row_id | rate score | effort score | target RR | stratum |
+|---|---:|---:|---:|---:|---|
+| typical | 12429 | 0.491773 | 0.510347 | 18.566685 | high |
+| rr_difficult | 9700 | 0.761219 | 0.308028 | 21.230867 | high |
+| effort_difficult | 16442 | 0.184368 | 0.749065 | 13.067503 | low |
+| rr_effort_inconsistent | 16273 | 0.244390 | 0.805285 | 14.076622 | low |
+| joint_failure | 10787 | 0.995886 | 0.992645 | 12.568559 | low |
+
+候选表保存 `5×2675=13375` rows，每类恰有一个 selected row，五个 rows 互异；候选和选中表不携带 `samp_id`。
+选样只读取冻结 W0 validation metrics 与 target attributes，没有读取任何 waveform、checkpoint 或 test，也没有执行 inference。
