@@ -43,7 +43,7 @@
 | P4-U | center-90 的 90/135/180 s 输出尺度分支与 test 附件 | 是，18 runs；18 checkpoints inference | validation/test 均完成并冻结 |
 | P4-R | center30/60/90 与历史 180→180 节律指标统一只读汇总 | 否 | v2 selector provenance 修正后完成并冻结 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
-| P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | 待实现；test 访问关闭 |
+| P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形阶段完成；RR 区间阶段待授权 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
 
 每个阶段必须使用新目录且禁止覆盖。实现、训练、独立测试集访问和长时间 benchmark 分别需要用户明确授权；
@@ -789,8 +789,11 @@ P6 P1 target-only 属性已从干净 commit `6220d63c794ff51c0aaa3f9da36492dcd18
 `c5f72423ff236364555bfac6869117fcd0ff11e8249ea1537817e1f5d7dc91e3 / 7937c9d085c35139993bb7a482797d6f9ffb932d5da92d634a61890b96e8a784`。
 两个阶段均未读取 test target、BCG 或 checkpoint，未执行 inference/GPU；下一步仅开放 15-pair validation 波形导出。
 
-P6 波形导出固定为五个 validation rows、三个 W0 checkpoints、batch size 5，共 15 个 forward elements。完整
-`15×5=75` 项主指标差值检查使用绝对容差 `0.01`；已观测最大重复计算差值为
-`5.2045859986804555e-05`，满足波形示例的身份与数值一致性要求。该检查不参与模型比较或结论选择。
+P6 波形导出已从干净 commit `582f360fcb0f52910915dc8ec1479d38b2cae1c2` 完成。五个 validation rows、三个 W0
+checkpoints、batch size 5，共 15 个 forward elements；完整 `15×5=75` 项主指标差值全部通过绝对容差 `0.01`，最大差值
+`0.00116557263923589`。Receipt/manifest SHA-256=
+`64d8d60cfece8606674e9ecb11e6ca662f6a12f6e4e69f2374680b0fd113b950 / 13ba01f4116385f72dbb2a4f2291ab46bb699f746a2858f49bff0479e43a37be`。
+冻结 NPZ 的 row/seed/shape/finite 与 artifact manifest 均通过只读核验，波形 panel 完整可读。Validation 波形阶段关闭；
+下一步为按 train-frozen cutpoints 构建 10 方法 RR 区间汇总，需单独授权 test target-only 访问。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

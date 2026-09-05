@@ -2,7 +2,7 @@
 
 协议 ID：`paper-p6-multi-attribute-v1-20260905`；日期：2026-09-05。
 
-状态：**P1 target-only 属性与确定性 validation 选样已冻结；等待 15-pair validation GPU 波形导出，test 访问保持关闭。**
+状态：**Target-only 属性、确定性 validation 选样与 15-pair validation 波形导出已冻结；等待 RR 区间阶段授权。**
 
 ## 1. 研究问题与证据边界
 
@@ -125,6 +125,11 @@ selection rule SHA-256=`23bd6ab081d457393bf9298b64ba8450ca7c54472cc0ac45ef3e6ce8
 
 ## 9. 导出数值一致性
 
-GPU 重复计算的完整 75 项差值中，观测到的最大绝对差为 `5.2045859986804555e-05`。该差异远低于冻结容差 `0.01`，
-满足示例波形导出的身份与数值一致性要求。这个检查只用于防止 row、checkpoint 或指标管线的实质漂移，不参与模型比较、
-显著性判断或结论选择。
+从干净 commit `582f360fcb0f52910915dc8ec1479d38b2cae1c2` 完成导出。完整 75 项差值全部通过，最大绝对差为
+`0.00116557263923589`，低于冻结容差 `0.01`。Receipt/manifest SHA-256 为
+`64d8d60cfece8606674e9ecb11e6ca662f6a12f6e4e69f2374680b0fd113b950 / 13ba01f4116385f72dbb2a4f2291ab46bb699f746a2858f49bff0479e43a37be`。
+
+冻结 NPZ 包含 5 个 18000-point BCG/target、3×5 个 18000-point predictions、中心 6000-point targets 与对应 35-point
+log-RMS envelopes；全部数值 finite，row/seed 顺序与合同一致。波形 panel 已完成视觉核验，五类标题、中心区间、三 seed
+轨迹和 envelope 面板均完整可读。该一致性检查只用于确认 row、checkpoint 与指标管线，不参与模型比较、显著性判断或
+结论选择。
