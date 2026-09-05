@@ -139,3 +139,12 @@ selection rule SHA-256=`23bd6ab081d457393bf9298b64ba8450ca7c54472cc0ac45ef3e6ce8
 
 没有放宽容差、换 row、重选 checkpoint 或删除失败记录。用户确认后，执行合同仅改为第 5 节历史 batch-shape replay；
 padding 不增加数据访问范围。相关 P6/respiration-metrics 定向 CPU 测试现为 25 项通过。
+
+Replay 首次执行从干净 commit `abdeb61` 启动，仍在 seed `20260811`、row `16442` 的 Local RR 锚点停止：
+observed=`0.039869667187182621`、expected=`0.039871286044205499`、绝对差=`1.6188570228781174e-6`，略高于
+`1e-6`；失败记录保留于 `.p6_waveform_export.incomplete_ggddr8_o/failure.json`。该数值很小，但不能只根据首个超限值
+事后把门槛改为 `2e-6`。
+
+因此下一次执行保持同一合同、rows、replay 和门槛，改为完成三个 checkpoints 的全部 `15×5=75` 项锚点比较后统一
+判定。若存在超限，incomplete lifecycle 将保存 `validation_anchor_deltas.csv`，报告全矩阵 failed count、最大绝对差及
+对应 seed/row/metric；在看到完整误差分布前不改变验收口径。

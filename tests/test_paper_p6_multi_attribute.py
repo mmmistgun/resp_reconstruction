@@ -222,12 +222,18 @@ def test_replay_plan_rejects_historical_slot_drift():
         p6.build_numerical_replay_plan(selected, list(range(2675)), replay)
 
 
-def test_anchor_failure_reports_observed_expected_and_delta():
+def test_anchor_delta_matrix_reports_all_values_without_early_exit():
     observed = pd.DataFrame({"dataset_row_id": [1], **{metric: [1.0] for metric in p6.PRIMARY_METRICS}})
     frozen = observed.copy()
     frozen.loc[0, "local_rr_mae_bpm"] = 2.0
-    with pytest.raises(RuntimeError, match=r"observed=1.*expected=2.*abs_delta=1"):
-        p6._anchor_export_metrics(observed, frozen, atol=1e-6)
+    deltas = p6.build_export_anchor_deltas(observed, frozen, seed=p6.SEEDS[0], atol=1e-6)
+    assert len(deltas) == 5
+    failed = deltas.loc[~deltas["within_atol"]]
+    assert len(failed) == 1
+    assert failed.iloc[0]["metric"] == "local_rr_mae_bpm"
+    assert failed.iloc[0]["observed"] == 1.0
+    assert failed.iloc[0]["expected"] == 2.0
+    assert failed.iloc[0]["abs_delta"] == 1.0
 
 
 def test_existing_output_rejected_before_git_or_source_access(tmp_path, monkeypatch):

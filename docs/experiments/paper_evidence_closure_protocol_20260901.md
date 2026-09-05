@@ -797,4 +797,9 @@ P6 P1 target-only 属性已从干净 commit `6220d63c794ff51c0aaa3f9da36492dcd18
 `0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff` 仅由该执行修订替代，既有 target/selection
 产物、RR cutpoints、rule hash、矩阵和 `1e-6` 锚点保持有效；25 项相关定向 CPU 测试通过。
 
+Replay 首次执行仍在 seed `20260811`、row `16442` 的 Local RR 超出锚点：observed/expected=
+`0.039869667187182621 / 0.039871286044205499`，绝对差 `1.6188570228781174e-6`；第二个失败 lifecycle
+`.p6_waveform_export.incomplete_ggddr8_o` 保留。没有据首个超限值放宽门槛。实现现改为完成全部 75 项锚点差值后统一
+判定，并在失败目录保存 `validation_anchor_deltas.csv`；下一次运行只作完整数值漂移诊断，不改变科学矩阵或数据访问范围。
+
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

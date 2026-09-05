@@ -538,6 +538,7 @@ def export_p6_validation_waveforms(
     target = np.stack([dataset[index]["target"].numpy().reshape(-1) for index in range(len(dataset))])
     predictions = []
     metric_frames = []
+    anchor_frames = []
     temporary = _temporary_output(output)
     try:
         for source in contract["w0_sources"]:
@@ -572,10 +573,13 @@ def export_p6_validation_waveforms(
             predictions.append(wave)
             metrics = evaluate_task_predictions(predicted, cfg, method="crd_tf102_w")
             metrics.insert(0, "seed", seed)
-            _anchor_export_metrics(
-                metrics,
-                pd.read_csv(root / source["run_dir"] / "metrics.csv"),
-                atol=float(contract["waveform_export"]["primary_metric_anchor_atol"]),
+            anchor_frames.append(
+                build_export_anchor_deltas(
+                    metrics,
+                    pd.read_csv(root / source["run_dir"] / "metrics.csv"),
+                    seed=seed,
+                    atol=float(contract["waveform_export"]["primary_metric_anchor_atol"]),
+                )
             )
             category_by_id = selected.set_index("dataset_row_id")["category"]
             metrics.insert(
@@ -601,6 +605,19 @@ def export_p6_validation_waveforms(
             )
             del model
             torch.cuda.empty_cache()
+        anchor_deltas = pd.concat(anchor_frames, ignore_index=True)
+        anchor_deltas.to_csv(temporary / "validation_anchor_deltas.csv", index=False)
+        failed_anchor = anchor_deltas.loc[~anchor_deltas["within_atol"]]
+        if not failed_anchor.empty:
+            worst = failed_anchor.sort_values("abs_delta", ascending=False).iloc[0]
+            raise RuntimeError(
+                "P6 export FULL anchor matrix 不一致: "
+                f"failed={len(failed_anchor)}/{len(anchor_deltas)}; "
+                f"max_abs_delta={float(worst['abs_delta']):.17g}; "
+                f"seed={int(worst['seed'])}; row={int(worst['dataset_row_id'])}; "
+                f"metric={worst['metric']}; atol={float(worst['atol']):.17g}; "
+                "完整差值见 validation_anchor_deltas.csv"
+            )
         prediction_matrix = np.stack(predictions)
         center_start, center_stop = map(int, contract["waveform_export"]["center_interval_samples"])
         envelope_bcg = compute_log_rms_envelopes(bcg, base_cfg)
@@ -895,8 +912,15 @@ def _load_selected_rows(root: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     return selected, _file_record(manifest_path, "waveform_selection_manifest")
 
 
-def _anchor_export_metrics(observed: pd.DataFrame, frozen: pd.DataFrame, *, atol: float) -> None:
+def build_export_anchor_deltas(
+    observed: pd.DataFrame,
+    frozen: pd.DataFrame,
+    *,
+    seed: int,
+    atol: float,
+) -> pd.DataFrame:
     source = frozen.set_index("dataset_row_id")
+    records = []
     for _, row in observed.iterrows():
         row_id = int(row["dataset_row_id"])
         if row_id not in source.index:
@@ -904,12 +928,23 @@ def _anchor_export_metrics(observed: pd.DataFrame, frozen: pd.DataFrame, *, atol
         for metric in PRIMARY_METRICS:
             observed_value = float(row[metric])
             expected_value = float(source.loc[row_id, metric])
-            if not np.isclose(observed_value, expected_value, rtol=0.0, atol=atol):
-                raise RuntimeError(
-                    f"P6 export FULL anchor 不一致: row={row_id}/{metric}; "
-                    f"observed={observed_value:.17g}; expected={expected_value:.17g}; "
-                    f"abs_delta={abs(observed_value - expected_value):.17g}; atol={atol:.17g}"
-                )
+            delta = abs(observed_value - expected_value)
+            records.append(
+                {
+                    "seed": int(seed),
+                    "dataset_row_id": row_id,
+                    "metric": metric,
+                    "observed": observed_value,
+                    "expected": expected_value,
+                    "abs_delta": delta,
+                    "atol": float(atol),
+                    "within_atol": bool(delta <= float(atol)),
+                }
+            )
+    result = pd.DataFrame.from_records(records)
+    if len(result) != len(observed) * len(PRIMARY_METRICS):
+        raise RuntimeError("P6 export anchor delta matrix 不完整")
+    return result
 
 
 def _slice_prediction_rows(
@@ -1040,6 +1075,7 @@ __all__ = [
     "assign_rr_strata",
     "build_p6_target_attributes",
     "build_numerical_replay_plan",
+    "build_export_anchor_deltas",
     "build_target_attribute_frame",
     "build_waveform_selection",
     "export_p6_validation_waveforms",
