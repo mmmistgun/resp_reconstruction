@@ -44,7 +44,7 @@
 | P4-R | center30/60/90 与历史 180→180 节律指标统一只读汇总 | 否 | v2 selector provenance 修正后完成并冻结 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形与 test RR 区间均冻结；阶段关闭 |
-| P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | GPU-only 实现完成，等待用户执行 |
+| P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | v1 完成但 online-W 有顺序混杂；v2 校正等待执行 |
 
 每个阶段必须使用新目录且禁止覆盖。实现、训练、独立测试集访问和长时间 benchmark 分别需要用户明确授权；
 前一阶段完成不自动授权后一阶段。
@@ -642,6 +642,12 @@ indices view 保持在现有模型 `forward` 内，因此报告段名为 `model_
 - 记录 30 s sliding step 下的 `30s - p95_end_to_end` 数值余量和更新吞吐，但不把正/负余量自动翻译成实时、流式或部署结论；
 - 记录完整 180 s 上下文等待这一事实，明确 benchmark 只评价滑窗处理开销。
 
+首次执行后，完全相同的 online 97-scale CWT stage 在 W0/W3/D4 间出现不可归因于模型的系统性时延差异，故该次
+online-W 跨模型相对变化不进入论文结论。P7-v2 保持相同模型、checkpoint、输入、场景及 `20+100×5` 预算，仅校正
+测量调度：五轮平衡模型位置、交替场景顺序、每个模型×轮次重新加载并在场景前清理 CUDA cache，且把 profiler 移到
+全部正式时延/显存测量之后。相同 CWT stage 的跨模型 median 与 p95 relative spread 均须不超过 `10%`，否则 v2
+manifest 记为 `measurement_incomplete`，禁止解释 online-W 跨模型相对变化。
+
 ### 10.4 结果产物
 
 固定新目录：
@@ -834,5 +840,19 @@ W0/W3 质量列只读三 seed 独立测试集汇总，D4 明确只读三 seed va
 FLOPs/MACs，并标注 Mamba custom op coverage 不完整；manifest decision 只允许 `measurement_complete`，不生成
 实时、流式或部署结论。当前仅完成实现，尚未执行 benchmark。
 新增 7 项 P7 定向 CPU 合同/汇总测试全部通过；测试没有加载 checkpoint、读取 waveform 或执行模型 benchmark。
+
+P7-v1 已从干净 commit `6b1079da6e8bd1140866a19828a996b721855b36` 完成，manifest SHA-256=
+`53fd433a2626dfe7623ca7429b2b51a51389cd035ac6e218ddf5b55946c12e14`，3,000 条 timed pipeline iterations、
+13,500 条 stage records、全部 finite 且 artifact hash 闭合。Cached-W 可比较：W3 相对 W0 的 median/p95 为
+`+0.516% / +3.240%`，peak allocated 减少 `26.049%`；D4 median/p95 改善 `23.997% / 21.712%`，参数量减少
+`25.997%`。但相同 CWT stage 的 W0/W3/D4 p95 为 `66.261 / 41.536 / 39.818 ms`，超过合理一致性范围；同时
+profiler 前置造成 reserved allocator state 不同。因此 v1 只冻结 cached-W、peak allocated 与资源描述，online-W
+跨模型变化及 peak reserved 不作论文比较。
+
+用户已确认以不增加 timed iteration 总数的方式执行 P7-v2。独立合同
+`configs/paper_evidence_v1/p7_iot_efficiency_correction_v2.json` 固定 prior manifest、平衡 round schedule、后置
+profiler、CWT 一致性门槛和新不可覆盖输出目录，SHA-256=
+`94d23ed74bdf661c7507845ca7ab7af1da3decd63a3824da957a75868bfc5529`；v1 产物保持不变。当前只完成 v2
+实现，尚未执行校正 benchmark。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

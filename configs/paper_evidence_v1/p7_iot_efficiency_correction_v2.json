@@ -1,0 +1,63 @@
+{
+  "schema_version": "paper-p7-iot-efficiency-correction-config-v2",
+  "protocol_id": "paper-p7-iot-efficiency-correction-v2-20260905",
+  "role": "descriptive_gpu_measurement_correction",
+  "parent_contract": {
+    "path": "configs/paper_evidence_v1/p7_iot_efficiency_v1.json",
+    "sha256": "8da08b682b2a7381fe81e0dc316295187b390ec29cd98ef1bb3c84aefd682b28"
+  },
+  "prior_measurement": {
+    "path": "runs/paper_evidence_v1/p7_iot_efficiency/manifest.json",
+    "sha256": "53fd433a2626dfe7623ca7429b2b51a51389cd035ac6e218ddf5b55946c12e14",
+    "decision": "measurement_complete",
+    "retained_unchanged": true
+  },
+  "authorization": {
+    "gpu_benchmark": true,
+    "cpu_model_benchmark": false,
+    "training": false,
+    "cache_build": false,
+    "research_test_access": false
+  },
+  "benchmark": {
+    "warmup_iterations": 20,
+    "timed_iterations": 100,
+    "rounds": 5,
+    "scenarios": ["cached_w", "online_w"],
+    "round_model_order": [
+      ["W0_FULL_12V_FILM_D6", "W3_FULL_6V_FILM_D6", "D4_W0"],
+      ["W3_FULL_6V_FILM_D6", "D4_W0", "W0_FULL_12V_FILM_D6"],
+      ["D4_W0", "W0_FULL_12V_FILM_D6", "W3_FULL_6V_FILM_D6"],
+      ["D4_W0", "W3_FULL_6V_FILM_D6", "W0_FULL_12V_FILM_D6"],
+      ["W3_FULL_6V_FILM_D6", "W0_FULL_12V_FILM_D6", "D4_W0"]
+    ],
+    "round_scenario_order": [
+      ["cached_w", "online_w"],
+      ["online_w", "cached_w"],
+      ["cached_w", "online_w"],
+      ["online_w", "cached_w"],
+      ["cached_w", "online_w"]
+    ],
+    "fresh_model_load_per_candidate_round": true,
+    "cuda_empty_cache_before_each_scenario": true,
+    "profiler_position": "after_all_latency_and_memory_measurements",
+    "gpu_synchronize_after_each_stage": true,
+    "percentile_method": "numpy_linear",
+    "sample_sd_ddof": 1,
+    "sliding_step_seconds": 30,
+    "context_wait_seconds": 180,
+    "model_forward_stage": "model_forward_including_w_view"
+  },
+  "online_cwt_consistency": {
+    "stage": "w_feature_extraction_97scale_log_pool",
+    "statistics": ["median_ms", "p95_ms"],
+    "relative_spread_definition": "(cross_model_max-cross_model_min)/cross_model_min",
+    "maximum_relative_spread": 0.1,
+    "required_for_measurement_complete": true
+  },
+  "output": {
+    "directory": "runs/paper_evidence_v1/p7_iot_efficiency_correction_v2",
+    "allow_overwrite": false,
+    "csv_float_format": "%.12g"
+  }
+}
