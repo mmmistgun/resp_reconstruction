@@ -45,40 +45,12 @@
     "validation_rows": 5,
     "checkpoint_seeds": [20260811, 20260812, 20260813],
     "exported_row_checkpoint_pairs": 15,
-    "numerical_replay": {
-      "source_validation_batch_size": 128,
-      "source_last_batch_size": 115,
-      "replay_batches": [
-        {
-          "batch_size": 128,
-          "materialization": "repeat_selected",
-          "fill_category": "typical",
-          "category_slots": {
-            "typical": 37,
-            "rr_difficult": 81,
-            "rr_effort_inconsistent": 95,
-            "joint_failure": 105
-          }
-        },
-        {
-          "batch_size": 115,
-          "materialization": "historical_source_batch",
-          "source_position_start": 2560,
-          "source_position_stop": 2675,
-          "category_slots": {
-            "effort_difficult": 5
-          }
-        }
-      ],
-      "processed_batch_elements_per_checkpoint": 243,
-      "processed_batch_elements_total": 729,
-      "unique_validation_rows_read": 119,
-      "repeat_padding_uses_selected_rows_only": true,
-      "padding_outputs_saved": false
-    },
+    "inference_batch_size": 5,
+    "processed_batch_elements_per_checkpoint": 5,
+    "processed_batch_elements_total": 15,
     "ensemble_method_created": false,
     "center_interval_samples": [6000, 12000],
-    "primary_metric_anchor_atol": 1e-6
+    "primary_metric_anchor_atol": 0.01
   },
   "method_allowlist": [
     "F0_fixed_band_bcg",

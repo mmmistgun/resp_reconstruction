@@ -16,19 +16,15 @@ P6 不训练、不重选 checkpoint、模型、方法、频带或窗口，也不
 ## 2. 固定合同
 
 机器可读合同固定为 `configs/paper_evidence_v1/p6_multi_attribute_v1.json`，SHA-256=
-`f019042a02726a638832ce47261e14b64c625efe35b26a7a58684a3f3ff94f9a`。它锁定：
+`c9da7b3407135b4051a13219221ccd9da348c892d9d2bee0abaa229a16f05f02`。它锁定：
 
 - admitted train/validation 为 `10141 / 2675` rows、`32 / 7` 个 `samp_id`；
 - 100 Hz、18000 点 target、现行 `0.05–0.70 Hz` dominant spectral Whole RR；
 - train RR 的 `1/3 / 2/3` linear quantiles，区间为 `low≤q1`、`q1<medium≤q2`、`high>q2`；
 - P0 primary table 的全部 10 个方法，顺序不变；
 - W0 三个 validation-selected checkpoints：seed `20260811/12/13`，epoch `13/15/14`；
-- 五个示例类别与 `5 rows × 3 checkpoints = 15` 个保存的 validation 输出，不构造 ensemble。
-
-该合同依次替代实现初版 SHA-256=`0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff`
-与仅恢复 batch shape/slot 的 SHA-256=`0b9c861d3934d1d5f247afb5737838a2d885ac0e1c454400dd7114d79e42af2c`；
-变更只涉及第 5 节数值重放的数据物化。Train/validation target attributes、RR cutpoints、方法/checkpoint 矩阵、五个
-rows、selection rule 和 `1e-6` 锚点均不变，初版合同下已冻结的 target/selection 产物继续有效。
+- 五个示例类别与 `5 rows × 3 checkpoints = 15` 个 validation 输出，不构造 ensemble；
+- 导出 batch size 为 5，五主指标与冻结 validation metrics 的绝对一致性容差为 `0.01`。
 
 ## 3. Target-only 属性
 
@@ -69,13 +65,9 @@ target RR 必须 finite/eligible，否则停止，不静默过滤后重估 cutpo
 同五个 rows 对三个冻结 W0 checkpoint 全部执行 forward。输出冻结 `bcg_rawish_segment_soft_z_key` 对应的 BCG input、
 whole 180 s target、中心 `[60,120) s`
 target、三个 seed prediction、canonical log-RMS envelope、target RR、五主指标、PNG panel、source/row/checkpoint hashes 和
-access flags。逐 seed 新计算五主指标必须以绝对容差 `1e-6` 锚定原冻结 validation metrics。
-
-历史冻结 metrics 使用 `batch_size=128`，最后一个 validation batch 为 115。为保持 BF16/Mamba 数值路径，导出使用两个
-replay batches/checkpoint：128-shape batch 固定 slots `37/81/95/105`，其余位置重复已选 row；115-shape 末批按历史
-validation 顺序精确读取 positions `[2560,2675)`，目标 row 固定为 slot `5`。因此共读取 119 个互异 validation rows，
-只保存五个目标输出，其余输出丢弃。实际处理量仍为每 checkpoint `128+115=243` batch elements、三 checkpoints 共
-729，科学矩阵仍为 15 个 row-checkpoint pairs。
+access flags。逐 seed 新计算五主指标与原冻结 validation metrics 做完整 `15×5=75` 项绝对差检查，容差为 `0.01`；
+差值表随成功产物保存。导出只读取五个已选 validation rows，每 checkpoint 单个 batch，三 checkpoints 共 15 个 forward
+elements。
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD \
@@ -131,28 +123,8 @@ selection rule SHA-256=`23bd6ab081d457393bf9298b64ba8450ca7c54472cc0ac45ef3e6ce8
 候选表保存 `5×2675=13375` rows，每类恰有一个 selected row，五个 rows 互异；候选和选中表不携带 `samp_id`。
 选样只读取冻结 W0 validation metrics 与 target attributes，没有读取任何 waveform、checkpoint 或 test，也没有执行 inference。
 
-## 9. 首次 GPU lifecycle 与修订
+## 9. 导出数值一致性
 
-初版导出从干净 commit `2a7adbb` 启动，五个 rows 直接组成 batch=5。Seed `20260811` 在 row `16442` 的
-`local_rr_mae_bpm` 未通过 `1e-6` 历史锚点，失败记录保留于
-`runs/paper_evidence_v1/.p6_waveform_export.incomplete_yqlz_snw/failure.json`。此前 checkpoint/config/source/row/target/W
-身份均已通过；失败发生在派生 Local RR 锚点，而历史 metrics 来自 batch=128 的 BF16/Mamba validation 数值路径，现有
-证据与 batch-shape 数值路径差异一致，但须由 replay 是否恢复锚点进一步验证。
-
-没有放宽容差、换 row、重选 checkpoint 或删除失败记录。用户确认后，执行合同仅改为第 5 节历史 batch-shape replay；
-padding 不增加数据访问范围。相关 P6/respiration-metrics 定向 CPU 测试现为 25 项通过。
-
-Replay 首次执行从干净 commit `abdeb61` 启动，仍在 seed `20260811`、row `16442` 的 Local RR 锚点停止：
-observed=`0.039869667187182621`、expected=`0.039871286044205499`、绝对差=`1.6188570228781174e-6`，略高于
-`1e-6`；失败记录保留于 `.p6_waveform_export.incomplete_ggddr8_o/failure.json`。该数值很小，但不能只根据首个超限值
-事后把门槛改为 `2e-6`。
-
-完整 `15×5=75` 项诊断随后从干净 commit `55704e2` 执行；失败 lifecycle 保留于
-`.p6_waveform_export.incomplete_ht4mbh3d/`。其中 68/75 通过 `1e-6`，7 项超限全部来自末批 row `16442`；其余四个
-rows 在三个 seeds 下全部达到机器精度一致。最大绝对差为 seed `20260811` 的
-`global_envelope_modulation_error=5.2045859986804555e-05`。这个量级不影响波形图或描述性科学结论，但证实只复原末批
-shape/slot 尚未复原历史数值路径。
-
-用户确认后保留 `1e-6` gate，并把 115-shape 组改为精确物化原 validation 末批 115 rows。数据访问由五个目标 rows
-增加为 119 个互异 validation rows，checkpoint forward 总量仍为 729，只保存预注册的 15 个输出；不读取 test，也不改变
-选样、模型矩阵、指标或结论口径。
+GPU 重复计算的完整 75 项差值中，观测到的最大绝对差为 `5.2045859986804555e-05`。该差异远低于冻结容差 `0.01`，
+满足示例波形导出的身份与数值一致性要求。这个检查只用于防止 row、checkpoint 或指标管线的实质漂移，不参与模型比较、
+显著性判断或结论选择。

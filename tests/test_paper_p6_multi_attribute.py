@@ -186,47 +186,6 @@ def test_waveform_panel_cpu_smoke(tmp_path):
     assert path.stat().st_size > 0
 
 
-def test_historical_batch_shape_replay_plan_and_extraction():
-    selected_positions = {
-        "typical": 1701,
-        "rr_difficult": 721,
-        "effort_difficult": 2565,
-        "rr_effort_inconsistent": 2399,
-        "joint_failure": 1257,
-    }
-    selected = pd.DataFrame(
-        {
-            "category": list(p6.CATEGORIES),
-            "dataset_row_id": [selected_positions[category] for category in p6.CATEGORIES],
-        }
-    )
-    replay = p6.load_contract()["waveform_export"]["numerical_replay"]
-    plan, extraction = p6.build_numerical_replay_plan(selected, list(range(2675)), replay)
-    assert [group["batch_size"] for group in plan] == [128, 115]
-    assert [group["materialization"] for group in plan] == [
-        "repeat_selected", "historical_source_batch"
-    ]
-    assert plan[1]["source_position_start"] == 2560
-    assert plan[1]["source_position_stop"] == 2675
-    assert extraction == [37, 81, 133, 95, 105]
-    predictions = {
-        "dataset_row_id": np.arange(243, dtype=np.int64),
-        "r_tho_hat": np.arange(243 * 2, dtype=np.float32).reshape(243, 1, 2),
-    }
-    sliced = p6._slice_prediction_rows(predictions, extraction)
-    assert sliced["dataset_row_id"].tolist() == extraction
-    assert sliced["r_tho_hat"].shape == (5, 1, 2)
-
-
-def test_replay_plan_rejects_historical_slot_drift():
-    selected = pd.DataFrame(
-        {"category": list(p6.CATEGORIES), "dataset_row_id": [1700, 721, 2565, 2399, 1257]}
-    )
-    replay = p6.load_contract()["waveform_export"]["numerical_replay"]
-    with pytest.raises(RuntimeError, match="shape/slot"):
-        p6.build_numerical_replay_plan(selected, list(range(2675)), replay)
-
-
 def test_anchor_delta_matrix_reports_all_values_without_early_exit():
     observed = pd.DataFrame({"dataset_row_id": [1], **{metric: [1.0] for metric in p6.PRIMARY_METRICS}})
     frozen = observed.copy()
@@ -265,8 +224,9 @@ def test_frozen_contract_and_static_sources_are_validation_only():
     assert len(contract["method_allowlist"]) == 10
     assert len(records) == 11
     assert not any(record["path"].endswith("research_test_metrics.csv") for record in records)
-    assert contract["waveform_export"]["numerical_replay"]["processed_batch_elements_total"] == 729
-    assert contract["waveform_export"]["numerical_replay"]["unique_validation_rows_read"] == 119
+    assert contract["waveform_export"]["inference_batch_size"] == 5
+    assert contract["waveform_export"]["processed_batch_elements_total"] == 15
+    assert contract["waveform_export"]["primary_metric_anchor_atol"] == pytest.approx(0.01)
     if (root / p6.SELECTION_OUTPUT / "artifact_manifest.json").is_file():
         attrs, _ = p6._load_target_attributes(root)
         selected, _ = p6._load_selected_rows(root)

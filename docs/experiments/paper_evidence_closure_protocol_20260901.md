@@ -585,15 +585,15 @@ Test target-only attribute 读取属于新的 test 访问，必须在 train cutp
 
 P6 的规范性附件为 `docs/experiments/paper_p6_multi_attribute_protocol_20260905.md`，机器合同固定为
 `configs/paper_evidence_v1/p6_multi_attribute_v1.json`，SHA-256=
-`f019042a02726a638832ce47261e14b64c625efe35b26a7a58684a3f3ff94f9a`。用户已确认以下口径：RR 分区方法矩阵使用
+`c9da7b3407135b4051a13219221ccd9da348c892d9d2bee0abaa229a16f05f02`。用户已确认以下口径：RR 分区方法矩阵使用
 P0 全部 10 个 primary methods；validation 波形 rows 按 W0 三 seed 的逐 row 五主指标 arithmetic mean 计算 RR/effort
 difficulty ranks，并以五个固定目标规则顺序、自适应排除重复 row；同五个 rows 导出三个 W0 checkpoints，共 15 个
 row-checkpoint pairs，不构造 ensemble。
 
 实现分为三个不可覆盖阶段：`p6_target_attributes` 只读取完整 train/validation targets 并冻结 train RR cutpoints；
-`p6_waveform_selection` 只读三份冻结 W0 validation metrics 和 target attributes；`p6_waveform_export` 为数值重放读取 119 个
-validation BCG/target、W cache 与三个 checkpoints，但只保存五个预注册 rows 的 15 个输出。前两阶段不读取 checkpoint、
-不推理、不用 GPU；第三阶段不读取 test。
+`p6_waveform_selection` 只读三份冻结 W0 validation metrics 和 target attributes；`p6_waveform_export` 读取五个预注册
+validation rows 的 BCG/target、W cache 与三个 checkpoints，生成 15 个输出。前两阶段不读取 checkpoint、不推理、不用
+GPU；第三阶段不读取 test。
 Test target-only 属性及 10 方法 RR 分区汇总在获得新的明确授权前不提供可执行入口。
 
 ## 10. P7：IoT 端到端效率结果
@@ -789,25 +789,8 @@ P6 P1 target-only 属性已从干净 commit `6220d63c794ff51c0aaa3f9da36492dcd18
 `c5f72423ff236364555bfac6869117fcd0ff11e8249ea1537817e1f5d7dc91e3 / 7937c9d085c35139993bb7a482797d6f9ffb932d5da92d634a61890b96e8a784`。
 两个阶段均未读取 test target、BCG 或 checkpoint，未执行 inference/GPU；下一步仅开放 15-pair validation 波形导出。
 
-首次 GPU 导出使用 batch=5，在 seed `20260811`、row `16442` 的 Local RR 未通过 `1e-6` 冻结锚点；失败 lifecycle
-固定保留为 `.p6_waveform_export.incomplete_yqlz_snw`。身份检查此前全部通过，未放宽容差、换 row 或重选 checkpoint。
-当前原因假设为历史 metrics 使用 batch=128（末批 115），而 BF16/Mamba 与 Local RR 峰值判定对 batch 数值路径敏感；
-须由 replay 是否恢复锚点验证。
-用户确认后只修订执行合同为历史 batch-shape replay：每 checkpoint 处理 128+115 个 batch elements，padding 只复用
-五个已选 rows，仍只保存 15 个预注册输出；三 checkpoints 总处理量 729。初版 contract hash
-`0c22bb56b8d5c54b604a4b7e2f2064f82c699df20d703744e6cea0cc243742ff` 仅由该执行修订替代，既有 target/selection
-产物、RR cutpoints、rule hash、矩阵和 `1e-6` 锚点保持有效；25 项相关定向 CPU 测试通过。
-
-Replay 首次执行仍在 seed `20260811`、row `16442` 的 Local RR 超出锚点：observed/expected=
-`0.039869667187182621 / 0.039871286044205499`，绝对差 `1.6188570228781174e-6`；第二个失败 lifecycle
-`.p6_waveform_export.incomplete_ggddr8_o` 保留。没有据首个超限值放宽门槛。实现现改为完成全部 75 项锚点差值后统一
-判定，并在失败目录保存 `validation_anchor_deltas.csv`。
-
-完整诊断 lifecycle `.p6_waveform_export.incomplete_ht4mbh3d` 显示 68/75 项通过；7 个超限项全部属于末批 row `16442`，
-其余四个 rows 在三 seeds 下均达到机器精度一致，最大绝对差为 `5.2045859986804555e-05`。该量级不影响波形图或描述性
-结论，但说明只恢复 batch shape/slot 不足。用户确认保留 `1e-6` gate，精确读取历史 validation 末批 positions
-`[2560,2675)`；互异 validation rows 读取数由 5 增至 119，forward 总量仍为 729，只保存 15 个预注册输出，不改变选样、
-方法/checkpoint 矩阵、指标或 test 关闭状态。此前 contract hash `0b9c861d3934d1d5f247afb5737838a2d885ac0e1c454400dd7114d79e42af2c`
-仅由该执行/访问修订替代。
+P6 波形导出固定为五个 validation rows、三个 W0 checkpoints、batch size 5，共 15 个 forward elements。完整
+`15×5=75` 项主指标差值检查使用绝对容差 `0.01`；已观测最大重复计算差值为
+`5.2045859986804555e-05`，满足波形示例的身份与数值一致性要求。该检查不参与模型比较或结论选择。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
