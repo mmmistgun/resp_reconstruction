@@ -2,7 +2,7 @@
 
 协议 ID：`paper-p6-multi-attribute-v1-20260905`；日期：2026-09-05。
 
-状态：**Target-only 属性、确定性 validation 选样与 15-pair validation 波形导出已冻结；等待 RR 区间阶段授权。**
+状态：**Validation 波形阶段已冻结；test RR 区间实现已锁定，等待 target-only 属性构建。**
 
 ## 1. 研究问题与证据边界
 
@@ -82,19 +82,49 @@ CUDA_VISIBLE_DEVICES=0 \
 
 ## 6. Test RR 区间阶段
 
-后续阶段固定应用 train cutpoints，并把 target-only test 属性按 `dataset_row_id` 一对一连接 10 个冻结方法结果。必须审计
-2310-row 集合、重复、缺失、split、target hash、`samp_id` coverage 和每区间窗口/`samp_id` 数；不得调用任何已关闭
-checkpoint evaluator。该入口和产物在获得新的 test 授权前保持未实现/关闭，避免实现阶段误触 test。
+用户已授权该描述性阶段。独立机器合同为 `configs/paper_evidence_v1/p6_rr_strata_v1.json`，SHA-256=
+`d062e44868d5a721f9d111da4667ebc0c127f7c05767f2e80c104417a414e195`。它固定 2310 个 test windows、8 个
+`samp_id`、row-ID SHA-256=`184e9d6a934b6719a4b679ebf6224e20dda1101c1920ed5b9e22ea80f0f293e8`，并直接应用
+train-frozen cutpoints `14.327967747931218 / 17.188694745285627 bpm`。
+
+第一阶段只读取 2310 个 test targets，计算 target RR、target envelope modulation 与 target SHA-256，同时核验 test rows
+和 train/validation rows 零交集。它不读取 BCG、W cache、checkpoint 或现有模型指标：
+
+```bash
+./.venv/bin/python scripts/build_paper_p6_test_target_attributes_v1.py \
+  --confirm-test-target-attribute-build
+```
+
+固定输出为 `runs/paper_evidence_v1/p6_test_target_attributes/`。该命令属于全量 test target CPU 读取，由用户执行。
+
+第二阶段只读取上述 target-only artifact 与 P0 已冻结的 10 个 primary methods test metrics。来源矩阵为 2 个
+deterministic records 加 8 个 learned methods × 3 seeds，共 26 个完整 2310-row records；每个来源文件都由 P0 artifact
+audit 的 SHA-256/size 锚定。连接逐项核验 row、split、input set、`samp_id`、coupling state 和 target modulation。
+
+每个 record 在 low/medium/high 内先做 sample-direct mean；learned methods 再对三个 seed means 取 arithmetic mean 与
+sample SD (`ddof=1`)，deterministic methods 的 seed SD 保持未定义。输出 78 条 record-stratum rows、30 条
+method-stratum rows，以及三个区间的 window/`samp_id` coverage：
+
+```bash
+./.venv/bin/python scripts/summarize_paper_p6_test_rr_strata_v1.py
+```
+
+固定输出为 `runs/paper_evidence_v1/p6_rr_strata_summary/`。该阶段不重新运行 checkpoint evaluator，不产生 prediction，
+不进行模型选择、显著性检验或跨区间总分。
 
 ## 7. 当前验收命令
 
 ```bash
 ./.venv/bin/python -m pytest tests/test_paper_p6_multi_attribute.py -q
+./.venv/bin/python -m pytest tests/test_paper_p6_rr_strata.py -q
 ./.venv/bin/python -m py_compile \
   resp_train/paper_evidence/p6_multi_attribute.py \
+  resp_train/paper_evidence/p6_rr_strata.py \
   scripts/build_paper_p6_target_attributes_v1.py \
+  scripts/build_paper_p6_test_target_attributes_v1.py \
   scripts/select_paper_p6_validation_waveforms_v1.py \
-  scripts/export_paper_p6_validation_waveforms_v1.py
+  scripts/export_paper_p6_validation_waveforms_v1.py \
+  scripts/summarize_paper_p6_test_rr_strata_v1.py
 ```
 
 ## 8. P1 冻结结果

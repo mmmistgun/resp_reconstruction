@@ -1,0 +1,53 @@
+{
+  "protocol_id": "paper-p6-rr-strata-v1-20260905",
+  "schema_version": "paper-p6-rr-strata-contract-v1",
+  "evidence_scope": "independent-test descriptive target-RR strata",
+  "dataset": {
+    "dataset_index_sha256": "f65ae6524632187c7c2795bd7b5e25434afb649b5a04fe39084b70cc59f9b04f",
+    "test_count": 2310,
+    "test_samp_id_count": 8,
+    "test_row_ids_sha256": "184e9d6a934b6719a4b679ebf6224e20dda1101c1920ed5b9e22ea80f0f293e8",
+    "sample_strategy": "stratified_random",
+    "sample_seed": 20260612,
+    "target_key": "target_waveform_segment_soft_z_key",
+    "sample_rate_hz": 100,
+    "window_samples": 18000
+  },
+  "target_config": {
+    "path": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/config.yaml",
+    "sha256": "675232d48b7aadb2f0116e43a9cb737a5ac1737013dd54c4544e4f49cc1b2843"
+  },
+  "rr_strata": {
+    "train_target_attribute_manifest": "runs/paper_evidence_v1/p6_target_attributes/artifact_manifest.json",
+    "train_target_attribute_manifest_sha256": "bfd5ca354bbd3a84e5f5d2f979ebdf2716297036719db212fbc0377fcbb888ee",
+    "cutpoints_bpm": [14.327967747931218, 17.188694745285627],
+    "boundary_rule": "low<=q1; medium=(q1,q2]; high>q2",
+    "order": ["low", "medium", "high"]
+  },
+  "method_sources": {
+    "source_manifest": "configs/paper_evidence_v1/p0_comparison_sources.json",
+    "source_manifest_sha256": "c1fcf7d55a25763013a9604d544a81c6306b3752e41cbfba2447a8dbb46f5b82",
+    "p0_audit_manifest": "runs/paper_evidence_v1/p0_comparison_audit/manifest.json",
+    "p0_audit_manifest_sha256": "1e05c3de9a75c08ee016af379e075adc1b71b4d1162f7bbf81d716b4942d2542",
+    "method_allowlist": [
+      "F0_fixed_band_bcg",
+      "IEWT",
+      "B0_final_loss_patchmixer",
+      "T2_g3c_wide_native",
+      "T4_g3c_bandenergy_native",
+      "crd_c201_decoder_10hz_cap",
+      "crd_tf101_m",
+      "crd_tf102_w",
+      "crd_tf203_ms",
+      "crd_tfw_v2_w3_full_6v_film_d6"
+    ],
+    "learned_seeds": [20260811, 20260812, 20260813],
+    "target_envelope_modulation_atol": 1e-10,
+    "record_aggregation": "sample-direct mean within record and RR stratum",
+    "method_aggregation": "arithmetic record mean and sample SD ddof=1; deterministic SD undefined"
+  },
+  "outputs": {
+    "test_target_attributes": "runs/paper_evidence_v1/p6_test_target_attributes",
+    "rr_strata_summary": "runs/paper_evidence_v1/p6_rr_strata_summary"
+  }
+}

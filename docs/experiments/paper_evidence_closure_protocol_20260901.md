@@ -43,7 +43,7 @@
 | P4-U | center-90 的 90/135/180 s 输出尺度分支与 test 附件 | 是，18 runs；18 checkpoints inference | validation/test 均完成并冻结 |
 | P4-R | center30/60/90 与历史 180→180 节律指标统一只读汇总 | 否 | v2 selector provenance 修正后完成并冻结 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
-| P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形阶段完成；RR 区间阶段待授权 |
+| P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形阶段完成；test RR 区间实现锁定，待构建 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
 
 每个阶段必须使用新目录且禁止覆盖。实现、训练、独立测试集访问和长时间 benchmark 分别需要用户明确授权；
@@ -793,7 +793,13 @@ P6 波形导出已从干净 commit `582f360fcb0f52910915dc8ec1479d38b2cae1c2` �
 checkpoints、batch size 5，共 15 个 forward elements；完整 `15×5=75` 项主指标差值全部通过绝对容差 `0.01`，最大差值
 `0.00116557263923589`。Receipt/manifest SHA-256=
 `64d8d60cfece8606674e9ecb11e6ca662f6a12f6e4e69f2374680b0fd113b950 / 13ba01f4116385f72dbb2a4f2291ab46bb699f746a2858f49bff0479e43a37be`。
-冻结 NPZ 的 row/seed/shape/finite 与 artifact manifest 均通过只读核验，波形 panel 完整可读。Validation 波形阶段关闭；
-下一步为按 train-frozen cutpoints 构建 10 方法 RR 区间汇总，需单独授权 test target-only 访问。
+冻结 NPZ 的 row/seed/shape/finite 与 artifact manifest 均通过只读核验，波形 panel 完整可读。Validation 波形阶段关闭。
+
+用户随后授权 P6 test RR 区间描述性阶段。独立合同 `configs/paper_evidence_v1/p6_rr_strata_v1.json` SHA-256=
+`d062e44868d5a721f9d111da4667ebc0c127f7c05767f2e80c104417a414e195`，固定 2310 test rows、8 个 `samp_id`、
+train cutpoints 与 P0 全部 10 个 primary methods。实现分为 test target-only 属性构建和冻结 metrics 只读汇总；来源矩阵为
+2 个 deterministic records 加 8×3 learned seed records，共 26 项。每个 record 先在 RR 区间内 sample-direct mean，learned
+methods 再作三 seed arithmetic mean/sample SD (`ddof=1`)；不构造总分或重选模型。30 项 P6 RR strata、波形与呼吸指标
+定向 CPU 测试通过；正式 target 读取和汇总均待用户执行。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。
