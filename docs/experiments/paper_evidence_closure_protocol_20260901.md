@@ -43,7 +43,7 @@
 | P4-U | center-90 的 90/135/180 s 输出尺度分支与 test 附件 | 是，18 runs；18 checkpoints inference | validation/test 均完成并冻结 |
 | P4-R | center30/60/90 与历史 180→180 节律指标统一只读汇总 | 否 | v2 selector provenance 修正后完成并冻结 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
-| P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形阶段完成；test RR 区间实现锁定，待构建 |
+| P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形与 test target 属性完成；RR 区间汇总待执行 |
 | P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
 
 每个阶段必须使用新目录且禁止覆盖。实现、训练、独立测试集访问和长时间 benchmark 分别需要用户明确授权；
@@ -800,6 +800,11 @@ checkpoints、batch size 5，共 15 个 forward elements；完整 `15×5=75` 项
 train cutpoints 与 P0 全部 10 个 primary methods。实现分为 test target-only 属性构建和冻结 metrics 只读汇总；来源矩阵为
 2 个 deterministic records 加 8×3 learned seed records，共 26 项。每个 record 先在 RR 区间内 sample-direct mean，learned
 methods 再作三 seed arithmetic mean/sample SD (`ddof=1`)；不构造总分或重选模型。30 项 P6 RR strata、波形与呼吸指标
-定向 CPU 测试通过；正式 target 读取和汇总均待用户执行。
+定向 CPU 测试通过。
+
+Test target-only 属性已从干净 commit `a305bd861385d81d09cef2ba4018cb4c7b992bef` 完成，receipt/manifest SHA-256=
+`d0ecdaa982919a160c73eaec3ac57a7d757d20e2d562e85e9654902457412b53 / eebd4fd38a6f5f142c15914c7a1ea40aac85f59d5df09f26da8b7ef2c68d7a2f`。
+2310 rows 全部唯一、target RR eligible 且属性 finite；low/medium/high 为 `1656/462/192` windows，覆盖 `8/6/7`
+个 `samp_id`。下一步仅运行 10 方法冻结 test metrics 的只读 RR 区间汇总。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

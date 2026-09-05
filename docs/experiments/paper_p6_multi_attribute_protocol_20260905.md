@@ -2,7 +2,7 @@
 
 协议 ID：`paper-p6-multi-attribute-v1-20260905`；日期：2026-09-05。
 
-状态：**Validation 波形阶段已冻结；test RR 区间实现已锁定，等待 target-only 属性构建。**
+状态：**Validation 波形与 test target-only 属性已冻结；等待 10 方法 RR 区间只读汇总。**
 
 ## 1. 研究问题与证据边界
 
@@ -97,6 +97,11 @@ train-frozen cutpoints `14.327967747931218 / 17.188694745285627 bpm`。
 ```
 
 固定输出为 `runs/paper_evidence_v1/p6_test_target_attributes/`。该命令属于全量 test target CPU 读取，由用户执行。
+
+该阶段已从干净 commit `a305bd861385d81d09cef2ba4018cb4c7b992bef` 完成。Receipt/manifest SHA-256=
+`d0ecdaa982919a160c73eaec3ac57a7d757d20e2d562e85e9654902457412b53 / eebd4fd38a6f5f142c15914c7a1ea40aac85f59d5df09f26da8b7ef2c68d7a2f`。
+2310 rows 全部唯一、RR eligible 且属性 finite；row hash 与冻结身份一致。Low/medium/high 分别包含
+`1656 / 462 / 192` windows，覆盖 `8 / 6 / 7` 个 `samp_id`。
 
 第二阶段只读取上述 target-only artifact 与 P0 已冻结的 10 个 primary methods test metrics。来源矩阵为 2 个
 deterministic records 加 8 个 learned methods × 3 seeds，共 26 个完整 2310-row records；每个来源文件都由 P0 artifact
