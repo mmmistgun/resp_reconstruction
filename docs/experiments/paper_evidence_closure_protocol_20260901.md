@@ -527,11 +527,22 @@ W0 已有三个固定 seed、10 项完整 validation 干预：FULL、BETA_ONLY�
 CARRIER、CARRIER_L、CARRIER_H、TIME_MEAN、TIME_SHIFT_30S。该审计和 correction 已关闭，不得重复运行。
 
 当前第一动作只允许只读生成论文表/图，保持 source CSV hash 不变。至少报告 FULL 对比 CONDITION_OFF、TIME_MEAN、
-TIME_SHIFT_30S 及四个频率遮挡的五项 primary delta、三 seed 方向和 FiLM corrected statistics。
+TIME_SHIFT_30S 及四个频带仅保留 view 的五项 primary delta、三 seed 方向和 FiLM corrected statistics。实际语义固定为：
+RESP 仅保留 `≤0.8 Hz`，CARRIER 仅保留 `>0.8 Hz`，CARRIER_L 仅保留 `0.8–2 Hz`，CARRIER_H 仅保留 `>2 Hz`；
+不得把 keep-only 结果改写为“移除对应频带”的效果。
 
 只读整理的实现、统计合同、冻结输入哈希与不可覆盖输出协议见
 `docs/experiments/paper_p5_w0_functional_evidence_protocol_20260905.md`。实现固定输出 aggregate-mean 变化、paired-seed
 变化 mean ± sample SD 与方向计数；图中 error 使用相对恶化、PCC 使用绝对下降，避免混用单位。
+
+P5 与既有训练证据按三层解释：CRD-TF v1 的 C201/W/CTRL1 回答 W 模型收益与匹配容量归因；CRD-TF-W v2 的
+W1/W2 重训练回答频带选择后、模型充分适应时的 validation 性能权衡；P5 回答冻结 W0 对条件路径和时间对齐的功能依赖。
+W1/W2/W3 各三 seed 的 9/9 formal 已完成，每项 80 epochs / 6400 updates；W1/W2 从训练阶段应用 mask，并保持
+encoder、FiLM、主干、decoder、`[97,360]` shape 与参数量一致。W1 相对 W0 的 Whole/Local/trajectory/global/PCC
+变化为 `+1.2564% / +1.2168% / +0.4302% / −2.3242% / −0.003938`；W2 为
+`−6.7179% / −2.4838% / +0.6640% / +1.7038% / −0.003158`，其 Whole/Local RR 均为 `3/3 seeds`
+改善。W1/W2 证据仅限 validation；后续 research-test allowlist 只纳入 W3。BETA_ONLY/GAMMA_ONLY 是冻结路径干预，
+未触发 ADD/SCALE 重训练，决策保持 `retain_film_no_p2_training`。
 
 ### 8.2 可选局部频率×时间干预
 
@@ -747,7 +758,8 @@ P5 已从干净 commit `4105e53f3a3b7b8ac164f0e2d54cb5ca20162e38` 完成冻结 P
 40-row validation summary 和 8025-row corrected FiLM statistics。receipt/manifest SHA-256 为
 `d93e54ca6798671d068a0c82c97a530af3cb83df525d1068b3563b093c19292d / 82e4c10c10e85390b2eb3f61657c036c180e97a3927a0d0c15ddf666aea51187`。
 TIME_SHIFT_30S 的四项 error 均恶化 `3.99% / 6.60% / 23.05% / 24.10%`，PCC 下降 `0.02382`，五项均为
-3/3 seeds 恶化；RESP 遮挡稳定损害 RR/trajectory/PCC，carrier 遮挡则呈 RR 与 morphology/PCC trade-off。
+3/3 seeds 恶化；仅保留 RESP 低频时 RR/trajectory/PCC 稳定变差，仅保留 CARRIER 高频时呈 RR 与
+morphology/PCC trade-off。这些 keep-only 结果不表述为移除对应频带的损害。
 现有十项干预已满足论文功能证据需求，P5 关闭，不启动可选局部 `4×6` inference；21 项相关定向 CPU 测试通过。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

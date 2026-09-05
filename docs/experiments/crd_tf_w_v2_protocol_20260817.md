@@ -182,7 +182,7 @@ $$
 
 FiLM 干预属于冻结联合模型的功能敏感性证据，不是重新训练 ADD/SCALE 的因果效果。它只按第 6.4 节决定是否分配三个 P2 runs。
 
-### 6.2 W 频率遮挡
+### 6.2 W 频带仅保留 views
 
 对现有 `[97,360]` W cache 创建只读视图，shape 和 encoder 均不变：
 
@@ -194,7 +194,7 @@ CARRIER_L  = indices 56..71, 0.80 < mapped_frequency <= 2.00 Hz  # 仅诊断
 CARRIER_H  = indices 72..96, mapped_frequency > 2.00 Hz          # 仅诊断
 ```
 
-`0.80 Hz` 固定归入 RESP。被遮挡 scale 在任何 W encoder normalization 之前置零；不得改变 cache、本体频率数组、encoder bias、通道或参数。
+`0.80 Hz` 固定归入 RESP。每个 view 只保留表中所列 scale，其余 scale 在任何 W encoder normalization 之前置零；不得改变 cache、本体频率数组、encoder bias、通道或参数。
 
 ### 6.3 时间信息负对照
 
@@ -250,7 +250,7 @@ correction 随后从干净 commit `4eb9b3ce937792d151393a40c0f95b5cab0e7c9b` 完
 
 修正后的逐 sample direct mean 为：`mean|g|=0.26685546`、`median|g|=0.28009504`、`mean|b|=0.24302296`、`median|b|=0.24550465`、`mean|Δ_t g|=0.02261490`、`mean|Δ_t b|=0.02396674`、gamma/beta saturation fraction=`0.02633766 / 0.02032499`。这些是三个已联合训练 checkpoint 的 validation 描述性功能统计，不是重新训练机制的因果效应。
 
-P−1 的冻结功能证据为：BETA_ONLY 仅 `1/3` seed quality-near，三-seed mean global-envelope error 恶化 `9.31%`；GAMMA_ONLY 为 `0/3`，global-envelope error 恶化 `2.53%`，因此不分配 P2。CONDITION_OFF 的 global-envelope error 恶化 `20.40%`、PCC 下降 `0.00822`。TIME_MEAN 的 global-envelope error 恶化 `25.97%`、PCC 下降 `0.01210`；TIME_SHIFT_30S 的四项 error 分别变化 `+3.99% / +6.60% / +23.05% / +24.10%`，PCC 下降 `0.02382`，且四项 error 和 PCC 在 `3/3` seed 方向一致，支持冻结 W0 对局部时频演化与时间对齐存在功能依赖。RESP/CARRIER 遮挡呈指标间权衡，只作为 P1 两个固定重训练臂的机制动机，不解释为频带因果优胜。
+P−1 的冻结功能证据为：BETA_ONLY 仅 `1/3` seed quality-near，三-seed mean global-envelope error 恶化 `9.31%`；GAMMA_ONLY 为 `0/3`，global-envelope error 恶化 `2.53%`，因此不分配 P2。CONDITION_OFF 的 global-envelope error 恶化 `20.40%`、PCC 下降 `0.00822`。TIME_MEAN 的 global-envelope error 恶化 `25.97%`、PCC 下降 `0.01210`；TIME_SHIFT_30S 的四项 error 分别变化 `+3.99% / +6.60% / +23.05% / +24.10%`，PCC 下降 `0.02382`，且四项 error 和 PCC 在 `3/3` seed 方向一致，支持冻结 W0 对局部时频演化与时间对齐存在功能依赖。RESP/CARRIER 分别是仅保留 `≤0.8 Hz` / `>0.8 Hz` 的 view，其结果呈指标间权衡，只作为 P1 两个固定重训练臂的机制动机；不能表述为移除相应频带的效果，也不解释为频带因果优胜。
 
 P−1 至此关闭并只保留 provenance；完整功能 audit 与 correction 均不得重复运行。P2 已关闭，剩余训练预算固定为 P1 九 runs 加 P3 三 runs，共 12 runs。
 
