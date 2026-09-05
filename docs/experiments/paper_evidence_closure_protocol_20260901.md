@@ -44,7 +44,7 @@
 | P4-R | center30/60/90 与历史 180→180 节律指标统一只读汇总 | 否 | v2 selector provenance 修正后完成并冻结 |
 | P5 | 时频功能证据整理与可选局部干预 | 否 | 既有证据可整理；新增推理关闭 |
 | P6 | 多属性波形图与 RR 区间分析 | 否或只读推理 | validation 波形与 test RR 区间均冻结；阶段关闭 |
-| P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | 未授权执行 |
+| P7 | W0/W3/D4 端到端 IoT 效率测量 | 否 | GPU-only 实现完成，等待用户执行 |
 
 每个阶段必须使用新目录且禁止覆盖。实现、训练、独立测试集访问和长时间 benchmark 分别需要用户明确授权；
 前一阶段完成不自动授权后一阶段。
@@ -610,7 +610,9 @@ D4 没有独立测试集质量结果，效率表必须明确其质量列来自 v
 
 ### 10.2 平台与场景
 
-至少在当前桌面 GPU 和桌面 CPU 测量 batch=1。若未来有真实边缘设备，再以新增平台行补充，不能用桌面结果替代边缘结果。
+本阶段经用户于 2026-09-05 明确收窄为当前桌面 GPU、batch=1，不执行 CPU 模型 benchmark。该收窄只改变
+P7 平台矩阵，不改变模型、质量或数据证据；桌面 GPU 结果不得替代真实边缘设备测量。若未来补充 CPU 或真实边缘设备，
+必须使用新增平台行和新产物目录，不回写本次冻结结果。
 
 每个模型测两个场景：
 
@@ -622,11 +624,17 @@ D4 没有独立测试集质量结果，效率表必须明确其质量列来自 v
 W3 必须按当前实现从完整 97-scale source 取偶数 indices，不能在 benchmark 中改成新的 direct-49-scale extractor。
 输入文件读取时间单独测量和报告，不与稳定内存内 pipeline 混成一个不可复现数字。
 
+本次冻结单一 checkpoint seed=`20260811`，模型矩阵恰为 W0/W3/D4 三项；每项执行 `cached-W/online-W`
+两个场景。host memory 固定为 pageable；两场景均把 BCG 与完整 97-scale W 一起计入 host→device。W3 的偶数
+indices view 保持在现有模型 `forward` 内，因此报告段名为 `model_forward_including_w_view`，不通过改接口或重复
+切片伪造独立 view 时延。`online-W` 的冻结 97-scale CWT、log-magnitude 与 50-point pool 在 host 上执行并作为
+独立 stage 报告；这属于 GPU pipeline 的在线预处理，不构成 CPU 模型 benchmark。
+
 ### 10.3 测量方法
 
 - 固定软件环境、CPU 型号/线程数、GPU 型号、CUDA/cuDNN/PyTorch、dtype 和 checkpoint；
 - batch=1，GPU 每段前后显式 synchronize；
-- 每个场景至少 20 次 warm-up、100 次 timed iterations、5 个独立 rounds；
+- 本次每个模型×场景严格执行 20 次 warm-up、100 次 timed iterations、5 个独立 rounds；
 - 报告每段和端到端的 median、p95、mean、sample SD、min/max；
 - GPU 报告 peak allocated/reserved，CPU 报告进程 RSS 增量；
 - 同时报告参数数、权重文件大小和可审计 profiler 能覆盖的 FLOPs/MACs；无法完整覆盖 Mamba op 时必须标记 coverage，
@@ -814,5 +822,17 @@ W0 的 RR error 呈区间依赖：相对 medium，low 的 Whole/Local 增加 `11
 `244.185%/219.799%`；trajectory/global 不呈相同单调趋势。W3 相对 W0 在三个区间的 trajectory/global/PCC 均小幅改善，
 但 RR 方向由 low 的恶化转为 medium/high 的改善。证据结论为不同 target RR 区间存在性能权衡，不构造跨区间唯一赢家；
 鉴于区间窗口数和 `samp_id` coverage 不平衡，只作描述性异质性证据。P6 完成并关闭。
+
+P7 已按用户确认完成 GPU-only 实现锁。合同
+`configs/paper_evidence_v1/p7_iot_efficiency_v1.json` SHA-256=
+`8da08b682b2a7381fe81e0dc316295187b390ec29cd98ef1bb3c84aefd682b28`，固定 W0/W3/D4 的 seed `20260811`
+checkpoint、P6
+预声明 typical validation row `12429`、完整 97-scale source、pageable host memory、batch=1、两个场景以及严格
+`20 warm-up + 100 timed × 5 rounds`。入口只允许显式 `cuda:0`，物理卡由 `CUDA_VISIBLE_DEVICES` 映射；输出采用
+不可覆盖的原子目录，生成环境、独立文件物化时延、逐 iteration/stage 时延、汇总、显存、资源与质量-效率表。
+W0/W3 质量列只读三 seed 独立测试集汇总，D4 明确只读三 seed validation 汇总。Profiler 只报告可覆盖的标准 op
+FLOPs/MACs，并标注 Mamba custom op coverage 不完整；manifest decision 只允许 `measurement_complete`，不生成
+实时、流式或部署结论。当前仅完成实现，尚未执行 benchmark。
+新增 7 项 P7 定向 CPU 合同/汇总测试全部通过；测试没有加载 checkpoint、读取 waveform 或执行模型 benchmark。
 
 本文件仍不授权 Codex 启动任何长时间 CPU/GPU 任务、训练、全量 cache、benchmark 或独立测试集访问。

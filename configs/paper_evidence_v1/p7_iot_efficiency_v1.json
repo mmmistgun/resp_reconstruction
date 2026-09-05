@@ -1,0 +1,134 @@
+{
+  "schema_version": "paper-p7-iot-efficiency-config-v1",
+  "protocol_id": "paper-p7-iot-efficiency-v1-20260905",
+  "role": "descriptive_gpu_measurement",
+  "authorization": {
+    "gpu_benchmark": true,
+    "cpu_model_benchmark": false,
+    "training": false,
+    "cache_build": false,
+    "research_test_access": false
+  },
+  "platform": {
+    "kind": "desktop_gpu",
+    "device": "cuda:0",
+    "batch_size": 1,
+    "host_memory": "pageable",
+    "amp_dtype": "bfloat16",
+    "allow_tf32": false,
+    "cudnn_benchmark": false,
+    "required_unset_environment": ["LD_LIBRARY_PATH", "LD_PRELOAD"]
+  },
+  "benchmark": {
+    "warmup_iterations": 20,
+    "timed_iterations": 100,
+    "rounds": 5,
+    "scenarios": ["cached_w", "online_w"],
+    "percentile_method": "numpy_linear",
+    "sample_sd_ddof": 1,
+    "sliding_step_seconds": 30,
+    "context_wait_seconds": 180,
+    "gpu_synchronize_after_each_stage": true,
+    "input_file_materialization_reported_separately": true,
+    "model_forward_stage": "model_forward_including_w_view"
+  },
+  "input": {
+    "split": "val",
+    "dataset_row_id": 12429,
+    "selection_category": "typical",
+    "selection_manifest": "runs/paper_evidence_v1/p6_waveform_selection/artifact_manifest.json",
+    "selection_manifest_sha256": "7937c9d085c35139993bb7a482797d6f9ffb932d5da92d634a61890b96e8a784",
+    "selection_rows": "runs/paper_evidence_v1/p6_waveform_selection/waveform_selected_rows.csv",
+    "selection_rows_sha256": "6aa1a855d739515c5eaba084bea8b8406b8a95d5166752eb3e9e4560185a72e2",
+    "duration_samples": 18000,
+    "sample_rate_hz": 100
+  },
+  "w_source": {
+    "cache_root": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+    "cache_manifest_sha256": "6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8",
+    "source_shape": [97, 360],
+    "online_extractor": "resp_train.crd.tf_v1_features.cwt_magnitude_features",
+    "online_extractor_device": "host_cpu",
+    "online_scale_count": 97,
+    "online_pool_samples": 50,
+    "w3_view": "model-internal input[:,::2,:]",
+    "w3_view_index_sha256": "3734c4183c17744eb4779ac65ac8521de1897f6a12f364e913aeb02528e250d6",
+    "cached_online_max_abs_tolerance": 1e-5
+  },
+  "canonicalization": {
+    "name": "Pi_180",
+    "sample_rate_hz": 100,
+    "low_hz": 0.05,
+    "high_hz": 0.7,
+    "scale_eps": 1e-8
+  },
+  "models": [
+    {
+      "candidate_id": "W0_FULL_12V_FILM_D6",
+      "variant": "crd_tf102_w",
+      "seed": 20260811,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861",
+      "selected_epoch": 13,
+      "config_sha256": "675232d48b7aadb2f0116e43a9cb737a5ac1737013dd54c4544e4f49cc1b2843",
+      "checkpoint_sha256": "18425476831628d9614925dc6835de97ab466aac8cce157f7d95335f504c70f5",
+      "checkpoint_size_bytes": 14890845,
+      "trainable_parameters": 1219850,
+      "model_input_elements": 34920,
+      "model_w_scales": 97
+    },
+    {
+      "candidate_id": "W3_FULL_6V_FILM_D6",
+      "variant": "crd_tfw_v2_w3_full_6v_film_d6",
+      "seed": 20260811,
+      "run_dir": "runs/crd_tf_w_v2/formal/crd_tfw_v2_w3_full_6v_film_d6/seed_20260811/20260818_142005_581105",
+      "selected_epoch": 9,
+      "config_sha256": "7b9894f244eab507af5d04e3b596ca6fd3eb9534dd951b17a585ac9102b32a66",
+      "checkpoint_sha256": "7528378ee8ae2f4010974ddb01ab6dd36697aa8b2864709acea2d7960f28542b",
+      "checkpoint_size_bytes": 14892765,
+      "trainable_parameters": 1219850,
+      "model_input_elements": 17640,
+      "model_w_scales": 49
+    },
+    {
+      "candidate_id": "D4_W0",
+      "variant": "crd_tfw_v2_d4_full_12v_film",
+      "seed": 20260811,
+      "run_dir": "runs/crd_tf_w_v2/formal/crd_tfw_v2_d4_full_12v_film/seed_20260811/20260818_230002_842674",
+      "selected_epoch": 13,
+      "config_sha256": "7c44a6b542ba96082c59b015a2e13e7935cbc7095db0f59962a9c288f474b71c",
+      "checkpoint_sha256": "cf948e73f2c1c61886fe0a25db715620fd55460b93696a6d458381e5f2114b60",
+      "checkpoint_size_bytes": 11039349,
+      "trainable_parameters": 902722,
+      "model_input_elements": 34920,
+      "model_w_scales": 97
+    }
+  ],
+  "quality_sources": {
+    "w0_w3": {
+      "scope": "independent_test_three_seed_mean",
+      "path": "runs/crd_tf_w_v2/research_test/summary/aggregate_primary.csv",
+      "sha256": "613d6f6d0d87661c6bd9ffed28f24ca82967fe478de1a677ff8556af5b30741c",
+      "manifest_path": "runs/crd_tf_w_v2/research_test/summary/p5_summary_manifest.json",
+      "manifest_sha256": "3169d062b3b93131d1bb20f38f7870ad23cd5c9536706efc50a1854d23ec415e"
+    },
+    "d4": {
+      "scope": "validation_three_seed_mean",
+      "path": "runs/crd_tf_w_v2/p4_validation_summary/candidate_eligibility.csv",
+      "sha256": "1b637f4a0081552d3ab716edee143ee134292bdffc0b6d428d45ea5e9448607a",
+      "manifest_path": "runs/crd_tf_w_v2/p4_validation_summary/p4_summary_manifest.json",
+      "manifest_sha256": "d9f32d26fa9bf8b98ec739762a30717a881d62a32ccb44099e603fafe94b0e97"
+    }
+  },
+  "profiler": {
+    "scope": "model_forward_including_w_view",
+    "activities": ["cpu", "cuda"],
+    "with_flops": true,
+    "macs_definition": "covered_flops_divided_by_2",
+    "coverage": "partial_standard_ops_only_mamba_custom_ops_may_be_uncovered"
+  },
+  "output": {
+    "directory": "runs/paper_evidence_v1/p7_iot_efficiency",
+    "allow_overwrite": false,
+    "csv_float_format": "%.12g"
+  }
+}
