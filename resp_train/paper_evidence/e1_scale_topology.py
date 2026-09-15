@@ -23,6 +23,8 @@ ERRORS = (
 PCC = "lag_aware_signed_pcc"
 PRIMARY = (*ERRORS, PCC)
 FILM_COLUMNS = ("gamma_raw_pair_mae", "beta_raw_pair_mae")
+FULL_RTOL = 1e-3
+FULL_ATOL = 0.0
 
 
 def array_hash(value: np.ndarray) -> str:
@@ -193,8 +195,12 @@ def check_full_anchor(observed: pd.DataFrame, reference: pd.DataFrame, seed: int
     if not np.isfinite(left).all() or not np.isfinite(right).all():
         raise FloatingPointError("FULL 复现主指标非有限")
     delta = left - right
+    # 容差仅由冻结历史值决定；历史值为零时要求精确一致。
+    allowed = FULL_RTOL * np.abs(right)
     receipt = {"seed": seed, "absolute_deltas": dict(zip(columns, np.abs(delta).tolist(), strict=True)),
-               "atol": 1e-6, "rtol": 0.0, "passed": bool(np.all(np.abs(delta) <= 1e-6))}
+               "reference_values": dict(zip(columns, right.tolist(), strict=True)),
+               "allowed_absolute_deltas": dict(zip(columns, allowed.tolist(), strict=True)),
+               "atol": FULL_ATOL, "rtol": FULL_RTOL, "passed": bool(np.all(np.abs(delta) <= allowed))}
     if not receipt["passed"]:
         raise RuntimeError(f"FULL 复现超差: {receipt}")
     for key in PRIMARY:

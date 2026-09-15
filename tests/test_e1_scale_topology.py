@@ -257,15 +257,35 @@ def test_full_anchor_checks_each_metric_and_denominator():
     columns.update({key + "_n": [7] for key in core.PRIMARY})
     reference = pd.DataFrame(columns)
     observed = reference.copy()
-    observed.loc[0, core.PCC + "_mean"] += 5e-7
+    observed.loc[0, core.PCC + "_mean"] += 5e-4
     assert core.check_full_anchor(observed, reference, core.SEEDS[0])["passed"]
-    observed.loc[0, core.PCC + "_mean"] += 1e-6
+    observed.loc[0, core.PCC + "_mean"] += 1e-3
     with pytest.raises(RuntimeError, match="超差"):
         core.check_full_anchor(observed, reference, core.SEEDS[0])
     observed = reference.copy()
     observed.loc[0, core.PCC + "_n"] = 6
     with pytest.raises(ValueError, match="分母"):
         core.check_full_anchor(observed, reference, core.SEEDS[0])
+
+
+@pytest.mark.parametrize("historical,change,passed", [
+    (1e-4, 5e-8, True), (1e-4, 5e-7, False),
+    (10., 0.005, True), (10., 0.02, False),
+    (-0.8, 0.0004, True), (-0.8, 0.001, False),
+    (0., 0., True), (0., 1e-15, False),
+])
+def test_full_relative_tolerance_uses_absolute_historical_value(historical, change, passed):
+    reference = pd.DataFrame({**{key + "_mean": [historical] for key in core.PRIMARY},
+                              **{key + "_n": [7] for key in core.PRIMARY}})
+    observed = reference.copy()
+    observed.loc[0, core.PCC + "_mean"] += change
+    if passed:
+        receipt = core.check_full_anchor(observed, reference, core.SEEDS[0])
+        assert receipt["rtol"] == 1e-3 and receipt["atol"] == 0
+        assert receipt["allowed_absolute_deltas"][core.PCC + "_mean"] == 1e-3 * abs(historical)
+    else:
+        with pytest.raises(RuntimeError, match="超差"):
+            core.check_full_anchor(observed, reference, core.SEEDS[0])
 
 
 def test_failed_attempt_is_preserved_and_new_attempt_is_independent(tmp_path):
@@ -342,6 +362,15 @@ def test_prepare_locks_only_reads_allowlisted_sources_and_detects_drift(tmp_path
         assert runtime.identity(path) == expected
     with pytest.raises(FileExistsError):
         runtime.prepare_locks(root)
+    # 修订只创建新实现锁，既有索引和前一实现锁保持逐字节一致。
+    old_index, old_lock = runtime.identity(index_path), runtime.identity(lock_path)
+    monkeypatch.setattr(runtime, "PREVIOUS_IMPLEMENTATION_LOCK", lock_path.relative_to(root))
+    monkeypatch.setattr(runtime, "IMPLEMENTATION_LOCK", runtime.DOCS / "synthetic_revision.json")
+    _, revision_path = runtime.prepare_locks(root)
+    revision, _, _ = runtime.load_locks(root)
+    assert revision_path != lock_path
+    assert revision["supersedes"]["sha256"] == old_lock["sha256"]
+    assert runtime.identity(index_path) == old_index and runtime.identity(lock_path) == old_lock
     (root / runtime.SCRIPT).write_text("changed fixture\n")
     with pytest.raises(RuntimeError, match="身份漂移"):
         runtime.load_locks(root)

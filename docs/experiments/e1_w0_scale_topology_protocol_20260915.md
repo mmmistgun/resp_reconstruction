@@ -82,7 +82,7 @@ E4 的立项结合 E1 结果和新模型研究目标另行决定。
 ## 6. 验收与输出合同
 
 1. 新 evaluator、wrapper 与输出 identity 独立于历史入口。正式运行前冻结 implementation lock、索引锁、resolved config、命令、代码 commit 和环境记录。
-2. FULL 逐 seed 对冻结 validation summary 的五项主指标执行 `rtol=0, atol=1e-6` 检查。正式 batch 固定为历史配置的 128，AMP 为 bf16；锁定 row 顺序与末 batch 行为。全部三个 FULL 通过后开放正式干预评价。
+2. FULL 逐 seed 对冻结 validation summary 的五项主指标执行 `rtol=1e-3, atol=0`（允许绝对偏差为 `1e-3 × |历史值|`） 检查。正式 batch 固定为历史配置的 128，AMP 为 bf16；锁定 row 顺序与末 batch 行为。全部三个 FULL 通过后开放正式干预评价。
 3. GPU batch-1 finite 验收使用 synthetic fixture，检查运行能力。完整 validation FULL 负责正式批量条件下的数值复现。超差时保留失败 lifecycle 和差值回执，再排查身份、实现和环境。
 4. 每条件 8025 条唯一记录，四条件共 32100 条；唯一键为 `(split, condition, seed, dataset_row_id)`，每个 `(condition,seed)` 的 row 集合及顺序与 FULL 一致。
 5. 输入、prediction 与关键指标均有限，prediction degeneracy 为零，完整记录既有指标资格与分母。失败显式中止并保留产物。
@@ -97,7 +97,7 @@ E4 的立项结合 E1 结果和新模型研究目标另行决定。
 固定锁路径：
 
 - 索引锁：`docs/experiments/e1_w0_scale_indices_20260915.json`。
-- 实现锁：`docs/experiments/e1_w0_scale_implementation_lock_20260915.json`。
+- 当前实现锁：`docs/experiments/e1_w0_scale_implementation_lock_20260915_r2.json`。
 
 准备命令只读核验 W0 三 seed checkpoint/config/manifest/validation summary、validation W cache、row 文件及频率文件的大小与 SHA-256。checkpoint/cache 仅按字节计算身份，随后保存索引自检结果和代码身份。实际运行重新核验来源、shared dataset index、索引锁与代码锁。
 
@@ -105,7 +105,7 @@ E4 的立项结合 E1 结果和新模型研究目标另行决定。
 ./.venv/bin/python scripts/eval_e1_w0_scale_topology.py prepare-locks
 ```
 
-该命令排他创建锁文件。实现锁同时覆盖 E1 入口、定向测试、本文和 `resp_train` Python 源码，以记录原生推理与指标依赖；后续源码修订应形成新实现身份。锁中的 preparation Git 状态说明准备时的工作树，正式 attempt 另行记录干净执行 commit。
+该命令排他创建当前实现锁，复用并核验已有索引锁。实现锁同时覆盖 E1 入口、定向测试、本文和 `resp_train` Python 源码，以记录原生推理与指标依赖；后续源码修订应形成新实现身份。锁中的 preparation Git 状态说明准备时的工作树，正式 attempt 另行记录干净执行 commit。
 
 ### 7.1 CPU 验收回执
 
@@ -140,3 +140,11 @@ GPU 验收回执必须绑定同一 implementation lock。完整评价按三个 F
 为了跨三个 FULL 验收门配对且保留可审计来源，FULL raw FiLM 使用 float32 `.npy` 存储，原生 bf16 数值可无损表示。三个 seed 的六个文件合计约 10.3 GiB；分批读写与计算 MAE，完整 attempt 还需容纳 metrics 和元数据。原始 FiLM 文件保留并进入 manifest。
 
 每次运行创建新 attempt。出现异常时保存 `lifecycle_failed.json` 和已有文件；成功以 `manifest.json` 加 `freeze_receipt.json` 为完成依据。全部最终记录共 32100 条 metrics 与 32100 条 FiLM 配对记录。首轮范围为完整 validation，test 按第 1 节规定的科学问题与附件开放。
+
+## 8. FULL 复现容差修订（2026-09-15，r2）
+
+用户在 `validation_ee1e52ddc602_20260915T142509Z_6e4ba7fef219` 的 seed `20260812` FULL 复现失败后，明确将容差改为 `abs(当前值 − 历史值) <= 1e-3 × abs(历史值)`，即相对容差 0.1%、绝对容差 0。历史值为零时要求精确一致。回执逐指标保存历史值、实际绝对偏差和允许绝对偏差。
+
+修订作用于 FULL 数值复现验收；数据、尺度索引、checkpoint、指标计算和结果解释口径沿用当前定义。失败 attempt 与原实现锁 `e1_w0_scale_implementation_lock_20260915.json` 保留，r2 使用新的实现锁和 attempt。因 GPU 回执绑定 implementation lock，提交 r2 后重新运行 synthetic `gpu-smoke`，再使用其输出目录启动完整 validation。已有失败产物保持原状态。
+
+r2 定向验证：`pytest tests/test_e1_scale_topology.py -q -k 'full_anchor or full_relative or prepare_locks or failed_third_full'`，结果 `11 passed, 23 deselected`。覆盖不同量级、负历史值、零历史值、指标分母、失败 FULL 阻断干预以及原索引/旧实现锁保持不变。

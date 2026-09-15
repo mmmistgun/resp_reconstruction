@@ -23,7 +23,7 @@
 
 专项协议：`docs/experiments/e1_w0_scale_topology_protocol_20260915.md`。入口为
 `scripts/eval_e1_w0_scale_topology.py`，当前矩阵是完整 validation 的三个 W0 checkpoint × 四条件。
-三个 FULL 均通过冻结五指标 `rtol=0, atol=1e-6` 复现后，执行三个尺度重排条件并自动汇总。
+三个 FULL 均通过冻结五指标 `rtol=1e-3, atol=0` 复现后，执行三个尺度重排条件并自动汇总。
 
 实现准备与 synthetic CPU 定向验证：
 

@@ -28,7 +28,7 @@ from resp_train.data.factory import build_window_data
 from resp_train.engine import collect_predictions
 from resp_train.metrics.task import evaluate_task_predictions, summarize_task_metrics
 from resp_train.paper_evidence.e1_scale_topology import (
-    CONDITIONS, FILM_COLUMNS, PRIMARY, PROTOCOL, SEEDS, WINDOW_COUNT, ScaleAuditModel,
+    CONDITIONS, FILM_COLUMNS, FULL_ATOL, FULL_RTOL, PRIMARY, PROTOCOL, SEEDS, WINDOW_COUNT, ScaleAuditModel,
     array_hash, check_full_anchor, index_self_checks, make_index_lock, raw_pair_mae,
     summarize_pairs, validate_index_lock, validate_metrics, validate_rows,
 )
@@ -38,7 +38,8 @@ DOCS = Path("docs/experiments")
 SOURCE_LOCK = DOCS / "crd_tf_w_v2_candidate_lock_20260817.json"
 SOURCE_LOCK_SHA256 = "6ae35076bbd89bec688bfd4918cfecd20c7d5ea7f845f460034a88045432c7b6"
 INDEX_LOCK = DOCS / "e1_w0_scale_indices_20260915.json"
-IMPLEMENTATION_LOCK = DOCS / "e1_w0_scale_implementation_lock_20260915.json"
+PREVIOUS_IMPLEMENTATION_LOCK = DOCS / "e1_w0_scale_implementation_lock_20260915.json"
+IMPLEMENTATION_LOCK = DOCS / "e1_w0_scale_implementation_lock_20260915_r2.json"
 PROTOCOL_PATH = DOCS / "e1_w0_scale_topology_protocol_20260915.md"
 SCRIPT = Path("scripts/eval_e1_w0_scale_topology.py")
 TEST = Path("tests/test_e1_scale_topology.py")
@@ -79,9 +80,8 @@ def git_state(root: Path = ROOT, *, require_clean: bool = False) -> dict[str, An
 
 def prepare_locks(root: Path = ROOT) -> tuple[Path, Path]:
     """只读核验 W0/validation 来源字节身份，创建独立索引与代码锁。"""
-    for relative in (INDEX_LOCK, IMPLEMENTATION_LOCK):
-        if (root / relative).exists():
-            raise FileExistsError(f"E1 锁已存在: {root / relative}")
+    if (root / IMPLEMENTATION_LOCK).exists():
+        raise FileExistsError(f"E1 锁已存在: {root / IMPLEMENTATION_LOCK}")
     source_path = root / SOURCE_LOCK
     if sha256_file(source_path) != SOURCE_LOCK_SHA256:
         raise RuntimeError("E1 历史 candidate lock identity 漂移")
@@ -112,13 +112,25 @@ def prepare_locks(root: Path = ROOT) -> tuple[Path, Path]:
         "protocol": PROTOCOL, "status": "implementation_locked_runtime_acceptance_pending",
         "prepared_at": datetime.now(timezone.utc).isoformat(), "preparation_git": git_state(root),
         "conditions": list(CONDITIONS), "seeds": list(SEEDS), "split": "val", "windows": WINDOW_COUNT,
-        "samp_ids": 7, "batch_size": 128, "amp_dtype": "bfloat16", "full_atol": 1e-6,
+        "samp_ids": 7, "batch_size": 128, "amp_dtype": "bfloat16", "full_atol": FULL_ATOL,
+        "full_rtol": FULL_RTOL,
         "w0_entries": entries, "cache_lock": cache, "source_files": sources,
         "dataset_index": {"path": cache_manifest["dataset_index"], "sha256": cache_manifest["dataset_index_sha256"]},
         "source_verification": "SHA-256 and size only; checkpoint/cache payloads not deserialized",
     }
-    index = make_index_lock()
-    write_json(root / INDEX_LOCK, index)
+    if (root / INDEX_LOCK).exists():
+        index = json.loads((root / INDEX_LOCK).read_text(encoding="utf-8"))
+        validate_index_lock(index)
+        if index_self_checks(index) != index["self_checks"]:
+            raise ValueError("E1 已有索引锁自检回执不一致")
+    else:
+        index = make_index_lock()
+        write_json(root / INDEX_LOCK, index)
+    if (root / PREVIOUS_IMPLEMENTATION_LOCK).exists():
+        previous = json.loads((root / PREVIOUS_IMPLEMENTATION_LOCK).read_text(encoding="utf-8"))
+        verify_file(root / INDEX_LOCK, previous["index_lock"])
+        lock["supersedes"] = {"path": str(PREVIOUS_IMPLEMENTATION_LOCK), **identity(root / PREVIOUS_IMPLEMENTATION_LOCK)}
+        lock["revision"] = "用户指定 FULL 容差为 1e-3 * abs(reference)，保留既有尺度索引"
     lock["index_lock"] = {"path": str(INDEX_LOCK), **identity(root / INDEX_LOCK)}
     # 覆盖原生推理、数据、指标及其本仓库依赖；第三方实现由环境回执记录。
     code_paths = sorted((root / "resp_train").rglob("*.py"))
@@ -133,7 +145,8 @@ def load_locks(root: Path = ROOT) -> tuple[dict[str, Any], dict[str, Any], str]:
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     if (lock["protocol"] != PROTOCOL or tuple(lock["conditions"]) != CONDITIONS or tuple(lock["seeds"]) != SEEDS
             or lock["split"] != "val" or lock["windows"] != WINDOW_COUNT or lock["batch_size"] != 128
-            or lock["amp_dtype"] != "bfloat16" or lock["full_atol"] != 1e-6):
+            or lock["amp_dtype"] != "bfloat16" or lock["full_atol"] != FULL_ATOL
+            or lock.get("full_rtol") != FULL_RTOL):
         raise ValueError("E1 implementation lock 合同不一致")
     for relative, expected in lock["code_files"].items():
         verify_file(root / relative, expected)
