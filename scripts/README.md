@@ -19,6 +19,34 @@
 - 独立测试集：现有 `test` 可在阶段性整理后重复评价，并可形成后续独立科研问题；不得用于重选既有run的epoch/checkpoint。
 - CRD 训练与普通 `eval_crd.py` 仍只读 train/validation；S1C 只允许 candidate lock 中的 12 个 checkpoint 通过专用入口各读取一次现有 research-test。
 
+## E1：W0 尺度重排敏感性审计
+
+专项协议：`docs/experiments/e1_w0_scale_topology_protocol_20260915.md`。入口为
+`scripts/eval_e1_w0_scale_topology.py`，当前矩阵是完整 validation 的三个 W0 checkpoint × 四条件。
+三个 FULL 均通过冻结五指标 `rtol=0, atol=1e-6` 复现后，执行三个尺度重排条件并自动汇总。
+
+实现准备与 synthetic CPU 定向验证：
+
+```bash
+./.venv/bin/python -m pytest tests/test_e1_scale_topology.py -q
+./.venv/bin/python scripts/eval_e1_w0_scale_topology.py prepare-locks
+```
+
+`prepare-locks` 只读核验 W0/validation 来源文件的字节身份，并排他生成索引锁与实现锁；已生成的锁直接复用。
+正式执行前提交待执行代码、协议和锁，保持工作树干净。以下两步由用户执行：
+
+```bash
+./.venv/bin/python scripts/eval_e1_w0_scale_topology.py gpu-smoke --device cuda:0
+./.venv/bin/python scripts/eval_e1_w0_scale_topology.py validation \
+  --device cuda:0 \
+  --gpu-receipt '/实际完成的gpu_smoke_attempt目录'
+```
+
+第一步只使用合成输入与新初始化 W0；将其输出目录作为第二步的 `--gpu-receipt`。两步都创建独立 attempt，
+输出根为 `runs/e1_w0_scale_topology_v1/`。完整评价保留约 10.3 GiB 的 FULL raw FiLM 文件供配对审计，
+并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
+以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
+
 ## 数据与 split 审计
 
 数据审计：
