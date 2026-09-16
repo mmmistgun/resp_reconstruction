@@ -47,11 +47,11 @@
 
 ### E2 状态
 
-E2 已开放实施：使用最终 W0、同初始化与训练预算，执行 effort_weight=0 的三个 seed（20260811/20260812/20260813），每 seed 80 epochs，并与冻结完整目标 W0 validation 结果配对。独立实现与 CPU 验证已完成；GPU synthetic 验收和正式训练由用户执行。结果用于评估相对努力项的贡献及 RR/PCC 代价。执行合同见[E2 专项协议](/mnt/disk_code/marques/resp_reconstruction/docs/experiments/e2_w0_effort_ablation_protocol_20260916.md)。
+E2 三个 seed 的训练、validation 与 test 配对汇总已完成。相对努力损失在两个 split 上均改善包络轨迹重建，test 上还改善全局包络调制误差与 signed PCC；RR 指标存在取舍。冻结身份、完整五指标和解释边界见[E2 完成记录](/mnt/disk_code/marques/resp_reconstruction/docs/experiments/e2_w0_effort_results_20260916.md)。
 
 ## 6. 论文映射
 
 - 内部底稿第 5.3.1 节保存完整身份和数值。
 - 中文稿 V-C 的 Table VI(b) 呈现尺度重排结果，Table VI(a) 保留条件内容与时间干预。
 - `results_validation.md` 和科学证据账本增加 E1 支持性结果；结果汇总登记完整 validation 证据。
-- 论文计划与待补实验清单将 E1 标记为完成、E2 标记为已开放实施。
+- 论文计划与待补实验清单登记 E1、E2 的完成状态与冻结结果。

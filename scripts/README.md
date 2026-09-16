@@ -49,6 +49,10 @@
 
 ## E2：最终 W0 相对努力损失消融
 
+**已完成**：三个 seed 的训练、validation 与 test 及配对汇总均已冻结。
+当前状态、结果路径与解释见 `docs/experiments/e2_w0_effort_results_20260916.md`。
+下列命令保留为执行记录；后续分析读取已有完成产物。
+
 专项协议：`docs/experiments/e2_w0_effort_ablation_protocol_20260916.md`。E2 使用原生 W0
 训练器，仅将 `effort_weight` 从 0.25 设为 0，按三个冻结 seed 分别训练 80 epochs / 6400 updates，
 随后与原始冻结完整 W0 validation 结果配对。完整运行步骤、来源及验收口径以专项协议为准。
@@ -88,6 +92,8 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD \
 已完成的同身份 seed 直接复用，失败 attempt 和部分产物保留；完整汇总要求全部三个 seed。
 
 ## E2 test：固定损失消融 checkpoint 评价
+
+三个 seed 的 test 评价与汇总已完成，结果索引同上。
 
 专项协议：`docs/experiments/e2_w0_effort_test_protocol_20260916.md`。
 入口为 `scripts/eval_e2_w0_effort_test.py`；固定 E2 三个 validation-selected checkpoint
