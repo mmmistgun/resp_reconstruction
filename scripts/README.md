@@ -47,6 +47,32 @@
 并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
 以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
 
+## E3：W0 五指标关联与 RR—努力不一致比例
+
+专项协议：`docs/experiments/e3_w0_metric_association_protocol_20260916.md`。
+三个冻结 W0 的 validation/test 分别分析，读取已有指标 CSV 与时间元数据，使用 CPU。
+交付 Spearman 相关、逐 samp_id 分布、完整阈值敏感性矩阵及不重叠窗口视图。
+默认描述性设置为两项 RR 误差同时 ≤1 bpm，其他属性超过 validation 参考分布第 75 百分位；
+完整统计定义、分母与证据边界以专项协议为准。
+
+实现准备（锁已生成时复用）：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python -m pytest tests/test_e3_metric_association.py -q
+./.venv/bin/python scripts/analyze_e3_w0_metrics.py prepare-lock
+```
+
+提交实现与锁后执行：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/analyze_e3_w0_metrics.py analyze
+```
+
+输出位于 `runs/e3_w0_metric_association_v1/analysis/`，以 manifest 与 freeze receipt 确认完成。
+相同锁的已完成分析校验后复用；失败 attempt 保留。
+
 ## E2：最终 W0 相对努力损失消融
 
 **已完成**：三个 seed 的训练、validation 与 test 及配对汇总均已冻结。
