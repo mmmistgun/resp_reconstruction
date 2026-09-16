@@ -87,6 +87,36 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD \
 逐窗口 validation metrics、配置/来源/环境回执；外层 `manifest.json` 与 `freeze_receipt.json` 标识完成。
 已完成的同身份 seed 直接复用，失败 attempt 和部分产物保留；完整汇总要求全部三个 seed。
 
+## E2 test：固定损失消融 checkpoint 评价
+
+专项协议：`docs/experiments/e2_w0_effort_test_protocol_20260916.md`。
+入口为 `scripts/eval_e2_w0_effort_test.py`；固定 E2 三个 validation-selected checkpoint
+（epoch 31/36/33），每个评价完整 2310-window test，并与同 seed 的冻结 W0 test 结果配对。
+
+```bash
+./.venv/bin/python -m pytest tests/test_e2_effort_test.py -q
+./.venv/bin/python scripts/eval_e2_w0_effort_test.py prepare-lock
+```
+
+准备阶段核验已冻结结果与 metadata，正式 test 数组在评价阶段读取。锁准备完成并提交本轮代码、协议和锁后，
+由用户逐 seed 执行：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/eval_e2_w0_effort_test.py evaluate --seed 20260811 --device cuda:0
+```
+
+其余 seed 为 `20260812`、`20260813`。三个成功 attempt 后执行：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/eval_e2_w0_effort_test.py summarize --runs \
+  '/seed_20260811的完成test_attempt目录' '/seed_20260812的完成test_attempt目录' '/seed_20260813的完成test_attempt目录'
+```
+
+输出根为 `runs/e2_w0_effort_test_v1/`，新增 6930 条逐窗口记录。
+test 五指标、配对变化、来源/访问/环境回执与不可覆盖 manifest 独立保存，完整运行循环和验收标准见专项协议。
+
 ## 数据与 split 审计
 
 数据审计：
