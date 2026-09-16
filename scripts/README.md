@@ -47,6 +47,46 @@
 并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
 以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
 
+## E2：最终 W0 相对努力损失消融
+
+专项协议：`docs/experiments/e2_w0_effort_ablation_protocol_20260916.md`。E2 使用原生 W0
+训练器，仅将 `effort_weight` 从 0.25 设为 0，按三个冻结 seed 分别训练 80 epochs / 6400 updates，
+随后与原始冻结完整 W0 validation 结果配对。完整运行步骤、来源及验收口径以专项协议为准。
+
+实现准备：
+
+```bash
+./.venv/bin/python -m pytest tests/test_e2_effort_ablation.py -q
+./.venv/bin/python scripts/run_e2_w0_effort_ablation.py prepare-lock
+```
+
+准备锁、提交实现与协议并保持干净工作树后，由用户执行 synthetic GPU 验收：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/run_e2_w0_effort_ablation.py gpu-smoke --device cuda:0
+```
+
+将成功的 E2 GPU attempt 路径作为 `--gpu-receipt`，分别执行三个 seed：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/run_e2_w0_effort_ablation.py formal \
+  --seed 20260811 --device cuda:0 --gpu-receipt '/实际E2_gpu_smoke目录'
+```
+
+其余 seed 为 `20260812`、`20260813`。三个完成 attempt 齐全后执行：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/run_e2_w0_effort_ablation.py summarize --runs \
+  '/seed_20260811的完成attempt目录' '/seed_20260812的完成attempt目录' '/seed_20260813的完成attempt目录'
+```
+
+输出根为 `runs/e2_w0_effort_ablation_v1/`。每个 seed 保存原生 history、best/final checkpoint、
+逐窗口 validation metrics、配置/来源/环境回执；外层 `manifest.json` 与 `freeze_receipt.json` 标识完成。
+已完成的同身份 seed 直接复用，失败 attempt 和部分产物保留；完整汇总要求全部三个 seed。
+
 ## 数据与 split 审计
 
 数据审计：
