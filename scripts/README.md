@@ -49,6 +49,10 @@
 
 ## E3：W0 五指标关联与 RR—努力不一致比例
 
+**已完成**：两个 split、三个 seed 的再分析及完整敏感性矩阵已冻结。
+结果、统计定义与验收见 `docs/experiments/e3_w0_metric_association_results_20260917.md`。
+下列命令为执行记录，后续引用已有完成产物。
+
 专项协议：`docs/experiments/e3_w0_metric_association_protocol_20260916.md`。
 三个冻结 W0 的 validation/test 分别分析，读取已有指标 CSV 与时间元数据，使用 CPU。
 交付 Spearman 相关、逐 samp_id 分布、完整阈值敏感性矩阵及不重叠窗口视图。
