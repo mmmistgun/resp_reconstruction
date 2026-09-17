@@ -47,6 +47,52 @@
 并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
 以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
 
+## E4：W0 四区域尺度聚合
+
+专项协议：`docs/experiments/e4_w0_scale_aggregation_protocol_20260917.md`。
+独立入口 `run_e4_w0_scale_aggregation.py` 保持 W0 公共初始化、fill=65 和完整目标，
+增加零初始化的四区域 384→96 残差投影。全模型 1,256,714 参数；固定三 seed，
+各 80 epochs / 6400 updates，范围为 train/validation。
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
+  tests/test_e4_scale_aggregation.py tests/test_e2_effort_ablation.py -q
+./.venv/bin/python scripts/run_e4_w0_scale_aggregation.py prepare-lock
+```
+
+已存在的实现锁直接复用，准备命令拒绝覆盖。提交实现、协议与锁、保持干净工作树后，
+由用户执行 GPU synthetic 验收和匹配效率测量：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/run_e4_w0_scale_aggregation.py gpu-acceptance --device cuda:0
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/run_e4_w0_scale_aggregation.py benchmark --device cuda:0
+```
+
+GPU 验收包括三个 seed 的 batch-1 初始等值/三步梯度检查，以及 seed 20260811 的
+batch-128 三步 acceptance。正式训练要求相同代码锁、commit 和关键运行环境。
+benchmark 使用合成输入和独立进程，报告 batch-1 eval 与 batch-128 training 的耗时和显存。
+
+```bash
+E4_GPU_RECEIPT='/实际成功的E4_gpu_acceptance目录'
+for E4_SEED in 20260811 20260812 20260813; do
+  env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+    scripts/run_e4_w0_scale_aggregation.py formal --seed "$E4_SEED" \
+    --device cuda:0 --gpu-receipt "$E4_GPU_RECEIPT" || break
+done
+
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/run_e4_w0_scale_aggregation.py summarize --runs \
+  '/seed_20260811的完成attempt目录' \
+  '/seed_20260812的完成attempt目录' \
+  '/seed_20260813的完成attempt目录'
+```
+
+输出根为 `runs/e4_w0_scale_aggregation_v1/`。完成以 manifest/freeze receipt 为准，
+失败现场保留，同身份完成 seed 禁止重跑。汇总包括完整五指标、配对差值、seed SD、
+方向数、质量标志和容量/计算口径。test 需要匹配的后续专项附件。
+
 ## E3：W0 五指标关联与 RR—努力不一致比例
 
 **已完成**：两个 split、三个 seed 的再分析及完整敏感性矩阵已冻结。

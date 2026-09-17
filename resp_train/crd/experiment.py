@@ -44,6 +44,10 @@ class CRDExperiment:
         self.run_dir: Path | None = None
         self.device: torch.device | None = None
 
+    def _build_model(self) -> torch.nn.Module:
+        """独立实验可覆盖构造；默认路径保持冻结 CRD 模型工厂。"""
+        return build_crd_model(self.cfg)
+
     def train(self) -> Path:
         tf_w_v2_contract = None
         tf_w_v2_contract_key = None
@@ -86,7 +90,7 @@ class CRDExperiment:
         data.audit_summary.to_csv(run_dir / "audit.csv", index=False)
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
-        model = build_crd_model(self.cfg).to(device)
+        model = self._build_model().to(device)
         loss_fn = RespirationTaskLoss(self.cfg).to(device)
         optimizer, partition = build_crd_optimizer(model, self.cfg)
         (run_dir / "optimizer_parameter_groups.json").write_text(
