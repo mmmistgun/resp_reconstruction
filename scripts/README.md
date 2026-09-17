@@ -93,6 +93,40 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
 失败现场保留，同身份完成 seed 禁止重跑。汇总包括完整五指标、配对差值、seed SD、
 方向数、质量标志和容量/计算口径。test 需要匹配的后续专项附件。
 
+## E4 test：固定四区域聚合 checkpoint 的评价
+
+附件：`docs/experiments/e4_w0_scale_aggregation_test_protocol_20260917.md`。
+固定 E4 selected epoch **10/5/17**，每 seed 完整评价 2310 窗口、8 个 samp_id，
+与同 seed 冻结 W0 test CSV 配对。独立模型工厂严格加载 E4 状态，保留完整目标与四区配置。
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python -m pytest tests/test_e4_scale_aggregation_test.py -q
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/eval_e4_w0_scale_aggregation_test.py prepare-lock
+```
+
+锁只创建一次；准备仅核验冻结产物与 metadata，真实 test 数组在用户执行阶段读取。
+提交本轮 test 源码、协议与锁，保持干净工作树后执行：
+
+```bash
+for E4_TEST_SEED in 20260811 20260812 20260813; do
+  env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+    ./.venv/bin/python scripts/eval_e4_w0_scale_aggregation_test.py evaluate \
+    --device cuda:0 --seed "$E4_TEST_SEED" || break
+done
+
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/eval_e4_w0_scale_aggregation_test.py summarize --runs \
+  '/seed_20260811的完成test_attempt目录' \
+  '/seed_20260812的完成test_attempt目录' \
+  '/seed_20260813的完成test_attempt目录'
+```
+
+输出根 `runs/e4_w0_scale_aggregation_test_v1/`，三 seed 新记录共 6930 条。
+完成以 manifest/freeze receipt 为准，失败现场保留；五指标、target eligibility、
+退化计数与质量标志共同交付。test 是复用研究测试集，结论与 validation 分开解释。
+
 ## E3：W0 五指标关联与 RR—努力不一致比例
 
 **已完成**：两个 split、三个 seed 的再分析及完整敏感性矩阵已冻结。
