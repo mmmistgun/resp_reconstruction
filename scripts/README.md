@@ -47,6 +47,78 @@
 并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
 以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
 
+## E4 v2：四种尺度聚合固定矩阵
+
+协议：`docs/experiments/e4_scale_aggregation_v2_protocol_20260917.md`。
+四个 arm 为 `static_scale`、`scale_attention`、`frequency_attention`、`channel_region`，
+各三个 seed、80 epochs / 6400 updates，共 12 次训练。新增参数分别为 97/784/792/384；
+固定 W0 公共初始化、fill=65、完整 loss 与训练合同。
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
+  tests/test_e4_aggregation_v2_model.py tests/test_e4_aggregation_v2.py \
+  tests/test_e4_aggregation_v2_test.py -q
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/run_e4_aggregation_v2.py prepare-lock
+```
+
+实现锁排他创建，已有锁直接复用。提交代码、协议和锁并保持工作树干净后，用户执行：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/run_e4_aggregation_v2.py gpu-acceptance --device cuda:0
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/run_e4_aggregation_v2.py benchmark --device cuda:0
+```
+
+验收包含四个 arm 各三个 seed 的 batch-1 对照，以及各一个 batch-128 验收，每项 5 次更新。
+benchmark 为 W0 与四候选的 eval/train 两场景×三组，共 30 个独立进程。
+将成功验收路径填入变量后，按固定顺序执行完整训练；子 shell 在工程失败时停止：
+
+```bash
+E4_V2_GPU_RECEIPT='/实际成功的v2_gpu_acceptance目录'
+(
+  for E4_V2_SEED in 20260811 20260812 20260813; do
+    for E4_V2_ARM in static_scale scale_attention frequency_attention channel_region; do
+      env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+        scripts/run_e4_aggregation_v2.py formal --arm "$E4_V2_ARM" --seed "$E4_V2_SEED" \
+        --device cuda:0 --gpu-receipt "$E4_V2_GPU_RECEIPT" || exit $?
+    done
+  done
+)
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/run_e4_aggregation_v2.py summarize --completed
+```
+
+`--completed` 仅定位当前锁下每个 arm/seed 的唯一成功 attempt，缺失或重复即失败；
+汇总仍完整核验来源与 checkpoint。也可用 `--runs` 显式传入 12 个目录。
+完成 cell 禁止重跑；工程失败后只单独执行未完成的 cell。
+
+取得完整 validation 汇总目录后，准备 test 锁并提交，再由用户执行完整 12 次 test：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/eval_e4_aggregation_v2_test.py prepare-lock \
+  --validation-summary '/实际完成的v2_validation_summary目录'
+
+# 提交新生成的 test 锁并保持工作树干净后执行。
+(
+  for E4_V2_SEED in 20260811 20260812 20260813; do
+    for E4_V2_ARM in static_scale scale_attention frequency_attention channel_region; do
+      env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+        scripts/eval_e4_aggregation_v2_test.py evaluate \
+        --arm "$E4_V2_ARM" --seed "$E4_V2_SEED" --device cuda:0 || exit $?
+    done
+  done
+)
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/eval_e4_aggregation_v2_test.py summarize --completed
+```
+
+训练输出根为 `runs/e4_scale_aggregation_v2/`，test 输出根为 `runs/e4_scale_aggregation_v2_test/`。
+两种 split 均生成 15 行 seed metrics、60 行配对差值、20 行 `four_arm_comparison.csv`。
+test 每次完整 2310 窗口、8 samp_id，12 次新记录共 27720 条；有限退化结果保留质量标志。
+
 ## E4：W0 四区域尺度聚合
 
 专项协议：`docs/experiments/e4_w0_scale_aggregation_protocol_20260917.md`。
