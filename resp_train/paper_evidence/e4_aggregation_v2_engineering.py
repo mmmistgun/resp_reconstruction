@@ -20,7 +20,8 @@ from resp_train.paper_evidence import e4_aggregation_v2 as experiment
 from resp_train.paper_evidence.e4_aggregation_v2_model import ARMS, build_model
 from resp_train.paper_evidence.e4_scale_aggregation_engineering import synthetic_batch, update
 
-ACCEPTANCE_UPDATES = 5
+ACCEPTANCE_MIN_UPDATES = 5
+ACCEPTANCE_MAX_UPDATES = 20
 
 
 def initial_identity(reference, candidate, batch, device):
@@ -56,8 +57,69 @@ def initial_identity(reference, candidate, batch, device):
             "waveform_max_abs_error": max(errors), "rtol": 1e-5, "atol": 1e-6}
 
 
-def acceptance_case(cfg, batch_size, check_initial):
-    seed, device, arm = int(cfg.training.seed), str(cfg.training.device), str(cfg.model.aggregation_v2.arm)
+def acceptance_updates(model, batch, loss_fn, optimizer, cfg, record, diagnostic_dir=None):
+    """在原生 warm-up 内检验通路及实际更新，并保存每步的可诊断证据。"""
+    aggregation = model.branches["w"].aggregation
+    initial = {name: value.detach().clone() for name, value in aggregation.named_parameters()}
+    record.update(updates=0, summaries=[], new_parameter_gradient_norms=[],
+                  new_parameter_max_abs_changes=[], new_parameters_updated={})
+    hook = model.register_forward_hook(lambda _, args, result: experiment.finite_tree(result))
+    try:
+        for index in range(ACCEPTANCE_MAX_UPDATES):
+            record["stage"] = f"update_{index + 1}"
+            summary = update(model, batch, loss_fn, optimizer, cfg, index)
+            experiment.finite_tree(summary)
+            experiment.finite_tree(model.state_dict()); experiment.finite_tree(optimizer.state_dict())
+            for name, parameter in model.named_parameters():
+                if parameter.grad is None:
+                    raise RuntimeError(f"E4-v2 gradient 通路缺失: {name}")
+                experiment.finite_tree(parameter.grad)
+            # FP64 范数避免极小但非零的梯度在平方求和时下溢为零。
+            gradients = {name: float(parameter.grad.double().norm()) for name, parameter in aggregation.named_parameters()}
+            changes = {name: float((parameter.detach().double() - initial[name].double()).abs().max())
+                       for name, parameter in aggregation.named_parameters()}
+            changed = {name: value > 0 for name, value in changes.items()}
+            record["updates"] = index + 1
+            record["summaries"].append(summary)
+            record["new_parameter_gradient_norms"].append(gradients)
+            record["new_parameter_max_abs_changes"].append(changes)
+            record["new_parameters_updated"] = changed
+            if diagnostic_dir is not None:
+                experiment.write_json(diagnostic_dir / f"step_{index + 1:03d}.json", {
+                    "arm": record["arm"], "seed": record["seed"], "batch_size": record["batch_size"],
+                    "update": index + 1, "summary": summary, "gradient_norms": gradients,
+                    "max_abs_changes": changes, "parameters_updated": changed})
+            # 两个零末层依次打开；梯度非零与 FP32 参数发生可见变化分别验证。
+            if index + 1 >= ACCEPTANCE_MIN_UPDATES and all(changed.values()) and all(v > 0 for v in gradients.values()):
+                return
+        stalled = [name for name, changed in record["new_parameters_updated"].items() if not changed]
+        zero = [name for name, value in record["new_parameter_gradient_norms"][-1].items() if value == 0]
+        raise RuntimeError(f"E4-v2 {ACCEPTANCE_MAX_UPDATES} 步验收失败: 未更新参数={stalled}; 零梯度参数={zero}")
+    finally:
+        hook.remove()
+
+
+def acceptance_case(cfg, batch_size, check_initial, *, diagnostic_dir=None):
+    record = {"arm": str(cfg.model.aggregation_v2.arm), "seed": int(cfg.training.seed),
+              "batch_size": batch_size, "minimum_updates": ACCEPTANCE_MIN_UPDATES,
+              "maximum_updates": ACCEPTANCE_MAX_UPDATES, "status": "running", "stage": "initialization"}
+    if diagnostic_dir is not None:
+        diagnostic_dir.mkdir(exist_ok=False)
+    try:
+        _acceptance_case(cfg, batch_size, check_initial, record, diagnostic_dir)
+        record.update(status="passed", stage="completed")
+    except BaseException as exc:
+        record.update(status="failed", error=str(exc), error_type=type(exc).__name__)
+        exc.add_note(f"E4-v2 arm={record['arm']} seed={record['seed']} batch={batch_size} stage={record['stage']}; diagnostics={diagnostic_dir}")
+        raise
+    finally:
+        if diagnostic_dir is not None:
+            experiment.write_json(diagnostic_dir / "case.json", record)
+    return record
+
+
+def _acceptance_case(cfg, batch_size, check_initial, record, diagnostic_dir):
+    seed, device = int(cfg.training.seed), str(cfg.training.device)
     set_seed(seed)
     model = build_model(cfg)
     batch = synthetic_batch(batch_size, seed + 1700, device)
@@ -70,35 +132,18 @@ def acceptance_case(cfg, batch_size, check_initial):
         equality = {**initial_identity(reference, model, batch, device), "cpu_rng_equal": True, "cuda_rng_equal": True}
         del reference
     model.to(device)
-    aggregation = model.branches["w"].aggregation
-    initial = {key: value.detach().clone() for key, value in aggregation.named_parameters()}
+    record["initial_identity"] = equality
     torch.cuda.empty_cache(); torch.cuda.reset_peak_memory_stats(device)
     loss_fn = RespirationTaskLoss(cfg).to(device)
     optimizer, _ = build_crd_optimizer(model, cfg)
-    histories, gradients = [], []
-    hook = model.register_forward_hook(lambda _, args, result: experiment.finite_tree(result))
-    try:
-        for index in range(ACCEPTANCE_UPDATES):
-            histories.append(update(model, batch, loss_fn, optimizer, cfg, index))
-            experiment.finite_tree(model.state_dict()); experiment.finite_tree(optimizer.state_dict())
-            for name, parameter in model.named_parameters():
-                if parameter.grad is None:
-                    raise RuntimeError(f"E4-v2 gradient 通路缺失: {name}")
-                experiment.finite_tree(parameter.grad)
-            gradients.append({name: float(parameter.grad.float().norm()) for name, parameter in aggregation.named_parameters()})
-    finally:
-        hook.remove()
-    changed = {name: bool((parameter.detach() != initial[name]).any()) for name, parameter in aggregation.named_parameters()}
-    if not all(changed.values()) or not all(value > 0 for value in gradients[-1].values()):
-        raise RuntimeError("E4-v2 五步后仍有新增参数未更新或梯度为零")
+    acceptance_updates(model, batch, loss_fn, optimizer, cfg, record, diagnostic_dir)
+    record["stage"] = "memory"
     allocated, reserved = torch.cuda.max_memory_allocated(device), torch.cuda.max_memory_reserved(device)
     total = torch.cuda.get_device_properties(device).total_memory
+    record.update(peak_allocated_bytes=allocated, peak_reserved_bytes=reserved,
+                  device_total_bytes=total, peak_reserved_fraction=reserved / total)
     if reserved / total > .8:
         raise RuntimeError(f"E4-v2 batch={batch_size} reserved fraction={reserved / total} 超过0.8")
-    return {"arm": arm, "seed": seed, "batch_size": batch_size, "updates": ACCEPTANCE_UPDATES,
-            "initial_identity": equality, "new_parameter_gradient_norms": gradients, "new_parameters_updated": changed,
-            "summaries": histories, "peak_allocated_bytes": allocated, "peak_reserved_bytes": reserved,
-            "device_total_bytes": total, "peak_reserved_fraction": reserved / total}
 
 
 def run_gpu_acceptance(device="cuda:0"):
@@ -114,11 +159,11 @@ def run_gpu_acceptance(device="cuda:0"):
                 for seed in experiment.SEEDS:
                     baseline = OmegaConf.create(lock["baselines"][str(seed)])
                     cfg = experiment.derived_config(baseline, arm, lock["frequency"]["values_hz"], output_root=output / "synthetic", device=device)
-                    record = acceptance_case(cfg, 1, True)
+                    record = acceptance_case(cfg, 1, True, diagnostic_dir=output / f"{arm}_{seed}_batch1_diagnostics")
                     experiment.write_json(output / f"{arm}_{seed}_batch1.json", record); records.append(record)
                 baseline = OmegaConf.create(lock["baselines"][str(experiment.SEEDS[0])])
                 cfg = experiment.derived_config(baseline, arm, lock["frequency"]["values_hz"], output_root=output / "synthetic", device=device)
-                record = acceptance_case(cfg, 128, False)
+                record = acceptance_case(cfg, 128, False, diagnostic_dir=output / f"{arm}_batch128_diagnostics")
                 experiment.write_json(output / f"{arm}_batch128.json", record); records.append(record)
             experiment.write_json(output / "gpu_acceptance.json", {"protocol": experiment.PROTOCOL, "passed": True,
                 "arms": list(ARMS), "seeds": list(experiment.SEEDS), "physical_batch": 128, "records": records})

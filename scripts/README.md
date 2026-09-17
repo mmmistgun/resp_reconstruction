@@ -50,6 +50,8 @@
 ## E4 v2：四种尺度聚合固定矩阵
 
 协议：`docs/experiments/e4_scale_aggregation_v2_protocol_20260917.md`。
+当前工程修订：`docs/experiments/e4_scale_aggregation_v2_engineering_r2_20260917.md`；
+当前实现锁为 `docs/experiments/e4_scale_aggregation_v2_implementation_lock_r2_20260917.json`。
 四个 arm 为 `static_scale`、`scale_attention`、`frequency_attention`、`channel_region`，
 各三个 seed、80 epochs / 6400 updates，共 12 次训练。新增参数分别为 97/784/792/384；
 固定 W0 公共初始化、fill=65、完整 loss 与训练合同。
@@ -57,7 +59,7 @@
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
   tests/test_e4_aggregation_v2_model.py tests/test_e4_aggregation_v2.py \
-  tests/test_e4_aggregation_v2_test.py -q
+  tests/test_e4_aggregation_v2_test.py tests/test_e4_aggregation_v2_engineering.py -q
 env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
   scripts/run_e4_aggregation_v2.py prepare-lock
 ```
@@ -71,7 +73,8 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
   scripts/run_e4_aggregation_v2.py benchmark --device cuda:0
 ```
 
-验收包含四个 arm 各三个 seed 的 batch-1 对照，以及各一个 batch-128 验收，每项 5 次更新。
+验收包含四个 arm 各三个 seed 的 batch-1 对照，以及各一个 batch-128 验收，每项至少 5、最多 20 次更新。
+全部新增参数均有本步非零梯度且相对初值真实变化后通过；逐步诊断及异常现场保存在各用例的 `*_diagnostics/`。
 benchmark 为 W0 与四候选的 eval/train 两场景×三组，共 30 个独立进程。
 将成功验收路径填入变量后，按固定顺序执行完整训练；子 shell 在工程失败时停止：
 

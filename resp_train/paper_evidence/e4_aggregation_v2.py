@@ -30,10 +30,14 @@ from resp_train.paper_evidence.e4_aggregation_v2_model import (
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = Path("runs/e4_scale_aggregation_v2")
-LOCK_PATH = Path("docs/experiments/e4_scale_aggregation_v2_implementation_lock_20260917.json")
+LOCK_PATH = Path("docs/experiments/e4_scale_aggregation_v2_implementation_lock_r2_20260917.json")
+PREVIOUS_LOCK_PATH = Path("docs/experiments/e4_scale_aggregation_v2_implementation_lock_20260917.json")
+PREVIOUS_LOCK_SHA = "39cd320e67c02b59dc102c6f2f0d4e2d821b0fe96aff1f6049a0030af5fb2495"
 PROTOCOL_PATH = Path("docs/experiments/e4_scale_aggregation_v2_protocol_20260917.md")
+REVISION_PATH = Path("docs/experiments/e4_scale_aggregation_v2_engineering_r2_20260917.md")
 SCRIPT_PATH = Path("scripts/run_e4_aggregation_v2.py")
-TEST_PATHS = (Path("tests/test_e4_aggregation_v2_model.py"), Path("tests/test_e4_aggregation_v2.py"))
+TEST_PATHS = (Path("tests/test_e4_aggregation_v2_model.py"), Path("tests/test_e4_aggregation_v2.py"),
+              Path("tests/test_e4_aggregation_v2_engineering.py"))
 COUNTS = {"train": 10141, "val": 2675}
 EPOCHS, UPDATES_PER_EPOCH = 80, 80
 verify, finite_tree, validate_metrics = previous.verify, previous.finite_tree, previous.validate_metrics
@@ -74,6 +78,9 @@ def prepare_lock(root: Path = ROOT) -> Path:
     source = json.loads(source_path.read_text())
     entries = _w0_seed_entries(source)
     files = {str(previous.SOURCE_LOCK): identity(source_path)}
+    if sha256_file(root / PREVIOUS_LOCK_PATH) != PREVIOUS_LOCK_SHA:
+        raise ValueError("E4-v2 r1 实现锁漂移")
+    files[str(PREVIOUS_LOCK_PATH)] = identity(root / PREVIOUS_LOCK_PATH)
     audit_path = Path("docs/experiments/e4_w0_scale_aggregation_source_audit_20260917.json")
     audit = json.loads((root / audit_path).read_text())
     files[str(audit_path)] = identity(root / audit_path)
@@ -112,7 +119,7 @@ def prepare_lock(root: Path = ROOT) -> Path:
     # test 专属控制器由后续 test lock 绑定；其维护不改变已完成训练的代码 identity。
     paths = [p for p in sorted((root / "resp_train").rglob("*.py"))
              if p.relative_to(root).as_posix() != "resp_train/paper_evidence/e4_aggregation_v2_test.py"]
-    paths += [root / p for p in (SCRIPT_PATH, PROTOCOL_PATH, *TEST_PATHS)]
+    paths += [root / p for p in (SCRIPT_PATH, PROTOCOL_PATH, REVISION_PATH, *TEST_PATHS)]
     lock = {"protocol": PROTOCOL, "arms": list(ARMS), "seeds": list(SEEDS), "counts": COUNTS,
             "epochs": EPOCHS, "updates_per_epoch": UPDATES_PER_EPOCH,
             "contracts": {arm: aggregation_contract(arm) for arm in ARMS},
