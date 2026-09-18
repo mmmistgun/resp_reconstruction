@@ -60,7 +60,11 @@ class _W0(nn.Module):
     def forward(self, x, *, tf):
         z = self.base.encode_local(x)
         gamma, beta = self.branches["w"](tf)
-        return self.base.decode_local(z * (1 + 0.5 * torch.tanh(gamma)) + 0.5 * torch.tanh(beta))
+        gamma_sum = torch.zeros_like(z)
+        beta_sum = torch.zeros_like(z)
+        gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
+        beta_sum = beta_sum + 0.5 * torch.tanh(beta)
+        return self.base.decode_local(z * (1 + gamma_sum) + beta_sum)
 
 
 def test_explicit_full_is_identical_to_native():
@@ -75,6 +79,23 @@ def test_explicit_full_is_identical_to_native():
         )(x, tf={"w": w})
     for key in native:
         assert torch.equal(native[key], explicit[key])
+
+
+def test_single_forward_fusion_anchor_is_exact():
+    torch.manual_seed(4)
+    model = _W0().eval()
+    x = torch.randn(1, 1, 18000)
+    w = torch.randn(1, 97, 360)
+    with torch.inference_mode():
+        _, captured = local.forward_with_capture(model, x, tf={"w": w})
+        reconstructed = local._fuse_w0(
+            captured.z,
+            captured.gamma_raw,
+            captured.beta_raw,
+            gamma_coefficient=0.5,
+            beta_coefficient=0.5,
+        )
+    assert torch.equal(reconstructed, captured.z_prime)
 
 
 def test_gamma_and_beta_coefficients_change_only_the_intended_path():

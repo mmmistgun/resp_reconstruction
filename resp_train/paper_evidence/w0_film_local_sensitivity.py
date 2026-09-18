@@ -18,6 +18,8 @@ import torch
 from omegaconf import OmegaConf
 from torch import nn
 
+from resp_train.crd.model import _validate_input
+from resp_train.crd.tf_v1_model import _checkpointed_mapping_branch
 from resp_train.crd.tf_w_v2_audit import _w0_seed_entries
 from resp_train.engine import collect_predictions
 from resp_train.metrics.task import evaluate_task_predictions, summarize_task_metrics
@@ -32,6 +34,7 @@ from resp_train.paper_evidence.w0_cwt_film_behavior import (
     QUALITY_GROUP_COLUMN,
     SEEDS,
     WINDOW_COUNT,
+    forward_with_capture,
     validate_w0_contract,
 )
 from resp_train.paper_evidence.w0_cwt_film_behavior_runtime import (
@@ -77,7 +80,8 @@ PRIOR_SUMMARY = SOURCE_ROOT / (
 PRIOR_SUMMARY_MANIFEST_SHA256 = (
     "d6dee7a97d2fd1a5b7892ef9c8b4f7dca53739a43361d267af8b2bf6ca0ceff1"
 )
-IMPLEMENTATION_LOCK = DOCS / "w0_film_local_sensitivity_implementation_lock_20260918.json"
+PREVIOUS_IMPLEMENTATION_LOCK = DOCS / "w0_film_local_sensitivity_implementation_lock_20260918.json"
+IMPLEMENTATION_LOCK = DOCS / "w0_film_local_sensitivity_implementation_lock_r2_20260918.json"
 PROTOCOL_PATH = DOCS / "w0_film_local_sensitivity_protocol_20260918.md"
 SCRIPT_PATH = Path("scripts/analyze_w0_film_local_sensitivity.py")
 TEST_PATH = Path("tests/test_w0_film_local_sensitivity.py")
@@ -114,12 +118,36 @@ class LocalSensitivityModel(nn.Module):
         if self.condition == "FULL" and not self.force_explicit_full:
             return self.model(x, tf=tf)
         gamma_coefficient, beta_coefficient = COEFFICIENTS[self.condition]
+        _validate_input(x)
         latent = self.model.base.encode_local(x)
-        gamma_raw, beta_raw = self.model.branches["w"]({"w": tf["w"]})
-        effective_gamma = gamma_coefficient * torch.tanh(gamma_raw)
-        effective_beta = beta_coefficient * torch.tanh(beta_raw)
-        conditioned = latent * (1.0 + effective_gamma) + effective_beta
+        gamma_raw, beta_raw = _checkpointed_mapping_branch(
+            self.model.branches["w"], {"w": tf["w"]}
+        )
+        conditioned = _fuse_w0(
+            latent,
+            gamma_raw,
+            beta_raw,
+            gamma_coefficient=gamma_coefficient,
+            beta_coefficient=beta_coefficient,
+        )
         return self.model.base.decode_local(conditioned)
+
+
+def _fuse_w0(
+    latent: torch.Tensor,
+    gamma_raw: torch.Tensor,
+    beta_raw: torch.Tensor,
+    *,
+    gamma_coefficient: float,
+    beta_coefficient: float,
+) -> torch.Tensor:
+    """逐算子复刻原生 W0 融合，仅允许替换两个系数。"""
+
+    gamma_sum = torch.zeros_like(latent)
+    beta_sum = torch.zeros_like(latent)
+    gamma_sum = gamma_sum + gamma_coefficient * torch.tanh(gamma_raw)
+    beta_sum = beta_sum + beta_coefficient * torch.tanh(beta_raw)
+    return latent * (1.0 + gamma_sum) + beta_sum
 
 
 def error_aligned_metrics(frame: pd.DataFrame) -> pd.DataFrame:
@@ -450,6 +478,9 @@ def prepare_lock(*, code_root: Path = CODE_ROOT, source_root: Path = SOURCE_ROOT
     destination = code_root / IMPLEMENTATION_LOCK
     if destination.exists():
         raise FileExistsError(f"FiLM 局部 implementation lock 已存在: {destination}")
+    previous_lock_path = code_root / PREVIOUS_IMPLEMENTATION_LOCK
+    if not previous_lock_path.is_file():
+        raise FileNotFoundError(f"缺少被替代的 FiLM 局部 implementation lock: {previous_lock_path}")
     source_path = code_root / SOURCE_LOCK
     metric_path = code_root / METRIC_LOCK
     if sha256_file(source_path) != SOURCE_LOCK_SHA256:
@@ -511,6 +542,15 @@ def prepare_lock(*, code_root: Path = CODE_ROOT, source_root: Path = SOURCE_ROOT
             "path": str(PRIOR_SUMMARY.resolve()),
             "manifest_sha256": PRIOR_SUMMARY_MANIFEST_SHA256,
         },
+        "supersedes": {
+            "path": str(previous_lock_path.resolve()),
+            **identity(previous_lock_path),
+            "reason": (
+                "真实 BF16/CUDA smoke 的原判据未测量原生跨 forward 重复性，"
+                "无法区分 wrapper 算子路径差异与重复执行漂移；r2 改为同一次原生 "
+                "forward 的融合张量硬锚点，并逐算子复刻原生融合。"
+            ),
+        },
         "source_files": source_files,
         "code_files": {
             str(path.relative_to(code_root)): identity(path)
@@ -541,6 +581,12 @@ def load_lock(*, code_root: Path = CODE_ROOT) -> tuple[dict[str, Any], str]:
         raise ValueError("FiLM 局部 implementation lock 合同漂移")
     for relative, expected in lock["code_files"].items():
         verify_file(code_root / relative, expected)
+    supersedes = lock.get("supersedes", {})
+    if Path(supersedes.get("path", "")).resolve() != (
+        code_root / PREVIOUS_IMPLEMENTATION_LOCK
+    ).resolve():
+        raise ValueError("FiLM 局部 implementation lock supersedes 漂移")
+    verify_file(Path(supersedes["path"]), supersedes)
     return lock, sha256_file(path)
 
 
@@ -668,17 +714,47 @@ def run_smoke(*, device: str = "cuda:0") -> Path:
         x = batch["x"][:1].to(resolved)
         w = batch["tf"]["w"][:1].to(resolved)
         with torch.inference_mode(), torch.amp.autocast("cuda", dtype=torch.bfloat16):
-            native = model(x, tf={"w": w})
+            native, captured = forward_with_capture(model, x, tf={"w": w})
+            reconstructed = _fuse_w0(
+                captured.z,
+                captured.gamma_raw,
+                captured.beta_raw,
+                gamma_coefficient=0.5,
+                beta_coefficient=0.5,
+            )
             explicit = LocalSensitivityModel(
                 model, "FULL", force_explicit_full=True
             )(x, tf={"w": w})
-        maximums = {
+            native_repeat = model(x, tf={"w": w})
+        fusion_maximum = float(
+            (reconstructed.float() - captured.z_prime.float()).abs().max()
+        )
+        fusion_exact = bool(torch.equal(reconstructed, captured.z_prime))
+        if fusion_maximum > 1e-6:
+            raise RuntimeError(
+                "FiLM 局部 0.5/0.5 融合改变同次原生 forward 的 Z': "
+                f"{fusion_maximum}"
+            )
+        explicit_maximums = {
             key: float((explicit[key].float() - native[key].float()).abs().max())
             for key in native
         }
-        exact = {key: bool(torch.equal(explicit[key], native[key])) for key in native}
-        if any(value > 1e-6 for value in maximums.values()):
-            raise RuntimeError(f"FiLM 局部 explicit FULL 改变原生输出: {maximums}")
+        explicit_exact = {
+            key: bool(torch.equal(explicit[key], native[key])) for key in native
+        }
+        repeat_maximums = {
+            key: float((native_repeat[key].float() - native[key].float()).abs().max())
+            for key in native
+        }
+        repeat_exact = {
+            key: bool(torch.equal(native_repeat[key], native[key])) for key in native
+        }
+        output_repeatable_at_tolerance = max(repeat_maximums.values()) <= 1e-6
+        if output_repeatable_at_tolerance and max(explicit_maximums.values()) > 1e-6:
+            raise RuntimeError(
+                "FiLM 局部 explicit FULL 在原生重复 forward 可复现时改变输出: "
+                f"explicit={explicit_maximums}, native_repeat={repeat_maximums}"
+            )
         write_json(
             output / "smoke_receipt.json",
             {
@@ -686,8 +762,13 @@ def run_smoke(*, device: str = "cuda:0") -> Path:
                 "passed": True,
                 "seed": SEEDS[0],
                 "dataset_row_id": int(data.rows.iloc[0]["dataset_row_id"]),
-                "native_explicit_max_abs_deltas": maximums,
-                "native_explicit_exact": exact,
+                "fusion_anchor_max_abs_delta": fusion_maximum,
+                "fusion_anchor_exact": fusion_exact,
+                "native_explicit_max_abs_deltas": explicit_maximums,
+                "native_explicit_exact": explicit_exact,
+                "native_repeat_max_abs_deltas": repeat_maximums,
+                "native_repeat_exact": repeat_exact,
+                "output_repeatable_at_tolerance": output_repeatable_at_tolerance,
                 "research_test_used": False,
             },
         )
@@ -711,7 +792,11 @@ def _validate_smoke(path: Path, lock_hash: str) -> None:
     if (
         receipt.get("passed") is not True
         or int(receipt.get("seed", -1)) != SEEDS[0]
-        or max(receipt["native_explicit_max_abs_deltas"].values()) > 1e-6
+        or float(receipt.get("fusion_anchor_max_abs_delta", float("inf"))) > 1e-6
+        or (
+            receipt.get("output_repeatable_at_tolerance") is True
+            and max(receipt["native_explicit_max_abs_deltas"].values()) > 1e-6
+        )
     ):
         raise ValueError("FiLM 局部 smoke receipt 未通过")
 

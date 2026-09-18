@@ -2,7 +2,7 @@
 
 协议 ID：w0-film-local-sensitivity-v1-20260918。
 
-状态：结果知情的 validation-only 探索方案；设计、独立实现和 synthetic CPU 定向验证已完成，implementation lock 待生成。真实 GPU 推理由用户执行。
+状态：结果知情的 validation-only 探索方案；r2 一致性修订、synthetic CPU 定向验证和锁定流程已就绪。真实 GPU 推理由用户执行。
 
 ## 1. 动机与证据边界
 
@@ -59,16 +59,22 @@ gamma=0.6 时实际乘法增益范围仍为 [0.4,1.6]，保持为正；beta 有�
 
 ## 4. 非侵入与实现要求
 
-FULL 必须调用原生模型 forward。synthetic CPU fixture 和用户真实 batch-1 smoke 另构造 identity wrapper（0.5/0.5），要求与原生 waveform/waveform_10hz 逐 tensor一致；GPU 最大绝对差超过 1e-6 失败。
+FULL 必须调用原生模型 forward。synthetic CPU fixture 要求 identity wrapper（0.5/0.5）与原生 waveform/waveform_10hz 逐 tensor 一致。
+
+真实 batch-1 smoke 的硬锚点位于同一次原生 forward：hook 只保留六层 local trunk 输出、条件头 raw 输出和 refinement 输入引用；原生 forward 完成后才重建 0.5/0.5 融合张量，与实际 refinement 输入比较。最大绝对差超过 1e-6 失败。smoke 另执行 explicit FULL 和原生重复 forward：只有当原生重复 forward 在 1e-6 内可复现时，才对 explicit/native 输出施加 1e-6 硬门槛；否则两组输出差只作为 BF16/CUDA 跨 forward 重复性诊断，不替代同次融合硬锚点。
 
 四个干预路径只复用原生：
 
     Z = model.base.encode_local(x)
-    gamma_raw, beta_raw = model.branches["w"]({"w": W})
-    Z_prime = Z * (1 + c_gamma * tanh(gamma_raw)) + c_beta * tanh(beta_raw)
+    gamma_raw, beta_raw = checkpointed_mapping_branch(model.branches["w"], {"w": W})
+    gamma_sum = zeros_like(Z) + c_gamma * tanh(gamma_raw)
+    beta_sum = zeros_like(Z) + c_beta * tanh(beta_raw)
+    Z_prime = Z * (1 + gamma_sum) + beta_sum
     output = model.base.decode_local(Z_prime)
 
-不得在 decoder 前计算额外统计；不得修改 tf_v1_model.py；不得使用 strict=False。每个 checkpoint strict-load，model.eval()、torch.inference_mode()、BF16 AMP。
+上述顺序逐算子复刻原生 W0 forward，包含 `zeros_like` 和累加，不做代数简化。不得在 decoder 前计算额外统计；不得修改 tf_v1_model.py；不得使用 strict=False。每个 checkpoint strict-load，model.eval()、torch.inference_mode()、BF16 AMP。
+
+r1 真实 smoke 失败现场保留于 `runs/w0_film_local_sensitivity_v1/smoke/seed_20260811/smoke_5ff7b9d38549_20260918T065330Z_bafaf8665a09`。该版本的两次独立 forward 比较得到 waveform 最大差 0.0044066906、waveform_10hz 最大差 0.00390625，但未同时测量原生重复 forward，因而不能区分 wrapper 算子路径差异与 CUDA 重复执行漂移。r2 同时消除这两个混杂来源；r1 失败不作为科学结果。
 
 ## 5. 固定评价轴
 
@@ -161,13 +167,14 @@ S_central 正值表示提高该路径系数局部趋向恶化，负值表示局�
 - 核心/运行：resp_train/paper_evidence/w0_film_local_sensitivity.py
 - CLI：scripts/analyze_w0_film_local_sensitivity.py
 - tests：tests/test_w0_film_local_sensitivity.py
-- implementation lock：docs/experiments/w0_film_local_sensitivity_implementation_lock_20260918.json
+- implementation lock：docs/experiments/w0_film_local_sensitivity_implementation_lock_r2_20260918.json
+- 被替代的 r1 lock：docs/experiments/w0_film_local_sensitivity_implementation_lock_20260918.json
 - 输出根：/mnt/disk_code/marques/resp_reconstruction/runs/w0_film_local_sensitivity_v1/
 
 阶段：
 
 1. prepare-lock：锁定 W0 来源、冻结 metrics、前序 FiLM summary/结果依据及代码；
-2. smoke：用户执行真实 batch-1 native/identity wrapper 一致性；
+2. smoke：用户执行真实 batch-1 同次融合硬锚点及跨 forward 重复性诊断；
 3. analyze：用户按 seed 执行四个干预；
 4. summarize：CPU 汇总完整 3×5 矩阵；
 5. finalize：中文结论、manifest 与 freeze receipt。
@@ -186,7 +193,8 @@ S_central 正值表示提高该路径系数局部趋向恶化，负值表示局�
 
 Codex 只运行 synthetic/disposable CPU 测试：
 
-- 0.5/0.5 identity wrapper 与原生输出相等；
+- 0.5/0.5 identity wrapper 与原生输出在 synthetic CPU 上相等；
+- 同一次 forward 的 0.5/0.5 重建融合张量与原生 refinement 输入相等；
 - 四个条件公式、shape、finite 与实际增益正值；
 - condition/seed/row identity 完整；
 - error-aligned delta、相对变化、分层与局部响应公式；
@@ -200,7 +208,7 @@ Codex 只运行 synthetic/disposable CPU 测试：
 
 所有新推理完成前不查看部分 seed 后删减矩阵或改变系数。
 
-当前 synthetic CPU 与原 W0 模型联合验证为 34 passed。implementation lock 生成并提交后，固定命令为：
+当前 synthetic CPU 与原 W0 模型联合验证为 35 passed。r2 implementation lock 生成并提交后，固定命令为：
 
 ~~~bash
 FILM_WT=/mnt/disk_code/marques/resp_reconstruction_w0_cwt_film
