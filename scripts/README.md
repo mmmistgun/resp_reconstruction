@@ -47,6 +47,23 @@
 并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
 以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
 
+## E4：频带编码与聚合干预诊断
+
+专项协议：`docs/experiments/e4_band_encoding_aggregation_protocol_20260918.md`。
+入口 `scripts/eval_e4_band_encoding_aggregation.py` 固定 W0＋四候选、三个 seed、原 selected checkpoint，
+在完整 validation 上保存聚合前 X/实际 alpha，并比较均匀恢复、四区先验恢复、两种入口参考×四区替换。
+完整 X 约 250.55 GiB；两种入口参考预先覆盖全矩阵，共 210 个条件。
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest tests/test_e4_band_audit.py -q
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
+  scripts/eval_e4_band_encoding_aggregation.py prepare-lock \
+  --validation-summary '/mnt/disk_code/marques/resp_reconstruction/runs/e4_scale_aggregation_v2/summary/summary_71e6b8f753cc_20260918T055104Z_da596d615deb'
+```
+
+锁排他生成；提交代码/协议/锁后，用户依协议顺序执行 `prepare-reference`、`gpu-smoke`、
+15 次 `evaluate` 和 `summarize`。checkpoint、原 cache 及已完成评价保持原身份。
+
 ## E4 v2：四种尺度聚合固定矩阵
 
 协议：`docs/experiments/e4_scale_aggregation_v2_protocol_20260917.md`。
