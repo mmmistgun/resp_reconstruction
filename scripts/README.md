@@ -47,6 +47,43 @@
 并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
 以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
 
+## W0 CWT-FiLM 调制行为分析
+
+专项协议为 docs/experiments/w0_cwt_film_behavior_protocol_20260918.md。独立入口
+scripts/analyze_w0_cwt_film_behavior.py 只分析三个冻结 W0 validation checkpoint，不训练、不访问 test。
+分析复用冻结逐窗口误差和历史 corrected FiLM 统计，新增实际特征变化、raw/有效参数分布、
+正负多阈值边缘、通道/时间结构及质量关联。
+当前实现锁为 docs/experiments/w0_cwt_film_behavior_implementation_lock_20260918_r2.json。
+
+实现和 synthetic CPU 验证：
+
+~~~bash
+FILM_PY=/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python
+"$FILM_PY" -m pytest \
+  tests/test_w0_cwt_film_behavior.py tests/test_crd_tf_v1_model.py -q
+"$FILM_PY" scripts/analyze_w0_cwt_film_behavior.py prepare-lock
+~~~
+
+提交实现与新锁并保持独立 worktree 干净后，由用户运行真实 smoke 和完整 validation：
+
+~~~bash
+"$FILM_PY" scripts/analyze_w0_cwt_film_behavior.py smoke \
+  --seed 20260811 --device cuda:0
+
+FILM_SMOKE='/完成的smoke attempt目录'
+for FILM_SEED in 20260811 20260812 20260813; do
+  "$FILM_PY" scripts/analyze_w0_cwt_film_behavior.py analyze \
+    --seed "$FILM_SEED" --device cuda:0 --smoke-receipt "$FILM_SMOKE" || break
+done
+
+"$FILM_PY" scripts/analyze_w0_cwt_film_behavior.py summarize \
+  --runs '/seed 20260811 attempt' '/seed 20260812 attempt' '/seed 20260813 attempt'
+~~~
+
+summary 固定案例身份后，render-cases --summary ... --device cuda:0 只重建包含案例的原始
+batch-128 上下文并保存选中窗口；最后用 finalize --summary ... --cases ... 生成中文结论与闭合回执。
+产物根为主仓库的 runs/w0_cwt_film_behavior_v1/；每阶段排他创建 attempt，失败现场保留。
+
 ## E4 v2：四种尺度聚合固定矩阵
 
 协议：`docs/experiments/e4_scale_aggregation_v2_protocol_20260917.md`。
