@@ -190,7 +190,7 @@ class CRDExperiment:
                 "val_core_loss": val_core_loss,
                 "val_local_rr_mae": val_local_rr,
             }
-            if str(self.cfg.protocol.stage) in {"tf", "tf_p6a", "tf_w_v2"}:
+            if str(self.cfg.protocol.stage) in {"tf", "tf_p6a", "tf_w_v2", "tf_film_gamma"}:
                 record.update(
                     {
                         "train_elapsed_seconds": float(train_elapsed_seconds),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -294,12 +295,33 @@ BRANCH_TYPES = {
 class CRDTfV1Model(nn.Module):
     """C201 from-scratch anchor + branch-independent zero-init FiLM。"""
 
-    def __init__(self, variant: str, initialization_seed: int) -> None:
+    def __init__(
+        self,
+        variant: str,
+        initialization_seed: int,
+        *,
+        gamma_coefficient: float = 0.5,
+        beta_coefficient: float = 0.5,
+    ) -> None:
         super().__init__()
         variant = str(variant).lower()
         if variant not in TF_ALL_VARIANT_REPRESENTATIONS:
             raise ValueError(f"未知 CRD-TF variant={variant!r}")
+        if not math.isfinite(float(gamma_coefficient)) or not 0.0 < float(
+            gamma_coefficient
+        ) <= 1.0:
+            raise ValueError("FiLM gamma coefficient 必须是 (0,1] 内的有限值")
+        if not math.isfinite(float(beta_coefficient)) or not 0.0 < float(
+            beta_coefficient
+        ) <= 1.0:
+            raise ValueError("FiLM beta coefficient 必须是 (0,1] 内的有限值")
+        if variant != "crd_tf102_w" and (
+            float(gamma_coefficient) != 0.5 or float(beta_coefficient) != 0.5
+        ):
+            raise ValueError("非默认 FiLM coefficient 只为 W0 crd_tf102_w 训练协议开放")
         self.tf_variant = variant
+        self.gamma_coefficient = float(gamma_coefficient)
+        self.beta_coefficient = float(beta_coefficient)
         self.representations = TF_ALL_VARIANT_REPRESENTATIONS[variant]
         # D4 仅缩短 local trunk；独立 module seed 保证其余 C201/W 模块逐 tensor 同初始化。
         local_block_count = 4 if variant in P3_VARIANTS else 6
@@ -367,24 +389,32 @@ class CRDTfV1Model(nn.Module):
                     branch_features = {"w": apply_p1_w_view(branch_features["w"], self.tf_variant)}
                 gamma, beta = _checkpointed_mapping_branch(branch, branch_features)
                 if gate_factors is None:
-                    gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
-                    beta_sum = beta_sum + 0.5 * torch.tanh(beta)
+                    gamma_sum = gamma_sum + self.gamma_coefficient * torch.tanh(gamma)
+                    beta_sum = beta_sum + self.beta_coefficient * torch.tanh(beta)
                 else:
                     factor = gate_factors[:, condition_index : condition_index + 1]
-                    gamma_sum = gamma_sum + factor * (0.5 * torch.tanh(gamma))
-                    beta_sum = beta_sum + factor * (0.5 * torch.tanh(beta))
+                    gamma_sum = gamma_sum + factor * (
+                        self.gamma_coefficient * torch.tanh(gamma)
+                    )
+                    beta_sum = beta_sum + factor * (
+                        self.beta_coefficient * torch.tanh(beta)
+                    )
                 condition_index += 1
         elif tf not in (None, {}):
             raise ValueError(f"{self.tf_variant} capacity control 不得读取 TF cache")
         for branch in self.controls:
             gamma, beta = _checkpointed_tensor_branch(branch, latent)
             if gate_factors is None:
-                gamma_sum = gamma_sum + 0.5 * torch.tanh(gamma)
-                beta_sum = beta_sum + 0.5 * torch.tanh(beta)
+                gamma_sum = gamma_sum + self.gamma_coefficient * torch.tanh(gamma)
+                beta_sum = beta_sum + self.beta_coefficient * torch.tanh(beta)
             else:
                 factor = gate_factors[:, condition_index : condition_index + 1]
-                gamma_sum = gamma_sum + factor * (0.5 * torch.tanh(gamma))
-                beta_sum = beta_sum + factor * (0.5 * torch.tanh(beta))
+                gamma_sum = gamma_sum + factor * (
+                    self.gamma_coefficient * torch.tanh(gamma)
+                )
+                beta_sum = beta_sum + factor * (
+                    self.beta_coefficient * torch.tanh(beta)
+                )
             condition_index += 1
         conditioned = latent * (1.0 + gamma_sum) + beta_sum
         return self.base.decode_local(conditioned)
