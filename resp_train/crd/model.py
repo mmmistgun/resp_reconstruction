@@ -394,7 +394,22 @@ def build_crd_model(cfg: Any) -> nn.Module:
     if variant in (*CRD_TF_VARIANTS, *CRD_TF_P6_VARIANTS, *CRD_TF_W_V2_VARIANTS):
         from resp_train.crd.tf_v1_model import CRDTfV1Model
 
-        return CRDTfV1Model(variant, initialization_seed)
+        has_gamma = "film_gamma_coefficient" in cfg.model
+        has_beta = "film_beta_coefficient" in cfg.model
+        if has_gamma != has_beta:
+            raise ValueError("FiLM coefficient 配置必须同时提供 gamma/beta")
+        if has_gamma and variant != "crd_tf102_w":
+            raise ValueError("FiLM coefficient 配置只为 W0 crd_tf102_w 开放")
+        return CRDTfV1Model(
+            variant,
+            initialization_seed,
+            gamma_coefficient=(
+                float(cfg.model.film_gamma_coefficient) if has_gamma else 0.5
+            ),
+            beta_coefficient=(
+                float(cfg.model.film_beta_coefficient) if has_beta else 0.5
+            ),
+        )
     if variant in CRD_VARIANTS[2:]:
         return CRDCoarseModel(variant, initialization_seed)
     raise ValueError(f"未知 CRD variant={variant!r}；可选 {list(CRD_VARIANTS)}")

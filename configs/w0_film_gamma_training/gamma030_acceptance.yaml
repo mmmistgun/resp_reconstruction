@@ -1,0 +1,6 @@
+_base_: _base.yaml
+protocol: {run_role: acceptance, execution_gate: film_gamma_cuda_acceptance}
+data: {max_train_windows: 128, max_val_windows: 32, max_test_windows: null}
+training: {epochs: 1, batch_size: 128, gradient_accumulation_steps: 1, device: 'cuda:0', show_progress: false}
+outputs: {run_root: '/mnt/disk_code/marques/resp_reconstruction/runs/w0_film_gamma_training_v1/acceptance/gamma030/seed_20260811'}
+
