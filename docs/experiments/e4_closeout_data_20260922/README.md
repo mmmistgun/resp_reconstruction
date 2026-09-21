@@ -41,6 +41,8 @@
 
 ## 来源与复核
 
+2026-09-22 已完成 [15 份完整 X 的存储清理](../e4_feature_x_cleanup_20260922.json)。本目录依赖冻结 CSV、benchmark JSON 和 summary 来源，不读取 X；原 manifest 保留，完整 X 的缺失由清理记录说明。清理后重新整理的六份 CSV 与本目录版本逐字节一致。
+
 [source_manifest.json](source_manifest.json) 登记结项索引、每个输入文件的 SHA-256、整理脚本身份、统计定义及运行环境。[manifest.json](manifest.json) 绑定六份 CSV 和来源清单的字节身份；本 README 为阅读说明。
 
 从四份原 `seed_metrics.csv` 复算的 140 项性能均值/SD 与总表一致；耗时统计与各测量组明细一致；42 个方向记录与配对数据一致。所有 CSV 保留完整导出精度。

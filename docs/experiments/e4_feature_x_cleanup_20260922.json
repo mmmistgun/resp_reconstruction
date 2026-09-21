@@ -1,0 +1,233 @@
+{
+  "date": "2026-09-22",
+  "action": "delete_full_feature_x",
+  "status": "completed",
+  "cleanup_path": "runs/e4_storage_cleanup/cleanup_20260921T180310Z_12d8ef26",
+  "cleanup_receipt": {
+    "size_bytes": 837,
+    "sha256": "31e13f9eba72f7defcb88edb776845020cd4cd362344a189b37e6cea57119049"
+  },
+  "plan": {
+    "size_bytes": 12064,
+    "sha256": "4a5aa09fd44641991896ab945989614e665c6f7624cb56207b50e74d07b304a3"
+  },
+  "actions": {
+    "size_bytes": 7797,
+    "sha256": "867af8920fd754d0a83ff2d4f9ce43312071458699eb2310c9466d447e15f3bb"
+  },
+  "source_summary": "/mnt/disk_code/marques/resp_reconstruction/runs/e4_band_encoding_aggregation_v1/summary/summary_41084408b8b5_20260918T162940Z_ba2b36b5a324",
+  "source_summary_manifest": {
+    "size_bytes": 1630,
+    "sha256": "22396eb0a745c2d00ccd3c9760e6ec30e73d7f9b1efd753d1f1f6146b4b4e0fe"
+  },
+  "original_x_sha_policy": "继承原冻结 manifest；本次不重新扫描 X 全部内容",
+  "deleted_files": [
+    {
+      "model_seed": "W0_FULL/20260811",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/W0_FULL/seed_20260811/evaluation_41084408b8b5_20260918T113006Z_715d2e849f8c/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "67b6b77a6b002074def66badf7624e7bb7717c3b8055caecbc77d7d877e1ebc5"
+      },
+      "source_manifest": {
+        "size_bytes": 10269,
+        "sha256": "40828fe34cc709bf9adf4c57ac8562418222586fd80b6baa5e026196ebc3621f"
+      }
+    },
+    {
+      "model_seed": "W0_FULL/20260812",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/W0_FULL/seed_20260812/evaluation_41084408b8b5_20260918T130447Z_c89f4dfcb194/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "7251402f33e26649deeb31735a3cbb72de2b5b8d21514b29e36ff970b8facfda"
+      },
+      "source_manifest": {
+        "size_bytes": 10269,
+        "sha256": "486634610737dec8bb06cfae27c8be3dd9df30c340173928ae55161115970799"
+      }
+    },
+    {
+      "model_seed": "W0_FULL/20260813",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/W0_FULL/seed_20260813/evaluation_41084408b8b5_20260918T143931Z_3d40d36aad25/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "d350333cde4b0308faadebd5df6010dd8af4f26dd3bf8077f1856f44547fe501"
+      },
+      "source_manifest": {
+        "size_bytes": 10269,
+        "sha256": "ca65f486b693a02de49451f1b88ad966637c48aa23b3fdd7786502f730179199"
+      }
+    },
+    {
+      "model_seed": "channel_region/20260811",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/channel_region/seed_20260811/evaluation_41084408b8b5_20260918T124529Z_c389c424b59c/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "c9a096a2b39688c38824a3343aff1b4b3baa84b5a2f2a99d72836590cab813f7"
+      },
+      "source_manifest": {
+        "size_bytes": 10438,
+        "sha256": "4824786c584766faf7c3eb123719274988985f08d27917f9cc463ebcf7685384"
+      }
+    },
+    {
+      "model_seed": "channel_region/20260812",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/channel_region/seed_20260812/evaluation_41084408b8b5_20260918T141939Z_94a248998d77/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "55c5ab3fc620536b8195bc39560ee1997bbe2d9de047c99a45c7c17438bde200"
+      },
+      "source_manifest": {
+        "size_bytes": 10438,
+        "sha256": "6cd98475975bd59ea358e41a2be72f6eedc2938c2ff981c7ca77194a79b7b698"
+      }
+    },
+    {
+      "model_seed": "channel_region/20260813",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/channel_region/seed_20260813/evaluation_41084408b8b5_20260918T155516Z_23bf677b6a9d/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "c2c36918094d76fba778f6f627915b1ff4608421fa564e763d1e29e3724d82f7"
+      },
+      "source_manifest": {
+        "size_bytes": 10438,
+        "sha256": "b06a283018dcf2033d2f080e4af0496522f8ab481750bae1b1057b88805cbf56"
+      }
+    },
+    {
+      "model_seed": "frequency_attention/20260811",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/frequency_attention/seed_20260811/evaluation_41084408b8b5_20260918T122556Z_0e9571b71f23/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "83706db7d1171ea906f7f53774715a49ffacd2dc9d41a4748ddf40574093f3ec"
+      },
+      "source_manifest": {
+        "size_bytes": 10301,
+        "sha256": "d9c4393d2bb0e8ec91c6a398f7bf7dd4331dcd7e71888cdaf8f2577983c59ba7"
+      }
+    },
+    {
+      "model_seed": "frequency_attention/20260812",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/frequency_attention/seed_20260812/evaluation_41084408b8b5_20260918T140043Z_fd481bb50c25/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "f790f9d555c94006415836c5e4dabe1737f46ad976a58ff72ec2f0b6d4fcbace"
+      },
+      "source_manifest": {
+        "size_bytes": 10301,
+        "sha256": "1824c64f03810505d1eece67d01d80a61de28d9b974de157d65b5f277cbd8aa4"
+      }
+    },
+    {
+      "model_seed": "frequency_attention/20260813",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/frequency_attention/seed_20260813/evaluation_41084408b8b5_20260918T153700Z_74db87daac54/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "4b4f6e6e91a88af4d69eb67d255cd8a5d0e91b046801e3e59be52b78dc160aea"
+      },
+      "source_manifest": {
+        "size_bytes": 10301,
+        "sha256": "f19dda723406521ca6b9a64445a6c560c1744c81203e04aa30c9a2452186dfe7"
+      }
+    },
+    {
+      "model_seed": "scale_attention/20260811",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/scale_attention/seed_20260811/evaluation_41084408b8b5_20260918T120453Z_c811b942d211/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "e5f3b3bc1bc7b321b92ea262b2e2c93dcc32236de6bf320fccfa65cb144d2572"
+      },
+      "source_manifest": {
+        "size_bytes": 10293,
+        "sha256": "edbe3c0c15bfe59555ccc0d86c81eace367004d2a0663f29e79eabafa00a1a07"
+      }
+    },
+    {
+      "model_seed": "scale_attention/20260812",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/scale_attention/seed_20260812/evaluation_41084408b8b5_20260918T134328Z_5891e84c36c1/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "b96fb82e6c2355e7399efb4d84ad5b6c51d17de078d7cdc1ab2b2611cf89e832"
+      },
+      "source_manifest": {
+        "size_bytes": 10293,
+        "sha256": "b36b6b65e8c15a02fee3a8ab1c6a890d4f9673e2f861ba25a2dcf8988f5b215c"
+      }
+    },
+    {
+      "model_seed": "scale_attention/20260813",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/scale_attention/seed_20260813/evaluation_41084408b8b5_20260918T151822Z_b0f6da1ce267/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "a1b999dbfeb4ef08545b98a5b22cce50f11d8e5f99354767e1bddbd43859f633"
+      },
+      "source_manifest": {
+        "size_bytes": 10293,
+        "sha256": "b60eac18d7e6553a25361a58966ad618383b2f32f6b67cd401959527adeb45cb"
+      }
+    },
+    {
+      "model_seed": "static_scale/20260811",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/static_scale/seed_20260811/evaluation_41084408b8b5_20260918T114702Z_ddc6920ff861/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "b7068e87baeff0f9e0f1752ddda5b8e0d6a8ed56bfe8022a56c7c0e48775d0e7"
+      },
+      "source_manifest": {
+        "size_bytes": 10281,
+        "sha256": "eadd5c53b580e8d71a9cf6d45dcd857f44cdada7fdb63e0b68bea75a7ef896f7"
+      }
+    },
+    {
+      "model_seed": "static_scale/20260812",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/static_scale/seed_20260812/evaluation_41084408b8b5_20260918T132405Z_c903a2f5d211/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "cb21a877ea148f4ed16266f5dd7ff56563684f45fca8d119d9633626007b4ea2"
+      },
+      "source_manifest": {
+        "size_bytes": 10281,
+        "sha256": "4b59af76ec850b571a50851948969227555a1e1219c8f96f2c2757fe41c157b8"
+      }
+    },
+    {
+      "model_seed": "static_scale/20260813",
+      "path": "runs/e4_band_encoding_aggregation_v1/evaluation/static_scale/seed_20260813/evaluation_41084408b8b5_20260918T145839Z_96bf32a7c853/FULL/x.npy",
+      "size_bytes": 17934912128,
+      "original_manifest_identity": {
+        "size_bytes": 17934912128,
+        "sha256": "d20b52b98526306a0c6d3b87031dcc1f82de2cc86bda2821646d406e046079d5"
+      },
+      "source_manifest": {
+        "size_bytes": 10281,
+        "sha256": "6bb4999cfe74f9a7162499cef9a9ef1e375347571763f0afd4fda121897c02a3"
+      }
+    }
+  ],
+  "logical_bytes_removed": 269023681920,
+  "allocated_bytes_removed": 269023703040,
+  "observed_free_bytes_delta": 269023744000,
+  "retained_files_metadata_unchanged": 948,
+  "original_manifests_unchanged": true,
+  "closed_dataset_verified": true,
+  "post_cleanup_reproduction": {
+    "csv_files_compared": 6,
+    "byte_identical": true,
+    "script": "scripts/collect_e4_closeout_data.py"
+  },
+  "artifact_availability": "完整 X 已清理；原 manifest 和结项前审计索引保留。旧完整产物校验将报告清单中的 X 缺失。"
+}
