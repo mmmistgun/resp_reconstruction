@@ -21,7 +21,7 @@ def main():
     phases.add_parser('summarize')
     args=parser.parse_args()
     if args.phase=='prepare-lock': out=experiment.prepare_lock()
-    elif args.phase=='signals': out=experiment.signals()
+    elif args.phase=='signals': out=experiment.signal_entry()
     elif args.phase=='gpu-smoke': out=experiment.gpu_smoke(args.device)
     elif args.phase=='evaluate': out=experiment.evaluate(args.seed,args.device,args.signals.resolve(),args.gpu_receipt.resolve())
     else: out=experiment.summarize()

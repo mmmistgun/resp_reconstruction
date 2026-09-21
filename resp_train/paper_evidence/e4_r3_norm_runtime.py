@@ -1,6 +1,9 @@
 """R3/GN 独立锁、信号检查、synthetic GPU 门控与完整 validation 配对。"""
 from __future__ import annotations
 import json
+import ast
+import hashlib
+import subprocess
 import shutil
 import sys
 import traceback
@@ -27,8 +30,12 @@ from resp_train.paper_evidence.e4_r3_signals import signal_window,summarize_sign
 ROOT=Path(__file__).resolve().parents[2]
 PROTOCOL='e4-r3-temporal-normalization-v1-20260921'
 OUTPUT=Path('runs/e4_r3_temporal_normalization_v1')
-LOCK=Path('docs/experiments/e4_r3_temporal_normalization_lock_20260921.json')
-DOC=Path('docs/experiments/e4_r3_temporal_normalization_protocol_20260921.md')
+LOCK=Path('docs/experiments/e4_r3_temporal_normalization_lock_r2_20260921.json')
+DOC=Path('docs/experiments/e4_r3_temporal_normalization_r2_20260921.md')
+R1_DOC=Path('docs/experiments/e4_r3_temporal_normalization_protocol_20260921.md')
+R1_LOCK=Path('docs/experiments/e4_r3_temporal_normalization_lock_20260921.json')
+R1_SHA='7cbf4b4d9412fdadb24c08ae6f5cf1851cd0a47a244b1dd19541c1cde8aed6a2'
+R1_SIGNALS=Path('runs/e4_r3_temporal_normalization_v1/signals/signals_7cbf4b4d9412_20260921T072756Z_ff00a900b6a9')
 SCRIPT=Path('scripts/eval_e4_r3_temporal_normalization.py')
 TEST=Path('tests/test_e4_r3_norm.py')
 SOURCE_LOCK=Path('docs/experiments/e4_band_encoding_aggregation_lock_20260918.json')
@@ -52,7 +59,7 @@ def prepare_lock():
     prior.verify_attempt(ROOT/REFERENCE,SOURCE_SHA,'reference')
     reference_meta=json.loads((ROOT/REFERENCE/'reference.json').read_text())
     if reference_meta['source']!=old['cache_files']['train_w']: raise ValueError('参考 train cache 来源漂移')
-    code=sorted((ROOT/'resp_train').rglob('*.py'))+[ROOT/p for p in (DOC,SCRIPT,TEST)]
+    code=sorted((ROOT/'resp_train').rglob('*.py'))+[ROOT/p for p in (DOC,R1_DOC,SCRIPT,TEST)]
     result=dict(protocol=PROTOCOL,seeds=list(SEEDS),conditions=list(CONDITIONS),count=COUNT,entries=entries,
         validation_rows=old['validation_rows'],plot_row_ids=old['plot_row_ids'],cache_files=old['cache_files'],
         dataset_index=old['dataset_index'],frequencies=old['frequencies'],shifts=make_shifts(COUNT).tolist(),
@@ -61,6 +68,8 @@ def prepare_lock():
         reference_manifest={'path':str(ROOT/REFERENCE/'manifest.json'),**identity(ROOT/REFERENCE/'manifest.json')},
         code_files={str(p.relative_to(ROOT)):identity(p) for p in code},preparation_git=git_state(ROOT),
         prepared_at=datetime.now(timezone.utc).isoformat())
+    result['revision']=2
+    result['compatible_signals']=prepare_signal_reuse(result)
     write_json(ROOT/LOCK,result)
     return ROOT/LOCK
 
@@ -75,6 +84,78 @@ def load_lock():
         item=lock[key]; prior.source.verify(Path(item['path']),item)
     for name,expected in lock['code_files'].items(): prior.source.verify(ROOT/name,expected)
     return lock,sha256_file(ROOT/LOCK)
+
+
+def signal_nodes(source,names):
+    """只提取显式列出的信号路径定义；缺项/重名均失败。"""
+    found={}
+    for node in ast.parse(source).body:
+        name=getattr(node,'name',None)
+        if isinstance(node,ast.Assign) and len(node.targets)==1 and isinstance(node.targets[0],ast.Name):
+            name=node.targets[0].id
+        if name in names:
+            if name in found: raise ValueError('信号合同定义重复')
+            found[name]=hashlib.sha256(ast.dump(node,include_attributes=False).encode()).hexdigest()
+    if set(found)!=set(names): raise ValueError('信号合同定义不完整')
+    return found
+
+
+def prepare_signal_reuse(lock):
+    """仅接纳本次用户已完成的 r1 signals，逐文件与执行代码审计后绑定。"""
+    if sha256_file(ROOT/R1_LOCK)!=R1_SHA: raise ValueError('r1 来源锁漂移')
+    old=json.loads((ROOT/R1_LOCK).read_text())
+    for key in ('protocol','seeds','conditions','count','entries','validation_rows','plot_row_ids',
+                'cache_files','dataset_index','frequencies','shifts','source_lock','reference','reference_manifest'):
+        if old[key]!=lock[key]: raise ValueError(f'信号复用合同变化: {key}')
+    path=ROOT/R1_SIGNALS
+    verify_attempt(path,R1_SHA,'signals')
+    environment=json.loads((path/'environment.json').read_text())
+    if environment['git']['status_porcelain']: raise ValueError('r1 signals 工作树不干净')
+    commit=environment['git']['commit']
+    selected={
+        'resp_train/paper_evidence/e4_r3_norm.py':('TRANSFORMS','make_shifts'),
+        'resp_train/paper_evidence/e4_r3_norm_runtime.py':('COUNT','validation_data','signals'),
+    }
+    audit={}
+    # 其余 resp_train 文件必须与 r1 字节一致，覆盖信号、指标、数据及 cache 路径。
+    for rel,expected in old['code_files'].items():
+        if not rel.startswith('resp_train/'): continue
+        if rel not in selected:
+            prior.source.verify(ROOT/rel,expected)
+            continue
+        historical=subprocess.check_output(['git','show',f'{commit}:{rel}'],cwd=ROOT)
+        if hashlib.sha256(historical).hexdigest()!=expected['sha256']:
+            raise ValueError('r1 执行 commit 与锁内代码不符')
+        before=signal_nodes(historical,selected[rel]); after=signal_nodes((ROOT/rel).read_bytes(),selected[rel])
+        if before!=after: raise ValueError(f'信号函数定义变化: {rel}')
+        audit[rel]=after
+    meta=json.loads((path/'signals_receipt.json').read_text())
+    if (meta['count']!=COUNT or meta['transforms']!=list(TRANSFORMS) or meta['offsets']!=lock['shifts']
+            or meta['reference']!=lock['reference'] or meta['model_inference'] is not False):
+        raise ValueError('r1 signals 回执不匹配')
+    return dict(path=str(path.resolve()),manifest=identity(path/'manifest.json'),
+        implementation_lock={'path':str(ROOT/R1_LOCK),**identity(ROOT/R1_LOCK)},
+        implementation_lock_sha256=R1_SHA,source_commit=commit,signal_definitions=audit)
+
+
+def verify_signals(path,lock,digest):
+    path=Path(path).resolve()
+    compatible=lock.get('compatible_signals')
+    if compatible is not None and path==Path(compatible['path']).resolve():
+        item=compatible['implementation_lock']; prior.source.verify(Path(item['path']),item)
+        prior.source.verify(path/'manifest.json',compatible['manifest'])
+        return verify_attempt(path,compatible['implementation_lock_sha256'],'signals')
+    return verify_attempt(path,digest,'signals')
+
+
+def signal_entry():
+    """已验收的同口径 signals 直接返回原目录，避免重复真实数据阶段。"""
+    lock,digest=load_lock()
+    if 'compatible_signals' in lock:
+        path=Path(lock['compatible_signals']['path']); verify_signals(path,lock,digest)
+        print('复用已完成的 r1 signals（文件身份已核验）',flush=True)
+        return path
+    return signals()
 
 
 @contextmanager
@@ -181,20 +262,49 @@ def signals():
     return output
 
 
-def batch_conditions(model,batch,reference,shifts,device,native_predictions=None):
+def batch_conditions(model,batch,reference,shifts,device,native_predictions=None,audit=None):
     """同一 batch 顺序跑完整矩阵，FULL 的层间 tensor 只在该 batch 暂存。"""
     baseline=None; mean_trace=None
     native=native_predictions if native_predictions is not None else collect_predictions(model,[batch],device=device,max_windows=len(batch['x']),use_amp=True)
     for condition in CONDITIONS:
         wrapper=NormIntervention(model,condition,reference,shifts,baseline,mean_trace)
-        result=collect_predictions(wrapper,[batch],device=device,max_windows=len(batch['x']),use_amp=True)
+        details=dict(condition=condition,batch_size=len(batch['x']))
+        if audit: audit(dict(details,status='started'))
+        try:
+            result=collect_predictions(wrapper,[batch],device=device,max_windows=len(batch['x']),use_amp=True)
+            if not np.isfinite(result['r_tho_hat']).all(): raise FloatingPointError('prediction 非有限')
+            if condition.startswith('FULL__'):
+                actual=result['r_tho_hat']; expected=native['r_tho_hat']
+                if actual.shape!=expected.shape: raise ValueError('FULL 波形 shape 不符')
+                difference=np.abs(actual.astype(np.float64)-expected.astype(np.float64))
+                details['waveform_max_abs']=float(difference.max())
+                details['waveform_mismatched']=int((difference>1e-6+1e-5*np.abs(expected)).sum())
+                details['gn_stats_vs_full']={} if baseline is None else {
+                    name:dict(mean_max_abs=float((stats.mean-baseline.natural[name].mean).abs().max()),
+                              rstd_max_abs=float((stats.rstd-baseline.natural[name].rstd).abs().max()))
+                    for name,stats in wrapper.trace.natural.items()}
+                np.testing.assert_allclose(actual,expected,rtol=1e-5,atol=1e-6)
+        except BaseException as exc:
+            details.update(status='failed',error=str(exc),gn_self_replay_max_abs=wrapper.trace.replay_max_abs,
+                           gn_formula_max_abs=wrapper.trace.formula_max_abs)
+            if audit: audit(details)
+            exc.add_note(f'R3 condition={condition}, batch={len(batch["x"])}, waveform_max_abs={details.get("waveform_max_abs")}')
+            raise
+        if audit: audit(dict(details,status='completed',gn_self_replay_max_abs=wrapper.trace.replay_max_abs,
+                             gn_formula_max_abs=wrapper.trace.formula_max_abs))
         if condition=='FULL__NAT': baseline=wrapper.trace
         if condition=='TRAIN_MEAN__NAT':
             # STAT_ONLY 只需要首层统计，不能把 TRAIN_MEAN 的整批大特征一直留在 GPU。
             mean_trace=Trace(natural={'norm':wrapper.trace.natural['norm']})
-        if condition.startswith('FULL__'):
-            np.testing.assert_allclose(result['r_tho_hat'],native['r_tho_hat'],rtol=1e-5,atol=1e-6)
         yield condition,result,wrapper.trace,baseline
+
+
+def condition_audit(output,**context):
+    def save(record):
+        # 只追加当前 attempt 的诊断；每条件开始与结束均落盘，失败时保留现场。
+        with (output/'condition_diagnostics.jsonl').open('a') as stream:
+            stream.write(json.dumps(dict(context,**record),ensure_ascii=False,allow_nan=False)+'\n')
+    return save
 
 
 def gpu_smoke(device):
@@ -213,7 +323,8 @@ def gpu_smoke(device):
                 shifts=torch.from_numpy(make_shifts(batch_size)); reference=torch.linspace(.02,.3,97)
                 torch.cuda.empty_cache(); torch.cuda.reset_peak_memory_stats(device)
                 seen=[]; replay=0.
-                for condition,result,trace,baseline in batch_conditions(model,batch,reference,shifts,device):
+                audit=condition_audit(output,seed=entry['seed'])
+                for condition,result,trace,baseline in batch_conditions(model,batch,reference,shifts,device,audit=audit):
                     if not np.isfinite(result['r_tho_hat']).all(): raise FloatingPointError('smoke prediction 非有限')
                     seen.append(condition); replay=max(replay,*trace.replay_max_abs.values())
                     del trace
@@ -240,7 +351,7 @@ def validate_gpu(path,digest,environment):
 def evaluate(seed,device,signal_receipt,gpu_receipt):
     lock,digest=load_lock(); environment=prior.source.runtime_preflight(device)
     validate_gpu(gpu_receipt,digest,environment)
-    verify_attempt(signal_receipt,digest,'signals')
+    verify_signals(signal_receipt,lock,digest)
     signal_meta=json.loads((signal_receipt/'signals_receipt.json').read_text())
     if (signal_meta['count']!=COUNT or signal_meta['transforms']!=list(TRANSFORMS) or signal_meta['offsets']!=lock['shifts']
             or signal_meta['reference']!=lock['reference'] or signal_meta['model_inference'] is not False):
@@ -270,7 +381,8 @@ def evaluate(seed,device,signal_receipt,gpu_receipt):
             count=len(batch['x']); slice_rows=rows.iloc[cursor:cursor+count].to_dict('records')
             shifts=torch.tensor(lock['shifts'][cursor:cursor+count],dtype=torch.int64)
             reference_predictions={'r_tho_hat':native['r_tho_hat'][cursor:cursor+count]}
-            for condition,predictions,trace,baseline in batch_conditions(model,batch,reference,shifts,device,reference_predictions):
+            audit=condition_audit(output,seed=seed,row_offset=cursor)
+            for condition,predictions,trace,baseline in batch_conditions(model,batch,reference,shifts,device,reference_predictions,audit=audit):
                 metrics=evaluate_task_predictions(predictions,cfg,include_test_only=False,method='W0_FULL')
                 prior.source.validate_metrics(metrics,rows.iloc[cursor:cursor+count])
                 metric_frames[condition].append(metrics)
@@ -333,7 +445,7 @@ def summarize():
         if len(frame)!=22*8*5 or not frame.seed.eq(seed).all() or set(frame.condition)!=set(CONDITIONS): raise ValueError('配对矩阵不完整')
         frames.append(frame); fact.append(factorial_table(frame)); sources[str(seed)]={'path':str(path),'manifest':identity(path/'manifest.json')}
     combined=pd.concat(frames,ignore_index=True); factorial=pd.concat(fact,ignore_index=True)
-    verify_attempt(Path(signal_source['path']),digest,'signals')
+    verify_signals(Path(signal_source['path']),lock,digest)
     prior.source.verify(Path(signal_source['path'])/'manifest.json',signal_source['manifest'])
     summary=[]
     for key,g in combined.groupby(['condition','scope','group','metric'],sort=False,dropna=False):

@@ -47,6 +47,14 @@
 并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
 以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
 
+## E4：R3 时间结构与 GN 统计控制
+
+入口 `scripts/eval_e4_r3_temporal_normalization.py`，科学矩阵见
+[执行协议](../docs/experiments/e4_r3_temporal_normalization_protocol_20260921.md)，当前实现和命令见
+[r2 修复附件](../docs/experiments/e4_r3_temporal_normalization_r2_20260921.md)。
+原 W0 三个 selected checkpoint、完整 validation、每 seed 22 条件；当前需要用户运行 r2 `gpu-smoke`，通过后再 `evaluate`。
+已完成的 r1 `signals` 经代码与文件身份核验绑定至 r2，可直接复用。旧失败 GPU attempt 和旧锁保留。
+
 ## E4：频带编码与聚合干预诊断
 
 专项协议：`docs/experiments/e4_band_encoding_aggregation_protocol_20260918.md`。

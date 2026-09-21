@@ -181,6 +181,97 @@ def test_bf16_full_replays_with_all_gn_fixed():
             torch.testing.assert_close(result['waveform'],expected['waveform'],rtol=1e-5,atol=1e-6)
 
 
+@pytest.mark.parametrize('shape,groups', [((2,48,9,17),8),((2,96,31),12)])
+def test_replay_changed_statistics_against_independent_float64_oracle(shape,groups):
+    module=nn.GroupNorm(groups,shape[1]).eval()
+    x=torch.randn(shape,generator=torch.Generator().manual_seed(2109))
+    with torch.no_grad():
+        module.weight.copy_(torch.linspace(-1.3,1.1,shape[1]))
+        module.bias.copy_(torch.linspace(-.4,.3,shape[1]))
+        native=module(x); natural=core.native_stats(module,x,native)
+        selected=core.GNStats(natural.mean+.2,natural.rstd*.7)
+        result=core.replay_norm(module,x,selected,natural,native)
+        grouped=x.double().reshape(shape[0],groups,-1)
+        oracle=((grouped-selected.mean.double()[:,:,None])*selected.rstd.double()[:,:,None]).reshape(shape)
+        broad=(1,shape[1],*([1]*(len(shape)-2)))
+        oracle=oracle*module.weight.double().reshape(broad)+module.bias.double().reshape(broad)
+        torch.testing.assert_close(result.double(),oracle,rtol=1e-5,atol=1e-6)
+        assert not torch.equal(result,native)
+        copied=core.GNStats(natural.mean.clone(),natural.rstd.clone())
+        assert torch.equal(core.replay_norm(module,x,copied,natural,native),native)
+
+
+def test_native_rounding_residual_does_not_cross_bf16_boundary_on_replay():
+    # 模拟两个正确 FP32 kernel 的一 ULP 差异，随后 BF16 量化会把误差放大。
+    module=nn.GroupNorm(1,1).eval(); x=torch.tensor([[[-1.,1.]]])
+    with torch.no_grad():
+        module.bias.fill_(1.00390625-module(x)[0,0,1])
+        native=module(x); natural=core.native_stats(module,x,native)
+        direct=core.frozen_norm(module,x,natural,native.dtype)
+        assert direct[0,0,1]==1.00390625
+        native[0,0,1]=torch.nextafter(direct[0,0,1],torch.tensor(float('inf')))
+        torch.testing.assert_close(direct,native,rtol=1e-5,atol=1e-6)
+        assert not torch.equal(direct.bfloat16(),native.bfloat16())
+        selected=core.GNStats(natural.mean.clone(),natural.rstd.clone())
+        replay=core.replay_norm(module,x,selected,natural,native)
+        assert torch.equal(replay,native) and torch.equal(replay.bfloat16(),native.bfloat16())
+
+
+def test_full_failure_records_condition_and_keeps_gate(tmp_path,monkeypatch):
+    model=fixture_model(); batch=runtime.prior.synthetic_batch(1,7)
+    batch['meta']={'dataset_row_id':torch.tensor([1]),'samp_id':torch.tensor([9]),'split':['val']}
+    original=runtime.collect_predictions; calls=0
+    def faulty(*args,**kwargs):
+        nonlocal calls
+        calls+=1; result=original(*args,**kwargs)
+        if calls==3: result['r_tho_hat']=result['r_tho_hat']+.004
+        return result
+    monkeypatch.setattr(runtime,'collect_predictions',faulty)
+    with pytest.raises(AssertionError) as error:
+        list(runtime.batch_conditions(model,batch,torch.zeros(97),torch.from_numpy(core.make_shifts(1)),
+                                      'cpu',audit=runtime.condition_audit(tmp_path,seed=1)))
+    records=[json.loads(line) for line in (tmp_path/'condition_diagnostics.jsonl').read_text().splitlines()]
+    assert records[-1]['status']=='failed' and records[-1]['condition']=='FULL__GN1_FIXED'
+    assert records[-1]['waveform_max_abs']>.0039 and records[-1]['waveform_mismatched']>0
+    assert any('FULL__GN1_FIXED' in note for note in error.value.__notes__)
+    assert not any(m._forward_hooks for m in model.modules())
+
+
+def test_reuse_signals_requires_frozen_code_contract_and_exact_artifact(tmp_path,monkeypatch):
+    monkeypatch.setattr(runtime,'ROOT',tmp_path); monkeypatch.setattr(runtime,'COUNT',2)
+    core_path='resp_train/paper_evidence/e4_r3_norm.py'
+    runtime_path='resp_train/paper_evidence/e4_r3_norm_runtime.py'
+    sources={core_path:'TRANSFORMS=("FULL",)\ndef make_shifts(n): return n\n',
+             runtime_path:'COUNT=2\ndef signals(): return 1\ndef validation_data(): return 2\n',
+             'resp_train/paper_evidence/e4_r3_signals.py':'def signal_window(): return 3\n'}
+    for rel,text in sources.items():
+        path=tmp_path/rel; path.parent.mkdir(parents=True,exist_ok=True); path.write_text(text)
+    fields=('protocol','seeds','conditions','count','entries','validation_rows','plot_row_ids','cache_files',
+            'dataset_index','frequencies','shifts','source_lock','reference','reference_manifest')
+    old={key:[] for key in fields}; old['shifts']=[[60,61,62],[63,64,65]]
+    old['code_files']={rel:runtime.identity(tmp_path/rel) for rel in sources}
+    source=tmp_path/'old_lock.json'; runtime.write_json(source,old)
+    old_digest=runtime.sha256_file(source)
+    monkeypatch.setattr(runtime,'R1_LOCK',source); monkeypatch.setattr(runtime,'R1_SHA',old_digest)
+    with runtime.attempt('signals',old_digest) as signal:
+        runtime.write_json(signal/'environment.json',{'git':{'commit':'fixture','status_porcelain':''}})
+        runtime.write_json(signal/'signals_receipt.json',dict(count=2,transforms=list(core.TRANSFORMS),
+            offsets=old['shifts'],reference=old['reference'],model_inference=False))
+        for name in ('associations.csv','paired_associations.csv','rows.csv'): (signal/name).write_text('fixture\n1\n')
+    monkeypatch.setattr(runtime,'R1_SIGNALS',signal)
+    monkeypatch.setattr(runtime.subprocess,'check_output',lambda command,**kwargs:sources[command[-1].split(':',1)[1]].encode())
+    compatible=runtime.prepare_signal_reuse(old)
+    lock=dict(old,compatible_signals=compatible); digest='c'*64
+    runtime.verify_signals(signal,lock,digest)
+    with pytest.raises(ValueError): runtime.verify_signals(signal,{},digest)
+    (tmp_path/runtime_path).write_text(sources[runtime_path].replace('return 1','return 9'))
+    with pytest.raises(ValueError,match='信号函数'): runtime.prepare_signal_reuse(old)
+    (tmp_path/runtime_path).write_text(sources[runtime_path])
+    with pytest.raises(ValueError,match='合同变化'): runtime.prepare_signal_reuse(dict(old,shifts=[]))
+    (signal/'associations.csv').write_text('tampered\n')
+    with pytest.raises(RuntimeError): runtime.verify_signals(signal,lock,digest)
+
+
 def test_full_evaluation_runtime_native_metrics(tmp_path,monkeypatch):
     from resp_train.engine import collect_predictions
     from resp_train.metrics.task import evaluate_task_predictions

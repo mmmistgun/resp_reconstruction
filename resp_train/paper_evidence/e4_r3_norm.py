@@ -70,6 +70,7 @@ def native_stats(module,x,y):
 
 
 def frozen_norm(module,x,stats,dtype):
+    """独立仿射公式，用于核对原生输出和干预输出的数值误差。"""
     n,c=x.shape[:2]; groups=module.num_groups
     if stats.mean.shape!=(n,groups) or stats.rstd.shape!=(n,groups):
         raise ValueError('GN 统计的窗口/组 shape 不符')
@@ -89,12 +90,51 @@ def frozen_norm(module,x,stats,dtype):
     return output
 
 
+def replay_norm(module,x,selected,natural,output):
+    """在原生输出上施加统计变化，避免同源重放引入额外舍入。
+
+    实数恒等式：y_fixed = y_native + gamma *
+      [(x-mu_native)*(r_fixed-r_native) + (mu_native-mu_fixed)*r_fixed]。
+    所有固定统计条件走相同公式；统计相同时差值自然为零。
+    这保留原生 GN 的舍入残差，独立 affine 检查仍由调用方执行。
+    """
+    n,c=x.shape[:2]; g=module.num_groups
+    for stats in (selected,natural):
+        if stats.mean.shape!=(n,g) or stats.rstd.shape!=(n,g):
+            raise ValueError('GN 统计的窗口/组 shape 不符')
+        finite(stats.mean); finite(stats.rstd)
+        if bool((stats.rstd<=0).any()): raise FloatingPointError('GN 逆标准差非正')
+    with torch.autocast(x.device.type,enabled=False):
+        broad=(n,c,*([1]*(x.ndim-2)))
+        expand=lambda v:v.float().repeat_interleave(c//g,1).reshape(broad)
+        # 分块限制首层 B×48×97×360 特征在 FP32 下的临时显存。
+        delta_r=expand(selected.rstd-natural.rstd)
+        offset=expand((natural.mean-selected.mean)*selected.rstd)
+        mu=expand(natural.mean)
+        gamma=module.weight.float().reshape(1,c,*([1]*(x.ndim-2)))
+        result=torch.empty_like(output)
+        for start in range(0,n,8):
+            sl=slice(start,start+8)
+            correction=torch.addcmul(offset[sl],x[sl].float()-mu[sl],delta_r[sl])*gamma
+            result[sl]=(output[sl].float()+correction).to(output.dtype)
+    finite(result)
+    return result
+
+
+def check_formula(actual,expected):
+    # FP32 保留原协议容差；低精度 GN 输出允许自身的量化分辨率。
+    low=actual.dtype in (torch.bfloat16,torch.float16)
+    eps=torch.finfo(actual.dtype).eps if low else 0.
+    torch.testing.assert_close(actual,expected,rtol=max(1e-5,eps),atol=max(1e-6,eps))
+
+
 @dataclass
 class Trace:
     natural: dict[str,GNStats]=field(default_factory=dict)
     used: dict[str,GNStats]=field(default_factory=dict)
     points: dict[str,torch.Tensor]=field(default_factory=dict)
     replay_max_abs: dict[str,float]=field(default_factory=dict)
+    formula_max_abs: dict[str,float]=field(default_factory=dict)
 
 
 class NormIntervention(nn.Module):
@@ -131,7 +171,7 @@ class NormIntervention(nn.Module):
                 elif name=='norm' and mode=='STAT_ONLY':
                     selected=self.mean_trace.natural[name]
                 trace.used[name]=selected
-                # 同源重放也验收，不用“统计相同时返回原输出”的捷径掩盖差异。
+                # 独立公式检查原生数值残差；FULL 波形仍需通过原协议严格容差。
                 same=frozen_norm(module,args[0],stats,output.dtype)
                 try:
                     torch.testing.assert_close(same,output,rtol=1e-5,atol=1e-6)
@@ -139,7 +179,16 @@ class NormIntervention(nn.Module):
                     exc.add_note(f'GN 同源重放失败: layer={name}, condition={self.condition}')
                     raise
                 trace.replay_max_abs[name]=float((same.float()-output.float()).abs().max())
-                result=output if selected is stats else frozen_norm(module,args[0],selected,output.dtype)
+                result=output
+                if mode=='ALL_W_GN_FIXED' or (name=='norm' and mode in ('GN1_FIXED','STAT_ONLY')):
+                    result=replay_norm(module,args[0],selected,stats,output)
+                    expected=frozen_norm(module,args[0],selected,output.dtype)
+                    try:
+                        check_formula(result,expected)
+                    except AssertionError as exc:
+                        exc.add_note(f'GN 固定统计公式失败: layer={name}, condition={self.condition}')
+                        raise
+                    trace.formula_max_abs[name]=float((result.float()-expected.float()).abs().max())
                 if name=='norm': trace.points['gn_front']=result.detach()
                 return result
             return hook
