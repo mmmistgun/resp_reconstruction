@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
+
 先确定任务所属实验，再读取对应协议中与当前任务有关的章节；不要默认把某一协议应用到整个仓库。
 
 - THO loss/metrics restart：`docs/experiments/loss_metrics_restart_plan_20260729.md`

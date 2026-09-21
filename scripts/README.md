@@ -47,13 +47,22 @@
 并交付 32100 条逐窗口指标、同量 FiLM 配对记录、三 seed 汇总及 delta 表。
 以 `manifest.json` 和 `freeze_receipt.json` 确认完成，失败 lifecycle 与部分产物原地保留。
 
+## E4：结项入口
+
+截至 2026-09-22，E4 的 15 次新训练、15 次候选 test 评价、两轮 validation 机制检查及效率测量均已完成。
+当前状态、完整五指标比较、结论边界和产物索引统一见
+[E4 结项报告](../docs/experiments/e4_closeout_20260922.md)。以下 E4 命令保留用于追溯执行入口；已完成阶段保持冻结。
+
+结项数据见 [性能、代价与机制证据数据集](../docs/experiments/e4_closeout_data_20260922/README.md)。
+`collect_e4_closeout_data.py` 从冻结 CSV/benchmark JSON 整理数据并登记来源身份，可用 `--output` 指定新的核对目录。
+
 ## E4：R3 时间结构与 GN 统计控制
 
 入口 `scripts/eval_e4_r3_temporal_normalization.py`，科学矩阵见
 [执行协议](../docs/experiments/e4_r3_temporal_normalization_protocol_20260921.md)，当前实现和命令见
 [r2 修复附件](../docs/experiments/e4_r3_temporal_normalization_r2_20260921.md)。
-原 W0 三个 selected checkpoint、完整 validation、每 seed 22 条件；当前需要用户运行 r2 `gpu-smoke`，通过后再 `evaluate`。
-已完成的 r1 `signals` 经代码与文件身份核验绑定至 r2，可直接复用。旧失败 GPU attempt 和旧锁保留。
+原 W0 三个 selected checkpoint、完整 validation、每 seed 22 条件；r2 GPU smoke、三 seed 评价及汇总已完成。
+共享 signals 与完整结果见 [R3/GN 结果记录](../docs/experiments/e4_r3_temporal_normalization_results_20260921.md)。
 
 ## E4：频带编码与聚合干预诊断
 
@@ -69,8 +78,8 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
   --validation-summary '/mnt/disk_code/marques/resp_reconstruction/runs/e4_scale_aggregation_v2/summary/summary_71e6b8f753cc_20260918T055104Z_da596d615deb'
 ```
 
-锁排他生成；提交代码/协议/锁后，用户依协议顺序执行 `prepare-reference`、`gpu-smoke`、
-15 次 `evaluate` 和 `summarize`。checkpoint、原 cache 及已完成评价保持原身份。
+上述准备与全部 15 次 `evaluate`、`summarize` 均已完成，见
+[频带/聚合结果记录](../docs/experiments/e4_band_encoding_aggregation_results_20260919.md)。checkpoint、原 cache 及评价保持原身份。
 
 ## W0 CWT-FiLM 调制行为分析
 
@@ -110,6 +119,8 @@ batch-128 上下文并保存选中窗口；最后用 finalize --summary ... --ca
 产物根为主仓库的 runs/w0_cwt_film_behavior_v1/；每阶段排他创建 attempt，失败现场保留。
 
 ## E4 v2：四种尺度聚合固定矩阵
+
+状态：12 次训练、12 次 test 评价、GPU 验收、benchmark 与两份汇总均已完成并结项。下列为历史执行命令。
 
 协议：`docs/experiments/e4_scale_aggregation_v2_protocol_20260917.md`。
 当前工程修订：`docs/experiments/e4_scale_aggregation_v2_engineering_r2_20260917.md`；
@@ -185,6 +196,8 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python \
 test 每次完整 2310 窗口、8 samp_id，12 次新记录共 27720 条；有限退化结果保留质量标志。
 
 ## E4：W0 四区域尺度聚合
+
+状态：三 seed 训练、三次 test 评价、GPU 验收、benchmark 与两份汇总均已完成并结项。下列为历史执行命令。
 
 专项协议：`docs/experiments/e4_w0_scale_aggregation_protocol_20260917.md`。
 独立入口 `run_e4_w0_scale_aggregation.py` 保持 W0 公共初始化、fill=65 和完整目标，

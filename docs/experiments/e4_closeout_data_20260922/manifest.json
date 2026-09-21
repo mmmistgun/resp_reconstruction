@@ -1,0 +1,47 @@
+{
+  "kind": "e4_closeout_dataset",
+  "status": "completed",
+  "table_rows": 14,
+  "paired_rows": 144,
+  "subject_direction_rows": 42,
+  "signal_association_rows": 64,
+  "subjects": [
+    952,
+    956,
+    961,
+    971,
+    972,
+    1308,
+    1378
+  ],
+  "files": {
+    "benchmark_measurement_groups.csv": {
+      "size_bytes": 5139,
+      "sha256": "2da0d07e2804cd3e0106c909da4a5645aa9ae445914280cc7cc3f30d641934ab"
+    },
+    "mechanism_paired_points.csv": {
+      "size_bytes": 21118,
+      "sha256": "1014ae0f44eed056bb7280447e9c692a13403e1be1a3361c4b7e13368b7cf12c"
+    },
+    "mechanism_signal_associations.csv": {
+      "size_bytes": 8365,
+      "sha256": "e797027563f6fac6777314178a0a27486c1c6edec47f5a8110e8a9c88623b94e"
+    },
+    "mechanism_signal_paired_changes.csv": {
+      "size_bytes": 4881,
+      "sha256": "69997b5331af02e8ba7179bc0badc80454013c45711e42f352b3e430d8e4cf8e"
+    },
+    "mechanism_subject_directions.csv": {
+      "size_bytes": 2539,
+      "sha256": "e6f10d5cfbe1db2dc432b1f61540fddca291c6108737ceb235d887d979faae15"
+    },
+    "performance_cost.csv": {
+      "size_bytes": 5644,
+      "sha256": "c34d8e77b43fe7f2713752493e98a866db0ee6392494c3e572af92751e086571"
+    },
+    "source_manifest.json": {
+      "size_bytes": 5664,
+      "sha256": "0ea0f455c82ada81eaa3f0e04fd0693dda4170be3e3d6f1957567f876917585f"
+    }
+  }
+}
