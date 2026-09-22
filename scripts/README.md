@@ -56,6 +56,34 @@
 结项数据见 [性能、代价与机制证据数据集](../docs/experiments/e4_closeout_data_20260922/README.md)。
 `collect_e4_closeout_data.py` 从冻结 CSV/benchmark JSON 整理数据并登记来源身份，可用 `--output` 指定新的核对目录。
 
+## E5：W0 时域前端替换
+
+专项协议为 [E5 时域前端方案](../docs/experiments/e5_temporal_frontend_protocol_20260922.md)。唯一候选
+`e5_tfe101_aa10_res_w0` 使用固定 511-tap `100→10 Hz` 抗混叠、`1→96,k11` 局部 embedding
+和 zero-init `96-channel,k5` depthwise residual；不在前端增加 normalization 或 pointwise mixer。
+W 条件分支、六层 BiMamba2、FiLM、decoder 和完整 loss 固定。训练最多 80 epochs/6400 planned updates；
+完整 validation Local-RR early stop 固定为 `min_epoch=30 / patience=15 / min_delta=0`，最早在 epoch 30 触发，
+LR 日程不因提前停止重标定。
+
+当前仅完成 P1 代码和 synthetic CPU 验收：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
+  tests/test_e5_temporal_frontend.py tests/test_crd_tf_v1_model.py \
+  tests/test_resp_temporal_v1_models.py -q
+./.venv/bin/python scripts/run_e5_temporal_frontend.py check-config
+```
+
+提交实现并保持工作树干净后，下一步只读准备实现锁：
+
+```bash
+./.venv/bin/python scripts/run_e5_temporal_frontend.py prepare-lock
+```
+
+该命令会重新核验冻结 W0 checkpoint/validation 来源和 train/validation W cache 的完整字节身份，
+生成不可覆盖的 `docs/experiments/e5_temporal_frontend_implementation_lock_20260923.json`。
+GPU acceptance、benchmark 和三 seed formal 尚未授权；不要在当前阶段运行对应子命令。test 入口未建立。
+
 ## E4：R3 时间结构与 GN 统计控制
 
 入口 `scripts/eval_e4_r3_temporal_normalization.py`，科学矩阵见

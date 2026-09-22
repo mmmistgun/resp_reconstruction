@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "audit_id": "e5-temporal-frontend-source-design-audit-v1-20260922",
+  "status": "source_and_design_audit_complete_implementation_not_authorized",
+  "repository_head": "f83f2c0ef2ec2a1b6e05f2ae392de398077abeab",
+  "workspace_at_start": {
+    "branch": "main",
+    "ahead_of_origin": 87,
+    "preexisting_untracked": [
+      "docs/experiments/e5_temporal_frontend_handoff_20260922.md"
+    ]
+  },
+  "scope": {
+    "real_waveforms_read": false,
+    "train_or_validation_cache_read": false,
+    "test_metrics_read": false,
+    "test_cache_read": false,
+    "gpu_used": false,
+    "training_executed": false,
+    "benchmark_executed": false,
+    "checkpoint_cpu_state_read": true,
+    "synthetic_model_construction_used": true,
+    "synthetic_model_forward_used": true,
+    "synthetic_fixed_operator_forward_used": true
+  },
+  "source_files": {
+    "docs/experiments/e4_w0_scale_aggregation_source_audit_20260917.json": "198cbb396b0503d7a3e889be5e90ae401371ee537c7ab559b14f842f6ad38090",
+    "docs/experiments/e4_closeout_20260922.md": "5f4b33ebbfae131a7fd504a3783b297011fdbe1b99da92130149681793366d16",
+    "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json": "11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69",
+    "docs/experiments/resp_temporal_v1_candidate_lock_20260820.json": "b4a2c83310fa2ce9519e3ca25814aea0b179458ab52d6380a932545c99c25f9b",
+    "docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json": "6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872",
+    "resp_train/crd/frontends.py": "2781002e9eadb79516c2e9eee04f1f89614412dcfd2ca5ab9c423225a6dfe792",
+    "resp_train/crd/model.py": "b4755c939961ab3a73c258c64ad0a501918779d6e133dd6bf70b88cc0b57ad5e",
+    "resp_train/crd/tf_v1_model.py": "80d8ac5a3b9029b283830b48da118212f58ade51cda164e8040f48fd9c900b28",
+    "resp_train/temporal/blocks.py": "c43b8deca4e5ea185c2808a6e6c8b06172b77f811449cbb3d9e3249a3dd83435",
+    "resp_train/temporal/config.py": "8d8667727c9c6bd29074df378dc5c35100f50564ce43f92aab4bbb68a3c1c8aa",
+    "resp_train/temporal/model.py": "5853c62151d0ab65a205feb949250da172326189ce18103e4ce98e7d59a10cce",
+    "resp_train/temporal/initialization.py": "1981e087b60d2428d7a88368ba1008d66ac4af1a807e0120f2cd96adf629f666",
+    "configs/crd_tf_v1/crd_tf102_w_formal.yaml": "4f7fb910871c4c6a33fa5e59919eff6e836b347c257830345ac9a036e73c071e"
+  },
+  "rtm_exact_implementation_match": {
+    "blocks_matches_receipt": true,
+    "config_matches_receipt": true,
+    "model_matches_receipt": true,
+    "initialization_matches_receipt": true,
+    "signal_lock_matches_config_constant": true,
+    "candidate_lock_matches_config_constant": true
+  },
+  "w0_checks": [
+    {
+      "seed": 20260811,
+      "selected_epoch": 13,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861",
+      "checkpoint_sha256": "18425476831628d9614925dc6835de97ab466aac8cce157f7d95335f504c70f5",
+      "config_sha256": "675232d48b7aadb2f0116e43a9cb737a5ac1737013dd54c4544e4f49cc1b2843",
+      "manifest_sha256": "0f44d8ca2a461ac02543cf9da4fdee789c46aa978474f939ebfb4983e08dc5cf",
+      "validation_metrics_sha256": "92415b0abc8f915817af21a3b4e50df45d10a61f8af227f76b40c7b34bc803ee",
+      "strict_current_load": true,
+      "state_tensor_count": 194,
+      "all_floating_or_complex_state_finite": true,
+      "model_parameters": 1219850,
+      "w_branch_parameters": 150048
+    },
+    {
+      "seed": 20260812,
+      "selected_epoch": 15,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130",
+      "checkpoint_sha256": "f6a174f88067bd88f0739faee6ce3c7cada79e8b43171a6a3d2e12a9798a5a61",
+      "config_sha256": "497f6dfab8e350ee145a568deb6d72df631a81ada5dd2c00847b500323f74eeb",
+      "manifest_sha256": "5475a24265ee24f8836fde29450c79b019efa8d7c09e1c1a3c4d96589db7d313",
+      "validation_metrics_sha256": "059f87afecdb9adb8650adf004b51028b3c01e32b5de7a8b5223c55a0c108072",
+      "strict_current_load": true,
+      "state_tensor_count": 194,
+      "all_floating_or_complex_state_finite": true,
+      "model_parameters": 1219850,
+      "w_branch_parameters": 150048
+    },
+    {
+      "seed": 20260813,
+      "selected_epoch": 14,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006",
+      "checkpoint_sha256": "efafbb653507fbee782f5946a07660121737bfd5339ff2b13b81b4b1e3a0fe99",
+      "config_sha256": "572711e26097b089e2e190d7e583ca59da0f162dfd5fb0421331cc7932981cc9",
+      "manifest_sha256": "42f5031e5c97d70f67d4dfb817413120d2c9d7824839531e5c1613a6f5475986",
+      "validation_metrics_sha256": "4d9c7ca6fcb25f26bacb64cec3cfe485f2f8fae0bdd3cc4f4802a02bf86a2dd3",
+      "strict_current_load": true,
+      "state_tensor_count": 194,
+      "all_floating_or_complex_state_finite": true,
+      "model_parameters": 1219850,
+      "w_branch_parameters": 150048
+    }
+  ],
+  "w0_frontend": {
+    "input_shape": ["B", 1, 18000],
+    "input_fs_hz": 100.0,
+    "right_zero_pad_samples": 48,
+    "padded_length": 18048,
+    "patch_length": 256,
+    "patch_stride": 128,
+    "token_count": 140,
+    "token_channels": 16,
+    "mixer_blocks": 2,
+    "interpolation": {
+      "mode": "linear",
+      "size": 1800,
+      "align_corners": false,
+      "source_coordinate_formula": "u(i)=(i+0.5)*140/1800-0.5, clamped to [0,139]",
+      "left_clamped_output_count": 6,
+      "right_clamped_output_count": 6,
+      "patch_center_seconds_formula": "1.275+1.28*j",
+      "unclamped_physical_formula_seconds": "0.6847777777777776+0.09955555555555556*i",
+      "strict_physical_10hz_alignment": false
+    },
+    "normalization": "two GroupNorm(1,16) per mixer block plus GroupNorm(12,96), all including time/spatial dimension in statistics",
+    "trainable_parameters": {
+      "encoder": 7056,
+      "adapter": 1536,
+      "adapter_norm": 192,
+      "total": 8784
+    },
+    "covered_macs_per_window": 3710080
+  },
+  "candidate": {
+    "arm": "e5_tfe101_aa10_res_w0",
+    "control_alias": "e5_tfe000_patch_w0",
+    "source_operator": "resp_train.temporal.blocks.FixedPolyphaseDecimator1D",
+    "planned_frontend_class": "independent E5 local-residual frontend; not yet implemented",
+    "construction": "construct current crd_tf102_w, then replace base.frontend under CRD module_seed(seed,'e5_temporal_frontend_aa10_residual')",
+    "flow": [
+      "fixed line-boundary Kaiser FIR 100-to-10 Hz: down=10, taps=511, cutoff=4.5 Hz",
+      "Conv1d 1-to-96 k11 p5 bias=false with Kaiming-normal initialization",
+      "z plus depthwise Conv1d 96 k5 p2 bias=false applied to SiLU(z); depthwise weight zero-initialized"
+    ],
+    "output_shape": ["B", 96, 1800],
+    "output_grid_seconds": "0.1*i, i=0..1799",
+    "normalization": "none inside frontend; preserve within-window signed amplitude, rely on downstream BiMamba2 RMS pre-norm/residual and existing refinement/head normalization",
+    "role_assignment": {
+      "temporal_frontend": "signed low-frequency displacement, local phase and morphology on an exact 10-Hz grid",
+      "frozen_w_branch": "0.03-to-8-Hz CWT log-magnitude time structure including high-carrier amplitude cues",
+      "six_layer_bimamba2": "long-range temporal dependencies and cross-channel mixing"
+    },
+    "boundary": {
+      "fixed_fir": "SciPy resample_poly padtype=line equivalent using full-window endpoint slope",
+      "learned_convolutions": "same-length zero padding",
+      "causal": false,
+      "interior_input_radius_samples_100hz": 325,
+      "interior_support_samples_100hz": 651,
+      "interior_support_seconds": 6.51,
+      "learned_receptive_field_tokens_10hz": 15,
+      "learned_receptive_field_seconds": 1.5,
+      "endpoint_global_dependency_from_line_slope": true
+    },
+    "dtype": {
+      "fixed_filter_autocast": false,
+      "float64_input_work_dtype": "float64",
+      "other_input_work_dtype": "float32",
+      "persistent_taps_dtype": "float64",
+      "amp_frontend_output_dtype": "learning-convolution autocast dtype"
+    },
+    "float64_reference_check": {
+      "input_shape": [2, 1, 18000],
+      "reference": "resp_train.temporal_signal_audit.fixed_resample with down=10, numtaps=511, cutoff=4.5, beta=8.6, padtype=line",
+      "output_shape": [2, 1, 1800],
+      "max_abs_error": 4.440892098500626e-16,
+      "atol": 5e-12,
+      "rtol": 5e-12,
+      "passed": true
+    },
+    "prototype_gradient_check": {
+      "input_shape": [2, 1, 18000],
+      "output_shape": [2, 96, 1800],
+      "output_finite": true,
+      "input_gradient_finite": true,
+      "local_embedding_gradient_finite": true,
+      "zero_init_depthwise_gradient_finite": true,
+      "zero_init_depthwise_nonzero_gradient_elements": 480,
+      "zero_init_depthwise_parameter_elements": 480,
+      "note": "standalone design-time prototype only; not integrated E5 implementation acceptance"
+    },
+    "trainable_parameters": {
+      "local_embedding_k11": 1056,
+      "zero_init_depthwise_residual_k5": 480,
+      "total": 1536
+    },
+    "fixed_persistent_values": 511,
+    "model_parameters": 1212602,
+    "delta_parameters_vs_w0": -7248,
+    "delta_model_percent": -0.5941714145181781,
+    "covered_macs_per_window": {
+      "fir_100_to_10": 919800,
+      "conv_1_to_96_k11": 1900800,
+      "depthwise_96_k5": 864000,
+      "total": 3684600,
+      "ratio_to_w0_frontend": 0.993132223250442
+    }
+  },
+  "planned_initialization_check": {
+    "seeds": [20260811, 20260812, 20260813],
+    "shared_state_prefix_excluded": "base.frontend.",
+    "shared_state_tensor_count_each_seed": 165,
+    "all_shared_tensors_bit_identical_each_seed": true,
+    "candidate_model_parameters_each_seed": 1212602,
+    "candidate_frontend_parameters_each_seed": 1536,
+    "candidate_state_tensor_count_each_seed": 168,
+    "note": "design-time prototype construction only; must become an implementation-lock test"
+  },
+  "scientific_matrix": {
+    "new_formal_runs": 3,
+    "seeds": [20260811, 20260812, 20260813],
+    "baseline_runs_reused": 3,
+    "train_windows": 10141,
+    "train_samp_ids": 32,
+    "validation_windows": 2675,
+    "validation_samp_ids": 7,
+    "max_epochs_per_seed": 80,
+    "planned_optimizer_updates_per_seed": 6400,
+    "minimum_completed_epochs_per_seed": 30,
+    "minimum_completed_optimizer_updates_per_seed": 2400,
+    "early_stopping": {
+      "monitor": "full_validation_local_rr_strict_minimum_earliest_tie",
+      "min_epoch": 30,
+      "patience": 15,
+      "min_delta": 0.0,
+      "wait_count_starts_at_epoch": 1,
+      "lr_schedule_rebased_on_early_stop": false
+    },
+    "checkpoint_selector": "strict minimum full-validation Local RR MAE; earliest epoch on tie",
+    "test_enabled": false
+  },
+  "attribution_limits": [
+    "complete frontend replacement jointly changes local encoder, resampling, normalization, boundary behavior, capacity and mixed-precision path",
+    "a first-round result cannot isolate anti-aliasing, interpolation, removal of frontend normalization or local residual encoding",
+    "the candidate intentionally delegates high-carrier magnitude-time structure to the fixed W branch and therefore does not test whether the temporal frontend should independently retain 4.5-to-8-Hz carrier information",
+    "140 multichannel tokens cannot be equated with 140 raw-waveform samples",
+    "RTM-v1 quality results are not evidence that this candidate will improve W0"
+  ],
+  "pending": [
+    "explicit user authorization for independent E5 implementation and synthetic CPU verification",
+    "implementation lock with fresh W train/validation cache byte and row-identity verification",
+    "separate user authorization and successful target-GPU multi-update, batch-128 lifecycle and matched efficiency acceptance",
+    "separate user authorization for three-seed formal train/validation",
+    "a new protocol and contemporaneous user authorization before any E5 test access"
+  ]
+}

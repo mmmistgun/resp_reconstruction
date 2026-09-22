@@ -34,6 +34,16 @@ def _early_stopping_step(
     return improved, 0 if improved else int(epochs_without_improvement) + 1
 
 
+def _early_stopping_should_stop(
+    *, epoch: int, min_epoch: int, epochs_without_improvement: int, patience: int
+) -> bool:
+    """达到最小 epoch 后才允许 patience 触发；等待计数仍从训练开始累计。"""
+
+    if int(epoch) <= 0 or int(min_epoch) <= 0 or int(patience) <= 0:
+        raise ValueError("early stopping epoch/min_epoch/patience 必须为正")
+    return int(epoch) >= int(min_epoch) and int(epochs_without_improvement) >= int(patience)
+
+
 class CRDExperiment:
     """冻结的 CRD-v1.1 S0/S1/S2 训练与 validation checkpoint 流程。"""
 
@@ -121,6 +131,14 @@ class CRDExperiment:
         early_stopping_enabled = bool(self.cfg.training.get("early_stopping_enabled", False))
         early_stopping_patience = int(self.cfg.training.get("early_stopping_patience", 0))
         early_stopping_min_delta = float(self.cfg.training.get("early_stopping_min_delta", 0.0))
+        early_stopping_has_min_epoch = "early_stopping_min_epoch" in self.cfg.training
+        early_stopping_min_epoch = int(self.cfg.training.get("early_stopping_min_epoch", 1))
+        if early_stopping_enabled and (
+            early_stopping_patience <= 0
+            or early_stopping_min_epoch <= 0
+            or early_stopping_min_epoch > total_epochs
+        ):
+            raise ValueError("early stopping 要求 patience>0 且 1<=min_epoch<=epochs")
         epochs_without_improvement = 0
         early_stopping_triggered = False
         for epoch in range(1, total_epochs + 1):
@@ -176,7 +194,13 @@ class CRDExperiment:
             if improved:
                 best_local_rr = val_local_rr
             early_stopping_triggered = bool(
-                early_stopping_enabled and epochs_without_improvement >= early_stopping_patience
+                early_stopping_enabled
+                and _early_stopping_should_stop(
+                    epoch=epoch,
+                    min_epoch=early_stopping_min_epoch,
+                    epochs_without_improvement=epochs_without_improvement,
+                    patience=early_stopping_patience,
+                )
             )
 
             record: dict[str, float | int] = {
@@ -205,6 +229,8 @@ class CRDExperiment:
                         "early_stopping_triggered": int(early_stopping_triggered),
                     }
                 )
+                if early_stopping_has_min_epoch:
+                    record["early_stopping_min_epoch"] = early_stopping_min_epoch
             if "loss_proto" in train_summary:
                 record.update(
                     {
@@ -240,7 +266,7 @@ class CRDExperiment:
                 ),
             }
             if early_stopping_enabled:
-                checkpoint_extra["early_stopping"] = {
+                early_stopping_state = {
                     "enabled": True,
                     "monitor": "validation_local_rr_mae_full_split",
                     "patience": early_stopping_patience,
@@ -249,6 +275,9 @@ class CRDExperiment:
                     "triggered": early_stopping_triggered,
                     "planned_epochs": total_epochs,
                 }
+                if early_stopping_has_min_epoch:
+                    early_stopping_state["min_epoch"] = early_stopping_min_epoch
+                checkpoint_extra["early_stopping"] = early_stopping_state
             if "loss_proto" in train_summary:
                 checkpoint_extra["structural_regularizer"] = {
                     "name": "prototype_orthogonality",
@@ -310,6 +339,11 @@ class CRDExperiment:
                             "triggered": early_stopping_triggered,
                             "planned_epochs": total_epochs,
                             "completed_epochs": int(history[-1]["epoch"]),
+                            **(
+                                {"min_epoch": early_stopping_min_epoch}
+                                if early_stopping_has_min_epoch
+                                else {}
+                            ),
                         }
                     }
                     if early_stopping_enabled

@@ -1,0 +1,56 @@
+schema_version: 1
+protocol: e5-temporal-frontend-v1-20260922
+arm: e5_tfe101_aa10_res_w0
+control_arm: e5_tfe000_patch_w0
+source:
+  w0_implementation_lock: docs/experiments/e4_w0_scale_aggregation_implementation_lock_20260917.json
+  w0_implementation_lock_sha256: 464e073dbd5707a30575d606dec2a84dcd89a161945e537c463b214a15c2b493
+  source_audit: docs/experiments/e5_temporal_frontend_source_audit_20260922.json
+frontend:
+  name: e5_tfe101_aa10_res_w0
+  input_fs_hz: 100.0
+  output_fs_hz: 10.0
+  output_channels: 96
+  output_length: 1800
+  anti_alias:
+    implementation: fixed_polyphase_line
+    window: kaiser
+    beta: 8.6
+    down: 10
+    numtaps: 511
+    cutoff_hz: 4.5
+  local_embedding:
+    in_channels: 1
+    out_channels: 96
+    kernel_size: 11
+    padding: 5
+    bias: false
+    initialization: kaiming_normal_fan_in_relu
+  local_residual:
+    type: silu_then_depthwise_conv1d
+    channels: 96
+    kernel_size: 5
+    padding: 2
+    bias: false
+    initialization: zeros
+  normalization: none
+  pointwise_mixer: false
+  trainable_parameters: 1536
+  model_parameters: 1212602
+matrix:
+  seeds: [20260811, 20260812, 20260813]
+  train_windows: 10141
+  validation_windows: 2675
+  train_samp_ids: 32
+  validation_samp_ids: 7
+  epochs: 80
+  optimizer_updates: 6400
+  early_stopping_enabled: true
+  early_stopping_min_epoch: 30
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  physical_batch: 128
+  gradient_accumulation_steps: 1
+  amp_dtype: bfloat16
+  checkpoint_selector: full_validation_local_rr_strict_minimum_earliest_tie
+  test_enabled: false
