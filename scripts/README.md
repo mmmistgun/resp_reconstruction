@@ -19,6 +19,53 @@
 - 独立测试集：现有 `test` 可在阶段性整理后重复评价，并可形成后续独立科研问题；不得用于重选既有run的epoch/checkpoint。
 - CRD 训练与普通 `eval_crd.py` 仍只读 train/validation；S1C 只允许 candidate lock 中的 12 个 checkpoint 通过专用入口各读取一次现有 research-test。
 
+## ADV-v1：时间对齐双视图网络
+
+当前状态：本轮四配置 × 三 seed 的 formal 训练、validation 和 research-test 均已完成并关闭。
+当前状态与证据入口：[ADV-v1 收尾索引](../docs/experiments/aligned_dual_view_v1_closeout_20260922.md)。
+原协议中的运行命令作为复现记录保留；已完成的 cache、训练、评价和汇总不重复执行。
+
+专项说明：`docs/experiments/aligned_dual_view_v1_protocol_20260920.md`。
+模型核心位于 `resp_train/aligned_dual_view/`，配置位于 `configs/aligned_dual_view_v1/`。
+独立管线入口为 `scripts/run_aligned_dual_view_v1.py`，包含 `cache`、`train`、
+`validation` 和 `summary`。`experiment.yaml` 固定 train/val、既有 loss/metrics、
+80 epochs、effective batch 128；真实数据/GPU 的用户执行命令及产物验收见专项说明第 7 节。
+
+```bash
+ADV_PY=/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES='' \
+  OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 SSQ_PARALLEL=0 SSQ_GPU=0 \
+  NUMBA_CACHE_DIR=/tmp/adv1-numba-cache \
+  "$ADV_PY" -m pytest -q tests/test_aligned_dual_view_v1.py tests/test_aligned_dual_view_runtime.py
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES='' \
+  "$ADV_PY" scripts/check_aligned_dual_view_v1.py describe
+```
+
+`describe` 用原生 Mamba 实例统计参数，不运行 GPU。用户执行的原生 GPU 合成
+前后向命令和报告验收标准见专项说明；测试替身的 CPU 结果不代表 GPU 已通过。
+
+## ADV-v1：research-test
+
+十二个固定 checkpoint 的评价与完整汇总已完成，结果见
+[research-test 结果报告](../docs/experiments/aligned_dual_view_v1_research_test_results_20260922.md)。
+专项协议：`docs/experiments/aligned_dual_view_v1_research_test_protocol_20260922.md`。
+入口：`scripts/eval_aligned_dual_view_v1_research_test.py`；实现位于 `resp_eval/adv_test/`。
+候选锁固定四配置 × 三 seed 的 validation-selected checkpoints；普通训练/validation
+代码身份保持不变。`check-lock` 不访问数据集，实际 test 操作需要显式确认标志及阶段授权。
+
+```bash
+ADV_PY=/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES='' \
+  "$ADV_PY" scripts/eval_aligned_dual_view_v1_research_test.py check-lock
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES='' \
+  OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 SSQ_PARALLEL=0 SSQ_GPU=0 \
+  NUMBA_CACHE_DIR=/tmp/adv1-numba-cache \
+  "$ADV_PY" -m pytest -q tests/test_aligned_dual_view_research_test.py
+```
+
+用户执行的 input-only cache、十二项评价与完整汇总命令、输出位置和验收标准见专项协议。
+本实现不重新训练或选择 checkpoint；所有结果继续使用 reused research/development evidence 标签。
+
 ## E1：W0 尺度重排敏感性审计
 
 专项协议：`docs/experiments/e1_w0_scale_topology_protocol_20260915.md`。入口为

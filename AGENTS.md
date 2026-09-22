@@ -16,6 +16,7 @@
 - CRD-TF-W v2：`docs/experiments/crd_tf_w_v2_protocol_20260817.md`
 - RTM-v1：`docs/experiments/resp_temporal_v1_protocol_20260820.md`；formal、validation summary 和独立测试集使用对应附件
 - 论文证据闭环：`docs/experiments/paper_evidence_closure_protocol_20260901.md`；center-30/60/90、research-test、P5、P6 等任务使用对应专项协议，存在 `supersedes` 或 v2 声明时按协议声明使用
+- ADV-v1 时间对齐双视图网络：本轮阶段已关闭；当前状态、执行协议、validation 与 research-test 结果及来源锁统一由 `docs/experiments/aligned_dual_view_v1_closeout_20260922.md` 路由。
 
 专项协议只在其明确作用域内覆盖总协议。协议发生冲突时，先核对任务身份、协议 ID、状态和日期；仍无法唯一确定时再询问用户。
 

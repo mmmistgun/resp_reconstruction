@@ -1,0 +1,55 @@
+{
+  "protocol": "aligned-dual-view-v1-engineering-20260920",
+  "status": "network_core_and_synthetic_cpu_validation_complete",
+  "base_commit": "cebc7f5a478da492458fe2c0f3f8d8acdf2f2001",
+  "source_proposal_sha256": {
+    "/mnt/disk_code/marques/paper/resp_rec/design_proposals/20260920_aligned_dual_view_v1/DESIGN.md": "9ee9ae166fd641572aba18bc8b37862a4494fb201ad6a0e7a926c8e9525becfb",
+    "/mnt/disk_code/marques/paper/resp_rec/design_proposals/20260920_aligned_dual_view_v1/FRONTEND_REVIEW.md": "7855a6a22d07a7fffd29300d26f2d7b895d620f25617ea331b81715f17f4708f",
+    "/mnt/disk_code/marques/paper/resp_rec/design_proposals/20260920_aligned_dual_view_v1/architecture_spec.json": "e9dfda82aa3e88d1a4a246eb55a1ef7e97532682f1d2b4372ee849faa59cf75f",
+    "/mnt/disk_code/marques/paper/resp_rec/design_proposals/20260920_aligned_dual_view_v1/design_checks.json": "433e4b45b2ab4870fd24c4253dce445ce61b598a338a6e2c313c444aa7393e91"
+  },
+  "implementation_sha256": {
+    "resp_train/aligned_dual_view/__init__.py": "77e5815122171a25663e41b70e0d466eac7759c20b9506adacb7240f17259b17",
+    "resp_train/aligned_dual_view/features.py": "1e642cebe38922da606b723224cdc389a650ffb9d50cc3a2af79013e4a54ec82",
+    "resp_train/aligned_dual_view/model.py": "a65a522a5e186b3cb0bcbbf8ea2643b80b35748dcfa80b4585b57c7879b917d2",
+    "resp_train/aligned_dual_view/signal.py": "b7f989f6c0ed6dd313653f92951d8da8e6da0dc409f031729d1bbdeebba7e73b",
+    "resp_train/aligned_dual_view/w0_grid.json": "d3caa01b5cbe9bd41c71bae50defbb6ca66e4434b79d1fd5f01eea853c9a031c",
+    "scripts/check_aligned_dual_view_v1.py": "c5f422ff18b579f8690d1f8edf4ae3cfc9afe6ebaebbfae6ae5af125700ef025",
+    "tests/test_aligned_dual_view_v1.py": "2f527ea3c8a162b5d92030e05859cda3c0eeba4e5607defdcdd0c44c54c1c0d1",
+    "configs/aligned_dual_view_v1/cwt.json": "34700790b3d1cda137d52836754b7a86be20ecdc62af5450a0306faae6be4f68",
+    "configs/aligned_dual_view_v1/joint.json": "fa1c21ad7100d4e93182e797c8b69a8192c3c233520882e53baa8d33b564f8da",
+    "configs/aligned_dual_view_v1/joint_scale_mean.json": "298684d7ee3ed7074a548d53b0cdd102ebe57d7b7bf7d68ce010b60c5ae20b67",
+    "configs/aligned_dual_view_v1/waveform.json": "1d99051d344621c4ae62ed34d6c6fdde5729cb2a90e0cdf8f8df3eaff3ce239a"
+  },
+  "reused_source_sha256": {
+    "resp_train/crd/blocks.py": "1a45d90639b24a3288e11d6ba3efb1b416cf8f80c8d67dbc1ae48edcd0ca91b8",
+    "resp_train/crd/spectral_ops.py": "fec3c1cfa3db5a931a8b6e46657212c663992929bcccdc08299d366739dec001",
+    "resp_train/crd/initialization.py": "6c72ea8881e6f498adcd73a5ad8afa5e5a299c4f313e5d3bc56f4c54add44ffc",
+    "resp_train/losses/task.py": "ab12014e686e687b97e0c4c1e1cd6d04051b75b2058cf8f409794f2549df5ade",
+    "resp_train/protocols/respiration.py": "0c82ac53014f850e8e751056701ae03acca57d32d972940235b82a9cf2a46528"
+  },
+  "dependencies": {
+    "torch": "2.12.0+cu130",
+    "numpy": "1.26.4",
+    "scipy": "1.17.1",
+    "ssqueezepy": "0.6.6",
+    "mamba-ssm": "2.3.2.post1",
+    "causal-conv1d": "1.6.2.post1"
+  },
+  "cpu_synthetic_tests": {
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_aligned_dual_view_v1.py",
+    "passed": 15,
+    "native_mamba_forward": false
+  },
+  "native_parameter_counts": {
+    "joint": 468113,
+    "waveform": 466641,
+    "cwt": 469585,
+    "joint_scale_mean": 465041
+  },
+  "real_waveform_accessed": false,
+  "training_started": false,
+  "gpu_execution_started": false,
+  "formal_cache_pipeline_implemented": false,
+  "formal_training_runner_implemented": false
+}

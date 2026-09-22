@@ -1,0 +1,10 @@
+{
+  "schema": "aligned-dual-view-v1-model-v1",
+  "model": {
+    "input_view": "cwt",
+    "dimension": 64,
+    "depth": 6,
+    "waveform_kernel": 51,
+    "initialization_seed": 20260811
+  }
+}
