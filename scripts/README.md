@@ -65,7 +65,11 @@ W 条件分支、六层 BiMamba2、FiLM、decoder 和完整 loss 固定。训练
 完整 validation Local-RR early stop 固定为 `min_epoch=30 / patience=15 / min_delta=0`，最早在 epoch 30 触发，
 LR 日程不因提前停止重标定。
 
-当前仅完成 P1 代码和 synthetic CPU 验收：
+P1 代码、synthetic CPU 验收、三 seed formal 和一次性 validation 汇总均已完成。Validation 结果为
+`net negative for this candidate`，不替换 W0；完整数值与来源见
+[E5 validation 结果](../docs/experiments/e5_temporal_frontend_results_20260923.md)。训练阶段已冻结，不重跑相同身份。
+
+训练实现的历史验收入口为：
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
@@ -74,15 +78,31 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
 ./.venv/bin/python scripts/run_e5_temporal_frontend.py check-config
 ```
 
-提交实现并保持工作树干净后，下一步只读准备实现锁：
+Test 专项协议为
+[E5 research-test 附件](../docs/experiments/e5_temporal_frontend_test_protocol_20260923.md)，入口为
+`scripts/eval_e5_temporal_frontend_test.py`。它固定使用 validation 预选的 epoch `9/13/5`，复用同 seed
+冻结 W0 test 指标作对照；test 只作为重复使用 research-test 上的开发性描述，不改变 validation 决定。
+当前只开放代码和 synthetic fixture 验收：
 
 ```bash
-./.venv/bin/python scripts/run_e5_temporal_frontend.py prepare-lock
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
+  tests/test_e5_temporal_frontend_test.py -q
 ```
 
-该命令会重新核验冻结 W0 checkpoint/validation 来源和 train/validation W cache 的完整字节身份，
-生成不可覆盖的 `docs/experiments/e5_temporal_frontend_implementation_lock_20260923.json`。
-GPU acceptance、benchmark 和三 seed formal 尚未授权；不要在当前阶段运行对应子命令。test 入口未建立。
+提交 test 实现并保持工作树干净后，`prepare-lock` 可只读核验 validation 来源、checkpoint、既有 W0 test
+指标和 test cache manifest；它不打开 test 数组。真实 test 推理需单独授权：
+
+```bash
+./.venv/bin/python scripts/eval_e5_temporal_frontend_test.py prepare-lock
+
+for E5_TEST_SEED in 20260811 20260812 20260813; do
+  ./.venv/bin/python scripts/eval_e5_temporal_frontend_test.py evaluate \
+    --seed "$E5_TEST_SEED" --device cuda:0 || break
+done
+
+./.venv/bin/python scripts/eval_e5_temporal_frontend_test.py summarize --runs \
+  '/seed_20260811完成attempt' '/seed_20260812完成attempt' '/seed_20260813完成attempt'
+```
 
 ## E4：R3 时间结构与 GN 统计控制
 
