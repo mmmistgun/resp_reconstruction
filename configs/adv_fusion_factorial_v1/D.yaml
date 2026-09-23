@@ -1,0 +1,3 @@
+# 后融合：FiLM；其余字段从冻结 experiment.yaml 合并。
+model:
+  arm: D

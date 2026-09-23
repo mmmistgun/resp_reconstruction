@@ -1,0 +1,3 @@
+# 前融合：拼接投影；其余字段从冻结 experiment.yaml 合并。
+model:
+  arm: A
