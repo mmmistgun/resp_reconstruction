@@ -1,0 +1,1277 @@
+{
+  "schema_version": 1,
+  "protocol": "e6-temporal-frontend-v1-20260923",
+  "arm": "e6_tfe201_aa20_demod10_w0",
+  "control_arm": "e6_tfe000_patch_w0",
+  "seeds": [
+    20260811,
+    20260812,
+    20260813
+  ],
+  "counts": {
+    "train": 10141,
+    "val": 2675
+  },
+  "samp_ids": {
+    "train": 32,
+    "val": 7
+  },
+  "epochs": 80,
+  "updates_per_epoch": 80,
+  "early_stopping": {
+    "enabled": true,
+    "min_epoch": 30,
+    "patience": 15,
+    "min_delta": 0.0,
+    "monitor": "full_validation_local_rr_strict_minimum_earliest_tie"
+  },
+  "frontend_contract": {
+    "name": "e6_tfe201_aa20_demod10_w0",
+    "input_fs_hz": 100.0,
+    "intermediate_fs_hz": 20.0,
+    "output_fs_hz": 10.0,
+    "output_channels": 96,
+    "output_length": 1800,
+    "stage_100_to_20": {
+      "implementation": "fixed_polyphase_line",
+      "window": "kaiser",
+      "beta": 8.6,
+      "down": 5,
+      "numtaps": 255,
+      "cutoff_hz": 9.0
+    },
+    "learned_20hz": {
+      "carrier_filter": {
+        "in_channels": 1,
+        "out_channels": 48,
+        "kernel_size": 21,
+        "padding": 10,
+        "bias": false
+      },
+      "depthwise": {
+        "channels": 48,
+        "kernel_size": 5,
+        "padding": 2,
+        "bias": false
+      },
+      "projection": {
+        "in_channels": 48,
+        "out_channels": 96,
+        "kernel_size": 5,
+        "padding": 2,
+        "bias": false
+      },
+      "normalization": "channel_only_layer_norm_per_time_step",
+      "activation": "silu_after_each_learned_stage",
+      "initialization": "kaiming_normal_fan_in_relu"
+    },
+    "stage_20_to_10": {
+      "implementation": "fixed_polyphase_line",
+      "window": "kaiser",
+      "beta": 8.6,
+      "down": 2,
+      "numtaps": 127,
+      "cutoff_hz": 4.5
+    },
+    "implementation_source": "resp_train.temporal.blocks.TemporalStem",
+    "trainable_parameters": 24672,
+    "model_parameters": 1235738
+  },
+  "w0_entries": [
+    {
+      "seed": 20260811,
+      "selected_epoch": 13,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861",
+      "checkpoint": {
+        "size_bytes": 14890845,
+        "sha256": "18425476831628d9614925dc6835de97ab466aac8cce157f7d95335f504c70f5"
+      },
+      "config": {
+        "size_bytes": 2548,
+        "sha256": "675232d48b7aadb2f0116e43a9cb737a5ac1737013dd54c4544e4f49cc1b2843"
+      },
+      "manifest": {
+        "size_bytes": 619,
+        "sha256": "0f44d8ca2a461ac02543cf9da4fdee789c46aa978474f939ebfb4983e08dc5cf"
+      },
+      "validation_summary": {
+        "size_bytes": 2222,
+        "sha256": "7aa1f305349c7a1fd3c9bbc26a40c6d28c6ea9a942ab13787b84a1bfdac49a00"
+      }
+    },
+    {
+      "seed": 20260812,
+      "selected_epoch": 15,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130",
+      "checkpoint": {
+        "size_bytes": 14890845,
+        "sha256": "f6a174f88067bd88f0739faee6ce3c7cada79e8b43171a6a3d2e12a9798a5a61"
+      },
+      "config": {
+        "size_bytes": 2548,
+        "sha256": "497f6dfab8e350ee145a568deb6d72df631a81ada5dd2c00847b500323f74eeb"
+      },
+      "manifest": {
+        "size_bytes": 619,
+        "sha256": "5475a24265ee24f8836fde29450c79b019efa8d7c09e1c1a3c4d96589db7d313"
+      },
+      "validation_summary": {
+        "size_bytes": 2223,
+        "sha256": "6568302d579ad09a1cd08b80c39a8ac46702d29e16b4f149e9d798de96d80e17"
+      }
+    },
+    {
+      "seed": 20260813,
+      "selected_epoch": 14,
+      "run_dir": "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006",
+      "checkpoint": {
+        "size_bytes": 14890845,
+        "sha256": "efafbb653507fbee782f5946a07660121737bfd5339ff2b13b81b4b1e3a0fe99"
+      },
+      "config": {
+        "size_bytes": 2548,
+        "sha256": "572711e26097b089e2e190d7e583ca59da0f162dfd5fb0421331cc7932981cc9"
+      },
+      "manifest": {
+        "size_bytes": 619,
+        "sha256": "42f5031e5c97d70f67d4dfb817413120d2c9d7824839531e5c1613a6f5475986"
+      },
+      "validation_summary": {
+        "size_bytes": 2222,
+        "sha256": "67cf88a19b56736cd0d9c315c7f24ba8b38deb00679a98bec531c441090c548d"
+      }
+    }
+  ],
+  "baselines": {
+    "20260811": {
+      "protocol": {
+        "name": "crd-tf-v1-research-informed-20260812",
+        "stage": "tf",
+        "run_role": "formal",
+        "execution_gate": "p4_formal"
+      },
+      "data": {
+        "format": "research_v2",
+        "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+        "index_csv": "training/dataset_index.csv",
+        "input_set": "research_v2_waveform",
+        "train_split": "train",
+        "val_split": "val",
+        "test_split": "test",
+        "target_task": "waveform",
+        "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+        "target_key": "target_waveform_segment_soft_z_key",
+        "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+        "max_train_windows": null,
+        "max_val_windows": null,
+        "max_test_windows": null,
+        "filter_unusable": true,
+        "drop_nonfinite_windows": false,
+        "preload_windows": true,
+        "train_sample_strategy": "stratified_random",
+        "val_sample_strategy": "stratified_random",
+        "test_sample_strategy": "stratified_random",
+        "train_sample_seed": 20260610,
+        "val_sample_seed": 20260611,
+        "test_sample_seed": 20260612,
+        "stratify_column": "allowed_losses",
+        "min_hard_valid_ratio": 0.8,
+        "min_state_alignment_valid_ratio": 0.8
+      },
+      "window": {
+        "target_fs": 100,
+        "duration_samples": 18000,
+        "duration_sec": 180
+      },
+      "model": {
+        "name": "crd_v1",
+        "variant": "crd_tf102_w",
+        "initialization_seed": 20260811,
+        "tf_representations": [
+          "w"
+        ]
+      },
+      "loss": {
+        "band_low_hz": 0.05,
+        "band_high_hz": 0.7,
+        "scale_eps": 1e-08,
+        "dynamic_eps": 1e-08,
+        "corr_eps": 1e-08,
+        "envelope_eps": 1e-08,
+        "max_lag_sec": 0.3,
+        "envelope_window_sec": 10,
+        "envelope_step_sec": 5,
+        "sync_weight": 1.0,
+        "effort_weight": 0.25
+      },
+      "evaluation": {
+        "local_rr_window_sec": 60,
+        "local_rr_step_sec": 15,
+        "ibi_peak_distance_samples": 142,
+        "ibi_match_tolerance_sec": 0.5,
+        "ibi_coverage_threshold": 0.8,
+        "ndtw_fs": 10,
+        "ndtw_radius_sec": 0.3,
+        "envelope_quantile_method": "linear",
+        "envelope_strata_low": 0.30875308839006915,
+        "envelope_strata_high": 0.7031542121234101
+      },
+      "training": {
+        "optimizer": "adamw",
+        "epochs": 80,
+        "early_stopping_enabled": false,
+        "batch_size": 128,
+        "gradient_accumulation_steps": 1,
+        "max_learning_rate": 0.0003,
+        "min_learning_rate": 3e-05,
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "adam_eps": 1e-08,
+        "weight_decay": 0.0001,
+        "warmup_fraction": 0.05,
+        "lr_schedule": "step_exact_warmup_cosine",
+        "grad_clip_norm": 1.0,
+        "use_amp": true,
+        "amp_dtype": "bfloat16",
+        "drop_last": false,
+        "resume": false,
+        "num_workers": 0,
+        "persistent_workers": false,
+        "prefetch_factor": null,
+        "seed": 20260811,
+        "device": "cuda:0",
+        "show_progress": false
+      },
+      "outputs": {
+        "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811"
+      }
+    },
+    "20260812": {
+      "protocol": {
+        "name": "crd-tf-v1-research-informed-20260812",
+        "stage": "tf",
+        "run_role": "formal",
+        "execution_gate": "p4_formal"
+      },
+      "data": {
+        "format": "research_v2",
+        "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+        "index_csv": "training/dataset_index.csv",
+        "input_set": "research_v2_waveform",
+        "train_split": "train",
+        "val_split": "val",
+        "test_split": "test",
+        "target_task": "waveform",
+        "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+        "target_key": "target_waveform_segment_soft_z_key",
+        "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+        "max_train_windows": null,
+        "max_val_windows": null,
+        "max_test_windows": null,
+        "filter_unusable": true,
+        "drop_nonfinite_windows": false,
+        "preload_windows": true,
+        "train_sample_strategy": "stratified_random",
+        "val_sample_strategy": "stratified_random",
+        "test_sample_strategy": "stratified_random",
+        "train_sample_seed": 20260610,
+        "val_sample_seed": 20260611,
+        "test_sample_seed": 20260612,
+        "stratify_column": "allowed_losses",
+        "min_hard_valid_ratio": 0.8,
+        "min_state_alignment_valid_ratio": 0.8
+      },
+      "window": {
+        "target_fs": 100,
+        "duration_samples": 18000,
+        "duration_sec": 180
+      },
+      "model": {
+        "name": "crd_v1",
+        "variant": "crd_tf102_w",
+        "initialization_seed": 20260812,
+        "tf_representations": [
+          "w"
+        ]
+      },
+      "loss": {
+        "band_low_hz": 0.05,
+        "band_high_hz": 0.7,
+        "scale_eps": 1e-08,
+        "dynamic_eps": 1e-08,
+        "corr_eps": 1e-08,
+        "envelope_eps": 1e-08,
+        "max_lag_sec": 0.3,
+        "envelope_window_sec": 10,
+        "envelope_step_sec": 5,
+        "sync_weight": 1.0,
+        "effort_weight": 0.25
+      },
+      "evaluation": {
+        "local_rr_window_sec": 60,
+        "local_rr_step_sec": 15,
+        "ibi_peak_distance_samples": 142,
+        "ibi_match_tolerance_sec": 0.5,
+        "ibi_coverage_threshold": 0.8,
+        "ndtw_fs": 10,
+        "ndtw_radius_sec": 0.3,
+        "envelope_quantile_method": "linear",
+        "envelope_strata_low": 0.30875308839006915,
+        "envelope_strata_high": 0.7031542121234101
+      },
+      "training": {
+        "optimizer": "adamw",
+        "epochs": 80,
+        "early_stopping_enabled": false,
+        "batch_size": 128,
+        "gradient_accumulation_steps": 1,
+        "max_learning_rate": 0.0003,
+        "min_learning_rate": 3e-05,
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "adam_eps": 1e-08,
+        "weight_decay": 0.0001,
+        "warmup_fraction": 0.05,
+        "lr_schedule": "step_exact_warmup_cosine",
+        "grad_clip_norm": 1.0,
+        "use_amp": true,
+        "amp_dtype": "bfloat16",
+        "drop_last": false,
+        "resume": false,
+        "num_workers": 0,
+        "persistent_workers": false,
+        "prefetch_factor": null,
+        "seed": 20260812,
+        "device": "cuda:0",
+        "show_progress": false
+      },
+      "outputs": {
+        "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812"
+      }
+    },
+    "20260813": {
+      "protocol": {
+        "name": "crd-tf-v1-research-informed-20260812",
+        "stage": "tf",
+        "run_role": "formal",
+        "execution_gate": "p4_formal"
+      },
+      "data": {
+        "format": "research_v2",
+        "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+        "index_csv": "training/dataset_index.csv",
+        "input_set": "research_v2_waveform",
+        "train_split": "train",
+        "val_split": "val",
+        "test_split": "test",
+        "target_task": "waveform",
+        "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+        "target_key": "target_waveform_segment_soft_z_key",
+        "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+        "max_train_windows": null,
+        "max_val_windows": null,
+        "max_test_windows": null,
+        "filter_unusable": true,
+        "drop_nonfinite_windows": false,
+        "preload_windows": true,
+        "train_sample_strategy": "stratified_random",
+        "val_sample_strategy": "stratified_random",
+        "test_sample_strategy": "stratified_random",
+        "train_sample_seed": 20260610,
+        "val_sample_seed": 20260611,
+        "test_sample_seed": 20260612,
+        "stratify_column": "allowed_losses",
+        "min_hard_valid_ratio": 0.8,
+        "min_state_alignment_valid_ratio": 0.8
+      },
+      "window": {
+        "target_fs": 100,
+        "duration_samples": 18000,
+        "duration_sec": 180
+      },
+      "model": {
+        "name": "crd_v1",
+        "variant": "crd_tf102_w",
+        "initialization_seed": 20260813,
+        "tf_representations": [
+          "w"
+        ]
+      },
+      "loss": {
+        "band_low_hz": 0.05,
+        "band_high_hz": 0.7,
+        "scale_eps": 1e-08,
+        "dynamic_eps": 1e-08,
+        "corr_eps": 1e-08,
+        "envelope_eps": 1e-08,
+        "max_lag_sec": 0.3,
+        "envelope_window_sec": 10,
+        "envelope_step_sec": 5,
+        "sync_weight": 1.0,
+        "effort_weight": 0.25
+      },
+      "evaluation": {
+        "local_rr_window_sec": 60,
+        "local_rr_step_sec": 15,
+        "ibi_peak_distance_samples": 142,
+        "ibi_match_tolerance_sec": 0.5,
+        "ibi_coverage_threshold": 0.8,
+        "ndtw_fs": 10,
+        "ndtw_radius_sec": 0.3,
+        "envelope_quantile_method": "linear",
+        "envelope_strata_low": 0.30875308839006915,
+        "envelope_strata_high": 0.7031542121234101
+      },
+      "training": {
+        "optimizer": "adamw",
+        "epochs": 80,
+        "early_stopping_enabled": false,
+        "batch_size": 128,
+        "gradient_accumulation_steps": 1,
+        "max_learning_rate": 0.0003,
+        "min_learning_rate": 3e-05,
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "adam_eps": 1e-08,
+        "weight_decay": 0.0001,
+        "warmup_fraction": 0.05,
+        "lr_schedule": "step_exact_warmup_cosine",
+        "grad_clip_norm": 1.0,
+        "use_amp": true,
+        "amp_dtype": "bfloat16",
+        "drop_last": false,
+        "resume": false,
+        "num_workers": 0,
+        "persistent_workers": false,
+        "prefetch_factor": null,
+        "seed": 20260813,
+        "device": "cuda:0",
+        "show_progress": false
+      },
+      "outputs": {
+        "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813"
+      }
+    }
+  },
+  "resolved_templates": {
+    "20260811": {
+      "protocol": {
+        "name": "e6-temporal-frontend-v1-20260923",
+        "stage": "tf",
+        "run_role": "formal",
+        "execution_gate": "e6_formal"
+      },
+      "data": {
+        "format": "research_v2",
+        "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+        "index_csv": "training/dataset_index.csv",
+        "input_set": "research_v2_waveform",
+        "train_split": "train",
+        "val_split": "val",
+        "test_split": "test",
+        "target_task": "waveform",
+        "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+        "target_key": "target_waveform_segment_soft_z_key",
+        "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+        "max_train_windows": null,
+        "max_val_windows": null,
+        "max_test_windows": null,
+        "filter_unusable": true,
+        "drop_nonfinite_windows": false,
+        "preload_windows": true,
+        "train_sample_strategy": "stratified_random",
+        "val_sample_strategy": "stratified_random",
+        "test_sample_strategy": "stratified_random",
+        "train_sample_seed": 20260610,
+        "val_sample_seed": 20260611,
+        "test_sample_seed": 20260612,
+        "stratify_column": "allowed_losses",
+        "min_hard_valid_ratio": 0.8,
+        "min_state_alignment_valid_ratio": 0.8
+      },
+      "window": {
+        "target_fs": 100,
+        "duration_samples": 18000,
+        "duration_sec": 180
+      },
+      "model": {
+        "name": "crd_v1",
+        "variant": "crd_tf102_w",
+        "initialization_seed": 20260811,
+        "tf_representations": [
+          "w"
+        ],
+        "e6_temporal_frontend": {
+          "name": "e6_tfe201_aa20_demod10_w0",
+          "input_fs_hz": 100.0,
+          "intermediate_fs_hz": 20.0,
+          "output_fs_hz": 10.0,
+          "output_channels": 96,
+          "output_length": 1800,
+          "stage_100_to_20": {
+            "implementation": "fixed_polyphase_line",
+            "window": "kaiser",
+            "beta": 8.6,
+            "down": 5,
+            "numtaps": 255,
+            "cutoff_hz": 9.0
+          },
+          "learned_20hz": {
+            "carrier_filter": {
+              "in_channels": 1,
+              "out_channels": 48,
+              "kernel_size": 21,
+              "padding": 10,
+              "bias": false
+            },
+            "depthwise": {
+              "channels": 48,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false
+            },
+            "projection": {
+              "in_channels": 48,
+              "out_channels": 96,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false
+            },
+            "normalization": "channel_only_layer_norm_per_time_step",
+            "activation": "silu_after_each_learned_stage",
+            "initialization": "kaiming_normal_fan_in_relu"
+          },
+          "stage_20_to_10": {
+            "implementation": "fixed_polyphase_line",
+            "window": "kaiser",
+            "beta": 8.6,
+            "down": 2,
+            "numtaps": 127,
+            "cutoff_hz": 4.5
+          },
+          "implementation_source": "resp_train.temporal.blocks.TemporalStem",
+          "trainable_parameters": 24672,
+          "model_parameters": 1235738
+        }
+      },
+      "loss": {
+        "band_low_hz": 0.05,
+        "band_high_hz": 0.7,
+        "scale_eps": 1e-08,
+        "dynamic_eps": 1e-08,
+        "corr_eps": 1e-08,
+        "envelope_eps": 1e-08,
+        "max_lag_sec": 0.3,
+        "envelope_window_sec": 10,
+        "envelope_step_sec": 5,
+        "sync_weight": 1.0,
+        "effort_weight": 0.25
+      },
+      "evaluation": {
+        "local_rr_window_sec": 60,
+        "local_rr_step_sec": 15,
+        "ibi_peak_distance_samples": 142,
+        "ibi_match_tolerance_sec": 0.5,
+        "ibi_coverage_threshold": 0.8,
+        "ndtw_fs": 10,
+        "ndtw_radius_sec": 0.3,
+        "envelope_quantile_method": "linear",
+        "envelope_strata_low": 0.30875308839006915,
+        "envelope_strata_high": 0.7031542121234101
+      },
+      "training": {
+        "optimizer": "adamw",
+        "epochs": 80,
+        "early_stopping_enabled": true,
+        "batch_size": 128,
+        "gradient_accumulation_steps": 1,
+        "max_learning_rate": 0.0003,
+        "min_learning_rate": 3e-05,
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "adam_eps": 1e-08,
+        "weight_decay": 0.0001,
+        "warmup_fraction": 0.05,
+        "lr_schedule": "step_exact_warmup_cosine",
+        "grad_clip_norm": 1.0,
+        "use_amp": true,
+        "amp_dtype": "bfloat16",
+        "drop_last": false,
+        "resume": false,
+        "num_workers": 0,
+        "persistent_workers": false,
+        "prefetch_factor": null,
+        "seed": 20260811,
+        "device": "cuda:0",
+        "show_progress": false,
+        "early_stopping_min_epoch": 30,
+        "early_stopping_patience": 15,
+        "early_stopping_min_delta": 0.0
+      },
+      "outputs": {
+        "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/e6_temporal_frontend/formal/seed_20260811"
+      }
+    },
+    "20260812": {
+      "protocol": {
+        "name": "e6-temporal-frontend-v1-20260923",
+        "stage": "tf",
+        "run_role": "formal",
+        "execution_gate": "e6_formal"
+      },
+      "data": {
+        "format": "research_v2",
+        "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+        "index_csv": "training/dataset_index.csv",
+        "input_set": "research_v2_waveform",
+        "train_split": "train",
+        "val_split": "val",
+        "test_split": "test",
+        "target_task": "waveform",
+        "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+        "target_key": "target_waveform_segment_soft_z_key",
+        "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+        "max_train_windows": null,
+        "max_val_windows": null,
+        "max_test_windows": null,
+        "filter_unusable": true,
+        "drop_nonfinite_windows": false,
+        "preload_windows": true,
+        "train_sample_strategy": "stratified_random",
+        "val_sample_strategy": "stratified_random",
+        "test_sample_strategy": "stratified_random",
+        "train_sample_seed": 20260610,
+        "val_sample_seed": 20260611,
+        "test_sample_seed": 20260612,
+        "stratify_column": "allowed_losses",
+        "min_hard_valid_ratio": 0.8,
+        "min_state_alignment_valid_ratio": 0.8
+      },
+      "window": {
+        "target_fs": 100,
+        "duration_samples": 18000,
+        "duration_sec": 180
+      },
+      "model": {
+        "name": "crd_v1",
+        "variant": "crd_tf102_w",
+        "initialization_seed": 20260812,
+        "tf_representations": [
+          "w"
+        ],
+        "e6_temporal_frontend": {
+          "name": "e6_tfe201_aa20_demod10_w0",
+          "input_fs_hz": 100.0,
+          "intermediate_fs_hz": 20.0,
+          "output_fs_hz": 10.0,
+          "output_channels": 96,
+          "output_length": 1800,
+          "stage_100_to_20": {
+            "implementation": "fixed_polyphase_line",
+            "window": "kaiser",
+            "beta": 8.6,
+            "down": 5,
+            "numtaps": 255,
+            "cutoff_hz": 9.0
+          },
+          "learned_20hz": {
+            "carrier_filter": {
+              "in_channels": 1,
+              "out_channels": 48,
+              "kernel_size": 21,
+              "padding": 10,
+              "bias": false
+            },
+            "depthwise": {
+              "channels": 48,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false
+            },
+            "projection": {
+              "in_channels": 48,
+              "out_channels": 96,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false
+            },
+            "normalization": "channel_only_layer_norm_per_time_step",
+            "activation": "silu_after_each_learned_stage",
+            "initialization": "kaiming_normal_fan_in_relu"
+          },
+          "stage_20_to_10": {
+            "implementation": "fixed_polyphase_line",
+            "window": "kaiser",
+            "beta": 8.6,
+            "down": 2,
+            "numtaps": 127,
+            "cutoff_hz": 4.5
+          },
+          "implementation_source": "resp_train.temporal.blocks.TemporalStem",
+          "trainable_parameters": 24672,
+          "model_parameters": 1235738
+        }
+      },
+      "loss": {
+        "band_low_hz": 0.05,
+        "band_high_hz": 0.7,
+        "scale_eps": 1e-08,
+        "dynamic_eps": 1e-08,
+        "corr_eps": 1e-08,
+        "envelope_eps": 1e-08,
+        "max_lag_sec": 0.3,
+        "envelope_window_sec": 10,
+        "envelope_step_sec": 5,
+        "sync_weight": 1.0,
+        "effort_weight": 0.25
+      },
+      "evaluation": {
+        "local_rr_window_sec": 60,
+        "local_rr_step_sec": 15,
+        "ibi_peak_distance_samples": 142,
+        "ibi_match_tolerance_sec": 0.5,
+        "ibi_coverage_threshold": 0.8,
+        "ndtw_fs": 10,
+        "ndtw_radius_sec": 0.3,
+        "envelope_quantile_method": "linear",
+        "envelope_strata_low": 0.30875308839006915,
+        "envelope_strata_high": 0.7031542121234101
+      },
+      "training": {
+        "optimizer": "adamw",
+        "epochs": 80,
+        "early_stopping_enabled": true,
+        "batch_size": 128,
+        "gradient_accumulation_steps": 1,
+        "max_learning_rate": 0.0003,
+        "min_learning_rate": 3e-05,
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "adam_eps": 1e-08,
+        "weight_decay": 0.0001,
+        "warmup_fraction": 0.05,
+        "lr_schedule": "step_exact_warmup_cosine",
+        "grad_clip_norm": 1.0,
+        "use_amp": true,
+        "amp_dtype": "bfloat16",
+        "drop_last": false,
+        "resume": false,
+        "num_workers": 0,
+        "persistent_workers": false,
+        "prefetch_factor": null,
+        "seed": 20260812,
+        "device": "cuda:0",
+        "show_progress": false,
+        "early_stopping_min_epoch": 30,
+        "early_stopping_patience": 15,
+        "early_stopping_min_delta": 0.0
+      },
+      "outputs": {
+        "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/e6_temporal_frontend/formal/seed_20260812"
+      }
+    },
+    "20260813": {
+      "protocol": {
+        "name": "e6-temporal-frontend-v1-20260923",
+        "stage": "tf",
+        "run_role": "formal",
+        "execution_gate": "e6_formal"
+      },
+      "data": {
+        "format": "research_v2",
+        "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+        "index_csv": "training/dataset_index.csv",
+        "input_set": "research_v2_waveform",
+        "train_split": "train",
+        "val_split": "val",
+        "test_split": "test",
+        "target_task": "waveform",
+        "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+        "target_key": "target_waveform_segment_soft_z_key",
+        "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+        "max_train_windows": null,
+        "max_val_windows": null,
+        "max_test_windows": null,
+        "filter_unusable": true,
+        "drop_nonfinite_windows": false,
+        "preload_windows": true,
+        "train_sample_strategy": "stratified_random",
+        "val_sample_strategy": "stratified_random",
+        "test_sample_strategy": "stratified_random",
+        "train_sample_seed": 20260610,
+        "val_sample_seed": 20260611,
+        "test_sample_seed": 20260612,
+        "stratify_column": "allowed_losses",
+        "min_hard_valid_ratio": 0.8,
+        "min_state_alignment_valid_ratio": 0.8
+      },
+      "window": {
+        "target_fs": 100,
+        "duration_samples": 18000,
+        "duration_sec": 180
+      },
+      "model": {
+        "name": "crd_v1",
+        "variant": "crd_tf102_w",
+        "initialization_seed": 20260813,
+        "tf_representations": [
+          "w"
+        ],
+        "e6_temporal_frontend": {
+          "name": "e6_tfe201_aa20_demod10_w0",
+          "input_fs_hz": 100.0,
+          "intermediate_fs_hz": 20.0,
+          "output_fs_hz": 10.0,
+          "output_channels": 96,
+          "output_length": 1800,
+          "stage_100_to_20": {
+            "implementation": "fixed_polyphase_line",
+            "window": "kaiser",
+            "beta": 8.6,
+            "down": 5,
+            "numtaps": 255,
+            "cutoff_hz": 9.0
+          },
+          "learned_20hz": {
+            "carrier_filter": {
+              "in_channels": 1,
+              "out_channels": 48,
+              "kernel_size": 21,
+              "padding": 10,
+              "bias": false
+            },
+            "depthwise": {
+              "channels": 48,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false
+            },
+            "projection": {
+              "in_channels": 48,
+              "out_channels": 96,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false
+            },
+            "normalization": "channel_only_layer_norm_per_time_step",
+            "activation": "silu_after_each_learned_stage",
+            "initialization": "kaiming_normal_fan_in_relu"
+          },
+          "stage_20_to_10": {
+            "implementation": "fixed_polyphase_line",
+            "window": "kaiser",
+            "beta": 8.6,
+            "down": 2,
+            "numtaps": 127,
+            "cutoff_hz": 4.5
+          },
+          "implementation_source": "resp_train.temporal.blocks.TemporalStem",
+          "trainable_parameters": 24672,
+          "model_parameters": 1235738
+        }
+      },
+      "loss": {
+        "band_low_hz": 0.05,
+        "band_high_hz": 0.7,
+        "scale_eps": 1e-08,
+        "dynamic_eps": 1e-08,
+        "corr_eps": 1e-08,
+        "envelope_eps": 1e-08,
+        "max_lag_sec": 0.3,
+        "envelope_window_sec": 10,
+        "envelope_step_sec": 5,
+        "sync_weight": 1.0,
+        "effort_weight": 0.25
+      },
+      "evaluation": {
+        "local_rr_window_sec": 60,
+        "local_rr_step_sec": 15,
+        "ibi_peak_distance_samples": 142,
+        "ibi_match_tolerance_sec": 0.5,
+        "ibi_coverage_threshold": 0.8,
+        "ndtw_fs": 10,
+        "ndtw_radius_sec": 0.3,
+        "envelope_quantile_method": "linear",
+        "envelope_strata_low": 0.30875308839006915,
+        "envelope_strata_high": 0.7031542121234101
+      },
+      "training": {
+        "optimizer": "adamw",
+        "epochs": 80,
+        "early_stopping_enabled": true,
+        "batch_size": 128,
+        "gradient_accumulation_steps": 1,
+        "max_learning_rate": 0.0003,
+        "min_learning_rate": 3e-05,
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "adam_eps": 1e-08,
+        "weight_decay": 0.0001,
+        "warmup_fraction": 0.05,
+        "lr_schedule": "step_exact_warmup_cosine",
+        "grad_clip_norm": 1.0,
+        "use_amp": true,
+        "amp_dtype": "bfloat16",
+        "drop_last": false,
+        "resume": false,
+        "num_workers": 0,
+        "persistent_workers": false,
+        "prefetch_factor": null,
+        "seed": 20260813,
+        "device": "cuda:0",
+        "show_progress": false,
+        "early_stopping_min_epoch": 30,
+        "early_stopping_patience": 15,
+        "early_stopping_min_delta": 0.0
+      },
+      "outputs": {
+        "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/e6_temporal_frontend/formal/seed_20260813"
+      }
+    }
+  },
+  "cache_lock": {
+    "root": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+    "transform_sha256": "bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+    "manifest": {
+      "path": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/cache_manifest.json",
+      "size_bytes": 9529,
+      "sha256": "6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8",
+      "complete": true,
+      "target_read": false,
+      "research_test_used": false,
+      "test_cache_created": false
+    },
+    "w_transform": {
+      "library": "ssqueezepy==0.6.6",
+      "wavelet": "morlet",
+      "mu": 13.4,
+      "voices_per_octave": 12,
+      "nominal_target_frequency_hz": [
+        0.03125,
+        8.0
+      ],
+      "mapped_frequency_hz": [
+        0.03662109375,
+        7.99560546875
+      ],
+      "scale_count": 97,
+      "pool_samples": 50,
+      "feature": "mean50_log1p_abs",
+      "padtype": "reflect"
+    },
+    "frequency_file": {
+      "path": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/w_frequencies_hz.npy",
+      "size_bytes": 904,
+      "file_sha256": "15cc722c38e5572b3284c92137cfdeec7cbc4153b4588c2c1e086f26ae3238b3",
+      "content_sha256_c_order": "9fb164e7b09d42b31f7ee57a7d3e966af7adabc6d8c6a0e1eff3090b00b73c0c",
+      "dtype": "float64",
+      "shape": [
+        97
+      ],
+      "nondecreasing": true,
+      "duplicate_count": 1
+    },
+    "train_w": {
+      "path": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/train_w.npy",
+      "size_bytes": 1416495008,
+      "sha256": "9ed2657cb92ba8e73ce8199dd8b19834ac3b964df10ef615ebb771e9a57e09a3",
+      "dtype": "float32",
+      "shape": [
+        10141,
+        97,
+        360
+      ],
+      "finite": true
+    },
+    "val_w": {
+      "path": "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/val_w.npy",
+      "size_bytes": 373644128,
+      "sha256": "fb8b44f174f078f93ae6f58083f2ba8c089a011457329e361a9965e409df3cc2",
+      "dtype": "float32",
+      "shape": [
+        2675,
+        97,
+        360
+      ],
+      "finite": true
+    },
+    "row_identity": {
+      "train_count": 10141,
+      "train_row_file_sha256": "2e383fac6c8c5c9421a39be3797f5abc05a7393a2407c21ada3a71ed421953e0",
+      "train_row_content_sha256": "f290e569140a2ff7745cf1a5cfa6a4da943644d76498c9b85517d3ae0702c45e",
+      "val_count": 2675,
+      "val_row_file_sha256": "cd5a0092647b07dc17ed4ae73b7e767684f37dc6084832340f324d18eeed5432",
+      "val_row_content_sha256": "b68a51b101bb80033c4de18c9c21cdfbb8924d1bfe134330f047617cf3b0915a"
+    },
+    "views": {
+      "resp": {
+        "frequency_rule": "mapped_frequency_hz <= 0.80",
+        "indices": "0..55",
+        "count": 56,
+        "mapped_frequency_hz": [
+          0.03662109375,
+          0.7965087890625
+        ],
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "460c40aca1f47cb149e783f690fc0f2aec0cda4717a2da644ec7927a6a744f36"
+      },
+      "carrier": {
+        "frequency_rule": "mapped_frequency_hz > 0.80",
+        "indices": "56..96",
+        "count": 41,
+        "mapped_frequency_hz": [
+          0.84228515625,
+          7.99560546875
+        ],
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "b9e31adaf7120cbdb7f503cfd806bb59831f0b09549ac705845f12d1e19e95c4"
+      },
+      "carrier_l_diagnostic": {
+        "frequency_rule": "0.80 < mapped_frequency_hz <= 2.00",
+        "indices": "56..71",
+        "count": 16,
+        "mapped_frequency_hz": [
+          0.84228515625,
+          1.959228515625
+        ],
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "b6d39f4cb2f7be5060c4e919a9fceb2fedf411ff20be1fa11fb9f6e7ed2f9fcd"
+      },
+      "carrier_h_diagnostic": {
+        "frequency_rule": "mapped_frequency_hz > 2.00",
+        "indices": "72..96",
+        "count": 25,
+        "mapped_frequency_hz": [
+          2.0721435546875,
+          7.99560546875
+        ],
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "66778e1669c9935dffef828f36f2846dc684bb9fa4b845e0a40de7d1463d55bb"
+      },
+      "full_6v": {
+        "indices": "0,2,...,96",
+        "count": 49,
+        "mapped_frequency_hz": [
+          0.03662109375,
+          7.99560546875
+        ],
+        "mapped_frequency_duplicate_count": 0,
+        "indices_dtype": "little-endian int64",
+        "indices_sha256": "3734c4183c17744eb4779ac65ac8521de1897f6a12f364e913aeb02528e250d6",
+        "target_grid_formula": "0.03125 * 2**(j/6), j=0..48",
+        "target_12v_even_vs_theoretical_6v_max_abs_hz": 1.7763568394002505e-15
+      }
+    },
+    "view_application_point": "after TfV1CacheReader.get copies the read-only memmap sample and before CwtBranch.conv_in; the source memmap and manifest remain unchanged"
+  },
+  "dataset_index": {
+    "path": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/training/dataset_index.csv",
+    "sha256": "f65ae6524632187c7c2795bd7b5e25434afb649b5a04fe39084b70cc59f9b04f"
+  },
+  "source_files": {
+    "docs/experiments/e4_w0_scale_aggregation_implementation_lock_20260917.json": {
+      "size_bytes": 64594,
+      "sha256": "464e073dbd5707a30575d606dec2a84dcd89a161945e537c463b214a15c2b493"
+    },
+    "docs/experiments/e6_temporal_frontend_source_audit_20260923.json": {
+      "size_bytes": 3506,
+      "sha256": "34eccc98f58a3ca8a8288d312556116dc8d0a421bec6ace561cd45bf4514a653"
+    },
+    "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json": {
+      "size_bytes": 7173,
+      "sha256": "11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69"
+    },
+    "docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json": {
+      "size_bytes": 5194,
+      "sha256": "6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872"
+    },
+    "resp_train/temporal/blocks.py": {
+      "size_bytes": 17016,
+      "sha256": "c43b8deca4e5ea185c2808a6e6c8b06172b77f811449cbb3d9e3249a3dd83435"
+    },
+    "runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/manifest.json": {
+      "size_bytes": 2341,
+      "sha256": "153b581b0ec1ca0ba5b286d990bdf248bb8e7a35949e79d36331b5cf6740d7f8"
+    },
+    "runs/e5_temporal_frontend_test/summary/summary_5b452091dc28_20260923T031427Z_c128f3353d19/manifest.json": {
+      "size_bytes": 2111,
+      "sha256": "ebfea505978d9fa55e3fa22607b11778588661a65f57b8e2fb3759ecfdf072d1"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/checkpoint_best_local_rr.pt": {
+      "size_bytes": 14890845,
+      "sha256": "18425476831628d9614925dc6835de97ab466aac8cce157f7d95335f504c70f5"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/config.yaml": {
+      "size_bytes": 2548,
+      "sha256": "675232d48b7aadb2f0116e43a9cb737a5ac1737013dd54c4544e4f49cc1b2843"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/run_manifest.json": {
+      "size_bytes": 619,
+      "sha256": "0f44d8ca2a461ac02543cf9da4fdee789c46aa978474f939ebfb4983e08dc5cf"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/metrics_summary.csv": {
+      "size_bytes": 2222,
+      "sha256": "7aa1f305349c7a1fd3c9bbc26a40c6d28c6ea9a942ab13787b84a1bfdac49a00"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/metrics.csv": {
+      "size_bytes": 736817,
+      "sha256": "92415b0abc8f915817af21a3b4e50df45d10a61f8af227f76b40c7b34bc803ee"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/checkpoint_best_local_rr.pt": {
+      "size_bytes": 14890845,
+      "sha256": "f6a174f88067bd88f0739faee6ce3c7cada79e8b43171a6a3d2e12a9798a5a61"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/config.yaml": {
+      "size_bytes": 2548,
+      "sha256": "497f6dfab8e350ee145a568deb6d72df631a81ada5dd2c00847b500323f74eeb"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/run_manifest.json": {
+      "size_bytes": 619,
+      "sha256": "5475a24265ee24f8836fde29450c79b019efa8d7c09e1c1a3c4d96589db7d313"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/metrics_summary.csv": {
+      "size_bytes": 2223,
+      "sha256": "6568302d579ad09a1cd08b80c39a8ac46702d29e16b4f149e9d798de96d80e17"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/metrics.csv": {
+      "size_bytes": 736757,
+      "sha256": "059f87afecdb9adb8650adf004b51028b3c01e32b5de7a8b5223c55a0c108072"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/checkpoint_best_local_rr.pt": {
+      "size_bytes": 14890845,
+      "sha256": "efafbb653507fbee782f5946a07660121737bfd5339ff2b13b81b4b1e3a0fe99"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/config.yaml": {
+      "size_bytes": 2548,
+      "sha256": "572711e26097b089e2e190d7e583ca59da0f162dfd5fb0421331cc7932981cc9"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/run_manifest.json": {
+      "size_bytes": 619,
+      "sha256": "42f5031e5c97d70f67d4dfb817413120d2c9d7824839531e5c1613a6f5475986"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/metrics_summary.csv": {
+      "size_bytes": 2222,
+      "sha256": "67cf88a19b56736cd0d9c315c7f24ba8b38deb00679a98bec531c441090c548d"
+    },
+    "runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/metrics.csv": {
+      "size_bytes": 735974,
+      "sha256": "4d9c7ca6fcb25f26bacb64cec3cfe485f2f8fae0bdd3cc4f4802a02bf86a2dd3"
+    },
+    "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/cache_manifest.json": {
+      "size_bytes": 9529,
+      "sha256": "6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8"
+    },
+    "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/train_w.npy": {
+      "size_bytes": 1416495008,
+      "sha256": "9ed2657cb92ba8e73ce8199dd8b19834ac3b964df10ef615ebb771e9a57e09a3"
+    },
+    "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/val_w.npy": {
+      "size_bytes": 373644128,
+      "sha256": "fb8b44f174f078f93ae6f58083f2ba8c089a011457329e361a9965e409df3cc2"
+    },
+    "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/w_frequencies_hz.npy": {
+      "size_bytes": 904,
+      "sha256": "15cc722c38e5572b3284c92137cfdeec7cbc4153b4588c2c1e086f26ae3238b3"
+    },
+    "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/train_row_ids.npy": {
+      "size_bytes": 81256,
+      "sha256": "2e383fac6c8c5c9421a39be3797f5abc05a7393a2407c21ada3a71ed421953e0"
+    },
+    "runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0/val_row_ids.npy": {
+      "size_bytes": 21528,
+      "sha256": "cd5a0092647b07dc17ed4ae73b7e767684f37dc6084832340f324d18eeed5432"
+    }
+  },
+  "code_files": {
+    "resp_train/paper_evidence/e6_temporal_frontend_model.py": {
+      "size_bytes": 5251,
+      "sha256": "570e316eedf259201fc2ae7cb56ae62b7ee76e8353e06bbaf803dfb84f6c6589"
+    },
+    "resp_train/paper_evidence/e6_temporal_frontend.py": {
+      "size_bytes": 52139,
+      "sha256": "24c06332f8b9380bff68542f1dd3e1fbfafa0e06f7bac3cb83381087e6fe0236"
+    },
+    "resp_train/paper_evidence/e6_temporal_frontend_engineering.py": {
+      "size_bytes": 15322,
+      "sha256": "a825b5f7354537fe4c0db09722c72565ec7b70fec65e1f2a42aad93ef75f3b56"
+    },
+    "scripts/run_e6_temporal_frontend.py": {
+      "size_bytes": 2751,
+      "sha256": "fbf81958c2b5b929ca1b848a56dc85f01de01f4356a362cffc87e023ee7519e7"
+    },
+    "tests/test_e6_temporal_frontend.py": {
+      "size_bytes": 21971,
+      "sha256": "2d63eb1db5cc88602dd9fce22a3cb672666faeaf0570a736fc90692ca2f57a27"
+    },
+    "configs/e6_temporal_frontend/e6_tfe201_aa20_demod10_w0.yaml": {
+      "size_bytes": 1950,
+      "sha256": "249539f54ceea245930da8ee30b852f05169e4b397717ad14786cd320aa59c6a"
+    },
+    "docs/experiments/e6_temporal_frontend_protocol_20260923.md": {
+      "size_bytes": 8913,
+      "sha256": "e95400e1ac2aea79b0597350ac2d34fdd36f2618e327f21b9524e7efb9a4815b"
+    },
+    "docs/experiments/e6_temporal_frontend_source_audit_20260923.json": {
+      "size_bytes": 3506,
+      "sha256": "34eccc98f58a3ca8a8288d312556116dc8d0a421bec6ace561cd45bf4514a653"
+    },
+    "resp_train/crd/frontends.py": {
+      "size_bytes": 4058,
+      "sha256": "2781002e9eadb79516c2e9eee04f1f89614412dcfd2ca5ab9c423225a6dfe792"
+    },
+    "resp_train/crd/model.py": {
+      "size_bytes": 17485,
+      "sha256": "b4755c939961ab3a73c258c64ad0a501918779d6e133dd6bf70b88cc0b57ad5e"
+    },
+    "resp_train/crd/tf_v1_model.py": {
+      "size_bytes": 21958,
+      "sha256": "80d8ac5a3b9029b283830b48da118212f58ade51cda164e8040f48fd9c900b28"
+    },
+    "resp_train/crd/blocks.py": {
+      "size_bytes": 8517,
+      "sha256": "1a45d90639b24a3288e11d6ba3efb1b416cf8f80c8d67dbc1ae48edcd0ca91b8"
+    },
+    "resp_train/crd/initialization.py": {
+      "size_bytes": 712,
+      "sha256": "6c72ea8881e6f498adcd73a5ad8afa5e5a299c4f313e5d3bc56f4c54add44ffc"
+    },
+    "resp_train/crd/experiment.py": {
+      "size_bytes": 25621,
+      "sha256": "94f6302b93ca61459f61403a6e264068d3d57fdf1966a0774a0023dc3b497e39"
+    },
+    "resp_train/crd/training.py": {
+      "size_bytes": 17110,
+      "sha256": "c574daeb565fd1974ab88a0cc08e3bacc1540858b0a5da1c1355276a7895ab72"
+    },
+    "resp_train/losses/task.py": {
+      "size_bytes": 10649,
+      "sha256": "ab12014e686e687b97e0c4c1e1cd6d04051b75b2058cf8f409794f2549df5ade"
+    },
+    "resp_train/metrics/task.py": {
+      "size_bytes": 34703,
+      "sha256": "c6b05527f4affe769e1d625268595dc9f83826d726d625780f1295d997ef87da"
+    },
+    "resp_train/temporal/blocks.py": {
+      "size_bytes": 17016,
+      "sha256": "c43b8deca4e5ea185c2808a6e6c8b06172b77f811449cbb3d9e3249a3dd83435"
+    }
+  },
+  "prepared_at": "2026-09-23T04:00:36.415986+00:00",
+  "preparation_git": {
+    "commit": "4142582cec2a0a32ba674535d4c5cb7e0d279af3",
+    "status_porcelain": ""
+  },
+  "status": "implementation_locked_gpu_and_training_pending"
+}
