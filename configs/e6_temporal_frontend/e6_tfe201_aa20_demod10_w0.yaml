@@ -1,0 +1,70 @@
+schema_version: 1
+protocol: e6-temporal-frontend-v1-20260923
+arm: e6_tfe201_aa20_demod10_w0
+control_arm: e6_tfe000_patch_w0
+source:
+  w0_implementation_lock: docs/experiments/e4_w0_scale_aggregation_implementation_lock_20260917.json
+  w0_implementation_lock_sha256: 464e073dbd5707a30575d606dec2a84dcd89a161945e537c463b214a15c2b493
+  source_audit: docs/experiments/e6_temporal_frontend_source_audit_20260923.json
+frontend:
+  name: e6_tfe201_aa20_demod10_w0
+  input_fs_hz: 100.0
+  intermediate_fs_hz: 20.0
+  output_fs_hz: 10.0
+  output_channels: 96
+  output_length: 1800
+  stage_100_to_20:
+    implementation: fixed_polyphase_line
+    window: kaiser
+    beta: 8.6
+    down: 5
+    numtaps: 255
+    cutoff_hz: 9.0
+  learned_20hz:
+    carrier_filter:
+      in_channels: 1
+      out_channels: 48
+      kernel_size: 21
+      padding: 10
+      bias: false
+    depthwise:
+      channels: 48
+      kernel_size: 5
+      padding: 2
+      bias: false
+    projection:
+      in_channels: 48
+      out_channels: 96
+      kernel_size: 5
+      padding: 2
+      bias: false
+    normalization: channel_only_layer_norm_per_time_step
+    activation: silu_after_each_learned_stage
+    initialization: kaiming_normal_fan_in_relu
+  stage_20_to_10:
+    implementation: fixed_polyphase_line
+    window: kaiser
+    beta: 8.6
+    down: 2
+    numtaps: 127
+    cutoff_hz: 4.5
+  implementation_source: resp_train.temporal.blocks.TemporalStem
+  trainable_parameters: 24672
+  model_parameters: 1235738
+matrix:
+  seeds: [20260811, 20260812, 20260813]
+  train_windows: 10141
+  validation_windows: 2675
+  train_samp_ids: 32
+  validation_samp_ids: 7
+  epochs: 80
+  optimizer_updates: 6400
+  early_stopping_enabled: true
+  early_stopping_min_epoch: 30
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  physical_batch: 128
+  gradient_accumulation_steps: 1
+  amp_dtype: bfloat16
+  checkpoint_selector: full_validation_local_rr_strict_minimum_earliest_tie
+  test_enabled: false

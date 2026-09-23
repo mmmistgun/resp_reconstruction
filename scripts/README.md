@@ -82,15 +82,14 @@ Test 专项协议为
 [E5 research-test 附件](../docs/experiments/e5_temporal_frontend_test_protocol_20260923.md)，入口为
 `scripts/eval_e5_temporal_frontend_test.py`。它固定使用 validation 预选的 epoch `9/13/5`，复用同 seed
 冻结 W0 test 指标作对照；test 只作为重复使用 research-test 上的开发性描述，不改变 validation 决定。
-当前只开放代码和 synthetic fixture 验收：
+三 seed test 与一次性汇总均已完成，结果继续支持 E5 net-negative 判断；冻结汇总位于
+`runs/e5_temporal_frontend_test/summary/summary_5b452091dc28_20260923T031427Z_c128f3353d19/`。
+以下命令只保留为历史入口：
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
   tests/test_e5_temporal_frontend_test.py -q
 ```
-
-提交 test 实现并保持工作树干净后，`prepare-lock` 可只读核验 validation 来源、checkpoint、既有 W0 test
-指标和 test cache manifest；它不打开 test 数组。真实 test 推理需单独授权：
 
 ```bash
 ./.venv/bin/python scripts/eval_e5_temporal_frontend_test.py prepare-lock
@@ -103,6 +102,35 @@ done
 ./.venv/bin/python scripts/eval_e5_temporal_frontend_test.py summarize --runs \
   '/seed_20260811完成attempt' '/seed_20260812完成attempt' '/seed_20260813完成attempt'
 ```
+
+## E6：20-Hz 学习解调后形成 10-Hz latent
+
+专项协议为
+[E6 时域前端方案](../docs/experiments/e6_temporal_frontend_protocol_20260923.md)。唯一候选
+`e6_tfe201_aa20_demod10_w0` 直接复用 RTM 冻结 `TemporalStem`：显式 `100→20 Hz` 抗混叠，
+在 20 Hz 完成 `1→48` carrier-sensitive filtering、depthwise filtering、`48→96` projection 及
+channel-only normalization/SiLU，再显式 `20→10 Hz`。只替换 W0 `base.frontend`；W 分支、
+六层 BiMamba2、FiLM、decoder、loss 和数据保持固定。参数量只报告，不参与结构选择。
+
+训练最多 80 epochs/6400 planned updates，继续使用完整 validation Local-RR early stop：
+`min_epoch=30 / patience=15 / min_delta=0`，LR 不随提前停止重标定。当前只完成 P1 代码和
+synthetic CPU 验收；实现锁、GPU acceptance、benchmark、正式训练和 test 尚未执行。
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
+  tests/test_e6_temporal_frontend.py tests/test_e5_temporal_frontend.py \
+  tests/test_resp_temporal_v1_models.py tests/test_crd_tf_v1_model.py -q
+
+./.venv/bin/python scripts/run_e6_temporal_frontend.py check-config
+```
+
+提交实现并保持工作树干净后，下一步只读准备实现锁：
+
+```bash
+./.venv/bin/python scripts/run_e6_temporal_frontend.py prepare-lock
+```
+
+GPU 与正式训练阶段由用户在后续明确开放；失败 attempt 和已完成 identity 均不可覆盖。
 
 ## E4：R3 时间结构与 GN 统计控制
 

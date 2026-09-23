@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "protocol": "e6-temporal-frontend-v1-20260923",
+  "question": "whether learned carrier-sensitive filtering and nonlinearity at 20 Hz before the final 10-Hz reduction improves the frozen W0 package",
+  "decision": {
+    "candidate": "e6_tfe201_aa20_demod10_w0",
+    "control": "e6_tfe000_patch_w0",
+    "frontend_source": "resp_train.temporal.blocks.TemporalStem",
+    "reuse_exact_temporal_stem": true,
+    "replace_only": "base.frontend",
+    "design_basis": "signal structure and input-path ordering",
+    "early_stopping": {
+      "enabled": true,
+      "min_epoch": 30,
+      "patience": 15,
+      "min_delta": 0.0,
+      "planned_epochs": 80,
+      "planned_updates": 6400
+    }
+  },
+  "signal_evidence": {
+    "target_10hz_representation": "C0 established near-lossless representation of the canonical respiratory output at 10 Hz",
+    "ordering": "RTM train-only audit supports explicit 100-to-20-Hz reduction, learned carrier-sensitive filtering and nonlinearity at 20 Hz, then explicit 20-to-10-Hz reduction",
+    "causal_boundary": "the audit supports the ordering and observability claim; it does not prove that this exact learned stem is uniquely optimal for W0"
+  },
+  "e5_observation": {
+    "frontend_order": "fixed 100-to-10-Hz reduction before all learned nonlinear operations",
+    "validation_outcome": "net negative",
+    "research_test_outcome": "net negative on reused research-test",
+    "interpretation": "the frozen W branch cannot be treated as an equivalent replacement for learned time-path carrier demodulation before the final 10-Hz reduction",
+    "confounding_boundary": "E5 also changed patch mixing, normalization and local encoding, so its outcome alone is not a causal ordering proof"
+  },
+  "frozen_sources": {
+    "rtm_signal_substrate_lock": {
+      "path": "docs/experiments/resp_temporal_v1_signal_substrate_lock_20260820.json",
+      "sha256": "11bfcad00f4532d4bdfe1413a375b5f06f46eb8ac67dfcd475701872322fee69"
+    },
+    "rtm_cpu_implementation_receipt": {
+      "path": "docs/experiments/resp_temporal_v1_cpu_implementation_receipt_20260820.json",
+      "sha256": "6ef3ca0d48e1ac819ff55bab4247d542c8bae0adfddb6951c8a026e81fea7872"
+    },
+    "temporal_blocks": {
+      "path": "resp_train/temporal/blocks.py",
+      "sha256": "c43b8deca4e5ea185c2808a6e6c8b06172b77f811449cbb3d9e3249a3dd83435"
+    },
+    "e5_validation_summary_manifest": {
+      "path": "runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/manifest.json",
+      "sha256": "153b581b0ec1ca0ba5b286d990bdf248bb8e7a35949e79d36331b5cf6740d7f8"
+    },
+    "e5_test_summary_manifest": {
+      "path": "runs/e5_temporal_frontend_test/summary/summary_5b452091dc28_20260923T031427Z_c128f3353d19/manifest.json",
+      "sha256": "ebfea505978d9fa55e3fa22607b11778588661a65f57b8e2fb3759ecfdf072d1"
+    }
+  },
+  "fixed_controls": [
+    "research_v2 train and validation identities",
+    "three training and initialization seeds",
+    "W-only 97-scale conditioning branch and cache",
+    "six-layer D96 bidirectional Mamba2 trunk",
+    "FiLM placement and coefficients",
+    "refinement, decoder and Fourier interpolation",
+    "L_sync plus 0.25 L_effort",
+    "optimizer, batch, planned learning-rate schedule and checkpoint selector",
+    "five primary metrics and sample-direct aggregation"
+  ],
+  "scope": {
+    "train_validation_only": true,
+    "test_enabled": false,
+    "new_formal_training_runs": 3,
+    "control_training_reused": true
+  }
+}

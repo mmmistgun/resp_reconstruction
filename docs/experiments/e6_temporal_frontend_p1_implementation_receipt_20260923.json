@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "receipt_id": "e6-temporal-frontend-p1-implementation-20260923",
+  "protocol_id": "e6-temporal-frontend-v1-20260923",
+  "status": "p1_code_and_synthetic_cpu_verified_implementation_lock_pending",
+  "created_date": "2026-09-23",
+  "authorization": {
+    "user_text": "继续early stop，开始实现",
+    "scope": "independent E6 implementation with early stopping and synthetic CPU verification",
+    "early_stopping_min_epoch": 30,
+    "early_stopping_patience": 15,
+    "gpu_execution_authorized": false,
+    "formal_training_authorized": false,
+    "real_data_smoke_authorized": false,
+    "benchmark_authorized": false,
+    "research_test_authorized": false
+  },
+  "repository": {
+    "head_before_implementation": "d58495a",
+    "implementation_committed": false,
+    "implementation_lock_created": false,
+    "preexisting_worktree_changes": []
+  },
+  "candidate": {
+    "arm": "e6_tfe201_aa20_demod10_w0",
+    "control_arm": "e6_tfe000_patch_w0",
+    "flow": [
+      "fixed Kaiser-beta-8.6 line-boundary FIR 100-to-20 Hz, down=5, taps=255, cutoff=9.0 Hz",
+      "Conv1d 1-to-48 k21 plus channel-only LayerNorm and SiLU at 20 Hz",
+      "depthwise Conv1d 48 k5 plus channel-only LayerNorm and SiLU at 20 Hz",
+      "Conv1d 48-to-96 k5 plus channel-only LayerNorm and SiLU at 20 Hz",
+      "fixed Kaiser-beta-8.6 line-boundary FIR 20-to-10 Hz, down=2, taps=127, cutoff=4.5 Hz"
+    ],
+    "implementation_source": "resp_train.temporal.blocks.TemporalStem",
+    "frontend_trainable_parameters": 24672,
+    "model_trainable_parameters": 1235738,
+    "fixed_persistent_taps": 382,
+    "output_shape": ["B", 96, 1800],
+    "output_grid_hz": 10.0,
+    "early_stopping": {
+      "monitor": "full_validation_local_rr_strict_minimum_earliest_tie",
+      "max_epochs": 80,
+      "planned_optimizer_updates": 6400,
+      "min_epoch": 30,
+      "patience": 15,
+      "min_delta": 0.0,
+      "wait_count_starts_at_epoch": 1,
+      "earliest_stop_epoch": 30,
+      "lr_schedule_rebased_on_early_stop": false
+    }
+  },
+  "implementation": {
+    "independent_model": true,
+    "generic_crd_variant_registry_modified": false,
+    "rtm_source_modified": false,
+    "exact_rtm_temporal_stem_reused": true,
+    "generic_crd_config_validator_relaxed": false,
+    "native_crd_trainer_loss_metrics_scheduler_selector_reused": true,
+    "strict_experiment_spec_added": true,
+    "source_audit_and_implementation_lock_preparer_added": true,
+    "gpu_acceptance_harness_added_not_executed": true,
+    "benchmark_harness_added_not_executed": true,
+    "formal_three_seed_runner_added_not_executed": true,
+    "validation_and_subject_summary_added_not_executed_on_real_results": true,
+    "failure_lifecycle_and_nonoverwrite_guards_added": true
+  },
+  "verification": {
+    "python_compile": {
+      "command": "env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m py_compile resp_train/paper_evidence/e6_temporal_frontend_model.py resp_train/paper_evidence/e6_temporal_frontend.py resp_train/paper_evidence/e6_temporal_frontend_engineering.py scripts/run_e6_temporal_frontend.py tests/test_e6_temporal_frontend.py",
+      "passed": true
+    },
+    "strict_spec": {
+      "command": "./.venv/bin/python scripts/run_e6_temporal_frontend.py check-config",
+      "passed": true
+    },
+    "e6_targeted_tests": {
+      "command": "env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest tests/test_e6_temporal_frontend.py -q",
+      "result": "35 passed",
+      "duration_seconds": 18.30
+    },
+    "e6_e5_w0_rtm_regression": {
+      "command": "env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest tests/test_e6_temporal_frontend.py tests/test_e5_temporal_frontend.py tests/test_resp_temporal_v1_models.py tests/test_crd_tf_v1_model.py -q",
+      "result": "97 passed",
+      "duration_seconds": 22.85
+    },
+    "legacy_early_stop_regression": {
+      "command": "env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest tests/test_crd_tf_v1_p6a.py tests/test_crd_tf_v1_p6a_summary.py -q",
+      "result": "16 passed",
+      "duration_seconds": 15.49
+    },
+    "contracts_verified": [
+      "100-to-20 and 20-to-10 float64 decimators equal the frozen SciPy audit operators at atol=rtol=5e-12",
+      "E6 frontend state and initialization are exact TemporalStem state and initialization",
+      "20-Hz learned stage and 10-Hz output shapes are exact",
+      "all frontend parameters receive immediate finite nonzero gradients on synthetic loss",
+      "three seeds share all 165 non-frontend state tensors bit-identically with W0",
+      "global CPU RNG state matches W0 construction for all three seeds",
+      "frontend and full-model parameter contracts are exact",
+      "convolutions use native decay and channel-only LayerNorm parameters use native no-decay grouping",
+      "fixed FIR taps do not enter the optimizer",
+      "old W0 and E6 state schemas remain strictly incompatible while E6 round-trip strict loading succeeds",
+      "strict experiment spec and generic CRD config rejection both hold",
+      "frozen RTM and E5 mechanism sources match their recorded SHA-256 identities",
+      "paired-seed deltas retain undefined relative denominators as NA",
+      "subject-equal macro summary preserves seed and subject identities",
+      "early stopping cannot trigger before epoch 30 and requires wait>=15 with min_delta=0",
+      "planned 6400-update LR schedule is preserved when early stopping truncates completed updates",
+      "legacy P6a early stopping behavior remains unchanged",
+      "tiny three-seed native trainer fixture closes history, selector, checkpoint, optimizer, lifecycle and summary contracts"
+    ]
+  },
+  "access_and_execution_flags": {
+    "real_waveforms_read": false,
+    "train_cache_arrays_read": false,
+    "validation_cache_arrays_read": false,
+    "research_test_input_or_target_read": false,
+    "frozen_validation_and_test_summary_provenance_read": true,
+    "existing_checkpoint_state_read_during_p1_implementation": false,
+    "synthetic_tensor_forward_used": true,
+    "synthetic_training_fixture_used": true,
+    "gpu_used": false,
+    "benchmark_used": false,
+    "formal_training_used": false
+  },
+  "files_sha256": {
+    "resp_train/paper_evidence/e6_temporal_frontend_model.py": "570e316eedf259201fc2ae7cb56ae62b7ee76e8353e06bbaf803dfb84f6c6589",
+    "resp_train/paper_evidence/e6_temporal_frontend.py": "24c06332f8b9380bff68542f1dd3e1fbfafa0e06f7bac3cb83381087e6fe0236",
+    "resp_train/paper_evidence/e6_temporal_frontend_engineering.py": "a825b5f7354537fe4c0db09722c72565ec7b70fec65e1f2a42aad93ef75f3b56",
+    "configs/e6_temporal_frontend/e6_tfe201_aa20_demod10_w0.yaml": "249539f54ceea245930da8ee30b852f05169e4b397717ad14786cd320aa59c6a",
+    "scripts/run_e6_temporal_frontend.py": "fbf81958c2b5b929ca1b848a56dc85f01de01f4356a362cffc87e023ee7519e7",
+    "tests/test_e6_temporal_frontend.py": "2d63eb1db5cc88602dd9fce22a3cb672666faeaf0570a736fc90692ca2f57a27",
+    "docs/experiments/e6_temporal_frontend_protocol_20260923.md": "e95400e1ac2aea79b0597350ac2d34fdd36f2618e327f21b9524e7efb9a4815b",
+    "docs/experiments/e6_temporal_frontend_source_audit_20260923.json": "34eccc98f58a3ca8a8288d312556116dc8d0a421bec6ace561cd45bf4514a653",
+    "scripts/README.md": "c027fe587bbb29d71eeca297443e26c284df457d180164e8a4c2420679e16289"
+  },
+  "next_gate": {
+    "step": "commit implementation, keep worktree clean, then run prepare-lock to rehash frozen W0, RTM/E5 provenance and train/validation W cache",
+    "implementation_lock_path": "docs/experiments/e6_temporal_frontend_implementation_lock_20260923.json",
+    "gpu_acceptance_still_requires_user_authorization": true
+  },
+  "interpretation_limit": "Synthetic CPU verification establishes implementation, numerical, initialization and lifecycle contracts only; it is not GPU feasibility, training quality, validation or research-test evidence."
+}
