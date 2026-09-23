@@ -1,0 +1,1031 @@
+{
+  "schema_version": 1,
+  "protocol": "e5-temporal-frontend-test-v1-20260923",
+  "arm": "e5_tfe101_aa10_res_w0",
+  "frontend_contract": {
+    "name": "e5_tfe101_aa10_res_w0",
+    "input_fs_hz": 100.0,
+    "output_fs_hz": 10.0,
+    "output_channels": 96,
+    "output_length": 1800,
+    "anti_alias": {
+      "implementation": "fixed_polyphase_line",
+      "window": "kaiser",
+      "beta": 8.6,
+      "down": 10,
+      "numtaps": 511,
+      "cutoff_hz": 4.5
+    },
+    "local_embedding": {
+      "in_channels": 1,
+      "out_channels": 96,
+      "kernel_size": 11,
+      "padding": 5,
+      "bias": false,
+      "initialization": "kaiming_normal_fan_in_relu"
+    },
+    "local_residual": {
+      "type": "silu_then_depthwise_conv1d",
+      "channels": 96,
+      "kernel_size": 5,
+      "padding": 2,
+      "bias": false,
+      "initialization": "zeros"
+    },
+    "normalization": "none",
+    "pointwise_mixer": false,
+    "trainable_parameters": 1536,
+    "model_parameters": 1212602
+  },
+  "seeds": [
+    20260811,
+    20260812,
+    20260813
+  ],
+  "selected_epochs": [
+    9,
+    13,
+    5
+  ],
+  "completed_epochs": [
+    30,
+    30,
+    30
+  ],
+  "split": "test",
+  "count": 2310,
+  "samp_id_count": 8,
+  "batch_size": 128,
+  "amp_dtype": "bfloat16",
+  "include_test_only": false,
+  "training_lock_sha256": "d7cf90ccb432f2bda4563f6719385eb98564c1594c43c8b75c10f10374dce7f5",
+  "validation_summary_manifest_sha256": "153b581b0ec1ca0ba5b286d990bdf248bb8e7a35949e79d36331b5cf6740d7f8",
+  "entries": [
+    {
+      "seed": 20260811,
+      "selected_epoch": 9,
+      "completed_epoch": 30,
+      "w0_selected_epoch": 13,
+      "training_attempt": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b",
+      "training_config": {
+        "protocol": {
+          "name": "e5-temporal-frontend-v1-20260922",
+          "stage": "tf",
+          "run_role": "formal",
+          "execution_gate": "e5_formal"
+        },
+        "data": {
+          "format": "research_v2",
+          "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+          "index_csv": "training/dataset_index.csv",
+          "input_set": "research_v2_waveform",
+          "train_split": "train",
+          "val_split": "val",
+          "test_split": "test",
+          "target_task": "waveform",
+          "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+          "target_key": "target_waveform_segment_soft_z_key",
+          "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+          "max_train_windows": null,
+          "max_val_windows": null,
+          "max_test_windows": null,
+          "filter_unusable": true,
+          "drop_nonfinite_windows": false,
+          "preload_windows": true,
+          "train_sample_strategy": "stratified_random",
+          "val_sample_strategy": "stratified_random",
+          "test_sample_strategy": "stratified_random",
+          "train_sample_seed": 20260610,
+          "val_sample_seed": 20260611,
+          "test_sample_seed": 20260612,
+          "stratify_column": "allowed_losses",
+          "min_hard_valid_ratio": 0.8,
+          "min_state_alignment_valid_ratio": 0.8
+        },
+        "window": {
+          "target_fs": 100,
+          "duration_samples": 18000,
+          "duration_sec": 180
+        },
+        "model": {
+          "name": "crd_v1",
+          "variant": "crd_tf102_w",
+          "initialization_seed": 20260811,
+          "tf_representations": [
+            "w"
+          ],
+          "e5_temporal_frontend": {
+            "name": "e5_tfe101_aa10_res_w0",
+            "input_fs_hz": 100.0,
+            "output_fs_hz": 10.0,
+            "output_channels": 96,
+            "output_length": 1800,
+            "anti_alias": {
+              "implementation": "fixed_polyphase_line",
+              "window": "kaiser",
+              "beta": 8.6,
+              "down": 10,
+              "numtaps": 511,
+              "cutoff_hz": 4.5
+            },
+            "local_embedding": {
+              "in_channels": 1,
+              "out_channels": 96,
+              "kernel_size": 11,
+              "padding": 5,
+              "bias": false,
+              "initialization": "kaiming_normal_fan_in_relu"
+            },
+            "local_residual": {
+              "type": "silu_then_depthwise_conv1d",
+              "channels": 96,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false,
+              "initialization": "zeros"
+            },
+            "normalization": "none",
+            "pointwise_mixer": false,
+            "trainable_parameters": 1536,
+            "model_parameters": 1212602
+          }
+        },
+        "loss": {
+          "band_low_hz": 0.05,
+          "band_high_hz": 0.7,
+          "scale_eps": 1e-08,
+          "dynamic_eps": 1e-08,
+          "corr_eps": 1e-08,
+          "envelope_eps": 1e-08,
+          "max_lag_sec": 0.3,
+          "envelope_window_sec": 10,
+          "envelope_step_sec": 5,
+          "sync_weight": 1.0,
+          "effort_weight": 0.25
+        },
+        "evaluation": {
+          "local_rr_window_sec": 60,
+          "local_rr_step_sec": 15,
+          "ibi_peak_distance_samples": 142,
+          "ibi_match_tolerance_sec": 0.5,
+          "ibi_coverage_threshold": 0.8,
+          "ndtw_fs": 10,
+          "ndtw_radius_sec": 0.3,
+          "envelope_quantile_method": "linear",
+          "envelope_strata_low": 0.30875308839006915,
+          "envelope_strata_high": 0.7031542121234101
+        },
+        "training": {
+          "optimizer": "adamw",
+          "epochs": 80,
+          "early_stopping_enabled": true,
+          "batch_size": 128,
+          "gradient_accumulation_steps": 1,
+          "max_learning_rate": 0.0003,
+          "min_learning_rate": 3e-05,
+          "adam_betas": [
+            0.9,
+            0.999
+          ],
+          "adam_eps": 1e-08,
+          "weight_decay": 0.0001,
+          "warmup_fraction": 0.05,
+          "lr_schedule": "step_exact_warmup_cosine",
+          "grad_clip_norm": 1.0,
+          "use_amp": true,
+          "amp_dtype": "bfloat16",
+          "drop_last": false,
+          "resume": false,
+          "num_workers": 0,
+          "persistent_workers": false,
+          "prefetch_factor": null,
+          "seed": 20260811,
+          "device": "cuda:0",
+          "show_progress": false,
+          "early_stopping_min_epoch": 30,
+          "early_stopping_patience": 15,
+          "early_stopping_min_delta": 0.0
+        },
+        "outputs": {
+          "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/training"
+        }
+      },
+      "candidate": {
+        "config.yaml": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/training/20260923_020811_190363/config.yaml",
+          "size_bytes": 3440,
+          "sha256": "db1d2f0a4d0ae6fc8fce7170101b6e9b4d18f3979bdec6bec2d1e3a545f52fcf"
+        },
+        "train_history.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/training/20260923_020811_190363/train_history.csv",
+          "size_bytes": 6064,
+          "sha256": "34b54a3697772008b0c01389b55c4c43393d23941fa248e3c3762065713315bf"
+        },
+        "checkpoint_best_local_rr.pt": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/training/20260923_020811_190363/checkpoint_best_local_rr.pt",
+          "size_bytes": 14774744,
+          "sha256": "ea89f0b8c1e80bbf866185176d52f1f9af23be87347907cf1a683284d8b12848"
+        }
+      },
+      "w0_test": {
+        "research_test_metrics.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/research_test_metrics.csv",
+          "size_bytes": 714852,
+          "sha256": "aa467696fe0b6684fc52ba64df9d926b4f692757a53b88a6bd644dcfe8dad694"
+        },
+        "research_test_metrics_summary.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/research_test_metrics_summary.csv",
+          "size_bytes": 2370,
+          "sha256": "6d4270082b4314ab4937e2d37fe9b428a19e2c71dcbfe556adef300af5c93486"
+        },
+        "research_test_metrics_manifest.json": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/research_test_metrics_manifest.json",
+          "size_bytes": 1578,
+          "sha256": "d12858221b14a2a91d4b0a1c2feb64b1742ba92cece38eecfdf533c299b20b5b"
+        }
+      },
+      "development_samp_ids": [
+        88,
+        221,
+        282,
+        285,
+        541,
+        579,
+        683,
+        684,
+        686,
+        703,
+        735,
+        736,
+        893,
+        933,
+        935,
+        939,
+        950,
+        952,
+        954,
+        955,
+        956,
+        960,
+        961,
+        962,
+        967,
+        969,
+        971,
+        972,
+        1000,
+        1004,
+        1010,
+        1300,
+        1302,
+        1308,
+        1314,
+        1354,
+        1374,
+        1378,
+        1478
+      ]
+    },
+    {
+      "seed": 20260812,
+      "selected_epoch": 13,
+      "completed_epoch": 30,
+      "w0_selected_epoch": 15,
+      "training_attempt": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079",
+      "training_config": {
+        "protocol": {
+          "name": "e5-temporal-frontend-v1-20260922",
+          "stage": "tf",
+          "run_role": "formal",
+          "execution_gate": "e5_formal"
+        },
+        "data": {
+          "format": "research_v2",
+          "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+          "index_csv": "training/dataset_index.csv",
+          "input_set": "research_v2_waveform",
+          "train_split": "train",
+          "val_split": "val",
+          "test_split": "test",
+          "target_task": "waveform",
+          "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+          "target_key": "target_waveform_segment_soft_z_key",
+          "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+          "max_train_windows": null,
+          "max_val_windows": null,
+          "max_test_windows": null,
+          "filter_unusable": true,
+          "drop_nonfinite_windows": false,
+          "preload_windows": true,
+          "train_sample_strategy": "stratified_random",
+          "val_sample_strategy": "stratified_random",
+          "test_sample_strategy": "stratified_random",
+          "train_sample_seed": 20260610,
+          "val_sample_seed": 20260611,
+          "test_sample_seed": 20260612,
+          "stratify_column": "allowed_losses",
+          "min_hard_valid_ratio": 0.8,
+          "min_state_alignment_valid_ratio": 0.8
+        },
+        "window": {
+          "target_fs": 100,
+          "duration_samples": 18000,
+          "duration_sec": 180
+        },
+        "model": {
+          "name": "crd_v1",
+          "variant": "crd_tf102_w",
+          "initialization_seed": 20260812,
+          "tf_representations": [
+            "w"
+          ],
+          "e5_temporal_frontend": {
+            "name": "e5_tfe101_aa10_res_w0",
+            "input_fs_hz": 100.0,
+            "output_fs_hz": 10.0,
+            "output_channels": 96,
+            "output_length": 1800,
+            "anti_alias": {
+              "implementation": "fixed_polyphase_line",
+              "window": "kaiser",
+              "beta": 8.6,
+              "down": 10,
+              "numtaps": 511,
+              "cutoff_hz": 4.5
+            },
+            "local_embedding": {
+              "in_channels": 1,
+              "out_channels": 96,
+              "kernel_size": 11,
+              "padding": 5,
+              "bias": false,
+              "initialization": "kaiming_normal_fan_in_relu"
+            },
+            "local_residual": {
+              "type": "silu_then_depthwise_conv1d",
+              "channels": 96,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false,
+              "initialization": "zeros"
+            },
+            "normalization": "none",
+            "pointwise_mixer": false,
+            "trainable_parameters": 1536,
+            "model_parameters": 1212602
+          }
+        },
+        "loss": {
+          "band_low_hz": 0.05,
+          "band_high_hz": 0.7,
+          "scale_eps": 1e-08,
+          "dynamic_eps": 1e-08,
+          "corr_eps": 1e-08,
+          "envelope_eps": 1e-08,
+          "max_lag_sec": 0.3,
+          "envelope_window_sec": 10,
+          "envelope_step_sec": 5,
+          "sync_weight": 1.0,
+          "effort_weight": 0.25
+        },
+        "evaluation": {
+          "local_rr_window_sec": 60,
+          "local_rr_step_sec": 15,
+          "ibi_peak_distance_samples": 142,
+          "ibi_match_tolerance_sec": 0.5,
+          "ibi_coverage_threshold": 0.8,
+          "ndtw_fs": 10,
+          "ndtw_radius_sec": 0.3,
+          "envelope_quantile_method": "linear",
+          "envelope_strata_low": 0.30875308839006915,
+          "envelope_strata_high": 0.7031542121234101
+        },
+        "training": {
+          "optimizer": "adamw",
+          "epochs": 80,
+          "early_stopping_enabled": true,
+          "batch_size": 128,
+          "gradient_accumulation_steps": 1,
+          "max_learning_rate": 0.0003,
+          "min_learning_rate": 3e-05,
+          "adam_betas": [
+            0.9,
+            0.999
+          ],
+          "adam_eps": 1e-08,
+          "weight_decay": 0.0001,
+          "warmup_fraction": 0.05,
+          "lr_schedule": "step_exact_warmup_cosine",
+          "grad_clip_norm": 1.0,
+          "use_amp": true,
+          "amp_dtype": "bfloat16",
+          "drop_last": false,
+          "resume": false,
+          "num_workers": 0,
+          "persistent_workers": false,
+          "prefetch_factor": null,
+          "seed": 20260812,
+          "device": "cuda:0",
+          "show_progress": false,
+          "early_stopping_min_epoch": 30,
+          "early_stopping_patience": 15,
+          "early_stopping_min_delta": 0.0
+        },
+        "outputs": {
+          "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/training"
+        }
+      },
+      "candidate": {
+        "config.yaml": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/training/20260923_024100_826364/config.yaml",
+          "size_bytes": 3440,
+          "sha256": "c03caade0a1f2d14b4270f80e0621021a0b209aea4c07307ca08ce8e69a7787e"
+        },
+        "train_history.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/training/20260923_024100_826364/train_history.csv",
+          "size_bytes": 6072,
+          "sha256": "7b756b6a6aa913ab6692e14962035b0fb215f7ab61b12205c516c4da012164df"
+        },
+        "checkpoint_best_local_rr.pt": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/training/20260923_024100_826364/checkpoint_best_local_rr.pt",
+          "size_bytes": 14774744,
+          "sha256": "5479c314d065a44e8328752f1e8facf67d0b5ecb0c34c0a8410633f7ccbf6903"
+        }
+      },
+      "w0_test": {
+        "research_test_metrics.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/research_test_metrics.csv",
+          "size_bytes": 714467,
+          "sha256": "542edc2df4b2146ac7f0eec6964c0fa289e6aed0bc837c4ffb106f10fe57268e"
+        },
+        "research_test_metrics_summary.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/research_test_metrics_summary.csv",
+          "size_bytes": 2372,
+          "sha256": "2e4285aca2f29f1c6d3c914a130dd7dfe85fc0abdc197789fdbdd733b64f50d0"
+        },
+        "research_test_metrics_manifest.json": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/research_test_metrics_manifest.json",
+          "size_bytes": 1578,
+          "sha256": "9af3470fd8d54b9e2c81426a11ff76b87173c81e29169adae9379cafd669e0e7"
+        }
+      },
+      "development_samp_ids": [
+        88,
+        221,
+        282,
+        285,
+        541,
+        579,
+        683,
+        684,
+        686,
+        703,
+        735,
+        736,
+        893,
+        933,
+        935,
+        939,
+        950,
+        952,
+        954,
+        955,
+        956,
+        960,
+        961,
+        962,
+        967,
+        969,
+        971,
+        972,
+        1000,
+        1004,
+        1010,
+        1300,
+        1302,
+        1308,
+        1314,
+        1354,
+        1374,
+        1378,
+        1478
+      ]
+    },
+    {
+      "seed": 20260813,
+      "selected_epoch": 5,
+      "completed_epoch": 30,
+      "w0_selected_epoch": 14,
+      "training_attempt": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165",
+      "training_config": {
+        "protocol": {
+          "name": "e5-temporal-frontend-v1-20260922",
+          "stage": "tf",
+          "run_role": "formal",
+          "execution_gate": "e5_formal"
+        },
+        "data": {
+          "format": "research_v2",
+          "dataset_root": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf",
+          "index_csv": "training/dataset_index.csv",
+          "input_set": "research_v2_waveform",
+          "train_split": "train",
+          "val_split": "val",
+          "test_split": "test",
+          "target_task": "waveform",
+          "bcg_input_key": "bcg_rawish_segment_soft_z_key",
+          "target_key": "target_waveform_segment_soft_z_key",
+          "tf_cache_path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/cache/bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0",
+          "max_train_windows": null,
+          "max_val_windows": null,
+          "max_test_windows": null,
+          "filter_unusable": true,
+          "drop_nonfinite_windows": false,
+          "preload_windows": true,
+          "train_sample_strategy": "stratified_random",
+          "val_sample_strategy": "stratified_random",
+          "test_sample_strategy": "stratified_random",
+          "train_sample_seed": 20260610,
+          "val_sample_seed": 20260611,
+          "test_sample_seed": 20260612,
+          "stratify_column": "allowed_losses",
+          "min_hard_valid_ratio": 0.8,
+          "min_state_alignment_valid_ratio": 0.8
+        },
+        "window": {
+          "target_fs": 100,
+          "duration_samples": 18000,
+          "duration_sec": 180
+        },
+        "model": {
+          "name": "crd_v1",
+          "variant": "crd_tf102_w",
+          "initialization_seed": 20260813,
+          "tf_representations": [
+            "w"
+          ],
+          "e5_temporal_frontend": {
+            "name": "e5_tfe101_aa10_res_w0",
+            "input_fs_hz": 100.0,
+            "output_fs_hz": 10.0,
+            "output_channels": 96,
+            "output_length": 1800,
+            "anti_alias": {
+              "implementation": "fixed_polyphase_line",
+              "window": "kaiser",
+              "beta": 8.6,
+              "down": 10,
+              "numtaps": 511,
+              "cutoff_hz": 4.5
+            },
+            "local_embedding": {
+              "in_channels": 1,
+              "out_channels": 96,
+              "kernel_size": 11,
+              "padding": 5,
+              "bias": false,
+              "initialization": "kaiming_normal_fan_in_relu"
+            },
+            "local_residual": {
+              "type": "silu_then_depthwise_conv1d",
+              "channels": 96,
+              "kernel_size": 5,
+              "padding": 2,
+              "bias": false,
+              "initialization": "zeros"
+            },
+            "normalization": "none",
+            "pointwise_mixer": false,
+            "trainable_parameters": 1536,
+            "model_parameters": 1212602
+          }
+        },
+        "loss": {
+          "band_low_hz": 0.05,
+          "band_high_hz": 0.7,
+          "scale_eps": 1e-08,
+          "dynamic_eps": 1e-08,
+          "corr_eps": 1e-08,
+          "envelope_eps": 1e-08,
+          "max_lag_sec": 0.3,
+          "envelope_window_sec": 10,
+          "envelope_step_sec": 5,
+          "sync_weight": 1.0,
+          "effort_weight": 0.25
+        },
+        "evaluation": {
+          "local_rr_window_sec": 60,
+          "local_rr_step_sec": 15,
+          "ibi_peak_distance_samples": 142,
+          "ibi_match_tolerance_sec": 0.5,
+          "ibi_coverage_threshold": 0.8,
+          "ndtw_fs": 10,
+          "ndtw_radius_sec": 0.3,
+          "envelope_quantile_method": "linear",
+          "envelope_strata_low": 0.30875308839006915,
+          "envelope_strata_high": 0.7031542121234101
+        },
+        "training": {
+          "optimizer": "adamw",
+          "epochs": 80,
+          "early_stopping_enabled": true,
+          "batch_size": 128,
+          "gradient_accumulation_steps": 1,
+          "max_learning_rate": 0.0003,
+          "min_learning_rate": 3e-05,
+          "adam_betas": [
+            0.9,
+            0.999
+          ],
+          "adam_eps": 1e-08,
+          "weight_decay": 0.0001,
+          "warmup_fraction": 0.05,
+          "lr_schedule": "step_exact_warmup_cosine",
+          "grad_clip_norm": 1.0,
+          "use_amp": true,
+          "amp_dtype": "bfloat16",
+          "drop_last": false,
+          "resume": false,
+          "num_workers": 0,
+          "persistent_workers": false,
+          "prefetch_factor": null,
+          "seed": 20260813,
+          "device": "cuda:0",
+          "show_progress": false,
+          "early_stopping_min_epoch": 30,
+          "early_stopping_patience": 15,
+          "early_stopping_min_delta": 0.0
+        },
+        "outputs": {
+          "run_root": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/training"
+        }
+      },
+      "candidate": {
+        "config.yaml": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/training/20260923_031411_700253/config.yaml",
+          "size_bytes": 3440,
+          "sha256": "63ffcdc8d4947e6a49aa1c5f5a0554ddf09ccdcaf171192133c447137409615a"
+        },
+        "train_history.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/training/20260923_031411_700253/train_history.csv",
+          "size_bytes": 6093,
+          "sha256": "c1fd5209c92edb97c430de4762353bde72e1e60aabb0cbcf465de87383d6e8ca"
+        },
+        "checkpoint_best_local_rr.pt": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/training/20260923_031411_700253/checkpoint_best_local_rr.pt",
+          "size_bytes": 14774744,
+          "sha256": "767da4ea0916939b10407f51e9d1a62cd1527ccfc8e18903e038d1e5b2302c4d"
+        }
+      },
+      "w0_test": {
+        "research_test_metrics.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/research_test_metrics.csv",
+          "size_bytes": 714622,
+          "sha256": "12b307c27d0cc967ac7fc2890ad7e5999d2310d14415fb5d47cb3c72c2647513"
+        },
+        "research_test_metrics_summary.csv": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/research_test_metrics_summary.csv",
+          "size_bytes": 2372,
+          "sha256": "258fc3dd7c8226aaf4c46c6e61fd9d97dc217e9939528b1f2760a1e8e703fb66"
+        },
+        "research_test_metrics_manifest.json": {
+          "path": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/research_test_metrics_manifest.json",
+          "size_bytes": 1578,
+          "sha256": "69b89eaa98b621cbf834d879c7b1bf4a082af765bb929c06507386214a6ca748"
+        }
+      },
+      "development_samp_ids": [
+        88,
+        221,
+        282,
+        285,
+        541,
+        579,
+        683,
+        684,
+        686,
+        703,
+        735,
+        736,
+        893,
+        933,
+        935,
+        939,
+        950,
+        952,
+        954,
+        955,
+        956,
+        960,
+        961,
+        962,
+        967,
+        969,
+        971,
+        972,
+        1000,
+        1004,
+        1010,
+        1300,
+        1302,
+        1308,
+        1314,
+        1354,
+        1374,
+        1378,
+        1478
+      ]
+    }
+  ],
+  "source_files": {
+    "/mnt/disk_code/marques/resp_reconstruction/docs/experiments/e5_temporal_frontend_implementation_lock_20260923.json": {
+      "size_bytes": 41975,
+      "sha256": "d7cf90ccb432f2bda4563f6719385eb98564c1594c43c8b75c10f10374dce7f5"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/research_test_summary/access_audit.csv": {
+      "size_bytes": 9293,
+      "sha256": "eb75cce11e1827b983f6540719e772c1e0288e8ffda06b7f3ae917bc2920d377"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/research_test_cache/40a24df424b2ff9182cfcc6f5b7c12d287578b0df1ed1e25b56b7af1c7f73839/cache_manifest.json": {
+      "size_bytes": 6555,
+      "sha256": "5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/freeze_receipt.json": {
+      "size_bytes": 179,
+      "sha256": "e2fc4db1625d2d2af4a39df1b4b9965a4562c549d64ea7c08ebefb51a484fec1"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/lifecycle_completed.json": {
+      "size_bytes": 886,
+      "sha256": "07dcc0d137d1137f7651a51bcb47b9dd4954db1cd288adb920cf4cbd29bf7f09"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/lifecycle_started.json": {
+      "size_bytes": 834,
+      "sha256": "98abca398192a7c0a74cf52e4145d2d22069ef304fb268f7c26ead3c34f9233d"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/manifest.json": {
+      "size_bytes": 2341,
+      "sha256": "153b581b0ec1ca0ba5b286d990bdf248bb8e7a35949e79d36331b5cf6740d7f8"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/paired_seed_delta.csv": {
+      "size_bytes": 4413,
+      "sha256": "0951e943c8c2e3cc46da5d6c86202e830e25fa19b8eb77dd16260cf7a34a483e"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/paired_seed_subject_delta.csv": {
+      "size_bytes": 14303,
+      "sha256": "4d11fce32dd36c000c671edbc6081eecc8ffc49cc667c894a29124afd9477666"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/parameter_compute_report.json": {
+      "size_bytes": 723,
+      "sha256": "cfd19d1ce198a0994eb3f1ad65bb54f983313d1bb153f39cd4f66adaefbc6cda"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/seed_metrics.csv": {
+      "size_bytes": 4675,
+      "sha256": "e019b7456c9aeff9c58a0badb2034fcb228e893ddaa852fed6b11ac37d9090a2"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/source_receipt.json": {
+      "size_bytes": 3407,
+      "sha256": "4d8a49912e15fd2e101839a4e95a06b37e389d204efca100cd7d7cf448b50029"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/subject_macro_by_seed.csv": {
+      "size_bytes": 1572,
+      "sha256": "b1b408c267630c9ab4689187805259b19911c6f0cd306db8ed191c9d2ad19585"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/summary_receipt.json": {
+      "size_bytes": 3618,
+      "sha256": "3cef62d7263d113d01229cbf4526d7a86f414d44336e993c5b91fa34d8728113"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/summary/summary_d7cf90ccb432_20260923T022609Z_937e34d10c67/three_seed_comparison.csv": {
+      "size_bytes": 1382,
+      "sha256": "9b9225c3cfb6881eba8d890a10ed15ff84a1966638c0865c21490958acccf1fb"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/manifest.json": {
+      "size_bytes": 4022,
+      "sha256": "c8bbc80640d5ff5aa23305d6eea5f07dff443150a7acbd8f8f6a5a84b03ecab5"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/formal_receipt.json": {
+      "size_bytes": 647,
+      "sha256": "562d4818f3d6a5ec630b7117bc65c8ee4a8f79ef12075bcb1c9a7da4a5ef06e5"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/freeze_receipt.json": {
+      "size_bytes": 179,
+      "sha256": "b7b073566204bd3156369a648ff4c32608c268e5afc5508862fa94e08ed703de"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/train_rows.csv": {
+      "size_bytes": 10178139,
+      "sha256": "e53a486804e74cde6f1ab0562956f7c55ad63bf4ab94a7bc5426e4b98b6d6c29"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/val_rows.csv": {
+      "size_bytes": 2689762,
+      "sha256": "5159f7388669c0ec6e837a183bfcfff11506a615c19d1017318344f30132195a"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/training/20260923_020811_190363/config.yaml": {
+      "size_bytes": 3440,
+      "sha256": "db1d2f0a4d0ae6fc8fce7170101b6e9b4d18f3979bdec6bec2d1e3a545f52fcf"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/training/20260923_020811_190363/train_history.csv": {
+      "size_bytes": 6064,
+      "sha256": "34b54a3697772008b0c01389b55c4c43393d23941fa248e3c3762065713315bf"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260811/formal_d7cf90ccb432_20260922T180755Z_44b4c5de8e8b/training/20260923_020811_190363/checkpoint_best_local_rr.pt": {
+      "size_bytes": 14774744,
+      "sha256": "ea89f0b8c1e80bbf866185176d52f1f9af23be87347907cf1a683284d8b12848"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/research_test_metrics.csv": {
+      "size_bytes": 714852,
+      "sha256": "aa467696fe0b6684fc52ba64df9d926b4f692757a53b88a6bd644dcfe8dad694"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/research_test_metrics_summary.csv": {
+      "size_bytes": 2370,
+      "sha256": "6d4270082b4314ab4937e2d37fe9b428a19e2c71dcbfe556adef300af5c93486"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260811/20260812_210725_400861/research_test_metrics_manifest.json": {
+      "size_bytes": 1578,
+      "sha256": "d12858221b14a2a91d4b0a1c2feb64b1742ba92cece38eecfdf533c299b20b5b"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/manifest.json": {
+      "size_bytes": 4022,
+      "sha256": "5d854f2fde6dfc910ac4482f98405aa8571f9d55acc4c309e5d16889ae77cbbd"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/formal_receipt.json": {
+      "size_bytes": 648,
+      "sha256": "ac6664b8e72e786c0a421c7f4283b5e23314687e3471237aebe47615edad3712"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/freeze_receipt.json": {
+      "size_bytes": 179,
+      "sha256": "8e67c5d252a2e81f6fb6364237726aa1f1e642a0b57aa8d4741e1d6b8bd959e8"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/train_rows.csv": {
+      "size_bytes": 10178139,
+      "sha256": "e53a486804e74cde6f1ab0562956f7c55ad63bf4ab94a7bc5426e4b98b6d6c29"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/val_rows.csv": {
+      "size_bytes": 2689762,
+      "sha256": "5159f7388669c0ec6e837a183bfcfff11506a615c19d1017318344f30132195a"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/training/20260923_024100_826364/config.yaml": {
+      "size_bytes": 3440,
+      "sha256": "c03caade0a1f2d14b4270f80e0621021a0b209aea4c07307ca08ce8e69a7787e"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/training/20260923_024100_826364/train_history.csv": {
+      "size_bytes": 6072,
+      "sha256": "7b756b6a6aa913ab6692e14962035b0fb215f7ab61b12205c516c4da012164df"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260812/formal_d7cf90ccb432_20260922T184045Z_f02856cef079/training/20260923_024100_826364/checkpoint_best_local_rr.pt": {
+      "size_bytes": 14774744,
+      "sha256": "5479c314d065a44e8328752f1e8facf67d0b5ecb0c34c0a8410633f7ccbf6903"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/research_test_metrics.csv": {
+      "size_bytes": 714467,
+      "sha256": "542edc2df4b2146ac7f0eec6964c0fa289e6aed0bc837c4ffb106f10fe57268e"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/research_test_metrics_summary.csv": {
+      "size_bytes": 2372,
+      "sha256": "2e4285aca2f29f1c6d3c914a130dd7dfe85fc0abdc197789fdbdd733b64f50d0"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260812/20260812_223203_048130/research_test_metrics_manifest.json": {
+      "size_bytes": 1578,
+      "sha256": "9af3470fd8d54b9e2c81426a11ff76b87173c81e29169adae9379cafd669e0e7"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/manifest.json": {
+      "size_bytes": 4022,
+      "sha256": "8a6f34129c187c91a7c13fa9d4084f2b2e1dddd956f4f1922eaebf34dea9b461"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/formal_receipt.json": {
+      "size_bytes": 647,
+      "sha256": "1d9406d197a408d1d372efcb0dd0d14d64cbef3a0b734ea96f07388d05a9e3e4"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/freeze_receipt.json": {
+      "size_bytes": 179,
+      "sha256": "a5f2731c287532e7f3460ab95ecc4d7bba78dafe41535d44c48359ea19c77b59"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/train_rows.csv": {
+      "size_bytes": 10178139,
+      "sha256": "e53a486804e74cde6f1ab0562956f7c55ad63bf4ab94a7bc5426e4b98b6d6c29"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/val_rows.csv": {
+      "size_bytes": 2689762,
+      "sha256": "5159f7388669c0ec6e837a183bfcfff11506a615c19d1017318344f30132195a"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/training/20260923_031411_700253/config.yaml": {
+      "size_bytes": 3440,
+      "sha256": "63ffcdc8d4947e6a49aa1c5f5a0554ddf09ccdcaf171192133c447137409615a"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/training/20260923_031411_700253/train_history.csv": {
+      "size_bytes": 6093,
+      "sha256": "c1fd5209c92edb97c430de4762353bde72e1e60aabb0cbcf465de87383d6e8ca"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/e5_temporal_frontend/formal/seed_20260813/formal_d7cf90ccb432_20260922T191356Z_0b29a1dcb165/training/20260923_031411_700253/checkpoint_best_local_rr.pt": {
+      "size_bytes": 14774744,
+      "sha256": "767da4ea0916939b10407f51e9d1a62cd1527ccfc8e18903e038d1e5b2302c4d"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/research_test_metrics.csv": {
+      "size_bytes": 714622,
+      "sha256": "12b307c27d0cc967ac7fc2890ad7e5999d2310d14415fb5d47cb3c72c2647513"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/research_test_metrics_summary.csv": {
+      "size_bytes": 2372,
+      "sha256": "258fc3dd7c8226aaf4c46c6e61fd9d97dc217e9939528b1f2760a1e8e703fb66"
+    },
+    "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/formal/crd_tf102_w/seed_20260813/20260812_235740_452006/research_test_metrics_manifest.json": {
+      "size_bytes": 1578,
+      "sha256": "69b89eaa98b621cbf834d879c7b1bf4a082af765bb929c06507386214a6ca748"
+    }
+  },
+  "cache_root": "/mnt/disk_code/marques/resp_reconstruction/runs/crd_tf_v1/research_test_cache/40a24df424b2ff9182cfcc6f5b7c12d287578b0df1ed1e25b56b7af1c7f73839",
+  "cache_files": {
+    "test_w.npy": {
+      "size_bytes": 322660928,
+      "sha256": "8057276f9af928f2116d729627caabd31279d245bed33ec42c20f00bfaab1312",
+      "dtype": "float32",
+      "shape": [
+        2310,
+        97,
+        360
+      ],
+      "finite": true,
+      "summary_semantics": "value",
+      "min": 4.247342076268978e-06,
+      "max": 2.145556688308716,
+      "mean": 0.15383247044690823,
+      "std": 0.1612047749098596
+    },
+    "test_row_ids.npy": {
+      "size_bytes": 18608,
+      "sha256": "7e395335a487ff2acb8f306eb17f8724d42199e4e819b3a6c1d1840a1391597b",
+      "dtype": "int64",
+      "shape": [
+        2310
+      ],
+      "finite": true,
+      "summary_semantics": "value",
+      "min": 637.0,
+      "max": 13978.0,
+      "mean": 3681.1753246753246,
+      "std": 2325.336391807027
+    },
+    "w_frequencies_hz.npy": {
+      "size_bytes": 904,
+      "sha256": "15cc722c38e5572b3284c92137cfdeec7cbc4153b4588c2c1e086f26ae3238b3",
+      "dtype": "float64",
+      "shape": [
+        97
+      ],
+      "finite": true,
+      "summary_semantics": "value",
+      "min": 0.03662109375,
+      "max": 7.99560546875,
+      "mean": 1.500646846810567,
+      "std": 1.9855057446468116
+    }
+  },
+  "cache_manifest_sha256": "5d43ecf34596d5a6dd7cbaba75d91f9b7cbbb00214ae7594a4755e2afe510745",
+  "dataset_index": {
+    "path": "/mnt/disk_code/marques/resp_prepare/dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/training/dataset_index.csv",
+    "sha256": "f65ae6524632187c7c2795bd7b5e25434afb649b5a04fe39084b70cc59f9b04f"
+  },
+  "row_order_sha256": "184e9d6a934b6719a4b679ebf6224e20dda1101c1920ed5b9e22ea80f0f293e8",
+  "preparation_git": {
+    "commit": "75281b6a16d2048ed31f5b435b942a50d649d2f7",
+    "status_porcelain": ""
+  },
+  "prepared_at": "2026-09-23T02:52:49.873596+00:00",
+  "preparation_access": "frozen configs/manifests/metric records and cache manifest; test arrays not loaded",
+  "code_files": {
+    "resp_train/paper_evidence/e5_temporal_frontend_test.py": {
+      "size_bytes": 36407,
+      "sha256": "13b18bd84bea295157824973ef31d163ca8e3f9458a48fc7fd5c62c4f5d5ef6f"
+    },
+    "scripts/eval_e5_temporal_frontend_test.py": {
+      "size_bytes": 1373,
+      "sha256": "bef34a7e2b76fb6826d6f7079efb47a10f22bf0b2b02d6df8902f44cb6546556"
+    },
+    "tests/test_e5_temporal_frontend_test.py": {
+      "size_bytes": 21768,
+      "sha256": "bdc3575829356c3baeb49e49cec9739662e8305204f5bfc3bbce3769c9e00950"
+    },
+    "docs/experiments/e5_temporal_frontend_test_protocol_20260923.md": {
+      "size_bytes": 7277,
+      "sha256": "c18900891af0f370cdfcb027ca518e95ac8a54eaf78893e8da36b02eed99df0d"
+    },
+    "resp_train/paper_evidence/e5_temporal_frontend_model.py": {
+      "size_bytes": 6090,
+      "sha256": "cceb59e00313380759998ea1554032bd007db50274fc04580dc877a92b73156c"
+    },
+    "resp_train/paper_evidence/e5_temporal_frontend.py": {
+      "size_bytes": 51394,
+      "sha256": "1028ceac51e5ae61125f8da66702fe605402bea6fb85dd45d717d1fce788a752"
+    },
+    "resp_train/crd/experiment.py": {
+      "size_bytes": 25621,
+      "sha256": "94f6302b93ca61459f61403a6e264068d3d57fdf1966a0774a0023dc3b497e39"
+    },
+    "resp_train/crd/tf_v1_research_test_data.py": {
+      "size_bytes": 6828,
+      "sha256": "b1c077568d0cff836fa99e789a24fdd5c1599daf1ac7a301ddf5d161a41f6a4b"
+    },
+    "resp_train/metrics/task.py": {
+      "size_bytes": 34703,
+      "sha256": "c6b05527f4affe769e1d625268595dc9f83826d726d625780f1295d997ef87da"
+    }
+  }
+}
