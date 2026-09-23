@@ -19,6 +19,32 @@
 - 独立测试集：现有 `test` 可在阶段性整理后重复评价，并可形成后续独立科研问题；不得用于重选既有run的epoch/checkpoint。
 - CRD 训练与普通 `eval_crd.py` 仍只读 train/validation；S1C 只允许 candidate lock 中的 12 个 checkpoint 通过专用入口各读取一次现有 research-test。
 
+## ADV 融合方式 × 位置 v1
+
+当前状态：六组工程验收、18组formal、validation与research-test及完整汇总均已完成并关闭；
+统一入口为[收尾索引](../docs/experiments/adv_fusion_factorial_v1_closeout_20260923.md)。
+以下协议中的命令作为复现记录保留，已完成阶段不重复执行。
+Validation结果与来源核对见[完成报告](../docs/experiments/adv_fusion_factorial_v1_results_20260923.md)。
+
+协议：[融合因子实验](../docs/experiments/adv_fusion_factorial_v1_protocol_20260922.md)；
+命令与验收：[执行说明](../docs/experiments/adv_fusion_factorial_v1_commands_20260922.md)；
+训练过程：[early stopping评估](../docs/experiments/adv_fusion_factorial_v1_earlystop_review_20260922.md)。
+入口为 `scripts/run_adv_fusion_factorial_v1.py`，实现为 `resp_fusion/`，配置为
+`configs/adv_fusion_factorial_v1/`。固定六组 × 三seed，共18次formal，最大80epochs；
+统一early stopping：min_epochs30、patience15、min_delta0，学习率计划保持80epochs；
+支持独立cache、训练、validation、完整因子汇总、原生参数统计和用户执行的GPU合成验收。
+历史训练曲线只读分析入口为 `scripts/review_adv_fusion_training_history.py`。
+
+## ADV 融合因子 research-test
+
+当前状态：18项固定checkpoint评价及完整汇总已完成，见[research-test结果报告](../docs/experiments/adv_fusion_factorial_v1_research_test_results_20260923.md)。
+
+专项协议及用户执行命令：[固定18项research-test](../docs/experiments/adv_fusion_factorial_v1_research_test_protocol_20260923.md)。
+入口为 `scripts/eval_adv_fusion_factorial_v1_research_test.py`，实现位于 `resp_eval/fusion_test/`。
+`check-lock` 仅读取固定候选锁与源码；`cache/evaluate/summary` 要求显式
+`--confirm-research-test`。每项完成全部input-only预测后再读取target，完整汇总保留
+方式、位置、交互差分和辅助指标。候选沿用es30p15训练的18个已选checkpoint。
+
 ## ADV-v1：时间对齐双视图网络
 
 当前状态：本轮四配置 × 三 seed 的 formal 训练、validation 和 research-test 均已完成并关闭。

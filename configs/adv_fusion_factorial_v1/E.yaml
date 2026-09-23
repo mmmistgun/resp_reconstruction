@@ -1,0 +1,3 @@
+# 前融合：双视图注意力；其余字段从冻结 experiment.yaml 合并。
+model:
+  arm: E
