@@ -69,6 +69,8 @@ def fixture(tmp_path, monkeypatch):
     pd.DataFrame(rows).to_csv(index, index=False)
     # 生产锁仅作为结构模板；所有可访问数据和权重都替换为 disposable fixture。
     lock = copy.deepcopy(read_json(contract.LOCK_PATH))
+    # 合入主线后，disposable 运行记录当前源码；生产锁继续保留正式运行时身份。
+    lock["training_code"] = code_identity()
     lock["dataset_index_sha256"] = sha256_file(index)
     lock["test_count"], lock["test_subject_count"] = 2, 1
     lock["test_row_ids_sha256"] = hashlib.sha256(np.asarray([3, 4], dtype="<i8").tobytes()).hexdigest()
@@ -122,13 +124,15 @@ def run_evaluation(fixture, cache, name="A_seed20260811", **kwargs):
 def test_real_candidate_lock_and_training_identity_are_preserved(tmp_path, monkeypatch):
     monkeypatch.setattr(np, "load", lambda *a, **k: pytest.fail("候选准备不得读数组"))
     monkeypatch.setattr(data, "read_research_v2_index", lambda *a, **k: pytest.fail("不得读数据集 index"))
-    lock = contract.load_lock()
+    lock = read_json(contract.LOCK_PATH)
     assert len(lock["entries"]) == 18
-    assert code_identity()["sha256"] == contract.TRAINING_CODE_SHA
-    recreated = contract.prepare_lock(tmp_path / "candidate_copy.json")
-    assert sha256_file(recreated) == contract.LOCK_SHA
-    with pytest.raises(FileExistsError):
-        contract.prepare_lock(recreated)
+    assert sha256_file(contract.LOCK_PATH) == contract.LOCK_SHA
+    assert lock["training_code"]["sha256"] == contract.TRAINING_CODE_SHA
+    assert code_identity()["sha256"] != contract.TRAINING_CODE_SHA
+    with pytest.raises(ValueError, match="冻结的训练代码"):
+        contract.load_lock()
+    with pytest.raises(ValueError, match="训练执行代码身份发生变化"):
+        contract.prepare_lock(tmp_path / "candidate_copy.json")
 
 
 def test_confirmation_precedes_all_data_access(tmp_path, monkeypatch):

@@ -64,6 +64,9 @@ Smoke cache 和训练记录同样保留在 `runs/aligned_dual_view_v1/`，正式
 
 `runs/`、checkpoint、缓存与日志由文件系统保留，不进入 Git。恢复实验记录需要同时保留该工作树中的运行产物及代码提交；仅克隆 Git 不包含运行数据。
 
+2026-09-23 的统一归位位置与迁移后哈希核对见
+[ADV 系列产物归位记录](adv_artifact_relocation_20260923.md)。
+
 ## 4. 保留的结论与证据边界
 
 1. Joint 相对 waveform 的 PCC 均值在 validation 和 research-test 均提高，两个 split 内均为三个 seed 同向；其他主指标存在取舍。

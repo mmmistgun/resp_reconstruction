@@ -57,6 +57,9 @@ Formal训练复用的cache原位保留在`/mnt/disk_code/marques/resp_reconstruc
 
 `runs/`、checkpoint、cache、日志和生成图原位保留，不进入Git。恢复实验记录需要代码提交及当前工作树、原ADV工作树中的相关运行产物；单独克隆Git不包含这些数据。成功与失败生命周期均按原协议保留，不向已完成目录补写。
 
+2026-09-23 的统一归位位置与迁移后哈希核对见
+[ADV 系列产物归位记录](adv_artifact_relocation_20260923.md)。
+
 ## 5. 来源锁与验证
 
 | 身份 | SHA-256 |
