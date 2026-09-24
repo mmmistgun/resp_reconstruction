@@ -105,8 +105,10 @@ done
 
 ## E6：20-Hz 学习解调后形成 10-Hz latent
 
-专项协议为
-[E6 时域前端方案](../docs/experiments/e6_temporal_frontend_protocol_20260923.md)。唯一候选
+状态：**已结项并关闭。** 完整来源、validation/test 指标、效率与解释边界统一见
+[E6 结项记录](../docs/experiments/e6_temporal_frontend_closeout_20260924.md)。以下内容保留为历史入口。
+
+专项协议为 [E6 时域前端方案](../docs/experiments/e6_temporal_frontend_protocol_20260923.md)。唯一候选
 `e6_tfe201_aa20_demod10_w0` 直接复用 RTM 冻结 `TemporalStem`：显式 `100→20 Hz` 抗混叠，
 在 20 Hz 完成 `1→48` carrier-sensitive filtering、depthwise filtering、`48→96` projection 及
 channel-only normalization/SiLU，再显式 `20→10 Hz`。只替换 W0 `base.frontend`；W 分支、
@@ -129,15 +131,15 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
 Test 专项协议为
 [E6 research-test 附件](../docs/experiments/e6_temporal_frontend_test_protocol_20260924.md)，入口为
 `scripts/eval_e6_temporal_frontend_test.py`。固定使用三个 epoch-4 checkpoint，复用同 seed W0 test 指标；
-结果只作重复使用 research-test 上的开发性描述，不改变 validation 决定。当前只开放代码和 synthetic 验收：
+结果只作重复使用 research-test 上的开发性描述，不改变 validation 决定。三 seed test 与一次性汇总均已完成；
+结果在五项 candidate mean 上均不利，E6 不替换 W0。
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
   tests/test_e6_temporal_frontend_test.py -q
 ```
 
-提交 test 实现并保持工作树干净后，可另行执行只读 `prepare-lock`。GPU test evaluation 尚未授权；
-失败 attempt 和已完成 identity 均不可覆盖。
+Test lock、三个 evaluation attempt 与 summary 已冻结，命令只保留 provenance；失败 attempt 和已完成 identity 均不可覆盖。
 
 ## E4：R3 时间结构与 GN 统计控制
 
