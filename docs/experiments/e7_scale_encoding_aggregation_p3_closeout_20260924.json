@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "protocol": "e7-scale-encoding-aggregation-p3-engineering-v1-20260924",
+  "status": "completed",
+  "p1_implementation_lock_sha256": "299448a12c4006f2f918f56645000838f83f044fbbf31d7cc281faa6540b11e1",
+  "p3_engineering_lock_sha256": "773f5e78c5e8d7b08cadaac00797ede8dcd9f3f7a77d0775fc5679650a29d32d",
+  "environment": {
+    "git_commit": "2d1552f33c4a69de96fbd914235d3497f0730fef",
+    "gpu_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "cuda": "13.0",
+    "cudnn": 92000,
+    "torch": "2.12.0+cu130",
+    "python": "3.12.13"
+  },
+  "gpu_acceptance": {
+    "path": "runs/e7_scale_encoding_aggregation/gpu_acceptance/gpu_acceptance_773f5e78c5e8_20260924T082610Z_62e8f9b7eaef",
+    "manifest": {
+      "size_bytes": 33356,
+      "sha256": "6adaf2ca83776f1d9bbd0ae92ca688f1890a7f8fc05cee6949370c18d00d22fe"
+    },
+    "result_sha256": "5d0b79fd1871c411e78c796575a9215c21bdb73bcb50d6ea58e29caa63a591b3",
+    "records": 24,
+    "batch1_records": 18,
+    "batch128_records": 6,
+    "passed_records": 24,
+    "minimum_updates": 5,
+    "maximum_updates": 5,
+    "max_peak_reserved_fraction": 0.6877348204971331,
+    "real_data_read": false,
+    "research_test_read": false
+  },
+  "benchmark": {
+    "path": "runs/e7_scale_encoding_aggregation/benchmark/benchmark_773f5e78c5e8_20260924T084537Z_32c4b00a1fe3",
+    "manifest": {
+      "size_bytes": 13563,
+      "sha256": "452a01a0d2f8b7d69dfdcc05a40e8827502879bdefb7ee0b057a99401e924364"
+    },
+    "result_sha256": "3fcaac0272cc736abf23fbe77ff76803fc9a903efb998c9d896f4c138d5f02ea",
+    "measurements": 36,
+    "groups": 3,
+    "eval_measurements": 18,
+    "train_measurements": 18,
+    "warmup": 5,
+    "repeats": 20,
+    "max_peak_reserved_fraction": 0.6901193025390028,
+    "real_data_read": false,
+    "research_test_read": false
+  },
+  "failed_attempts": [
+    {
+      "phase": "gpu_acceptance",
+      "path": "runs/e7_scale_encoding_aggregation/gpu_acceptance/gpu_acceptance_773f5e78c5e8_20260924T082150Z_aa1966f2f4cf",
+      "reason": "cudnn_runtime_library_conflict",
+      "superseded_by_success": true
+    },
+    {
+      "phase": "benchmark",
+      "path": "runs/e7_scale_encoding_aggregation/benchmark/benchmark_773f5e78c5e8_20260924T082206Z_2777dc94a09f",
+      "reason": "cudnn_runtime_library_conflict",
+      "superseded_by_success": true
+    },
+    {
+      "phase": "benchmark",
+      "path": "runs/e7_scale_encoding_aggregation/benchmark/benchmark_773f5e78c5e8_20260924T082800Z_9e75c85dfb0a",
+      "reason": "dirty_worktree_preflight",
+      "superseded_by_success": true
+    }
+  ]
+}
