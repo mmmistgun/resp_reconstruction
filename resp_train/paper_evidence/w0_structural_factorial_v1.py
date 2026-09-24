@@ -39,6 +39,7 @@ from resp_train.paper_evidence.w0_structural_factorial_v1_model import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
+SOURCE_ROOT = Path("/mnt/disk_code/marques/resp_reconstruction")
 SPEC_PATH = Path("configs/w0_structural_factorial_v1/experiment.yaml")
 PROTOCOL_PATH = Path("docs/experiments/w0_structural_factorial_v1_protocol_20260923.md")
 MODEL_PATH = Path("resp_train/paper_evidence/w0_structural_factorial_v1_model.py")
@@ -316,7 +317,7 @@ def prepare_lock(root: Path = ROOT) -> Path:
             expected = source["source_files"].get(relative)
             if expected is None:
                 raise ValueError(f"W0 来源锁缺少文件身份: {relative}")
-            verify_identity(root / relative, expected)
+            verify_identity(SOURCE_ROOT / relative, expected)
             source_files[relative] = {key: expected[key] for key in ("size_bytes", "sha256")}
 
     cache = source["cache_lock"]
@@ -326,17 +327,17 @@ def prepare_lock(root: Path = ROOT) -> Path:
             "size_bytes": int(entry["size_bytes"]),
             "sha256": str(entry.get("sha256", entry.get("file_sha256"))),
         }
-        verify_identity(root / entry["path"], expected)
+        verify_identity(SOURCE_ROOT / entry["path"], expected)
         source_files[entry["path"]] = expected
     for split in COUNTS:
         relative = str(Path(cache["root"]) / f"{split}_row_ids.npy")
         expected = source["source_files"].get(relative)
         if expected is None:
             raise ValueError(f"W0 来源锁缺少 row identity: {relative}")
-        verify_identity(root / relative, expected)
+        verify_identity(SOURCE_ROOT / relative, expected)
         source_files[relative] = {key: expected[key] for key in ("size_bytes", "sha256")}
 
-    cache_manifest = json.loads((root / cache["manifest"]["path"]).read_text(encoding="utf-8"))
+    cache_manifest = json.loads((SOURCE_ROOT / cache["manifest"]["path"]).read_text(encoding="utf-8"))
     baselines: dict[str, Any] = {}
     templates: dict[str, Any] = {}
     for seed in SEEDS:
@@ -344,7 +345,7 @@ def prepare_lock(root: Path = ROOT) -> Path:
         baselines[str(seed)] = OmegaConf.to_container(baseline, resolve=True)
         templates[str(seed)] = {}
         for arm in ARMS:
-            output = root / OUTPUT_ROOT / "formal" / arm / f"seed_{seed}"
+            output = SOURCE_ROOT / OUTPUT_ROOT / "formal" / arm / f"seed_{seed}"
             candidate = derived_config(baseline, arm=arm, output_root=output, device="cuda:0")
             validate_config(candidate, baseline, arm=arm, output_root=output, device="cuda:0")
             templates[str(seed)][arm] = OmegaConf.to_container(candidate, resolve=True)
@@ -371,6 +372,8 @@ def prepare_lock(root: Path = ROOT) -> Path:
             "path": cache_manifest["dataset_index"],
             "sha256": cache_manifest["dataset_index_sha256"],
         },
+        "source_repository_root": str(SOURCE_ROOT),
+        "artifact_root": str(SOURCE_ROOT / OUTPUT_ROOT),
         "source_files": source_files,
         "code_files": {str(path): identity(root / path) for path in critical_paths()},
         "prepared_at": datetime.now(timezone.utc).isoformat(),
@@ -400,6 +403,8 @@ def load_lock(root: Path = ROOT) -> tuple[dict[str, Any], str]:
         or lock.get("analysis") != _ANALYSIS
         or lock.get("arm_contracts") != _arm_spec_payload()
         or lock.get("status") != "implementation_locked_p2_pending"
+        or lock.get("source_repository_root") != str(SOURCE_ROOT)
+        or lock.get("artifact_root") != str(SOURCE_ROOT / OUTPUT_ROOT)
     ):
         raise ValueError("implementation lock 科学合同漂移")
     verify_identity(root / SPEC_PATH, lock["spec"])
@@ -413,7 +418,7 @@ def load_lock(root: Path = ROOT) -> tuple[dict[str, Any], str]:
                 template,
                 baseline,
                 arm=arm,
-                output_root=root / OUTPUT_ROOT / "formal" / arm / f"seed_{seed}",
+                output_root=SOURCE_ROOT / OUTPUT_ROOT / "formal" / arm / f"seed_{seed}",
                 device="cuda:0",
             )
     return lock, sha256_file(path)

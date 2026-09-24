@@ -31,20 +31,20 @@
       "sha256": "e0acf8f22ceb30d48525dac1f4f7468937b5236379485794a8b0123aa4717a2d"
     },
     "resp_train/paper_evidence/w0_structural_factorial_v1.py": {
-      "size_bytes": 38855,
-      "sha256": "772003a12d82619c1ae2af5c1a12750229702179d6c915683c8cfd291b4dc1bc"
+      "size_bytes": 39208,
+      "sha256": "0c1427be9d77e9de6d680afbba01c18209e239b97491157206c0486073921645"
     },
     "scripts/run_w0_structural_factorial_v1.py": {
-      "size_bytes": 2111,
-      "sha256": "4186c9f7fc72b1d2e6a16e7e3f55d8f631ede66df9f604fdf30da6c4bdbe9c08"
+      "size_bytes": 2135,
+      "sha256": "bada883fa74445ebe0e92b5707c9270c73623ffc8e7f756b307007d5ac41ee92"
     },
     "tests/test_w0_structural_factorial_v1.py": {
       "size_bytes": 15755,
       "sha256": "8bcddb7040654d0355af0d6dba6bdfe16548883422f16bb77116ac6a098a582d"
     },
     "docs/experiments/w0_structural_factorial_v1_protocol_20260923.md": {
-      "size_bytes": 33169,
-      "sha256": "d0774e0d859a1e123fe15cc0c13db81fc8ef49ff41bb2ed0c8fc7086c93bd14d"
+      "size_bytes": 33430,
+      "sha256": "aa13cb9802e2ef213ac53bff24305f9492f2469a822752c3a734520121d56656"
     }
   },
   "validation": {
@@ -59,7 +59,7 @@
       ],
       "passed": 50,
       "failed": 0,
-      "duration_seconds": 20.35
+      "duration_seconds": 19.90
     }
   },
   "access": {

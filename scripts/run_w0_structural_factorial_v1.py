@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 
 from resp_train.paper_evidence.w0_structural_factorial_v1 import (
     ARMS,
+    SOURCE_ROOT,
     derived_config,
     load_experiment_spec,
     load_lock,
@@ -36,7 +37,7 @@ def main() -> None:
         for seed in (20260811, 20260812, 20260813):
             baseline = load_w0_baseline(seed)
             for arm in ARMS:
-                output = ROOT / "runs/w0_structural_factorial_v1_es30p15/formal" / arm / f"seed_{seed}"
+                output = SOURCE_ROOT / "runs/w0_structural_factorial_v1_es30p15/formal" / arm / f"seed_{seed}"
                 cfg = derived_config(baseline, arm=arm, output_root=output, device="cuda:0")
                 validate_config(cfg, baseline, arm=arm, output_root=output, device="cuda:0")
         result: str | dict = "W0 structural factorial config OK"

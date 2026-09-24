@@ -10,6 +10,8 @@
 runs/w0_structural_factorial_v1_es30p15/
 ```
 
+该相对路径解析到主仓库 `/mnt/disk_code/marques/resp_reconstruction/runs/w0_structural_factorial_v1_es30p15/`；worktree 保存源码、配置、协议与实现锁，正式 attempt 和工程产物保存到主仓库的不可覆盖 `runs/` identity。
+
 未来实现锁固定使用新文件名：
 
 ```text
