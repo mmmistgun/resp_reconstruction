@@ -464,7 +464,7 @@ scripts/run_w0_structural_factorial_v1.py
 tests/test_w0_structural_factorial_v1.py
 ```
 
-专项测试与相邻 W0/TemporalStem 回归共 `49 passed`；Python 编译、`check-config` 和 `describe` 均通过。P1 receipt 为 `docs/experiments/w0_structural_factorial_v1_p1_implementation_receipt_20260924.json`。这些结果使用 synthetic CPU fixture，只形成结构、配置、初始化、分析和生命周期工程证据。
+专项测试与相邻 W0/TemporalStem 回归共 `50 passed`；Python 编译、`check-config` 和 `describe` 均通过。P1 receipt 为 `docs/experiments/w0_structural_factorial_v1_p1_implementation_receipt_20260924.json`。这些结果使用 synthetic CPU fixture，只形成结构、配置、初始化、分析和生命周期工程证据。
 
 ### P2：未来 GPU 工程验收
 

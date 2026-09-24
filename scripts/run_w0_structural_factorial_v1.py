@@ -13,8 +13,10 @@ from resp_train.paper_evidence.w0_structural_factorial_v1 import (
     ARMS,
     derived_config,
     load_experiment_spec,
+    load_lock,
     load_w0_baseline,
     parameter_compute_report,
+    prepare_lock,
     validate_config,
 )
 
@@ -23,6 +25,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="W0 三因素结构对照 v1")
     commands = parser.add_subparsers(dest="phase", required=True)
     commands.add_parser("check-config", help="核验八组结构与训练合同")
+    commands.add_parser("prepare-lock", help="在干净提交上复核来源并生成实现锁")
+    commands.add_parser("check-lock", help="复核已生成的实现锁与当前源码")
     describe = commands.add_parser("describe", help="输出参数与 covered-MAC 合同")
     describe.add_argument("--arm", choices=ARMS)
     args = parser.parse_args()
@@ -36,6 +40,11 @@ def main() -> None:
                 cfg = derived_config(baseline, arm=arm, output_root=output, device="cuda:0")
                 validate_config(cfg, baseline, arm=arm, output_root=output, device="cuda:0")
         result: str | dict = "W0 structural factorial config OK"
+    elif args.phase == "prepare-lock":
+        result = str(prepare_lock())
+    elif args.phase == "check-lock":
+        _lock, lock_hash = load_lock()
+        result = {"implementation_lock_sha256": lock_hash, "status": "passed"}
     else:
         report = parameter_compute_report()
         result = report if args.arm is None else report["arms"][args.arm]

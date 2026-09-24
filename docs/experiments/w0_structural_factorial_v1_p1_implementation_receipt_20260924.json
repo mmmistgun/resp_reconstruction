@@ -18,7 +18,8 @@
     "conditional/main/two-way/three-way factorial contrasts",
     "Local-RR tail, subject, denominator and simplification summaries",
     "exclusive success/failure lifecycle",
-    "check-config and describe CLI"
+    "implementation lock preparation and verification",
+    "check-config, prepare-lock, check-lock and describe CLI"
   ],
   "files": {
     "configs/w0_structural_factorial_v1/experiment.yaml": {
@@ -30,20 +31,20 @@
       "sha256": "e0acf8f22ceb30d48525dac1f4f7468937b5236379485794a8b0123aa4717a2d"
     },
     "resp_train/paper_evidence/w0_structural_factorial_v1.py": {
-      "size_bytes": 31878,
-      "sha256": "b22183ade324268a7938acca8e773164c7272548a99f6169b635c5301b20b0d5"
+      "size_bytes": 38855,
+      "sha256": "772003a12d82619c1ae2af5c1a12750229702179d6c915683c8cfd291b4dc1bc"
     },
     "scripts/run_w0_structural_factorial_v1.py": {
-      "size_bytes": 1661,
-      "sha256": "9ee007afc16cb4f2f160826c5bc1208aa69b77b2d09d7f5efe49b6c9df893ead"
+      "size_bytes": 2111,
+      "sha256": "4186c9f7fc72b1d2e6a16e7e3f55d8f631ede66df9f604fdf30da6c4bdbe9c08"
     },
     "tests/test_w0_structural_factorial_v1.py": {
-      "size_bytes": 15350,
-      "sha256": "ade0219816a899c9520f73577691895a93aeb2eea648de6a6da3f904a64296cf"
+      "size_bytes": 15755,
+      "sha256": "8bcddb7040654d0355af0d6dba6bdfe16548883422f16bb77116ac6a098a582d"
     },
     "docs/experiments/w0_structural_factorial_v1_protocol_20260923.md": {
       "size_bytes": 33169,
-      "sha256": "a05f9f035bb5b4fae612786afb7cd9e8ea2848ab6cc0afa65936a39d76538d74"
+      "sha256": "d0774e0d859a1e123fe15cc0c13db81fc8ef49ff41bb2ed0c8fc7086c93bd14d"
     }
   },
   "validation": {
@@ -56,9 +57,9 @@
         "tests/test_crd_tf_v1_model.py",
         "tests/test_resp_temporal_v1_models.py"
       ],
-      "passed": 49,
+      "passed": 50,
       "failed": 0,
-      "duration_seconds": 20.12
+      "duration_seconds": 20.35
     }
   },
   "access": {

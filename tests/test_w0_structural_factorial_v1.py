@@ -346,3 +346,14 @@ def test_parameter_compute_report_and_critical_paths():
     assert report["covered_macs"]["tm3"] == 201_657_600
     assert report["whole_model_flops"] is None
     assert all((sf.ROOT / path).is_file() for path in sf.critical_paths())
+
+
+def test_prepare_lock_requires_clean_worktree(tmp_path, monkeypatch):
+    monkeypatch.setattr(sf, "load_experiment_spec", lambda _path: object())
+    monkeypatch.setattr(
+        sf,
+        "git_state",
+        lambda _root: {"commit": "f" * 40, "branch": "fixture", "status_porcelain": " M file"},
+    )
+    with pytest.raises(RuntimeError, match="工作树干净"):
+        sf.prepare_lock(tmp_path)

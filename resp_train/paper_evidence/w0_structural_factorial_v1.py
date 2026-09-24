@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import subprocess
 import sys
 import traceback
 from collections.abc import Iterator, Mapping, Sequence
@@ -45,6 +46,7 @@ CONTROL_PATH = Path("resp_train/paper_evidence/w0_structural_factorial_v1.py")
 SCRIPT_PATH = Path("scripts/run_w0_structural_factorial_v1.py")
 TEST_PATH = Path("tests/test_w0_structural_factorial_v1.py")
 P1_RECEIPT_PATH = Path("docs/experiments/w0_structural_factorial_v1_p1_implementation_receipt_20260924.json")
+LOCK_PATH = Path("docs/experiments/w0_structural_factorial_v1_implementation_lock_20260923.json")
 W0_CONFIG_PATH = Path("configs/crd_tf_v1/crd_tf102_w_formal.yaml")
 OUTPUT_ROOT = Path("runs/w0_structural_factorial_v1_es30p15")
 W0_SOURCE_LOCK = Path("docs/experiments/e4_w0_scale_aggregation_implementation_lock_20260917.json")
@@ -122,6 +124,30 @@ def identity(path: Path) -> dict[str, Any]:
 
 def write_json(path: Path, value: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def verify_identity(path: Path, expected: Mapping[str, Any]) -> None:
+    normalized = {key: expected[key] for key in ("size_bytes", "sha256")}
+    if not path.is_file() or identity(path) != normalized:
+        raise RuntimeError(f"文件身份漂移: {path}")
+
+
+def git_state(root: Path = ROOT) -> dict[str, Any]:
+    def run(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args],
+            cwd=root,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout.strip()
+
+    return {
+        "commit": run("rev-parse", "HEAD"),
+        "branch": run("branch", "--show-current"),
+        "status_porcelain": run("status", "--porcelain"),
+    }
 
 
 def _arm_spec_payload() -> dict[str, Any]:
@@ -251,6 +277,146 @@ def critical_paths() -> tuple[Path, ...]:
     if missing:
         raise FileNotFoundError(f"结构因子实现缺少文件: {missing}")
     return paths
+
+
+def prepare_lock(root: Path = ROOT) -> Path:
+    """在干净提交上复核全部来源身份并排他生成实现锁。"""
+
+    spec = load_experiment_spec(root / SPEC_PATH)
+    destination = root / LOCK_PATH
+    if destination.exists():
+        raise FileExistsError(f"implementation lock 已存在: {destination}")
+    state = git_state(root)
+    if state["status_porcelain"]:
+        raise RuntimeError("implementation lock 要求工作树干净")
+    source_path = root / W0_SOURCE_LOCK
+    if sha256_file(source_path) != W0_SOURCE_LOCK_SHA256:
+        raise ValueError("W0 来源锁身份漂移")
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    if (
+        tuple(int(value) for value in source.get("seeds", ())) != SEEDS
+        or source.get("counts") != COUNTS
+        or set(source.get("baselines", {})) != {str(seed) for seed in SEEDS}
+    ):
+        raise ValueError("W0 来源锁 seed/count/baseline 合同漂移")
+
+    source_files: dict[str, dict[str, Any]] = {str(W0_SOURCE_LOCK): identity(source_path)}
+    for entry in source["w0_entries"]:
+        seed = int(entry["seed"])
+        if seed not in SEEDS:
+            raise ValueError("W0 来源锁包含矩阵外 seed")
+        for filename in (
+            "checkpoint_best_local_rr.pt",
+            "config.yaml",
+            "run_manifest.json",
+            "metrics.csv",
+            "metrics_summary.csv",
+        ):
+            relative = str(Path(entry["run_dir"]) / filename)
+            expected = source["source_files"].get(relative)
+            if expected is None:
+                raise ValueError(f"W0 来源锁缺少文件身份: {relative}")
+            verify_identity(root / relative, expected)
+            source_files[relative] = {key: expected[key] for key in ("size_bytes", "sha256")}
+
+    cache = source["cache_lock"]
+    cache_entries = (cache["manifest"], cache["train_w"], cache["val_w"], cache["frequency_file"])
+    for entry in cache_entries:
+        expected = {
+            "size_bytes": int(entry["size_bytes"]),
+            "sha256": str(entry.get("sha256", entry.get("file_sha256"))),
+        }
+        verify_identity(root / entry["path"], expected)
+        source_files[entry["path"]] = expected
+    for split in COUNTS:
+        relative = str(Path(cache["root"]) / f"{split}_row_ids.npy")
+        expected = source["source_files"].get(relative)
+        if expected is None:
+            raise ValueError(f"W0 来源锁缺少 row identity: {relative}")
+        verify_identity(root / relative, expected)
+        source_files[relative] = {key: expected[key] for key in ("size_bytes", "sha256")}
+
+    cache_manifest = json.loads((root / cache["manifest"]["path"]).read_text(encoding="utf-8"))
+    baselines: dict[str, Any] = {}
+    templates: dict[str, Any] = {}
+    for seed in SEEDS:
+        baseline = OmegaConf.create(source["baselines"][str(seed)])
+        baselines[str(seed)] = OmegaConf.to_container(baseline, resolve=True)
+        templates[str(seed)] = {}
+        for arm in ARMS:
+            output = root / OUTPUT_ROOT / "formal" / arm / f"seed_{seed}"
+            candidate = derived_config(baseline, arm=arm, output_root=output, device="cuda:0")
+            validate_config(candidate, baseline, arm=arm, output_root=output, device="cuda:0")
+            templates[str(seed)][arm] = OmegaConf.to_container(candidate, resolve=True)
+
+    lock = {
+        "schema_version": 1,
+        "protocol": PROTOCOL,
+        "spec": identity(root / SPEC_PATH),
+        "arms": list(ARMS),
+        "arm_contracts": _arm_spec_payload(),
+        "seeds": list(SEEDS),
+        "counts": COUNTS,
+        "samp_ids": SAMP_IDS,
+        "epochs": EPOCHS,
+        "updates_per_epoch": UPDATES_PER_EPOCH,
+        "planned_updates": PLANNED_UPDATES,
+        "early_stopping": _MATRIX["early_stopping"],
+        "analysis": _ANALYSIS,
+        "w0_entries": source["w0_entries"],
+        "baselines": baselines,
+        "resolved_templates": templates,
+        "cache_lock": cache,
+        "dataset_index": {
+            "path": cache_manifest["dataset_index"],
+            "sha256": cache_manifest["dataset_index_sha256"],
+        },
+        "source_files": source_files,
+        "code_files": {str(path): identity(root / path) for path in critical_paths()},
+        "prepared_at": datetime.now(timezone.utc).isoformat(),
+        "preparation_git": state,
+        "status": "implementation_locked_p2_pending",
+    }
+    write_json(destination, lock)
+    return destination
+
+
+def load_lock(root: Path = ROOT) -> tuple[dict[str, Any], str]:
+    path = root / LOCK_PATH
+    if not path.is_file():
+        raise FileNotFoundError(f"implementation lock 尚未建立: {path}")
+    lock = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        lock.get("schema_version") != 1
+        or lock.get("protocol") != PROTOCOL
+        or tuple(lock.get("arms", ())) != ARMS
+        or tuple(lock.get("seeds", ())) != SEEDS
+        or lock.get("counts") != COUNTS
+        or lock.get("samp_ids") != SAMP_IDS
+        or lock.get("epochs") != EPOCHS
+        or lock.get("updates_per_epoch") != UPDATES_PER_EPOCH
+        or lock.get("planned_updates") != PLANNED_UPDATES
+        or lock.get("early_stopping") != _MATRIX["early_stopping"]
+        or lock.get("analysis") != _ANALYSIS
+        or lock.get("arm_contracts") != _arm_spec_payload()
+        or lock.get("status") != "implementation_locked_p2_pending"
+    ):
+        raise ValueError("implementation lock 科学合同漂移")
+    verify_identity(root / SPEC_PATH, lock["spec"])
+    for relative, expected in lock["code_files"].items():
+        verify_identity(root / relative, expected)
+    for seed in SEEDS:
+        baseline = OmegaConf.create(lock["baselines"][str(seed)])
+        for arm in ARMS:
+            template = OmegaConf.create(lock["resolved_templates"][str(seed)][arm])
+            validate_config(
+                template,
+                baseline,
+                arm=arm,
+                output_root=root / OUTPUT_ROOT / "formal" / arm / f"seed_{seed}",
+                device="cuda:0",
+            )
+    return lock, sha256_file(path)
 
 
 class StructuralFactorialExperiment(CRDExperiment):
