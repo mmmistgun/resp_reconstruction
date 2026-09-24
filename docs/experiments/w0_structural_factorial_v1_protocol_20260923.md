@@ -504,7 +504,7 @@ runs/w0_structural_factorial_v1_es30p15/formal/<arm>/seed_<seed>/<lock-prefix>_<
   --confirm-formal-training
 ```
 
-formal preflight 复核 clean Git、实验锁、P2 acceptance/benchmark manifests、运行环境、冻结 source/cache/index identities、train/validation row 集合与 subject 隔离。训练完成后回放 early stopping、最早 Local-RR minimum、6400-update LR 计划、optimizer state、checkpoint/config/history、2,675 行 validation identity/eligibility、summary 分母、finite 与运行资源。P3 入口不包含 P4 汇总或模型选择。
+formal preflight 复核 clean Git、实验锁、P2 acceptance/benchmark manifests、运行环境、冻结 source/cache/index identities、train/validation row 集合与 subject 隔离。运行环境要求 Python、PyTorch、CUDA、cuDNN、原生依赖、GPU 型号和 BF16 口径与 P2 一致；当前设备总显存须不少于 P2 验收设备，并在 `environment.json` 与 `p2_source.json` 中记录两侧容量及判定策略。训练完成后回放 early stopping、最早 Local-RR minimum、6400-update LR 计划、optimizer state、checkpoint/config/history、2,675 行 validation identity/eligibility、summary 分母、finite 与运行资源。P3 入口不包含 P4 汇总或模型选择。
 
 ### P4：一次性冻结汇总
 

@@ -433,6 +433,34 @@ def test_formal_contract_reuses_experiment_identity_and_p2_evidence():
     assert tuple(lock["seeds"]) == sf.SEEDS
 
 
+def test_formal_runtime_allows_same_stack_with_equal_or_greater_memory():
+    accepted = {
+        "python": "3.12.13",
+        "torch": "2.12.0+cu130",
+        "cuda_runtime": "13.0",
+        "cudnn": 92000,
+        "dependencies": {"mamba-ssm": "2.3.2.post1"},
+        "device_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "device_total_bytes": 16_710_500_352,
+        "amp_dtype": "bfloat16",
+    }
+    current = {**accepted, "device_total_bytes": 16_717_840_384}
+    receipt = formal._runtime_compatibility(current, accepted)
+    assert receipt["capacity_policy"] == "current_device_total_bytes_gte_p2"
+    assert receipt["current_device_total_bytes"] > receipt["p2_device_total_bytes"]
+
+    with pytest.raises(ValueError, match="总显存低于"):
+        formal._runtime_compatibility(
+            {**accepted, "device_total_bytes": accepted["device_total_bytes"] - 1},
+            accepted,
+        )
+    with pytest.raises(ValueError, match="device_name"):
+        formal._runtime_compatibility(
+            {**current, "device_name": "different"},
+            accepted,
+        )
+
+
 def test_p3_matrix_status_distinguishes_completed_failed_and_pending(tmp_path, monkeypatch):
     parents = [tmp_path / f"cell_{index}" for index in range(3)]
     plan = [

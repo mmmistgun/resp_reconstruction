@@ -277,12 +277,37 @@ def runtime_preflight(device: str) -> dict[str, Any]:
     }
 
 
-def _verify_runtime_against_p2(runtime: Mapping[str, Any], evidence: Mapping[str, Any]) -> None:
-    path = sf.SOURCE_ROOT / evidence["gpu_acceptance"]["path"] / "environment.json"
-    accepted = json.loads(path.read_text(encoding="utf-8"))
-    for key in ("python", "torch", "cuda_runtime", "cudnn", "dependencies", "device_name", "device_total_bytes", "amp_dtype"):
+def _runtime_compatibility(runtime: Mapping[str, Any], accepted: Mapping[str, Any]) -> dict[str, Any]:
+    matched_fields = (
+        "python",
+        "torch",
+        "cuda_runtime",
+        "cudnn",
+        "dependencies",
+        "device_name",
+        "amp_dtype",
+    )
+    for key in matched_fields:
         if runtime.get(key) != accepted.get(key):
             raise ValueError(f"P3 runtime 与 P2 工程环境不一致: {key}")
+    current_total = int(runtime.get("device_total_bytes", -1))
+    accepted_total = int(accepted.get("device_total_bytes", -1))
+    if accepted_total <= 0 or current_total < accepted_total:
+        raise ValueError("P3 runtime 可用总显存低于 P2 工程环境")
+    return {
+        "matched_fields": list(matched_fields),
+        "capacity_policy": "current_device_total_bytes_gte_p2",
+        "p2_device_total_bytes": accepted_total,
+        "current_device_total_bytes": current_total,
+    }
+
+
+def _verify_runtime_against_p2(
+    runtime: Mapping[str, Any], evidence: Mapping[str, Any]
+) -> dict[str, Any]:
+    path = sf.SOURCE_ROOT / evidence["gpu_acceptance"]["path"] / "environment.json"
+    accepted = json.loads(path.read_text(encoding="utf-8"))
+    return _runtime_compatibility(runtime, accepted)
 
 
 def audit_sources(lock: Mapping[str, Any], cfg: DictConfig, output: Path) -> dict[str, pd.DataFrame]:
@@ -551,12 +576,16 @@ def run_formal(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
         reject_completed=True,
     ) as output:
         runtime = runtime_preflight(device)
-        _verify_runtime_against_p2(runtime, evidence)
+        runtime_compatibility = _verify_runtime_against_p2(runtime, evidence)
         sf.write_json(output / "environment.json", runtime)
         evidence_summary = verify_p2_evidence(evidence)
         sf.write_json(
             output / "p2_source.json",
-            {"evidence": evidence, "verification": evidence_summary},
+            {
+                "evidence": evidence,
+                "verification": evidence_summary,
+                "runtime_compatibility": runtime_compatibility,
+            },
         )
         sf.write_json(output / "source_code.json", formal_source_identity())
         sf.write_json(output / "implementation_lock.json", lock)
