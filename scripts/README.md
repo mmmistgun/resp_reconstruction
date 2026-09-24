@@ -178,16 +178,20 @@ done
 
 ## E6：20-Hz 学习解调后形成 10-Hz latent
 
-专项协议为
-[E6 时域前端方案](../docs/experiments/e6_temporal_frontend_protocol_20260923.md)。唯一候选
+状态：**已结项并关闭。** 完整来源、validation/test 指标、效率与解释边界统一见
+[E6 结项记录](../docs/experiments/e6_temporal_frontend_closeout_20260924.md)。以下内容保留为历史入口。
+
+专项协议为 [E6 时域前端方案](../docs/experiments/e6_temporal_frontend_protocol_20260923.md)。唯一候选
 `e6_tfe201_aa20_demod10_w0` 直接复用 RTM 冻结 `TemporalStem`：显式 `100→20 Hz` 抗混叠，
 在 20 Hz 完成 `1→48` carrier-sensitive filtering、depthwise filtering、`48→96` projection 及
 channel-only normalization/SiLU，再显式 `20→10 Hz`。只替换 W0 `base.frontend`；W 分支、
 六层 BiMamba2、FiLM、decoder、loss 和数据保持固定。参数量只报告，不参与结构选择。
 
 训练最多 80 epochs/6400 planned updates，继续使用完整 validation Local-RR early stop：
-`min_epoch=30 / patience=15 / min_delta=0`，LR 不随提前停止重标定。当前只完成 P1 代码和
-synthetic CPU 验收；实现锁、GPU acceptance、benchmark、正式训练和 test 尚未执行。
+`min_epoch=30 / patience=15 / min_delta=0`，LR 不随提前停止重标定。实现锁、GPU acceptance、
+benchmark、三 seed formal 和一次性 validation 汇总均已完成；三个 seed 都在 epoch 30 停止并选择 epoch 4。
+Validation 形成 trajectory 局部收益但 Local RR/PCC 等整体退化的属性权衡，不替换 W0。完整记录见
+[E6 validation 结果](../docs/experiments/e6_temporal_frontend_results_20260924.md)。
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
@@ -197,13 +201,18 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
 ./.venv/bin/python scripts/run_e6_temporal_frontend.py check-config
 ```
 
-提交实现并保持工作树干净后，下一步只读准备实现锁：
+Test 专项协议为
+[E6 research-test 附件](../docs/experiments/e6_temporal_frontend_test_protocol_20260924.md)，入口为
+`scripts/eval_e6_temporal_frontend_test.py`。固定使用三个 epoch-4 checkpoint，复用同 seed W0 test 指标；
+结果只作重复使用 research-test 上的开发性描述，不改变 validation 决定。三 seed test 与一次性汇总均已完成；
+结果在五项 candidate mean 上均不利，E6 不替换 W0。
 
 ```bash
-./.venv/bin/python scripts/run_e6_temporal_frontend.py prepare-lock
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
+  tests/test_e6_temporal_frontend_test.py -q
 ```
 
-GPU 与正式训练阶段由用户在后续明确开放；失败 attempt 和已完成 identity 均不可覆盖。
+Test lock、三个 evaluation attempt 与 summary 已冻结，命令只保留 provenance；失败 attempt 和已完成 identity 均不可覆盖。
 
 ## E4：R3 时间结构与 GN 统计控制
 
