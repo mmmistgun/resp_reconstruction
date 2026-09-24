@@ -468,7 +468,7 @@ tests/test_w0_structural_factorial_v1.py
 
 专项测试与相邻 W0/TemporalStem 回归共 `50 passed`；Python 编译、`check-config` 和 `describe` 均通过。P1 receipt 为 `docs/experiments/w0_structural_factorial_v1_p1_implementation_receipt_20260924.json`。这些结果使用 synthetic CPU fixture，只形成结构、配置、初始化、分析和生命周期工程证据。
 
-### P2：GPU 工程验收（已授权，执行中）
+### P2：GPU 工程验收（已完成）
 
 八组均做 batch-1 BF16 forward/loss/backward finite 与梯度检查；最大资源臂 `CONV20/TM3/REF2` 做 physical-batch-128 原生至少三次 update和完整 128-train/32-validation lifecycle。记录所有 arm 的参数、covered MAC、延迟、吞吐和显存。任一必须运行 arm OOM、非有限或 peak reserved 超过设备 80% 时暂停整个 formal 队列；不得只给该 arm 改 batch、accumulation、dtype、checkpointing 或结构。若统一 fallback，须在任何 formal 前修订协议并应用八组。
 
@@ -476,15 +476,35 @@ P2 使用 `resp_train/paper_evidence/w0_structural_factorial_v1_engineering.py` 
 
 P1 锁作为已完成实现身份保留；P2 代码由 `docs/experiments/w0_structural_factorial_v1_implementation_lock_r2_20260924.json` 重新冻结并显式链接 P1 锁。P2 的运行只读取实现锁和其中的 resolved baseline 配置，不读取 dataset index、真实波形、W cache、历史 checkpoint 或 test。
 
-### P3：未来 24-run formal
+P2 在 RTX 4070 Ti SUPER 上通过。最大资源臂 batch-128 三步的 peak reserved fraction 为 `68.2213%`，完整 `128 train / 32 validation` lifecycle 为 `68.1711%`；八组独立进程 train benchmark 范围为 `63.16%–68.61%`。冻结身份、逐臂效率和访问边界见 `docs/experiments/w0_structural_factorial_v1_p2_engineering_receipt_20260924.md`。
 
-只有 P1/P2 完成、实现锁冻结且用户再次明确授权长时间 GPU 后开放。输出固定为：
+### P3：24-run formal 训练入口
+
+P3 复用本实验现有 implementation lock 作为科学合同身份，并以 P2 receipt/manifest 确认工程门槛。每个 formal attempt 另行保存干净 Git commit、源码文件身份、resolved config、命令与完整 manifest。每次命令只训练一个明确的 `arm×seed`，24-cell 矩阵固定。正式训练经用户明确授权后执行。输出固定为：
 
 ```text
 runs/w0_structural_factorial_v1_es30p15/formal/<arm>/seed_<seed>/<lock-prefix>_<UTC>_<UUID>/
 ```
 
 每个 attempt 先排他写 started receipt；失败保留现场。成功保存 resolved config、命令、Git/源码/依赖/环境、数据与 cache identity、初始化 hashes、optimizer groups、完整 history、best/final checkpoint、逐 sample metrics、summary、资源与完成回执。相同 lock/arm/seed 的完成 run 拒绝重复。
+
+固定入口为：
+
+```bash
+# 复核正式训练合同、P2 工程证据与固定矩阵。
+./.venv/bin/python scripts/run_w0_structural_factorial_v1.py check-lock
+
+# 只读查看 24-cell 计划与当前状态。
+./.venv/bin/python scripts/run_w0_structural_factorial_v1.py formal-plan
+./.venv/bin/python scripts/run_w0_structural_factorial_v1.py matrix-status
+
+# 单次正式训练；arm 与 seed 必须属于冻结矩阵。
+./.venv/bin/python scripts/run_w0_structural_factorial_v1.py formal \
+  --arm sfv1_patch_tm3_ref2 --seed 20260811 --device cuda:0 \
+  --confirm-formal-training
+```
+
+formal preflight 复核 clean Git、实验锁、P2 acceptance/benchmark manifests、运行环境、冻结 source/cache/index identities、train/validation row 集合与 subject 隔离。训练完成后回放 early stopping、最早 Local-RR minimum、6400-update LR 计划、optimizer state、checkpoint/config/history、2,675 行 validation identity/eligibility、summary 分母、finite 与运行资源。P3 入口不包含 P4 汇总或模型选择。
 
 ### P4：一次性冻结汇总
 

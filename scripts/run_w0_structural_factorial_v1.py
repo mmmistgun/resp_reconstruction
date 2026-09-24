@@ -14,7 +14,6 @@ from resp_train.paper_evidence.w0_structural_factorial_v1 import (
     SOURCE_ROOT,
     derived_config,
     load_experiment_spec,
-    load_lock,
     load_w0_baseline,
     parameter_compute_report,
     prepare_lock,
@@ -25,6 +24,12 @@ from resp_train.paper_evidence.w0_structural_factorial_v1_engineering import (
     run_benchmark,
     run_gpu_acceptance,
 )
+from resp_train.paper_evidence.w0_structural_factorial_v1_formal import (
+    formal_plan,
+    load_formal_contract,
+    matrix_status,
+    run_formal,
+)
 
 
 def main() -> None:
@@ -32,7 +37,14 @@ def main() -> None:
     commands = parser.add_subparsers(dest="phase", required=True)
     commands.add_parser("check-config", help="核验八组结构与训练合同")
     commands.add_parser("prepare-lock", help="在干净提交上复核来源并生成实现锁")
-    commands.add_parser("check-lock", help="复核已生成的实现锁与当前源码")
+    commands.add_parser("check-lock", help="复核实验合同与工程证据")
+    commands.add_parser("formal-plan", help="输出八组×三 seed 的固定训练矩阵")
+    commands.add_parser("matrix-status", help="读取当前实验身份下的 24-cell 状态")
+    formal = commands.add_parser("formal", help="正式训练一个固定 arm×seed cell")
+    formal.add_argument("--arm", required=True, choices=ARMS)
+    formal.add_argument("--seed", required=True, type=int, choices=(20260811, 20260812, 20260813))
+    formal.add_argument("--device", default="cuda:0")
+    formal.add_argument("--confirm-formal-training", action="store_true")
     gpu = commands.add_parser("gpu-acceptance", help="执行 P2 synthetic GPU 工程验收")
     gpu.add_argument("--device", default="cuda:0")
     benchmark = commands.add_parser("benchmark", help="执行 P2 八组独立进程效率测量")
@@ -58,8 +70,16 @@ def main() -> None:
     elif args.phase == "prepare-lock":
         result = str(prepare_lock())
     elif args.phase == "check-lock":
-        _lock, lock_hash = load_lock()
+        _lock, lock_hash = load_formal_contract()
         result = {"implementation_lock_sha256": lock_hash, "status": "passed"}
+    elif args.phase == "formal-plan":
+        result = {"cells": formal_plan(), "count": len(formal_plan())}
+    elif args.phase == "matrix-status":
+        result = matrix_status()
+    elif args.phase == "formal":
+        if not args.confirm_formal_training:
+            raise SystemExit("formal 训练要求显式传入 --confirm-formal-training")
+        result = str(run_formal(args.arm, args.seed, device=args.device))
     elif args.phase == "gpu-acceptance":
         result = str(run_gpu_acceptance(args.device))
     elif args.phase == "benchmark":

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +16,7 @@ from resp_train.crd import experiment as crd_experiment
 from resp_train.crd.training import build_crd_optimizer, crd_learning_rate
 from resp_train.paper_evidence import w0_structural_factorial_v1 as sf
 from resp_train.paper_evidence import w0_structural_factorial_v1_engineering as engineering
+from resp_train.paper_evidence import w0_structural_factorial_v1_formal as formal
 from resp_train.paper_evidence.w0_structural_factorial_v1_model import (
     ARMS,
     ARM_SPECS,
@@ -391,6 +394,160 @@ def test_crd_data_extension_point_preserves_default_builder(monkeypatch):
     marker = object()
     monkeypatch.setattr(crd_experiment, "build_tho_data", lambda cfg: marker)
     assert crd_experiment.CRDExperiment(baseline())._build_data() is marker
+
+
+def test_p3_formal_plan_is_exact_24_cell_matrix():
+    plan = formal.formal_plan()
+    assert len(plan) == 24
+    assert {(row["arm"], row["seed"]) for row in plan} == {
+        (arm, seed) for arm in ARMS for seed in sf.SEEDS
+    }
+    assert all(
+        row["output_parent"].endswith(f"formal/{row['arm']}/seed_{row['seed']}")
+        for row in plan
+    )
+
+
+def test_p3_initialization_identity_is_deterministic_and_content_sensitive():
+    model = W0StructuralFactorialModel(ARMS[0], sf.SEEDS[0])
+    first = formal.state_dict_identity(model.state_dict())
+    second = formal.state_dict_identity(model.state_dict())
+    assert first == second
+    assert first["tensor_count"] == len(model.state_dict())
+    state = {name: value.clone() for name, value in model.state_dict().items()}
+    name = next(iter(state))
+    state[name].view(-1)[0] += 1
+    assert formal.state_dict_identity(state)["state_sha256"] != first["state_sha256"]
+
+
+def test_p3_verifies_frozen_p2_engineering_evidence():
+    summary = formal.verify_p2_evidence()
+    assert summary["max_acceptance_reserved_fraction"] < 0.8
+    assert summary["max_benchmark_reserved_fraction"] < 0.8
+
+
+def test_formal_contract_reuses_experiment_identity_and_p2_evidence():
+    lock, digest = formal.load_formal_contract()
+    assert digest == formal.P2_LOCK_SHA256
+    assert tuple(lock["arms"]) == ARMS
+    assert tuple(lock["seeds"]) == sf.SEEDS
+
+
+def test_p3_matrix_status_distinguishes_completed_failed_and_pending(tmp_path, monkeypatch):
+    parents = [tmp_path / f"cell_{index}" for index in range(3)]
+    plan = [
+        {"arm": ARMS[index], "seed": sf.SEEDS[0], "output_parent": str(parent)}
+        for index, parent in enumerate(parents)
+    ]
+    monkeypatch.setattr(formal, "formal_plan", lambda: plan)
+    monkeypatch.setattr(formal, "verify_formal_attempt", lambda *args, **kwargs: {})
+    lock_hash = "b" * 64
+    with sf.exclusive_attempt(
+        parents[0],
+        phase="formal",
+        lock_hash=lock_hash,
+        arm=ARMS[0],
+        seed=sf.SEEDS[0],
+    ):
+        pass
+    with pytest.raises(RuntimeError):
+        with sf.exclusive_attempt(
+            parents[1],
+            phase="formal",
+            lock_hash=lock_hash,
+            arm=ARMS[1],
+            seed=sf.SEEDS[0],
+        ):
+            raise RuntimeError("fixture")
+    status = formal.matrix_status(lock_hash)
+    assert status["counts"] == {"pending": 1, "running": 0, "failed": 1, "completed": 1}
+
+
+def test_formal_cell_rejects_duplicate_completed_identity(tmp_path):
+    lock_hash = "c" * 64
+    kwargs = {
+        "phase": "formal",
+        "lock_hash": lock_hash,
+        "arm": ARMS[0],
+        "seed": sf.SEEDS[0],
+        "reject_completed": True,
+    }
+    with sf.exclusive_attempt(tmp_path, **kwargs):
+        pass
+    with pytest.raises(FileExistsError, match="cell 已完成"):
+        with sf.exclusive_attempt(tmp_path, **kwargs):
+            pass
+
+
+def test_verify_formal_attempt_checks_frozen_cell_identity(tmp_path):
+    lock_hash = "d" * 64
+    arm, seed = ARMS[0], sf.SEEDS[0]
+    with sf.exclusive_attempt(
+        tmp_path,
+        phase="formal",
+        lock_hash=lock_hash,
+        arm=arm,
+        seed=seed,
+    ) as output:
+        for filename in (
+            "environment.json",
+            "p2_source.json",
+            "source_code.json",
+            "implementation_lock.json",
+            "access_started.json",
+            "access_receipt.json",
+            "train_rows.csv",
+            "val_rows.csv",
+            "initialization.json",
+        ):
+            (output / filename).write_text("{}\n", encoding="utf-8")
+        run_dir = output / "training" / "fixture"
+        run_dir.mkdir(parents=True)
+        (run_dir / "marker.txt").write_text("ok", encoding="utf-8")
+        sf.write_json(
+            output / "formal_receipt.json",
+            {
+                "protocol": sf.PROTOCOL,
+                "implementation_lock_sha256": lock_hash,
+                "arm": arm,
+                "seed": seed,
+                "validation_rows": sf.COUNTS["val"],
+                "run_dir": "training/fixture",
+            },
+        )
+    assert formal.verify_formal_attempt(
+        output,
+        lock_hash=lock_hash,
+        arm=arm,
+        seed=seed,
+    )["status"] == "completed"
+
+
+def test_run_formal_rejects_cells_outside_matrix_before_lock_load():
+    with pytest.raises(ValueError, match="冻结矩阵"):
+        formal.run_formal("invalid", sf.SEEDS[0], device="cpu")
+
+
+def test_formal_cli_requires_explicit_execution_confirmation():
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(sf.ROOT / sf.SCRIPT_PATH),
+            "formal",
+            "--arm",
+            ARMS[0],
+            "--seed",
+            str(sf.SEEDS[0]),
+            "--device",
+            "cpu",
+        ],
+        cwd=sf.ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "--confirm-formal-training" in result.stderr
 
 
 def test_prepare_lock_requires_clean_worktree(tmp_path, monkeypatch):

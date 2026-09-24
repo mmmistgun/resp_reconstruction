@@ -895,6 +895,7 @@ def exclusive_attempt(
     lock_hash: str,
     arm: str | None = None,
     seed: int | None = None,
+    reject_completed: bool = False,
 ) -> Iterator[Path]:
     """排他创建 attempt；成功冻结，失败保留现场。"""
 
@@ -905,6 +906,22 @@ def exclusive_attempt(
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError("相同结构因子身份正在运行") from exc
+        if reject_completed:
+            for receipt in parent.glob("*/freeze_receipt.json"):
+                attempt_path = receipt.parent
+                manifest_path = attempt_path / "manifest.json"
+                freeze = json.loads(receipt.read_text(encoding="utf-8"))
+                verify_identity(manifest_path, freeze["manifest"])
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if (
+                    manifest.get("implementation_lock_sha256") == lock_hash
+                    and manifest.get("phase") == phase
+                    and manifest.get("arm") == arm
+                    and manifest.get("seed") == seed
+                ):
+                    if manifest.get("status") != "completed":
+                        raise RuntimeError("已冻结 attempt 的完成状态非法")
+                    raise FileExistsError(f"相同结构因子 cell 已完成: {attempt_path}")
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         path = parent / f"{phase}_{lock_hash[:12]}_{stamp}_{uuid4().hex[:12]}"
         path.mkdir(exist_ok=False)
