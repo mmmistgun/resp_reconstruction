@@ -1,0 +1,50 @@
+schema_version: 1
+protocol: e7-scale-encoding-aggregation-factorial-v1-20260924
+source:
+  w0_implementation_lock: docs/experiments/e4_w0_scale_aggregation_implementation_lock_20260917.json
+  w0_implementation_lock_sha256: 464e073dbd5707a30575d606dec2a84dcd89a161945e537c463b214a15c2b493
+  frequency_audit: docs/experiments/e4_w0_scale_aggregation_source_audit_20260917.json
+encoders:
+  s0_shallow:
+    dilations: []
+    theoretical_scale_receptive_field: 7
+  s1_deep_local:
+    dilations: [1, 1, 1, 1]
+    theoretical_scale_receptive_field: 39
+  s2_axis_spanning:
+    dilations: [1, 2, 4, 8]
+    theoretical_scale_receptive_field: 127
+aggregations:
+  mean:
+    hidden_channels: 0
+  frequency_attention:
+    hidden_channels: 8
+matrix:
+  arms:
+    - s0_shallow__mean
+    - s0_shallow__frequency_attention
+    - s1_deep_local__mean
+    - s1_deep_local__frequency_attention
+    - s2_axis_spanning__mean
+    - s2_axis_spanning__frequency_attention
+  seeds: [20260811, 20260812, 20260813]
+  train_windows: 10141
+  validation_windows: 2675
+  train_samp_ids: 32
+  validation_samp_ids: 7
+  max_epochs: 80
+  planned_optimizer_updates: 6400
+  early_stopping:
+    enabled: true
+    min_epoch: 30
+    patience: 15
+    min_delta: 0.0
+    monitor: validation_local_rr_mae_full_split
+  physical_batch: 128
+  gradient_accumulation_steps: 1
+  amp_dtype: bfloat16
+  checkpoint_selector: full_validation_local_rr_strict_minimum_earliest_tie
+  test_enabled: false
+tolerances:
+  error_relative_percent: 0.5
+  pcc_absolute: 0.002
