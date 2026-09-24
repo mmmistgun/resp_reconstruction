@@ -113,8 +113,10 @@ channel-only normalization/SiLU，再显式 `20→10 Hz`。只替换 W0 `base.fr
 六层 BiMamba2、FiLM、decoder、loss 和数据保持固定。参数量只报告，不参与结构选择。
 
 训练最多 80 epochs/6400 planned updates，继续使用完整 validation Local-RR early stop：
-`min_epoch=30 / patience=15 / min_delta=0`，LR 不随提前停止重标定。当前只完成 P1 代码和
-synthetic CPU 验收；实现锁、GPU acceptance、benchmark、正式训练和 test 尚未执行。
+`min_epoch=30 / patience=15 / min_delta=0`，LR 不随提前停止重标定。实现锁、GPU acceptance、
+benchmark、三 seed formal 和一次性 validation 汇总均已完成；三个 seed 都在 epoch 30 停止并选择 epoch 4。
+Validation 形成 trajectory 局部收益但 Local RR/PCC 等整体退化的属性权衡，不替换 W0。完整记录见
+[E6 validation 结果](../docs/experiments/e6_temporal_frontend_results_20260924.md)。
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
@@ -124,13 +126,18 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
 ./.venv/bin/python scripts/run_e6_temporal_frontend.py check-config
 ```
 
-提交实现并保持工作树干净后，下一步只读准备实现锁：
+Test 专项协议为
+[E6 research-test 附件](../docs/experiments/e6_temporal_frontend_test_protocol_20260924.md)，入口为
+`scripts/eval_e6_temporal_frontend_test.py`。固定使用三个 epoch-4 checkpoint，复用同 seed W0 test 指标；
+结果只作重复使用 research-test 上的开发性描述，不改变 validation 决定。当前只开放代码和 synthetic 验收：
 
 ```bash
-./.venv/bin/python scripts/run_e6_temporal_frontend.py prepare-lock
+env -u LD_LIBRARY_PATH -u LD_PRELOAD ./.venv/bin/python -m pytest \
+  tests/test_e6_temporal_frontend_test.py -q
 ```
 
-GPU 与正式训练阶段由用户在后续明确开放；失败 attempt 和已完成 identity 均不可覆盖。
+提交 test 实现并保持工作树干净后，可另行执行只读 `prepare-lock`。GPU test evaluation 尚未授权；
+失败 attempt 和已完成 identity 均不可覆盖。
 
 ## E4：R3 时间结构与 GN 统计控制
 
