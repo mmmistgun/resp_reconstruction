@@ -293,6 +293,20 @@ source audit 与 P1 implementation lock 已建立。协议为
 `docs/experiments/e7_scale_encoding_aggregation_p1_implementation_lock_20260924.json`。
 GPU acceptance、benchmark、正式 18 次 train/validation 和 research-test 均按协议阶段门控由用户执行。
 
+P3 GPU 工程入口已实现并由独立 engineering lock 固定，协议为
+`docs/experiments/e7_scale_encoding_aggregation_p3_engineering_protocol_20260924.md`。用户执行：
+
+```bash
+./.venv/bin/python scripts/run_e7_scale_encoding_aggregation_p3.py check-lock
+./.venv/bin/python scripts/run_e7_scale_encoding_aggregation_p3.py \
+  gpu-acceptance --device cuda:0
+./.venv/bin/python scripts/run_e7_scale_encoding_aggregation_p3.py \
+  benchmark --device cuda:0
+```
+
+GPU acceptance 为 18 个 batch-1 cell 加 6 个 batch-128 cell；benchmark 为六臂、
+eval/train 两场景、三组独立进程，共 36 个 measurement。二者只使用 synthetic 输入。
+
 ## E4 v2：四种尺度聚合固定矩阵
 
 状态：12 次训练、12 次 test 评价、GPU 验收、benchmark 与两份汇总均已完成并结项。下列为历史执行命令。
