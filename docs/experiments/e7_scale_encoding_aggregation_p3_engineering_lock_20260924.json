@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "protocol": "e7-scale-encoding-aggregation-p3-engineering-v1-20260924",
+  "status": "engineering_implemented_not_run",
+  "contract": {
+    "p3_protocol": "e7-scale-encoding-aggregation-p3-engineering-v1-20260924",
+    "p1_implementation_lock_sha256": "299448a12c4006f2f918f56645000838f83f044fbbf31d7cc281faa6540b11e1",
+    "arms": [
+      "s0_shallow__mean",
+      "s0_shallow__frequency_attention",
+      "s1_deep_local__mean",
+      "s1_deep_local__frequency_attention",
+      "s2_axis_spanning__mean",
+      "s2_axis_spanning__frequency_attention"
+    ],
+    "seeds": [
+      20260811,
+      20260812,
+      20260813
+    ],
+    "acceptance": {
+      "batch1_cells": 18,
+      "batch128_cells": 6,
+      "minimum_updates": 5,
+      "maximum_updates": 20,
+      "physical_batch": 128,
+      "amp_dtype": "bfloat16",
+      "branch_checkpoint_batch_chunk": 8,
+      "memory_limit_fraction": 0.8
+    },
+    "benchmark": {
+      "arms": [
+        "s0_shallow__mean",
+        "s0_shallow__frequency_attention",
+        "s1_deep_local__mean",
+        "s1_deep_local__frequency_attention",
+        "s2_axis_spanning__mean",
+        "s2_axis_spanning__frequency_attention"
+      ],
+      "modes": [
+        "eval",
+        "train"
+      ],
+      "eval_batch": 1,
+      "train_batch": 128,
+      "warmup": 5,
+      "repeats": 20,
+      "groups": 3,
+      "processes": 36
+    }
+  },
+  "p1_implementation_lock": {
+    "path": "docs/experiments/e7_scale_encoding_aggregation_p1_implementation_lock_20260924.json",
+    "size_bytes": 182060,
+    "sha256": "299448a12c4006f2f918f56645000838f83f044fbbf31d7cc281faa6540b11e1"
+  },
+  "code_files": {
+    "resp_train/paper_evidence/e7_scale_encoding_aggregation_engineering.py": {
+      "size_bytes": 29861,
+      "sha256": "f569438267732ac8f0405652469df46ae136c944578df822fa67f2f705fd9594"
+    },
+    "scripts/run_e7_scale_encoding_aggregation_p3.py": {
+      "size_bytes": 1873,
+      "sha256": "e7cb1f7b123f76e6fb722a4f4177e1a6863b35b18d371f99fd6ba91432545b20"
+    },
+    "tests/test_e7_scale_encoding_aggregation_engineering.py": {
+      "size_bytes": 5500,
+      "sha256": "6c94d1f05da71bb6c79c6ad4fba0a4886f514257a5f67edf66f152987cb68b3f"
+    },
+    "docs/experiments/e7_scale_encoding_aggregation_p3_engineering_protocol_20260924.md": {
+      "size_bytes": 2875,
+      "sha256": "a99ffa195999d2d7111bba5eeda87cabe4941f7f9a32dbde0190746bcb4ab79d"
+    }
+  },
+  "preparation_git": {
+    "commit": "8b9141f12b11af17717bbada9bbf300a59ced268",
+    "status_porcelain": ""
+  },
+  "prepared_at": "2026-09-24T08:18:50.268625+00:00"
+}
