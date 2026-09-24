@@ -307,6 +307,33 @@ P3 GPU 工程入口已实现并由独立 engineering lock 固定，协议为
 GPU acceptance 为 18 个 batch-1 cell 加 6 个 batch-128 cell；benchmark 为六臂、
 eval/train 两场景、三组独立进程，共 36 个 measurement。二者只使用 synthetic 输入。
 
+P3 已完成并由 `docs/experiments/e7_scale_encoding_aggregation_p3_closeout_20260924.md`
+收口。P4 formal 入口复用该收口固定的单一 GPU receipt；正式训练由用户执行：
+
+```bash
+git status --short  # 必须无输出
+
+E7_GPU_RECEIPT='runs/e7_scale_encoding_aggregation/gpu_acceptance/gpu_acceptance_773f5e78c5e8_20260924T082610Z_62e8f9b7eaef'
+
+for E7_SEED in 20260811 20260812 20260813; do
+  for E7_ARM in \
+    s0_shallow__mean \
+    s0_shallow__frequency_attention \
+    s1_deep_local__mean \
+    s1_deep_local__frequency_attention \
+    s2_axis_spanning__mean \
+    s2_axis_spanning__frequency_attention; do
+    env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+      ./.venv/bin/python scripts/run_e7_scale_encoding_aggregation_p4.py formal \
+      --arm "$E7_ARM" --seed "$E7_SEED" --device cuda:0 \
+      --gpu-receipt "$E7_GPU_RECEIPT" || break 2
+  done
+done
+```
+
+同一 P4 execution lock 下已完成 cell 拒绝重跑；失败现场保留，后续从未完成 cell 继续。全部完成后运行
+`scripts/run_e7_scale_encoding_aggregation_p4.py check-completed` 核验唯一 18-cell 矩阵。
+
 ## E4 v2：四种尺度聚合固定矩阵
 
 状态：12 次训练、12 次 test 评价、GPU 验收、benchmark 与两份汇总均已完成并结项。下列为历史执行命令。
