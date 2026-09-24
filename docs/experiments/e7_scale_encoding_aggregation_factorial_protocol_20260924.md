@@ -2,7 +2,7 @@
 
 日期：2026-09-24。协议 ID：`e7-scale-encoding-aggregation-factorial-v1-20260924`。
 
-状态：**P1 独立六臂模型、严格 spec、训练/汇总控制器、表示诊断与 synthetic CPU 验收已完成；26 项定向测试通过。来源审计、实现锁、GPU 工程验收、正式训练和评价尚未执行。当前阶段不读取独立测试集。**
+状态：**P2 train/validation 来源审计与 P1 implementation lock 已完成；27 项 synthetic CPU 定向测试通过。GPU 工程验收、正式训练和评价尚未执行。当前阶段不读取独立测试集。**
 
 ## 1. 科学问题与证据边界
 
@@ -255,11 +255,24 @@ tests/test_e7_scale_encoding_aggregation.py
 ./.venv/bin/python -m pytest tests/test_e7_scale_encoding_aggregation.py -q
 ```
 
+P2 冻结身份：
+
+```text
+docs/experiments/e7_scale_encoding_aggregation_source_audit_20260924.json
+docs/experiments/e7_scale_encoding_aggregation_p1_implementation_lock_20260924.json
+```
+
+Source audit 重核父锁登记的 23 个 train/validation 来源文件、dataset index、约
+1.42 GiB train W cache、约 0.37 GiB validation W cache、频率文件与三 seed W0
+checkpoint/config/validation 来源。审计只读取字节身份，没有解码数组，test access=false。
+Implementation lock 固定六臂合同、27 项 P1 测试、18 份 resolved config、代码与来源 SHA、
+`30/15/0/80` 停止合同、材料性容差和参数/MAC 覆盖报告。
+
 | 阶段 | 内容 | 当前状态 |
 |---|---|---|
 | P0 | 科学问题、矩阵、停止合同、分析与诊断 | 已完成 |
-| P1 | 独立模型、训练/汇总控制器、synthetic CPU 测试 | 已完成；26 tests passed |
-| P2 | 来源审计与不可覆盖实现锁 | 待 P1 提交后执行 |
+| P1 | 独立模型、训练/汇总控制器、synthetic CPU 测试 | 已完成；27 tests passed |
+| P2 | 来源审计与不可覆盖实现锁 | 已完成 |
 | P3 | Synthetic GPU acceptance 与 benchmark | 由用户执行 |
 | P4 | 18 次 formal train/validation | 由用户执行 |
 | P5 | 完整 validation 汇总与冻结 | 随完整 P4 开放 |

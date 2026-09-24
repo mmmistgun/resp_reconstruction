@@ -278,17 +278,20 @@ batch-128 上下文并保存选中窗口；最后用 finalize --summary ... --ca
 
 ## E7：聚合前尺度编码 × 尺度聚合
 
-状态：P1 已完成。独立六臂模型、严格配置、early-stop 回放、析因汇总、表征诊断和
-synthetic CPU 测试已实现；来源审计与实现锁属于下一阶段。协议为
+状态：P2 已完成。独立六臂模型、严格配置、early-stop 回放、析因汇总、表征诊断、
+source audit 与 P1 implementation lock 已建立。协议为
 `docs/experiments/e7_scale_encoding_aggregation_factorial_protocol_20260924.md`。
 
 ```bash
 ./.venv/bin/python scripts/run_e7_scale_encoding_aggregation.py check-p1
+./.venv/bin/python scripts/run_e7_scale_encoding_aggregation.py check-lock
 ./.venv/bin/python -m pytest tests/test_e7_scale_encoding_aggregation.py -q
 ```
 
-当前入口只开放 P1 核验。GPU acceptance、benchmark、正式 18 次 train/validation 和
-research-test 均按协议阶段门控由用户执行。
+冻结来源与实现分别为
+`docs/experiments/e7_scale_encoding_aggregation_source_audit_20260924.json` 和
+`docs/experiments/e7_scale_encoding_aggregation_p1_implementation_lock_20260924.json`。
+GPU acceptance、benchmark、正式 18 次 train/validation 和 research-test 均按协议阶段门控由用户执行。
 
 ## E4 v2：四种尺度聚合固定矩阵
 
