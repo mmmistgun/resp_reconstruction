@@ -2,7 +2,7 @@
 
 日期：2026-09-23。协议 ID：`w0-structural-factorial-v1-es30p15-20260923`。
 
-状态：**证据核对与实验设计已完成；当前只形成协议，不实现模型、不读取原始波形或 cache 数组、不运行 smoke/GPU/训练/test。** 正式科学矩阵固定为 `2×2×2×3 seeds=24` 个全新 train/validation run。任何实现、工程验收和正式训练均须在后续单独授权后进行。2026-09-24 已将分支基线快进至包含 E6 结项的 `main`；该同步只更新历史来源状态，不改变本协议矩阵。
+状态：**证据核对与实验设计已完成，当前阶段为协议冻结。** 正式科学矩阵固定为 `2×2×2×3 seeds=24` 个全新 train/validation run。当前授权范围止于协议；实现、工程验收和正式训练在后续授权阶段开展。
 
 输出 identity 固定为：
 
@@ -16,7 +16,7 @@ runs/w0_structural_factorial_v1_es30p15/
 docs/experiments/w0_structural_factorial_v1_implementation_lock_20260923.json
 ```
 
-本轮使用独立 worktree `/mnt/disk_code/marques/resp_reconstruction/.worktrees/w0_structural_factorial_v1`，分支为 `codex/w0-structural-factorial-v1`，同步基线为包含 E6 结项的 `main` merge commit `9e86f5ad05064f2605ee9668c6afe154432263d2`。协议与后续实现均在该 worktree 中演化；历史 checkpoint、cache 和产物继续从主仓库绝对路径只读引用，factorial 的实现锁、运行和结论保持独立身份。
+本轮使用独立 worktree `/mnt/disk_code/marques/resp_reconstruction/.worktrees/w0_structural_factorial_v1`，分支为 `codex/w0-structural-factorial-v1`，同步基线为 `main` merge commit `9e86f5ad05064f2605ee9668c6afe154432263d2`。协议与后续实现均在该 worktree 中演化；冻结 checkpoint、cache 和产物从主仓库绝对路径只读引用，factorial 的实现锁、运行和结论保持独立身份。
 
 ## 1. 研究问题与证据属性
 
@@ -28,11 +28,11 @@ docs/experiments/w0_structural_factorial_v1_implementation_lock_20260923.json
 4. 三个结构因素之间是否存在互补、冗余或条件依赖；
 5. 是否存在参数/计算更少、同时维持 RR、PCC 与包络质量的结构。
 
-这是既有 validation 与重复使用 research-test 结果知情的开发性实验。核心归因只来自本轮统一合同下的完整 `2×2×2` train/validation 矩阵；历史 W0、E4、E5、E6、CRD-TF-W v2 和 research-test 只作来源、设计动机或历史参照。即使未来另行评价 test，也只能称为 reused research/development evidence，不能称为新的独立确认。
+这是既有开发证据知情的 train/validation 实验。核心归因来自本轮统一合同下的完整 `2×2×2` 矩阵。未来如另行评价 test，证据属性固定为 reused research/development evidence。
 
 ## 2. 证据核对与当前状态
 
-### 2.1 权威来源与状态优先级
+### 2.1 适用来源与冻结状态
 
 本设计核对了：
 
@@ -42,22 +42,14 @@ docs/experiments/w0_structural_factorial_v1_implementation_lock_20260923.json
 - `crd_tf_v1_research_test_protocol_20260816.md`；
 - `crd_tf_w_v2_protocol_20260817.md`；
 - `e4_closeout_20260922.md`；
-- `w0_film_gamma_training_results_20260919.md`；
 - 当前 W0/CRD-TF 源码、冻结配置、candidate lock；
-- E5/E6 前端协议、源码与已有产物索引。
+- `resp_train.temporal.blocks.TemporalStem` 及其固定降采样实现。
 
-状态判断按“当前结项/产物 → 新协议 → 早期协议快照”排序，不能把早期正文中的“未执行”当作当前事实：
-
-- CRD-v1、C0/C1/C2、CRD-TF v1、CRD-TF-W v2、E4 均已完成相应冻结阶段；关闭入口不得重跑。
-- E4 当前结论仍是保留 W0 为论文主模型；五个尺度聚合候选没有跨 validation/test、跨属性的稳定整体收益。
-- E5 的 `100→10 Hz` 抗混叠极简卷积前端已完成三 seed validation 和 reused research-test，均支持 `net negative for this candidate`。这只否定 E5 完整 package，不证明所有卷积前端无效。
-- E6 已完成实现锁、GPU acceptance、benchmark、三 seed formal/validation、固定 checkpoint reused research-test 和结项。结项记录为 `docs/experiments/e6_temporal_frontend_closeout_20260924.md`；最终决定是不替换 W0。
-
-E6 全部产物作为排除于本矩阵的历史开发证据保留，不纳入 24-run 汇总。本轮卷积前端的选择依据是 E6 formal 结果产生前已经冻结的结构理由和 exact `TemporalStem`；后续看到的 E6 validation/test 结果不修改本协议的矩阵、阈值、初始化或停止规则。
+本协议以已冻结 W0 为结构锚点。E4 的当前结论保留 W0 为论文主模型；CRD/CRD-TF 的已完成阶段提供数据、任务、训练、CWT、FiLM 与读出的只读来源。24-run 汇总的模型证据严格来自本协议 implementation lock 下生成的完整矩阵。
 
 ### 2.2 W0 精确身份、checkpoint 与历史训练合同
 
-W0 不是泛称，而是：
+W0 的精确身份为：
 
 ```text
 variant = crd_tf102_w
@@ -96,7 +88,7 @@ C201 10-Hz nonlinear decoder residual
 
 ### 3.1 Patch 波形前端
 
-W0 的 `PatchTokenFrontend` 不是完整 `PatchMixer1D` waveform 模型，也不注册 patch waveform head；其参数量为 `8,784`：
+W0 的 `PatchTokenFrontend` 由 `PatchMixer1D` 的 token encoder 与 CRD bridge 组成，参数量为 `8,784`：
 
 ```text
 x [B,1,18000]
@@ -119,7 +111,7 @@ x + Conv1d-dw(k3)→Conv1d(k1)→GELU(GroupNorm(1,16)(x))
 → residual + Conv1d(16,32,k1)→GELU→Conv1d(32,16,k1)(GroupNorm(1,16)(.))
 ```
 
-这里的 GroupNorm 对通道和时间共同取组内统计。W0 只复用 token encoder，`hann` overlap-add 权重和 patch head 不进入该前端。140→1800 是长度兼容插值，不是严格物理对齐的 10-Hz 重采样。
+这里的 GroupNorm 对通道和时间共同取组内统计。实际前端计算止于 token encoder 与 bridge；140→1800 使用长度兼容插值，其时间坐标沿用该插值网格。
 
 ### 3.2 六层双向 Mamba 主干
 
@@ -131,11 +123,11 @@ ngroups=1, chunk_size=256, rmsnorm=true,
 bias=false, conv_bias=true, use_mem_eff_path=true
 ```
 
-本轮不改变主干宽度、深度、方向合并、dropout 或 Mamba 依赖。
+主干宽度、深度、方向合并、dropout 和 Mamba 依赖在八组中固定。
 
 ### 3.3 CWT 表示、二维编码与后续时间处理
 
-W0 的 W 输入来自冻结 CRD-TF cache：`ssqueezepy==0.6.6`、analytic Morlet `mu=13.4`、`log1p(abs(CWT))`，原始 100-Hz 整窗 reflect 边界，目标为 12 voices/octave 的 97 scales，并对每 50 个原时间点做不重叠均值得到 `[97,360]`。实际 mapped centers 为 `0.03662109375–7.99560546875 Hz`，含一个重复中心；本轮保持实际 scale identity、顺序、缓存和 scale mean，不修改频带、voices、mother wavelet或边界。
+W0 的 W 输入来自冻结 CRD-TF cache：`ssqueezepy==0.6.6`、analytic Morlet `mu=13.4`、`log1p(abs(CWT))`，原始 100-Hz 整窗 reflect 边界，目标为 12 voices/octave 的 97 scales，并对每 50 个原时间点做不重叠算术均值得到 `[97,360]`。实际 mapped centers 为 `0.03662109375–7.99560546875 Hz`，含一个重复中心；实际 scale identity、顺序、缓存、scale mean、频带、voices、mother wavelet 和边界在八组中固定。
 
 W 编码真实流为：
 
@@ -153,7 +145,7 @@ w [B,97,360]
 → split gamma_raw,beta_raw
 ```
 
-因此，B 因子只能解释为“尺度聚合后的三层一维 temporal mixer”，不能写成“移除 CWT 的全部时间处理”。即使 B 关闭，两个二维卷积的时间核、360→1800 插值、active fill 和条件投影仍保留。
+B 因子的估计对象严格限定为尺度聚合后的三层一维 temporal mixer。B=TM0 时，两个二维卷积的时间核、360→1800 插值、active fill 和条件投影保持固定。
 
 ### 3.4 FiLM、post-FiLM refinement 与统一读出
 
@@ -165,7 +157,7 @@ b = 0.5*tanh(beta_raw)
 z_film = z*(1+g)+b
 ```
 
-FiLM 始终位于六层主干之后、refinement/decoder 之前。本轮固定 gamma/beta 系数为原 W0 的 `0.5/0.5`；历史 `gamma=0.4` 的 validation 候选只作为“结论依赖 FiLM 强度”的风险提示，不在本矩阵中加入第四个因素。
+FiLM 始终位于六层主干之后、refinement/decoder 之前。本轮固定 gamma/beta 系数为 W0 的 `0.5/0.5`。
 
 W0 的 post-FiLM refinement 为两层 `ResidualDWBlock(96,dilation=1/2,dropout=0.10)`。之后的统一读出固定为：
 
@@ -181,17 +173,14 @@ GroupNorm(12,96)
 → raw waveform
 ```
 
-读出本身仍含 `k5` 时间卷积。C 因子只改变 FiLM 后的两层 refinement；不能写成“移除了 FiLM 后所有时间卷积”或“无时间读出”。
+C 因子的估计对象严格限定为 FiLM 后的两层 refinement；统一读出中的 `k5` 时间卷积保持固定。
 
-## 4. 已有证据能支持什么
+## 4. 现有证据与本轮用途
 
-1. CRD-TF v1 的 W arm 在 validation 候选池与 reused research-test 上均有 RR/trajectory 价值；这支持保留 W 表示作为本轮固定条件源，不证明 W 分支内部每个子模块都必要。
-2. CRD-TF-W v2 的 `CONDITION_OFF`、`TIME_MEAN` 与 `TIME_SHIFT_30S` 干预显示，冻结 W0 对条件路径、局部时频演化和时间对齐有功能依赖；E4 R3/GN 控制也显示破坏 CWT 高频区域的时间对应会稳定损害 trajectory/PCC。这些证据不能区分二维时间卷积、B 因子的三层一维 mixer、FiLM 或后续主干的贡献。
-3. `BETA_ONLY` 与 `GAMMA_ONLY` 均未达到 quality-near，说明已联合训练 W0 同时依赖两条 FiLM 路径；本轮因此固定 FiLM 形式，不把 B/C 结果解释为 add-only 或 scale-only 结论。
-4. gamma 系数重训显示 `0.4` 在 validation 上优于原 `0.5` 的若干轴，但 W0 主模型身份仍是 `0.5/0.5`。本轮回答原 W0 条件下的结构问题，不声称得到与所有 FiLM 强度无关的结论。
-5. E5 的直接 `100→10 Hz` 极简卷积 package 在 validation/test 均整体退化；因此本轮不重复 E5，而采用在 20 Hz 完成学习非线性后再降至 10 Hz 的冻结 Conv package。
-6. C0 已证明最终正式呼吸带在 10-Hz/Fourier round-trip 上近似无损；这支持固定统一 10-Hz readout，但不证明原始 100-Hz BCG 可在任何学习变换前直接降到 10 Hz。
-7. C1、D4、W3、E4 聚合等已有对照揭示了 RR、trajectory、global modulation、PCC 与效率之间反复出现的交换。因此本轮不以单一 Local RR 均值选赢家。
+1. W 表示在 validation 与 reused research-test 上呈现 RR/trajectory 价值，因此本轮把 W 数学表示、scale identity 和 FiLM 位置作为固定条件源。
+2. 冻结 checkpoint 干预与 E4 R3/GN 控制显示，W0 会利用局部时频演化和时间对齐。本轮通过 B 因子进一步识别尺度聚合后三层一维 mixer 的增量作用。
+3. C0 的 10-Hz/Fourier round-trip 审计支持统一使用 10-Hz readout；本轮固定 coarse head、decoder residual 与 Fourier interpolation。
+4. 既有结构对照反复呈现 RR、trajectory、global modulation、PCC 与效率之间的属性交换，因此本轮并列报告五主指标和资源，不构造单指标赢家。
 
 ## 5. 三个因素的冻结定义
 
@@ -199,7 +188,7 @@ GroupNorm(12,96)
 
 `A=0 PATCH` 为第 3.1 节原 W0 `PatchTokenFrontend`。
 
-`A=1 CONV20` 固定为已经在 E6 实现锁中定义的 exact `TemporalStem`：
+`A=1 CONV20` 固定为 `resp_train.temporal.blocks.TemporalStem` 的 exact contract：
 
 ```text
 x [B,1,18000] at 100 Hz
@@ -215,16 +204,16 @@ x [B,1,18000] at 100 Hz
 → [B,96,1800] at 10 Hz
 ```
 
-两个固定 decimator 在 autocast 外执行；学习卷积按原 BF16 路径执行。输出第 `i` 个 token 对应 `0.1i s` 网格。Conv 前端 trainable parameters 为 `24,672`，固定 FIR values 为 `255+127`，不进入 optimizer。
+两个固定 decimator 在 autocast 外执行；学习卷积按原 BF16 路径执行。输出第 `i` 个 token 对应 `0.1i s` 网格。Conv 前端 trainable parameters 为 `24,672`；`255+127` 个固定 FIR values 作为不可训练 buffers 登记。
 
-A 比较的是完整 frontend package：采样路径、时间网格、卷积、SiLU、channel-only LayerNorm、边界、参数量和计算量都随之改变。结论只能写成 `CONV20 package vs PATCH package`；不得把差异单独归因于卷积、20 Hz、抗混叠、归一化或 carrier 解调。
+A 比较的是完整 frontend package：采样路径、时间网格、卷积、SiLU、channel-only LayerNorm、边界、参数量和计算量共同构成 `CONV20 package vs PATCH package` 的效应。
 
 ### 5.2 B：CWT 尺度聚合后的一维时间 mixer
 
 - `B=1 TM3`：保留三层 `ResidualDWBlock(96,d=1/2/4)`，其 dropout 已固定为 `0`。
 - `B=0 TM0`：把 `branches.w.temporal` 替换为严格 `Identity`。
 
-B=0 时必须保持二维 CWT encoder、scale mean、插值、`96→65→96` active fill、zero-init final projection、FiLM 系数和位置完全相同。不重新扩大 active fill，不添加 pointwise/normalization/minimal TCN，不保留未使用的 TM3 参数。
+B=0 时保持二维 CWT encoder、scale mean、插值、`96→65→96` active fill、zero-init final projection、FiLM 系数和位置完全相同；TM3 参数从模型、optimizer 和 state dict 中移除。
 
 ### 5.3 C：FiLM 后 refinement
 
@@ -233,7 +222,7 @@ B=0 时必须保持二维 CWT encoder、scale mean、插值、`96→65→96` act
 
 C=0 时保持 FiLM、完整 coarse head、C201 decoder residual 与 Fourier interpolation不变，不添加补偿层，也不保留未使用的 REF2 参数。
 
-B 与 C 使用相同 block 家族，但并非“同一模块只换位置”：B 为三层、dilation `1/2/4`、dropout `0`；C 为两层、dilation `1/2`、dropout `0.10`。因此不能把 B/C 效应大小之差直接解释为纯位置效应。
+B 与 C 是两个不同的 module package：B 为三层、dilation `1/2/4`、dropout `0`；C 为两层、dilation `1/2`、dropout `0.10`。B×C 用于描述两者的互补或冗余，位置比较不属于本矩阵的估计目标。
 
 ## 6. 完整 `2×2×2` 矩阵
 
@@ -248,7 +237,7 @@ B 与 C 使用相同 block 家族，但并非“同一模块只换位置”：B 
 | `sfv1_conv20_tm0_ref2` | CONV20 | TM0 | REF2 | 1,122,842 | Conv 下移除 B |
 | `sfv1_conv20_tm0_ref0` | CONV20 | TM0 | REF0 | 1,047,578 | Conv 下同时移除 B/C |
 
-每组固定 seeds `20260811 / 20260812 / 20260813`，共 24 个新 formal training runs。不得根据首个 seed、部分 arm、中间 validation、历史 E6 结果或任何 test 结果取消剩余格子。
+每组固定 seeds `20260811 / 20260812 / 20260813`，共 24 个新 formal training runs。矩阵在启动前整体冻结，执行与汇总均要求八组 × 三 seed 完整覆盖。
 
 参数差来自自然结构：
 
@@ -256,7 +245,7 @@ B 与 C 使用相同 block 家族，但并非“同一模块只换位置”：B 
 - TM3：`112,896`；
 - REF2：`75,264`。
 
-不使用 inert/unused parameter fill 做跨 arm 参数对齐。W0 原有、参与 forward 的 `96→65→96` active fill 在全部八组保持不变；它不是为本轮新加的参数补齐。
+各 arm 使用自然参数量。W0 原有、参与 forward 的 `96→65→96` active fill 在全部八组保持不变。
 
 ## 7. 初始化与配对合同
 
@@ -275,7 +264,7 @@ B 与 C 使用相同 block 家族，但并非“同一模块只换位置”：B 
 - 同 B=TM3 的 temporal mixer 在四个 A/C 组合中逐 tensor 相同；
 - 同 C=REF2 的 refinement 在四个 A/B 组合中逐 tensor 相同。
 
-每个 run 保存逐 state tensor hash、optimizer parameter names/groups 和 shared-state comparison。关闭的模块不得注册、优化或进入 state dict。固定 FIR buffers 单独登记，不进入 optimizer。
+每个 run 保存逐 state tensor hash、optimizer parameter names/groups 和 shared-state comparison。TM0/REF0 对应模块不注册参数；固定 FIR buffers 单独登记且保持不可训练。
 
 ### 7.2 初始函数与梯度启动
 
@@ -296,9 +285,9 @@ AdamW 对已经生成零梯度 tensor 的非零 decay 参数仍可能施加 deco
 ### 8.1 数据与任务
 
 - 数据格式、dataset root、index、input/target key、admission、subject/session 隔离均沿用 W0 `research_v2`。
-- 完整 train/validation 为 `10,141 / 2,675` windows、`32 / 7` 个 `samp_id`；不读取 test。
+- 完整 train/validation 为 `10,141 / 2,675` windows、`32 / 7` 个 `samp_id`；本协议的数据访问范围固定为 train/validation。
 - sample seed 固定 train=`20260610`、validation=`20260611`；正式 training seeds 固定三项。
-- 原 W train/validation cache identity固定为 transform SHA-256 `bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0`，manifest SHA-256 `6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8`。实现锁只读复核实际需要的 manifest、row IDs、W/frequency 文件字节；不得重建或覆盖 cache。
+- 原 W train/validation cache identity固定为 transform SHA-256 `bd6cea7348f6b51ed768b89cf9b3425530b6358a82ba78277844517a1c27fea0`，manifest SHA-256 `6fb44aad2689d9426ad78dc1f054db5aaac698792af5818bc01a54563cb9f0b8`。实现锁逐项复核 manifest、row IDs、W/frequency 文件字节，并以只读方式使用现有 cache。
 - loss 固定为 `L_sync + 0.25 L_effort`，外置 `Pi`、target-only eligibility、finite 与 penalty 语义不变。
 
 ### 8.2 Optimizer、batch 与学习率
@@ -457,13 +446,13 @@ RR、PCC、trajectory 与 global modulation 发生材料性交换时，明确标
 
 - [x] 核对 W0 variant/config/checkpoint/training contract；
 - [x] 还原 Patch、W encoder、BiMamba、FiLM、refinement 与读出真实计算图；
-- [x] 核对已有证据、阶段关闭状态与 E6 结项身份；
+- [x] 核对适用上游协议、冻结来源与当前源码；
 - [x] 冻结八组前向、参数、初始化、训练和分析合同；
-- [x] 未读取原始波形或 cache arrays，未执行本协议模型或实验；E6 聚合结果仅登记为协议冻结后的历史背景。
+- [x] P0 证据范围限定为文档、源码、manifest、summary 与文件身份元数据。
 
 ### P1：未来实现与 synthetic CPU
 
-必须新建独立模型/配置/控制器，不修改旧 W0/E5/E6 variant identity。至少验证：八组 strict schema、参数数、无 unused 参数、forward shape/finite、同 A 的 B/C 初始 waveform identity、共享 state hash、三步梯度启动、optimizer 分组、early-stop 回放、factorial contrast、Local RR tails、subject/denominator 汇总、不可覆盖 lifecycle。
+实现使用本协议独立的模型、配置、控制器和输出 namespace，并保持既有 builder/state identities 兼容。至少验证：八组 strict schema、参数数、optimizer 只含 active parameters、forward shape/finite、同 A 的 B/C 初始 waveform identity、共享 state hash、三步梯度启动、optimizer 分组、early-stop 回放、factorial contrast、Local RR tails、subject/denominator 汇总和排他 lifecycle。
 
 ### P2：未来 GPU 工程验收
 
@@ -481,7 +470,7 @@ runs/w0_structural_factorial_v1_es30p15/formal/<arm>/seed_<seed>/<lock-prefix>_<
 
 ### P4：一次性冻结汇总
 
-只接受 24 个唯一完整 run。逐 run 回放 earliest legal stop、最早 Local-RR minimum、实际 updates/LR、checkpoint、2,675 row identity/order、指标/eligibility/denominator和finite。缺任何格、混入历史 W0/E6 run、使用部分 seed或已有 summary 目录时拒绝生成结果。
+汇总输入严格限定为当前 implementation lock 产生的 24 个唯一完整 run。逐 run 回放 earliest legal stop、最早 Local-RR minimum、实际 updates/LR、checkpoint、2,675 row identity/order、指标/eligibility/denominator和finite；八组 × 三 seed 全部通过后生成一次性结果。
 
 预期最小汇总产物：
 
@@ -511,15 +500,32 @@ freeze_receipt.json
 6. 三 seed 足以描述固定随机种子的优化波动和交互方向，不足以作人群显著性推断。7 个 validation `samp_id` 的分层也只是有限开发样本上的异质性描述。
 7. Local RR 是窗口级频谱主峰误差，不是逐呼吸相位跟踪；trajectory/PCC/global modulation 必须共同解释。
 8. 统一 early stopping减少平均成本，但新组合可能晚恢复；max 80 仍是截断边界。实际停止 epoch作为优化行为报告，不用于事后延长单组。
-9. E6 已独立结项；其聚合结果只登记为本协议冻结后的历史外部背景，不能修改矩阵、阈值、初始化或停止规则。
-10. 当前 test 已被多轮开发使用。若本轮以后需要 test，必须另立 checkpoint allowlist 和专项授权；不得用 test重选 checkpoint、删除 seed或追加结构。
+9. 当前 test 已被多轮开发使用。未来 test 阶段须另立 checkpoint allowlist 和专项授权，并保持 validation-selected checkpoint 与完整三 seed 集合。
 
-## 14. 本次交付结论
+## 14. 适用边界与后续问题
 
-完整 `2×2×2` 可实施，但须采用上述三项最小修正：
+本节记录当前矩阵的解释范围、固定处理和预先安排的后续问题。所有条目在 24-run 启动前冻结。
 
-1. A 不是泛化的“Conv”，而是冻结的 `CONV20` 完整前端 package；不重复已经失败的 E5 `100→10 Hz` package。
-2. B 明确限定为 CWT scale-mean 后的三层一维 mixer；不声称移除全部 CWT 时间处理。
-3. C 明确限定为 FiLM 后两层 refinement；后续统一读出的时间卷积固定。
+| ID | 当前固定项 | 解释范围 | v1 合同 | 后续触发 |
+|---|---|---|---|---|
+| `C01_W_ACTIVE_FILL` | W 分支固定 `96→65→96` active fill，共 `12,576` 个参数；宽度 65 继承 CRD-TF v1 的 branch 参数预算。 | B 估计 TM3 在该 active fill 之上的增量价值。 | 八组使用同一个 fill state、宽度和初始化。 | 若 B 主效应接近零、B×C 明显，或 TM0 成为简化候选，另立 `fill × TM3` 小矩阵。 |
+| `C02_FRONTEND_PACKAGE` | CONV20 使用 exact `TemporalStem` contract：固定宽度、卷积核、三次 channel-only LayerNorm 和两级降采样。 | A 效应覆盖采样、网格、边界、归一化、激活、局部编码、参数和计算的完整 package。 | 以 `CONV20 package vs PATCH package` 报告质量与资源。 | 若 CONV20 呈现稳定收益或明确质量—计算交换，另立单因素前端机制对照。 |
+| `C03_BC_MODULE_SCOPE` | B 为三层、dilation `1/2/4`、dropout `0`；C 为两层、dilation `1/2`、dropout `0.10`。 | B×C 描述两个真实 package 的互补或冗余。 | B、C 分别报告条件效应和主效应。 | 若结果提示位置机制，另立完全匹配 block count/dilation/dropout/初始化的 pre/post placement 对照。 |
+| `C04_ZERO_INIT_STARTUP` | W final projection、TM3 residual project 和 REF2 residual project 为级联零初始化。 | 不同路径进入深层参数学习的 optimizer step 可能不同。 | 保留 W0 初始化；synthetic 连续三步记录逐模块 gradient/update norm。 | 若正式 history 在停止边界附近仍改善，或模块梯度长期接近零，先做只读优化诊断；初始化实验使用新协议和 identity。 |
+| `C05_SHARED_TRAINING_CONTRACT` | 八组共用 AdamW、LR、weight decay、batch 与 `30/15/0/80`。 | 本轮估计统一训练合同下的结构表现；实际 epoch、wall-time 和优化轨迹分别报告。 | 全部 arm 使用同一训练合同，并保存停止 epoch、updates、LR 位置、wall-time 和梯度诊断。 | 工程条件无法满足共同合同时，formal 整体暂停并在全部 seed 启动前统一修订。 |
+| `C06_C201_DECODER_SCOPE` | 统一读出固定 `1,057` 参数的 zero-init nonlinear decoder residual。 | C 效应条件于当前 decoder capacity。 | 八组固定 C201 residual 和读出。 | 若 REF0 成为质量保持简化候选，另立 `REF2 × decoder residual` 对照。 |
 
-在这三个边界下，八组具有清楚的前向定义、配对初始化和可解释的二阶/三阶交互。当前独立 worktree 已建立；后续实现继续使用该 worktree。E6 已按自身协议结项，factorial 不复用其 run、checkpoint 或生命周期。
+后续处理遵循两条规则：
+
+1. 24-run 启动前，静态实现审计如发现影响比较有效性的条件，统一修订协议 ID、实现锁和全部八组。
+2. 24-run 启动后按冻结矩阵完成；后续问题在完整结果冻结后使用新的专项协议和输出 identity。
+
+## 15. 协议冻结结论
+
+完整 `2×2×2` 的三个因素定义为：
+
+1. A：`PATCH` 与冻结的 `CONV20` 完整前端 package；
+2. B：CWT scale-mean 后的三层一维 mixer `TM3/TM0`；
+3. C：FiLM 后两层 refinement `REF2/REF0`，统一读出保持固定。
+
+八组具有明确前向、配对初始化、统一训练合同和预注册的主效应、条件效应及二阶/三阶交互。后续实现继续使用当前独立 worktree和本协议输出 identity。
