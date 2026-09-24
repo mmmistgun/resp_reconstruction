@@ -58,6 +58,10 @@ class CRDExperiment:
         """独立实验可覆盖构造；默认路径保持冻结 CRD 模型工厂。"""
         return build_crd_model(self.cfg)
 
+    def _build_data(self):
+        """独立工程验收可覆盖数据来源；默认路径仍构建冻结 train/validation。"""
+        return build_tho_data(self.cfg)
+
     def train(self) -> Path:
         tf_w_v2_contract = None
         tf_w_v2_contract_key = None
@@ -96,7 +100,7 @@ class CRDExperiment:
         device = resolve_device(str(self.cfg.training.device))
         self.device = device
 
-        data = build_tho_data(self.cfg)
+        data = self._build_data()
         data.audit_summary.to_csv(run_dir / "audit.csv", index=False)
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)

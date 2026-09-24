@@ -47,7 +47,10 @@ CONTROL_PATH = Path("resp_train/paper_evidence/w0_structural_factorial_v1.py")
 SCRIPT_PATH = Path("scripts/run_w0_structural_factorial_v1.py")
 TEST_PATH = Path("tests/test_w0_structural_factorial_v1.py")
 P1_RECEIPT_PATH = Path("docs/experiments/w0_structural_factorial_v1_p1_implementation_receipt_20260924.json")
-LOCK_PATH = Path("docs/experiments/w0_structural_factorial_v1_implementation_lock_20260923.json")
+PREVIOUS_LOCK_PATH = Path("docs/experiments/w0_structural_factorial_v1_implementation_lock_20260923.json")
+PREVIOUS_LOCK_SHA256 = "9e5d4a53499cec23cad9d6b4cc6d6eaca0b590cef4de5111c0d5b2d460b98b31"
+LOCK_PATH = Path("docs/experiments/w0_structural_factorial_v1_implementation_lock_r2_20260924.json")
+ENGINEERING_PATH = Path("resp_train/paper_evidence/w0_structural_factorial_v1_engineering.py")
 W0_CONFIG_PATH = Path("configs/crd_tf_v1/crd_tf102_w_formal.yaml")
 OUTPUT_ROOT = Path("runs/w0_structural_factorial_v1_es30p15")
 W0_SOURCE_LOCK = Path("docs/experiments/e4_w0_scale_aggregation_implementation_lock_20260917.json")
@@ -259,6 +262,7 @@ def critical_paths() -> tuple[Path, ...]:
         PROTOCOL_PATH,
         MODEL_PATH,
         CONTROL_PATH,
+        ENGINEERING_PATH,
         SCRIPT_PATH,
         TEST_PATH,
         P1_RECEIPT_PATH,
@@ -293,6 +297,9 @@ def prepare_lock(root: Path = ROOT) -> Path:
     source_path = root / W0_SOURCE_LOCK
     if sha256_file(source_path) != W0_SOURCE_LOCK_SHA256:
         raise ValueError("W0 来源锁身份漂移")
+    previous_lock_path = root / PREVIOUS_LOCK_PATH
+    if sha256_file(previous_lock_path) != PREVIOUS_LOCK_SHA256:
+        raise ValueError("P1 implementation lock 身份漂移")
     source = json.loads(source_path.read_text(encoding="utf-8"))
     if (
         tuple(int(value) for value in source.get("seeds", ())) != SEEDS
@@ -376,9 +383,13 @@ def prepare_lock(root: Path = ROOT) -> Path:
         "artifact_root": str(SOURCE_ROOT / OUTPUT_ROOT),
         "source_files": source_files,
         "code_files": {str(path): identity(root / path) for path in critical_paths()},
+        "previous_implementation_lock": {
+            "path": str(PREVIOUS_LOCK_PATH),
+            **identity(previous_lock_path),
+        },
         "prepared_at": datetime.now(timezone.utc).isoformat(),
         "preparation_git": state,
-        "status": "implementation_locked_p2_pending",
+        "status": "implementation_locked_p2_authorized",
     }
     write_json(destination, lock)
     return destination
@@ -402,12 +413,16 @@ def load_lock(root: Path = ROOT) -> tuple[dict[str, Any], str]:
         or lock.get("early_stopping") != _MATRIX["early_stopping"]
         or lock.get("analysis") != _ANALYSIS
         or lock.get("arm_contracts") != _arm_spec_payload()
-        or lock.get("status") != "implementation_locked_p2_pending"
+        or lock.get("status") != "implementation_locked_p2_authorized"
         or lock.get("source_repository_root") != str(SOURCE_ROOT)
         or lock.get("artifact_root") != str(SOURCE_ROOT / OUTPUT_ROOT)
     ):
         raise ValueError("implementation lock 科学合同漂移")
     verify_identity(root / SPEC_PATH, lock["spec"])
+    previous = lock.get("previous_implementation_lock", {})
+    if previous.get("path") != str(PREVIOUS_LOCK_PATH):
+        raise ValueError("P1 implementation lock 链接漂移")
+    verify_identity(root / PREVIOUS_LOCK_PATH, previous)
     for relative, expected in lock["code_files"].items():
         verify_identity(root / relative, expected)
     for seed in SEEDS:

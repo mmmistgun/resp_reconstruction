@@ -10,8 +10,10 @@ import torch
 from omegaconf import OmegaConf
 from torch import nn
 
+from resp_train.crd import experiment as crd_experiment
 from resp_train.crd.training import build_crd_optimizer, crd_learning_rate
 from resp_train.paper_evidence import w0_structural_factorial_v1 as sf
+from resp_train.paper_evidence import w0_structural_factorial_v1_engineering as engineering
 from resp_train.paper_evidence.w0_structural_factorial_v1_model import (
     ARMS,
     ARM_SPECS,
@@ -346,6 +348,49 @@ def test_parameter_compute_report_and_critical_paths():
     assert report["covered_macs"]["tm3"] == 201_657_600
     assert report["whole_model_flops"] is None
     assert all((sf.ROOT / path).is_file() for path in sf.critical_paths())
+
+
+def test_p2_synthetic_batch_and_native_loader_contract():
+    batch = engineering.synthetic_batch(2, 17, split="synthetic_validation", row_offset=100)
+    assert batch["x"].shape == (2, 1, 18_000)
+    assert batch["target"].shape == (2, 1, 18_000)
+    assert batch["tf"]["w"].shape == (2, 97, 360)
+    assert batch["meta"]["dataset_row_id"].tolist() == [100, 101]
+    assert batch["meta"]["split"] == ["synthetic_validation"] * 2
+    assert torch.isfinite(batch["x"]).all()
+    data, rows = engineering.synthetic_data_bundle(sf.SEEDS[0])
+    assert len(data.train.loader) == 1
+    assert len(data.train.loader.dataset) == engineering.LIFECYCLE_TRAIN_WINDOWS
+    assert len(data.val.loader.dataset) == engineering.LIFECYCLE_VALIDATION_WINDOWS
+    assert len(rows) == engineering.LIFECYCLE_VALIDATION_WINDOWS
+    assert next(iter(data.val.loader))["meta"]["dataset_row_id"].tolist() == rows.dataset_row_id.tolist()
+
+
+def test_p2_engineering_config_keeps_formal_structure_contract(tmp_path):
+    baseline_cfg = baseline()
+    lock = {"baselines": {str(sf.SEEDS[0]): OmegaConf.to_container(baseline_cfg, resolve=True)}}
+    cfg = engineering.engineering_config(
+        lock,
+        arm=engineering.MAX_RESOURCE_ARM,
+        output_root=tmp_path,
+        device="cpu",
+    )
+    sf.validate_config(
+        cfg,
+        baseline_cfg,
+        arm=engineering.MAX_RESOURCE_ARM,
+        output_root=tmp_path,
+        device="cpu",
+    )
+    assert cfg.training.batch_size == 128
+    assert cfg.training.gradient_accumulation_steps == 1
+    assert cfg.training.amp_dtype == "bfloat16"
+
+
+def test_crd_data_extension_point_preserves_default_builder(monkeypatch):
+    marker = object()
+    monkeypatch.setattr(crd_experiment, "build_tho_data", lambda cfg: marker)
+    assert crd_experiment.CRDExperiment(baseline())._build_data() is marker
 
 
 def test_prepare_lock_requires_clean_worktree(tmp_path, monkeypatch):

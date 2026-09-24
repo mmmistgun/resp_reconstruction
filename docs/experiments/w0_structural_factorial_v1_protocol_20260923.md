@@ -468,9 +468,13 @@ tests/test_w0_structural_factorial_v1.py
 
 专项测试与相邻 W0/TemporalStem 回归共 `50 passed`；Python 编译、`check-config` 和 `describe` 均通过。P1 receipt 为 `docs/experiments/w0_structural_factorial_v1_p1_implementation_receipt_20260924.json`。这些结果使用 synthetic CPU fixture，只形成结构、配置、初始化、分析和生命周期工程证据。
 
-### P2：未来 GPU 工程验收
+### P2：GPU 工程验收（已授权，执行中）
 
 八组均做 batch-1 BF16 forward/loss/backward finite 与梯度检查；最大资源臂 `CONV20/TM3/REF2` 做 physical-batch-128 原生至少三次 update和完整 128-train/32-validation lifecycle。记录所有 arm 的参数、covered MAC、延迟、吞吐和显存。任一必须运行 arm OOM、非有限或 peak reserved 超过设备 80% 时暂停整个 formal 队列；不得只给该 arm 改 batch、accumulation、dtype、checkpointing 或结构。若统一 fallback，须在任何 formal 前修订协议并应用八组。
+
+P2 使用 `resp_train/paper_evidence/w0_structural_factorial_v1_engineering.py` 和同一实验 CLI。完整 lifecycle 通过原生 trainer 的训练、validation Local-RR 选点、best/final checkpoint 与逐窗口 metrics 路径；数据扩展点的默认实现仍调用冻结 train/validation builder，P2 子类只注入 deterministic synthetic bundle。效率测量固定为每个 arm/mode 一个新进程，eval 使用 batch 1，train 使用 physical batch 128；每项 3 次 warmup、10 次计时重复。工程产物进入独立的 `gpu_acceptance/` 与 `benchmark/` lifecycle。
+
+P1 锁作为已完成实现身份保留；P2 代码由 `docs/experiments/w0_structural_factorial_v1_implementation_lock_r2_20260924.json` 重新冻结并显式链接 P1 锁。P2 的运行只读取实现锁和其中的 resolved baseline 配置，不读取 dataset index、真实波形、W cache、历史 checkpoint 或 test。
 
 ### P3：未来 24-run formal
 
