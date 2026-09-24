@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "protocol": "e7-scale-encoding-aggregation-p4-formal-v1-20260924",
+  "status": "formal_entry_locked_not_run",
+  "contract": {
+    "protocol": "e7-scale-encoding-aggregation-p4-formal-v1-20260924",
+    "p1_implementation_lock_sha256": "299448a12c4006f2f918f56645000838f83f044fbbf31d7cc281faa6540b11e1",
+    "p3_engineering_lock_sha256": "773f5e78c5e8d7b08cadaac00797ede8dcd9f3f7a77d0775fc5679650a29d32d",
+    "p3_closeout_sha256": "29334d33e4a3fb6666230bb5cf6915d16c5cf34e8a2cf49a07bd58d499433182",
+    "arms": [
+      "s0_shallow__mean",
+      "s0_shallow__frequency_attention",
+      "s1_deep_local__mean",
+      "s1_deep_local__frequency_attention",
+      "s2_axis_spanning__mean",
+      "s2_axis_spanning__frequency_attention"
+    ],
+    "seeds": [
+      20260811,
+      20260812,
+      20260813
+    ],
+    "cells": 18,
+    "counts": {
+      "train": 10141,
+      "val": 2675
+    },
+    "samp_ids": {
+      "train": 32,
+      "val": 7
+    },
+    "max_epochs": 80,
+    "updates_per_epoch": 80,
+    "planned_updates": 6400,
+    "early_stopping": {
+      "enabled": true,
+      "min_epoch": 30,
+      "patience": 15,
+      "min_delta": 0.0,
+      "monitor": "validation_local_rr_mae_full_split"
+    },
+    "checkpoint_selector": "full_validation_local_rr_strict_minimum_earliest_tie",
+    "split_scope": [
+      "train",
+      "val"
+    ],
+    "research_test_access": false
+  },
+  "p1_implementation_lock": {
+    "path": "docs/experiments/e7_scale_encoding_aggregation_p1_implementation_lock_20260924.json",
+    "size_bytes": 182060,
+    "sha256": "299448a12c4006f2f918f56645000838f83f044fbbf31d7cc281faa6540b11e1"
+  },
+  "p3_engineering_lock": {
+    "path": "docs/experiments/e7_scale_encoding_aggregation_p3_engineering_lock_20260924.json",
+    "size_bytes": 2590,
+    "sha256": "773f5e78c5e8d7b08cadaac00797ede8dcd9f3f7a77d0775fc5679650a29d32d"
+  },
+  "p3_closeout": {
+    "path": "docs/experiments/e7_scale_encoding_aggregation_p3_closeout_20260924.json",
+    "size_bytes": 2570,
+    "sha256": "29334d33e4a3fb6666230bb5cf6915d16c5cf34e8a2cf49a07bd58d499433182"
+  },
+  "gpu_receipt_allowlist": {
+    "path": "runs/e7_scale_encoding_aggregation/gpu_acceptance/gpu_acceptance_773f5e78c5e8_20260924T082610Z_62e8f9b7eaef",
+    "manifest": {
+      "size_bytes": 33356,
+      "sha256": "6adaf2ca83776f1d9bbd0ae92ca688f1890a7f8fc05cee6949370c18d00d22fe"
+    },
+    "result": {
+      "size_bytes": 393267,
+      "sha256": "5d0b79fd1871c411e78c796575a9215c21bdb73bcb50d6ea58e29caa63a591b3"
+    },
+    "environment": {
+      "size_bytes": 738,
+      "sha256": "14b5eb483c086755c911a84d731f57d4381f5bf1c073afad0841841e544982e8"
+    }
+  },
+  "code_files": {
+    "resp_train/paper_evidence/e7_scale_encoding_aggregation_formal.py": {
+      "size_bytes": 28249,
+      "sha256": "6eab760f0a8465bffeffd35eb9d86490c1abafe232e5486ade4d4f4fd39965b0"
+    },
+    "scripts/run_e7_scale_encoding_aggregation_p4.py": {
+      "size_bytes": 1734,
+      "sha256": "a69fad90b2cf707bd31035caaac82cf1f70e694c4126a3eb330454473d32105d"
+    },
+    "tests/test_e7_scale_encoding_aggregation_formal.py": {
+      "size_bytes": 3268,
+      "sha256": "e80d1d91794cbf5e29a28b94daa96ca4532b129f523f7faa127689942970e1ec"
+    },
+    "docs/experiments/e7_scale_encoding_aggregation_p4_formal_protocol_20260924.md": {
+      "size_bytes": 3860,
+      "sha256": "3acdcd6f5070748d5f238edc3d5ec55e91f2d1a278555185ad2609125894b7af"
+    }
+  },
+  "preparation_git": {
+    "commit": "a875f282213b07b82eb1b94e3f1d97716f07662d",
+    "status_porcelain": ""
+  },
+  "prepared_at": "2026-09-24T09:32:10.748089+00:00"
+}
