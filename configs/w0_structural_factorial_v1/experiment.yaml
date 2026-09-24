@@ -1,0 +1,38 @@
+schema_version: 1
+protocol: w0-structural-factorial-v1-es30p15-20260923
+output_root: runs/w0_structural_factorial_v1_es30p15
+source:
+  w0_implementation_lock: docs/experiments/e4_w0_scale_aggregation_implementation_lock_20260917.json
+  w0_implementation_lock_sha256: 464e073dbd5707a30575d606dec2a84dcd89a161945e537c463b214a15c2b493
+  w0_config: configs/crd_tf_v1/crd_tf102_w_formal.yaml
+  temporal_stem: resp_train/temporal/blocks.py
+arms:
+  sfv1_patch_tm3_ref2: {frontend: patch, cwt_temporal: tm3, refinement: ref2, factors: [0, 1, 1], trainable_parameters: 1219850, factor_covered_macs: 339806080}
+  sfv1_patch_tm3_ref0: {frontend: patch, cwt_temporal: tm3, refinement: ref0, factors: [0, 1, 0], trainable_parameters: 1144586, factor_covered_macs: 205367680}
+  sfv1_patch_tm0_ref2: {frontend: patch, cwt_temporal: tm0, refinement: ref2, factors: [0, 0, 1], trainable_parameters: 1106954, factor_covered_macs: 138148480}
+  sfv1_patch_tm0_ref0: {frontend: patch, cwt_temporal: tm0, refinement: ref0, factors: [0, 0, 0], trainable_parameters: 1031690, factor_covered_macs: 3710080}
+  sfv1_conv20_tm3_ref2: {frontend: conv20, cwt_temporal: tm3, refinement: ref2, factors: [1, 1, 1], trainable_parameters: 1235738, factor_covered_macs: 446396400}
+  sfv1_conv20_tm3_ref0: {frontend: conv20, cwt_temporal: tm3, refinement: ref0, factors: [1, 1, 0], trainable_parameters: 1160474, factor_covered_macs: 311958000}
+  sfv1_conv20_tm0_ref2: {frontend: conv20, cwt_temporal: tm0, refinement: ref2, factors: [1, 0, 1], trainable_parameters: 1122842, factor_covered_macs: 244738800}
+  sfv1_conv20_tm0_ref0: {frontend: conv20, cwt_temporal: tm0, refinement: ref0, factors: [1, 0, 0], trainable_parameters: 1047578, factor_covered_macs: 110300400}
+matrix:
+  seeds: [20260811, 20260812, 20260813]
+  train_windows: 10141
+  validation_windows: 2675
+  train_samp_ids: 32
+  validation_samp_ids: 7
+  epochs: 80
+  updates_per_epoch: 80
+  planned_updates: 6400
+  early_stopping: {enabled: true, min_epoch: 30, patience: 15, min_delta: 0.0}
+  physical_batch: 128
+  gradient_accumulation_steps: 1
+  amp_dtype: bfloat16
+  checkpoint_selector: full_validation_local_rr_strict_minimum_earliest_tie
+  split: train_validation
+analysis:
+  primary_metrics: [whole_rr_abs_error_bpm, local_rr_mae_bpm, envelope_trajectory_mae, global_envelope_modulation_error, lag_aware_signed_pcc]
+  error_relative_tolerance: 0.005
+  pcc_absolute_tolerance: 0.002
+  local_rr_thresholds_bpm: [2.0, 5.0]
+  seed_sd_ddof: 1

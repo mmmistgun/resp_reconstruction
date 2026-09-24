@@ -2,7 +2,7 @@
 
 日期：2026-09-23。协议 ID：`w0-structural-factorial-v1-es30p15-20260923`。
 
-状态：**证据核对与实验设计已完成，当前阶段为协议冻结。** 正式科学矩阵固定为 `2×2×2×3 seeds=24` 个全新 train/validation run。当前授权范围止于协议；实现、工程验收和正式训练在后续授权阶段开展。
+状态：**P1 模型、严格 spec、训练配置/实验适配器、冻结分析函数、排他生命周期、CLI 与 synthetic CPU 验收已完成；P2/P3 尚未开放。** 正式科学矩阵固定为 `2×2×2×3 seeds=24` 个全新 train/validation run。实现锁须在本轮代码提交并保持工作树干净后生成；GPU 工程验收、benchmark、真实数据 smoke 和正式训练在后续授权阶段开展。
 
 输出 identity 固定为：
 
@@ -450,9 +450,21 @@ RR、PCC、trajectory 与 global modulation 发生材料性交换时，明确标
 - [x] 冻结八组前向、参数、初始化、训练和分析合同；
 - [x] P0 证据范围限定为文档、源码、manifest、summary 与文件身份元数据。
 
-### P1：未来实现与 synthetic CPU
+### P1：实现与 synthetic CPU（已完成）
 
-实现使用本协议独立的模型、配置、控制器和输出 namespace，并保持既有 builder/state identities 兼容。至少验证：八组 strict schema、参数数、optimizer 只含 active parameters、forward shape/finite、同 A 的 B/C 初始 waveform identity、共享 state hash、三步梯度启动、optimizer 分组、early-stop 回放、factorial contrast、Local RR tails、subject/denominator 汇总和排他 lifecycle。
+实现使用本协议独立的模型、配置、控制器和输出 namespace，并保持既有 builder/state identities 兼容。已实现并验证：八组 strict schema、参数数、optimizer 只含 active parameters、forward shape/finite、同 A 的 B/C 初始 waveform identity、共享 state、三步梯度启动、optimizer 分组、early-stop 回放、factorial contrast、Local RR tails、subject/denominator 汇总和排他 lifecycle。
+
+实现路径为：
+
+```text
+configs/w0_structural_factorial_v1/experiment.yaml
+resp_train/paper_evidence/w0_structural_factorial_v1_model.py
+resp_train/paper_evidence/w0_structural_factorial_v1.py
+scripts/run_w0_structural_factorial_v1.py
+tests/test_w0_structural_factorial_v1.py
+```
+
+专项测试与相邻 W0/TemporalStem 回归共 `49 passed`；Python 编译、`check-config` 和 `describe` 均通过。P1 receipt 为 `docs/experiments/w0_structural_factorial_v1_p1_implementation_receipt_20260924.json`。这些结果使用 synthetic CPU fixture，只形成结构、配置、初始化、分析和生命周期工程证据。
 
 ### P2：未来 GPU 工程验收
 
