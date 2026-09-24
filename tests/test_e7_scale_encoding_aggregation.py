@@ -88,6 +88,17 @@ def test_spec_matrix_and_all_resolved_configs_are_strict(tmp_path, frequencies):
     assert e7.check_p1()["resolved_config_count"] == 18
 
 
+def test_p2_parent_source_contract_and_critical_paths():
+    parent = e7._load_parent_lock()
+    assert parent["counts"] == e7.COUNTS
+    assert parent["seeds"] == list(e7.SEEDS)
+    assert parent["frequency"] == e7.validate_frequency_grid(e7.load_frequencies())
+    assert all((e7.ROOT / path).is_file() for path in e7.critical_paths())
+    assert e7.sha256_file(e7.ROOT / e7.SOURCE_LOCK) == e7.SOURCE_LOCK_SHA256
+    assert e7.sha256_file(e7.ROOT / e7.FREQUENCY_AUDIT) == e7.FREQUENCY_AUDIT_SHA256
+    assert e7.sha256_file(e7.ROOT / e7.E4_CLOSEOUT) == e7.E4_CLOSEOUT_SHA256
+
+
 @pytest.mark.parametrize(
     "key,value",
     [

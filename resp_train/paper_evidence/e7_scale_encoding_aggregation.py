@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,12 @@ from resp_train.crd.experiment import (
 )
 from resp_train.crd.training import crd_learning_rate
 from resp_train.paper_evidence.e1_scale_topology import ERRORS, PCC, PRIMARY, SEEDS
+from resp_train.paper_evidence.e1_scale_topology_runtime import (
+    git_state,
+    identity,
+    sha256_file,
+    write_json,
+)
 from resp_train.paper_evidence.e4_scale_aggregation_model import validate_frequency_grid
 from resp_train.paper_evidence.e7_scale_encoding_aggregation_model import (
     AGGREGATIONS,
@@ -45,6 +52,11 @@ TEST_PATH = Path("tests/test_e7_scale_encoding_aggregation.py")
 SOURCE_LOCK = Path("docs/experiments/e4_w0_scale_aggregation_implementation_lock_20260917.json")
 SOURCE_LOCK_SHA256 = "464e073dbd5707a30575d606dec2a84dcd89a161945e537c463b214a15c2b493"
 FREQUENCY_AUDIT = Path("docs/experiments/e4_w0_scale_aggregation_source_audit_20260917.json")
+FREQUENCY_AUDIT_SHA256 = "198cbb396b0503d7a3e889be5e90ae401371ee537c7ab559b14f842f6ad38090"
+E4_CLOSEOUT = Path("docs/experiments/e4_closeout_20260922.md")
+E4_CLOSEOUT_SHA256 = "5f4b33ebbfae131a7fd504a3783b297011fdbe1b99da92130149681793366d16"
+SOURCE_AUDIT = Path("docs/experiments/e7_scale_encoding_aggregation_source_audit_20260924.json")
+LOCK_PATH = Path("docs/experiments/e7_scale_encoding_aggregation_p1_implementation_lock_20260924.json")
 OUTPUT = Path("runs/e7_scale_encoding_aggregation")
 COUNTS = {"train": 10_141, "val": 2_675}
 SAMP_IDS = {"train": 32, "val": 7}
@@ -55,6 +67,272 @@ EARLY_STOP_PATIENCE = 15
 EARLY_STOP_MIN_DELTA = 0.0
 ERROR_TOLERANCE_PERCENT = 0.5
 PCC_TOLERANCE = 0.002
+
+
+def verify(path: Path, expected: Mapping[str, Any]) -> None:
+    required = {key: expected[key] for key in ("size_bytes", "sha256")}
+    if not path.is_file() or identity(path) != required:
+        raise RuntimeError(f"E7 文件身份漂移: {path}")
+
+
+def critical_paths() -> tuple[Path, ...]:
+    paths = (
+        SPEC_PATH,
+        PROTOCOL_PATH,
+        MODEL_PATH,
+        CONTROL_PATH,
+        SCRIPT_PATH,
+        TEST_PATH,
+        Path("resp_train/crd/tf_v1_model.py"),
+        Path("resp_train/crd/initialization.py"),
+        Path("resp_train/crd/experiment.py"),
+        Path("resp_train/crd/training.py"),
+        Path("resp_train/crd/model.py"),
+        Path("resp_train/crd/blocks.py"),
+        Path("resp_train/losses/task.py"),
+        Path("resp_train/metrics/task.py"),
+        Path("resp_train/paper_evidence/e4_scale_aggregation_model.py"),
+    )
+    missing = [str(path) for path in paths if not (ROOT / path).is_file()]
+    if missing:
+        raise FileNotFoundError(f"E7 P1 缺少关键文件: {missing}")
+    return paths
+
+
+def _load_parent_lock(root: Path = ROOT) -> dict[str, Any]:
+    path = root / SOURCE_LOCK
+    if sha256_file(path) != SOURCE_LOCK_SHA256:
+        raise ValueError("E7 W0 来源锁漂移")
+    parent = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        parent.get("protocol") != "e4-w0-scale-aggregation-v1-20260917"
+        or parent.get("status") != "implementation_locked_gpu_and_training_pending"
+        or parent.get("seeds") != list(SEEDS)
+        or parent.get("counts") != COUNTS
+        or int(parent.get("epochs", -1)) != EPOCHS
+        or int(parent.get("updates_per_epoch", -1)) != UPDATES_PER_EPOCH
+        or len(parent.get("w0_entries", [])) != len(SEEDS)
+    ):
+        raise ValueError("E7 W0 来源锁合同漂移")
+    values = np.asarray(parent["frequency"]["values_hz"], dtype=np.float64)
+    if validate_frequency_grid(values) != parent["frequency"]:
+        raise ValueError("E7 W0 来源频率合同漂移")
+    if set(parent.get("baselines", {})) != {str(seed) for seed in SEEDS}:
+        raise ValueError("E7 W0 三 seed baseline 不完整")
+    return parent
+
+
+def _verify_parent_files(parent: Mapping[str, Any], root: Path = ROOT) -> None:
+    for relative, expected in parent["source_files"].items():
+        verify(root / relative, expected)
+    dataset = parent["dataset_index"]
+    dataset_path = Path(dataset["path"])
+    if not dataset_path.is_absolute():
+        dataset_path = root / dataset_path
+    if sha256_file(dataset_path) != dataset["sha256"]:
+        raise ValueError("E7 dataset index identity 漂移")
+
+
+def prepare_source_audit(root: Path = ROOT) -> Path:
+    destination = root / SOURCE_AUDIT
+    if destination.exists():
+        raise FileExistsError(f"E7 source audit 已存在: {destination}")
+    load_experiment_spec(root / SPEC_PATH)
+    parent = _load_parent_lock(root)
+    _verify_parent_files(parent, root)
+    for path, digest in (
+        (root / FREQUENCY_AUDIT, FREQUENCY_AUDIT_SHA256),
+        (root / E4_CLOSEOUT, E4_CLOSEOUT_SHA256),
+    ):
+        if sha256_file(path) != digest:
+            raise ValueError(f"E7 冻结背景来源漂移: {path}")
+    audit = {
+        "schema_version": 1,
+        "protocol": PROTOCOL,
+        "scope": "train_validation_source_identity_only",
+        "question": "aggregation_pre_scale_encoding_depth_span_by_aggregation_factorial",
+        "matrix": {
+            "arms": list(ARMS),
+            "seeds": list(SEEDS),
+            "cells": len(ARMS) * len(SEEDS),
+            "counts": COUNTS,
+            "samp_ids": SAMP_IDS,
+        },
+        "parent_sources": {
+            str(SOURCE_LOCK): identity(root / SOURCE_LOCK),
+            str(FREQUENCY_AUDIT): identity(root / FREQUENCY_AUDIT),
+            str(E4_CLOSEOUT): identity(root / E4_CLOSEOUT),
+        },
+        "dataset_index": parent["dataset_index"],
+        "cache_lock": parent["cache_lock"],
+        "frequency": parent["frequency"],
+        "w0_entries": parent["w0_entries"],
+        "fixed_controls": {
+            "model_variant": "crd_tf102_w",
+            "loss": "L_sync + 0.25 L_effort",
+            "batch_size": 128,
+            "amp_dtype": "bfloat16",
+            "max_epochs": EPOCHS,
+            "planned_updates": EPOCHS * UPDATES_PER_EPOCH,
+            "early_stopping": {
+                "min_epoch": EARLY_STOP_MIN_EPOCH,
+                "patience": EARLY_STOP_PATIENCE,
+                "min_delta": EARLY_STOP_MIN_DELTA,
+            },
+        },
+        "access": {
+            "decoded_arrays": False,
+            "test_accessed": False,
+            "verified_parent_file_count": len(parent["source_files"]),
+        },
+        "prepared_at": datetime.now(timezone.utc).isoformat(),
+        "preparation_git": git_state(root),
+    }
+    write_json(destination, audit)
+    return destination
+
+
+def validate_source_audit(audit: Mapping[str, Any], root: Path = ROOT) -> None:
+    if (
+        audit.get("schema_version") != 1
+        or audit.get("protocol") != PROTOCOL
+        or audit.get("scope") != "train_validation_source_identity_only"
+        or audit.get("matrix", {}).get("arms") != list(ARMS)
+        or audit.get("matrix", {}).get("seeds") != list(SEEDS)
+        or audit.get("matrix", {}).get("cells") != len(ARMS) * len(SEEDS)
+        or audit.get("access", {}).get("decoded_arrays") is not False
+        or audit.get("access", {}).get("test_accessed") is not False
+    ):
+        raise ValueError("E7 source audit 合同漂移")
+    expected_sources = {
+        str(SOURCE_LOCK): {"size_bytes": (root / SOURCE_LOCK).stat().st_size, "sha256": SOURCE_LOCK_SHA256},
+        str(FREQUENCY_AUDIT): {"size_bytes": (root / FREQUENCY_AUDIT).stat().st_size, "sha256": FREQUENCY_AUDIT_SHA256},
+        str(E4_CLOSEOUT): {"size_bytes": (root / E4_CLOSEOUT).stat().st_size, "sha256": E4_CLOSEOUT_SHA256},
+    }
+    if audit.get("parent_sources") != expected_sources:
+        raise ValueError("E7 source audit 父来源漂移")
+    validate_frequency_grid(np.asarray(audit["frequency"]["values_hz"], dtype=np.float64))
+
+
+def prepare_implementation_lock(root: Path = ROOT) -> Path:
+    destination = root / LOCK_PATH
+    if destination.exists():
+        raise FileExistsError(f"E7 P1 implementation lock 已存在: {destination}")
+    state = git_state(root)
+    if state.get("status_porcelain"):
+        raise RuntimeError("E7 implementation lock 要求干净工作树")
+    load_experiment_spec(root / SPEC_PATH)
+    parent = _load_parent_lock(root)
+    _verify_parent_files(parent, root)
+    audit_path = root / SOURCE_AUDIT
+    if not audit_path.is_file():
+        raise FileNotFoundError("E7 implementation lock 缺少已提交 source audit")
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    validate_source_audit(audit, root)
+    frequencies = np.asarray(parent["frequency"]["values_hz"], dtype=np.float64)
+    templates: dict[str, dict[str, Any]] = {}
+    for arm in ARMS:
+        templates[arm] = {}
+        for seed in SEEDS:
+            baseline = OmegaConf.create(parent["baselines"][str(seed)])
+            output_root = root / OUTPUT / "formal" / arm / f"seed_{seed}"
+            cfg = derived_config(
+                baseline,
+                arm,
+                frequencies,
+                output_root=output_root,
+                device="cuda:0",
+            )
+            validate_config(
+                cfg,
+                baseline,
+                arm,
+                frequencies,
+                output_root=output_root,
+                device="cuda:0",
+            )
+            templates[arm][str(seed)] = OmegaConf.to_container(cfg, resolve=True)
+    source_files = dict(parent["source_files"])
+    source_files.update(
+        {
+            str(SOURCE_LOCK): identity(root / SOURCE_LOCK),
+            str(FREQUENCY_AUDIT): identity(root / FREQUENCY_AUDIT),
+            str(E4_CLOSEOUT): identity(root / E4_CLOSEOUT),
+            str(SOURCE_AUDIT): identity(audit_path),
+        }
+    )
+    lock = {
+        "schema_version": 1,
+        "protocol": PROTOCOL,
+        "status": "p1_implemented_not_run",
+        "arms": list(ARMS),
+        "encoders": list(ENCODERS),
+        "aggregations": list(AGGREGATIONS),
+        "seeds": list(SEEDS),
+        "counts": COUNTS,
+        "samp_ids": SAMP_IDS,
+        "epochs": EPOCHS,
+        "updates_per_epoch": UPDATES_PER_EPOCH,
+        "early_stopping": expected_spec()["matrix"]["early_stopping"],
+        "tolerances": expected_spec()["tolerances"],
+        "contracts": {arm: arm_contract(arm) for arm in ARMS},
+        "baselines": parent["baselines"],
+        "resolved_templates": templates,
+        "w0_entries": parent["w0_entries"],
+        "frequency": parent["frequency"],
+        "cache_lock": parent["cache_lock"],
+        "dataset_index": parent["dataset_index"],
+        "source_audit": identity(audit_path),
+        "source_files": source_files,
+        "code_files": {
+            str(path): identity(root / path)
+            for path in critical_paths()
+        },
+        "parameter_compute_report": parameter_compute_report(),
+        "preparation_git": state,
+        "prepared_at": datetime.now(timezone.utc).isoformat(),
+    }
+    write_json(destination, lock)
+    return destination
+
+
+def load_implementation_lock(root: Path = ROOT) -> tuple[dict[str, Any], str]:
+    path = root / LOCK_PATH
+    lock = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        lock.get("schema_version") != 1
+        or lock.get("protocol") != PROTOCOL
+        or lock.get("status") != "p1_implemented_not_run"
+        or lock.get("arms") != list(ARMS)
+        or lock.get("seeds") != list(SEEDS)
+        or lock.get("counts") != COUNTS
+        or lock.get("samp_ids") != SAMP_IDS
+        or int(lock.get("epochs", -1)) != EPOCHS
+        or int(lock.get("updates_per_epoch", -1)) != UPDATES_PER_EPOCH
+        or lock.get("contracts") != {arm: arm_contract(arm) for arm in ARMS}
+        or lock.get("early_stopping") != expected_spec()["matrix"]["early_stopping"]
+        or lock.get("tolerances") != expected_spec()["tolerances"]
+    ):
+        raise ValueError("E7 P1 implementation lock 科学合同漂移")
+    for relative, expected in lock["code_files"].items():
+        verify(root / relative, expected)
+    audit_path = root / SOURCE_AUDIT
+    verify(audit_path, lock["source_audit"])
+    validate_source_audit(json.loads(audit_path.read_text(encoding="utf-8")), root)
+    frequencies = np.asarray(lock["frequency"]["values_hz"], dtype=np.float64)
+    validate_frequency_grid(frequencies)
+    for arm in ARMS:
+        for seed in SEEDS:
+            output_root = root / OUTPUT / "formal" / arm / f"seed_{seed}"
+            validate_config(
+                OmegaConf.create(lock["resolved_templates"][arm][str(seed)]),
+                OmegaConf.create(lock["baselines"][str(seed)]),
+                arm,
+                frequencies,
+                output_root=output_root,
+                device="cuda:0",
+            )
+    return lock, sha256_file(path)
 
 
 def expected_spec() -> dict[str, Any]:
