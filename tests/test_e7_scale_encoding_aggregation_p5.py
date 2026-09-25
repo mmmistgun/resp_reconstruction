@@ -74,6 +74,18 @@ def test_scale_accumulator_and_ratio_are_finite():
     assert ratio.finalize() == pytest.approx(0.2, rel=1e-6)
 
 
+def test_attention_statistics_uses_fp32_reduction_bound():
+    weights = torch.full((1, 1, 97, 3), 1 / 97, dtype=torch.float32)
+    weights[:, :, 0] += 1.1e-6
+    stats = p5.attention_statistics(weights)
+    assert stats["attention_max_abs_sum_error"] > 1e-6
+    assert stats["attention_max_abs_sum_error"] < stats["attention_sum_tolerance"]
+    invalid = weights.clone()
+    invalid[:, :, 0] += 1e-3
+    with pytest.raises(FloatingPointError, match="归一化误差"):
+        p5.attention_statistics(invalid)
+
+
 @pytest.mark.parametrize(
     "arm,expected",
     [

@@ -444,6 +444,41 @@ class RatioAccumulator:
         return float(np.sqrt(self.numerator / self.denominator))
 
 
+def attention_statistics(weights: torch.Tensor) -> dict[str, float]:
+    """以 FP32 归约误差界核验 97-scale softmax，再计算权重诊断。"""
+
+    if weights.ndim != 4 or weights.shape[1:3] != (1, 97):
+        raise ValueError("E7 P5 attention diagnostics 期望 (B,1,97,T)")
+    values = weights.detach().float()
+    if not bool(torch.isfinite(values).all()):
+        raise FloatingPointError("E7 P5 attention weights 非有限")
+    sums = values.sum(dim=2)
+    maximum_error = float((sums - 1).abs().max())
+    reduction_levels = int(np.ceil(np.log2(values.shape[2])))
+    tolerance = float(8 * torch.finfo(values.dtype).eps * reduction_levels)
+    if maximum_error > tolerance:
+        raise FloatingPointError(
+            f"E7 P5 attention weights 归一化误差 {maximum_error} 超过 {tolerance}"
+        )
+    safe = values.clamp_min(torch.finfo(values.dtype).tiny)
+    entropy = -(safe * safe.log()).sum(dim=2).mean()
+    total_variation = (
+        values[:, :, 1:] - values[:, :, :-1]
+    ).abs().sum(dim=2).mean()
+    regions = ((0, 25), (25, 49), (49, 73), (73, 97))
+    masses = [values[:, :, start:stop].sum(dim=2).mean() for start, stop in regions]
+    result = {
+        "attention_entropy": float(entropy),
+        "attention_total_variation": float(total_variation),
+        "attention_max_abs_sum_error": maximum_error,
+        "attention_sum_tolerance": tolerance,
+        **{f"region_{index}_mass": float(mass) for index, mass in enumerate(masses)},
+    }
+    if not np.isfinite(list(result.values())).all():
+        raise FloatingPointError("E7 P5 attention diagnostics 非有限")
+    return result
+
+
 def diagnostic_conditions(arm: str) -> list[tuple[str, bool, bool]]:
     encoder, aggregation = arm.split("__", maxsplit=1)
     conditions = [("full", True, False)]
@@ -510,6 +545,8 @@ def run_diagnostic(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
             attention_entropy_sum = attention_tv_sum = 0.0
             region_mass_sum = np.zeros(4, dtype=np.float64)
             attention_observations = 0
+            attention_max_abs_sum_error = 0.0
+            attention_sum_tolerance = np.nan
             with torch.no_grad():
                 for batch in data.val.loader:
                     w = batch["tf"]["w"]
@@ -524,7 +561,7 @@ def run_diagnostic(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
                         for index, (block_input, block_output) in enumerate(details["block_records"]):
                             block_ratios[index].update(block_output - block_input, block_input)
                         if details["weights"] is not None:
-                            stats = e7.attention_statistics(details["weights"])
+                            stats = attention_statistics(details["weights"])
                             count = int(details["weights"].shape[0] * details["weights"].shape[-1])
                             attention_entropy_sum += stats["attention_entropy"] * count
                             attention_tv_sum += stats["attention_total_variation"] * count
@@ -532,6 +569,11 @@ def run_diagnostic(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
                                 [stats[f"region_{index}_mass"] for index in range(4)]
                             ) * count
                             attention_observations += count
+                            attention_max_abs_sum_error = max(
+                                attention_max_abs_sum_error,
+                                stats["attention_max_abs_sum_error"],
+                            )
+                            attention_sum_tolerance = stats["attention_sum_tolerance"]
             x0_summary, x0_correlation = x0_accumulator.finalize()
             xe_summary, xe_correlation = xe_accumulator.finalize()
             np.save(output / "x0_scale_correlation.npy", x0_correlation)
@@ -553,6 +595,8 @@ def run_diagnostic(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
                         {
                             "attention_entropy": attention_entropy_sum / attention_observations,
                             "attention_total_variation": attention_tv_sum / attention_observations,
+                            "attention_max_abs_sum_error": attention_max_abs_sum_error,
+                            "attention_sum_tolerance": attention_sum_tolerance,
                             **{
                                 f"region_{index}_mass": region_mass_sum[index] / attention_observations
                                 for index in range(4)
