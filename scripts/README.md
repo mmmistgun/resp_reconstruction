@@ -363,6 +363,9 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD \
 
 P5 summary 与 diagnostics 只访问 validation；research-test 保持关闭。
 
+P5 已完成并由 `docs/experiments/e7_scale_encoding_aggregation_p5_closeout_20260926.md`
+收口。当前默认不再执行 validation 训练、诊断或汇总；后续 research-test 必须使用独立专项协议和当次授权。
+
 ## E4 v2：四种尺度聚合固定矩阵
 
 状态：12 次训练、12 次 test 评价、GPU 验收、benchmark 与两份汇总均已完成并结项。下列为历史执行命令。

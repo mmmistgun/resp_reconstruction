@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "protocol": "e7-scale-encoding-aggregation-p5-validation-v1-20260926",
+  "status": "completed",
+  "p4_execution_lock_sha256": "068ba8ec6c5866ebf1b17d560b4fb5f5448e7e921e0dc8b15dda66c2f907c193",
+  "summary": {
+    "path": "runs/e7_scale_encoding_aggregation/p5_validation/summary/summary_068ba8ec6c58_20260925T161725Z_58cf841bf690",
+    "manifest": {
+      "size_bytes": 3242,
+      "sha256": "89584f471443cb47ab8945720b95e3c711336259be3267026e1ac576543a00a6"
+    },
+    "receipt_sha256": "73c7605633090ac62131df09d67a7e163bc30caa1f82c410cb704fd7601c81d1",
+    "git_commit": "137891ead1da170f7c1a4de625d585d4c92b7814"
+  },
+  "final": {
+    "path": "runs/e7_scale_encoding_aggregation/p5_validation/final/final_068ba8ec6c58_20260925T184514Z_2cb10271e506",
+    "manifest": {
+      "size_bytes": 2602,
+      "sha256": "aae2d23fecd116db73b239ea028b4e394e72300b09e7077d54bc8e4235ad9837"
+    },
+    "receipt_sha256": "aad9348c17000f79b0bbd8f11276c8748ceb53fe791ed5ce5fd83fd442bff32b",
+    "git_commit": "329b4f64f73990e21c9cb4f2702d7ccd41f30af9"
+  },
+  "diagnostics": {
+    "cells": 18,
+    "validation_windows_per_cell": 2675,
+    "base_code_cells": 17,
+    "fp32_reduction_revision_cells": 1,
+    "base_git_commit": "137891ead1da170f7c1a4de625d585d4c92b7814",
+    "revision_git_commit": "2bbad33358f0e87ec99360f8fe19602d6c37880e"
+  },
+  "tables": {
+    "seed_metrics": 18,
+    "factorial_contrasts": 25,
+    "materiality": 35,
+    "subject_macro": 720,
+    "representation_diagnostics": 54,
+    "checkpoint_interventions": 135
+  },
+  "findings": {
+    "model_selection": "no_stable_five_metric_tolerance_aware_pareto_improvement",
+    "deep_local": "envelope_and_modulation_benefit_with_rr_tradeoff",
+    "axis_spanning": "no_stable_incremental_benefit_over_deep_local",
+    "attention": "strongly_used_but_attribute_tradeoff",
+    "shallow_sufficiency": "limited_support_within_tested_family_budget_and_validation_population"
+  },
+  "mechanism": {
+    "mean_encoder_residual_rms_ratio": {
+      "s1_deep_local_mean": 2.8507091509834357,
+      "s2_axis_spanning_mean": 2.7309505210669633
+    },
+    "mean_effective_rank": {
+      "s1_x0": 14.383549725544219,
+      "s1_xe": 29.205743944844823,
+      "s2_x0": 13.481704645443903,
+      "s2_xe": 34.9825465940598
+    },
+    "attention_correction_rms_ratio": {
+      "s0": 0.5073595629842853,
+      "s1": 0.832519471944508,
+      "s2": 0.6539816457540918
+    }
+  },
+  "failed_attempts": [
+    {
+      "phase": "diagnostic",
+      "cell": "s2_axis_spanning__frequency_attention/20260813",
+      "reason": "fixed_attention_sum_tolerance_below_observed_fp32_reduction_error",
+      "superseded_by_success": true
+    },
+    {
+      "phase": "final",
+      "reason": "headerless_zero_row_intervention_delta",
+      "superseded_by_success": true
+    }
+  ],
+  "research_test_accessed": false
+}
