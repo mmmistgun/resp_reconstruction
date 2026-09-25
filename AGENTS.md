@@ -9,7 +9,7 @@
 ## 协议路由
 
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
-- E7 聚合前尺度编码 × 尺度聚合：主协议为 `docs/experiments/e7_scale_encoding_aggregation_factorial_protocol_20260924.md`；P3 当前证据入口为 `docs/experiments/e7_scale_encoding_aggregation_p3_closeout_20260924.md`，P4 formal 使用 `docs/experiments/e7_scale_encoding_aggregation_p4_formal_protocol_20260924.md`；validation 汇总和 research-test 按主协议阶段门控执行。
+- E7 聚合前尺度编码 × 尺度聚合：主协议为 `docs/experiments/e7_scale_encoding_aggregation_factorial_protocol_20260924.md`；P3 当前证据入口为 `docs/experiments/e7_scale_encoding_aggregation_p3_closeout_20260924.md`，P4 formal 使用 `docs/experiments/e7_scale_encoding_aggregation_p4_formal_protocol_20260924.md`，P5 validation 汇总与诊断使用 `docs/experiments/e7_scale_encoding_aggregation_p5_validation_protocol_20260926.md`；research-test 按主协议阶段门控执行。
 
 先确定任务所属实验，再读取对应协议中与当前任务有关的章节；不要默认把某一协议应用到整个仓库。
 

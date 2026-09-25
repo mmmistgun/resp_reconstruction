@@ -334,6 +334,35 @@ done
 同一 P4 execution lock 下已完成 cell 拒绝重跑；失败现场保留，后续从未完成 cell 继续。全部完成后运行
 `scripts/run_e7_scale_encoding_aggregation_p4.py check-completed` 核验唯一 18-cell 矩阵。
 
+P5 复用 P4 execution lock。先生成 CPU validation summary，再由用户运行 18-cell selected-checkpoint
+diagnostics，最后冻结完整 P5：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/run_e7_scale_encoding_aggregation_p5.py summarize
+
+for E7_SEED in 20260811 20260812 20260813; do
+  for E7_ARM in \
+    s0_shallow__mean \
+    s0_shallow__frequency_attention \
+    s1_deep_local__mean \
+    s1_deep_local__frequency_attention \
+    s2_axis_spanning__mean \
+    s2_axis_spanning__frequency_attention; do
+    env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+      ./.venv/bin/python scripts/run_e7_scale_encoding_aggregation_p5.py diagnose \
+      --arm "$E7_ARM" --seed "$E7_SEED" --device cuda:0 || break 2
+  done
+done
+
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/run_e7_scale_encoding_aggregation_p5.py check-diagnostics
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/run_e7_scale_encoding_aggregation_p5.py finalize
+```
+
+P5 summary 与 diagnostics 只访问 validation；research-test 保持关闭。
+
 ## E4 v2：四种尺度聚合固定矩阵
 
 状态：12 次训练、12 次 test 评价、GPU 验收、benchmark 与两份汇总均已完成并结项。下列为历史执行命令。
