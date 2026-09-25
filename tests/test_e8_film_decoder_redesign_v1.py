@@ -367,6 +367,29 @@ def test_formal_runtime_compatibility_requires_same_stack_and_enough_memory():
     with pytest.raises(ValueError, match="torch"):
         formal._runtime_compatibility({**current, "torch": "other"}, accepted)
 
+    amendment = {
+        "runtime_policy": {
+            "minimum_device_total_bytes": formal.MIN_FORMAL_DEVICE_TOTAL_BYTES,
+            "p2_max_peak_reserved_bytes": formal.P2_MAX_PEAK_RESERVED_BYTES,
+            "maximum_peak_reserved_fraction": 0.8,
+        }
+    }
+    gpu0 = {
+        **accepted,
+        "device_total_bytes": formal.MIN_FORMAL_DEVICE_TOTAL_BYTES,
+    }
+    amended = formal._runtime_compatibility(gpu0, accepted, amendment)
+    assert amended["capacity_policy"] == (
+        "same_stack_exact_model_minimum_total_and_p2_peak_fraction"
+    )
+    assert amended["p2_peak_reserved_fraction_on_current_device"] < 0.8
+    with pytest.raises(ValueError, match="安全线"):
+        formal._runtime_compatibility(
+            {**gpu0, "device_total_bytes": formal.MIN_FORMAL_DEVICE_TOTAL_BYTES - 1},
+            accepted,
+            amendment,
+        )
+
 
 def test_formal_lifecycle_rejects_duplicate_completed_cell(tmp_path):
     lock_hash = "b" * 64

@@ -41,6 +41,16 @@ FORMAL_PATH = Path("resp_train/paper_evidence/e8_film_decoder_redesign_v1_formal
 FORMAL_LOCK_PATH = Path(
     "docs/experiments/e8_film_decoder_redesign_v1_formal_execution_lock_20260925.json"
 )
+FORMAL_LOCK_SHA256 = "40b30fc6ecdcc9b40750c393be8fd2faf4e223da0566432df739aacb513713c5"
+FORMAL_AMENDMENT_PATH = Path(
+    "docs/experiments/e8_film_decoder_redesign_v1_formal_runtime_amendment_20260926.json"
+)
+AMENDED_CODE_PATHS = (
+    str(FORMAL_PATH),
+    "tests/test_e8_film_decoder_redesign_v1.py",
+)
+MIN_FORMAL_DEVICE_TOTAL_BYTES = 16_710_500_352
+P2_MAX_PEAK_RESERVED_BYTES = 10_643_046_400
 P2_CLOSEOUT_PATH = Path(
     "docs/experiments/e8_film_decoder_redesign_v1_p2_closeout_20260925.md"
 )
@@ -255,10 +265,13 @@ def prepare_formal_lock() -> Path:
     return destination
 
 
-def load_formal_lock() -> tuple[dict[str, Any], str, dict[str, Any]]:
+def _base_formal_lock() -> tuple[dict[str, Any], str]:
     path = e8.ROOT / FORMAL_LOCK_PATH
     if not path.is_file():
         raise FileNotFoundError(f"E8 formal lock 尚未建立: {path}")
+    lock_hash = engineering._sha256(path)
+    if lock_hash != FORMAL_LOCK_SHA256:
+        raise ValueError("E8 base formal lock 身份漂移")
     lock = json.loads(path.read_text(encoding="utf-8"))
     if (
         lock.get("schema_version") != 1
@@ -276,10 +289,175 @@ def load_formal_lock() -> tuple[dict[str, Any], str, dict[str, Any]]:
         or lock.get("artifact_root") != str(e8.SOURCE_ROOT / e8.OUTPUT_ROOT)
     ):
         raise ValueError("E8 formal lock 科学合同漂移")
+    return lock, lock_hash
+
+
+def _pre_amendment_matrix_snapshot(lock_hash: str) -> dict[str, Any]:
+    cells: list[dict[str, Any]] = []
+    for cell in formal_plan():
+        parent = Path(cell["output_parent"])
+        completed: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        running: list[str] = []
+        if parent.is_dir():
+            for attempt in sorted(path for path in parent.iterdir() if path.is_dir()):
+                started_path = attempt / "lifecycle_started.json"
+                if not started_path.is_file():
+                    continue
+                context = json.loads(started_path.read_text(encoding="utf-8"))
+                if context.get("implementation_lock_sha256") != lock_hash:
+                    continue
+                if (attempt / "freeze_receipt.json").is_file():
+                    manifest = verify_formal_attempt(
+                        attempt,
+                        lock_hash=lock_hash,
+                        arm=cell["arm"],
+                        seed=cell["seed"],
+                    )
+                    completed.append(
+                        {
+                            "path": str(attempt),
+                            "manifest": engineering._identity(attempt / "manifest.json"),
+                            "file_count": len(manifest["files"]),
+                        }
+                    )
+                elif (attempt / "lifecycle_failed.json").is_file():
+                    failed.append(
+                        {
+                            "path": str(attempt),
+                            "failure": engineering._identity(attempt / "lifecycle_failed.json"),
+                        }
+                    )
+                else:
+                    running.append(str(attempt))
+        if running:
+            raise RuntimeError(f"E8 amendment 前仍有运行 cell: {cell['arm']}/{cell['seed']}")
+        if len(completed) > 1:
+            raise RuntimeError(f"E8 amendment 前存在重复成功 cell: {cell['arm']}/{cell['seed']}")
+        status = "completed" if completed else "failed" if failed else "pending"
+        cells.append(
+            {
+                "arm": cell["arm"],
+                "seed": cell["seed"],
+                "status": status,
+                "completed": completed,
+                "failed": failed,
+            }
+        )
+    counts = {
+        status: sum(cell["status"] == status for cell in cells)
+        for status in ("pending", "failed", "completed")
+    }
+    if counts != {"pending": 24, "failed": 1, "completed": 11}:
+        raise ValueError(f"E8 amendment 前矩阵状态不符合冻结预期: {counts}")
+    return {"counts": counts, "cells": cells}
+
+
+def prepare_formal_amendment() -> Path:
+    """冻结只影响 GPU 容量兼容门控的增量修订。"""
+
+    destination = e8.ROOT / FORMAL_AMENDMENT_PATH
+    if destination.exists():
+        raise FileExistsError(f"E8 formal amendment 已存在: {destination}")
+    state = engineering._git_state()
+    if state["status_porcelain"]:
+        raise RuntimeError("E8 formal amendment 要求工作树干净")
+    lock, lock_hash = _base_formal_lock()
+    amended = set(AMENDED_CODE_PATHS)
+    for relative, expected in lock["code_files"].items():
+        if relative not in amended and engineering._identity(e8.ROOT / relative) != expected:
+            raise ValueError(f"E8 amendment 范围外代码漂移: {relative}")
+    p2 = verify_p2_evidence()
+    if p2 != lock["p2_evidence"]:
+        raise ValueError("E8 amendment P2 evidence 漂移")
+    snapshot = _pre_amendment_matrix_snapshot(lock_hash)
+    amendment = {
+        "schema_version": 1,
+        "protocol": e8.PROTOCOL,
+        "status": "formal_runtime_compatibility_amendment_locked",
+        "base_formal_lock": {
+            "path": str(FORMAL_LOCK_PATH),
+            "sha256": lock_hash,
+        },
+        "scope": "runtime_gpu_capacity_compatibility_only",
+        "scientific_contract_changed": False,
+        "runtime_policy": {
+            "matched_fields": [
+                "python",
+                "torch",
+                "cuda_runtime",
+                "cudnn",
+                "dependencies",
+                "device_name",
+                "amp_dtype",
+            ],
+            "minimum_device_total_bytes": MIN_FORMAL_DEVICE_TOTAL_BYTES,
+            "p2_max_peak_reserved_bytes": P2_MAX_PEAK_RESERVED_BYTES,
+            "maximum_peak_reserved_fraction": 0.8,
+            "observed_gpu0_total_bytes": 16_710_500_352,
+            "p2_gpu1_total_bytes": 16_717_840_384,
+            "absolute_difference_bytes": 7_340_032,
+            "relative_difference": 7_340_032 / 16_717_840_384,
+        },
+        "pre_amendment_matrix": snapshot,
+        "amended_code_files": {
+            relative: {
+                "base": lock["code_files"][relative],
+                "revised": engineering._identity(e8.ROOT / relative),
+            }
+            for relative in AMENDED_CODE_PATHS
+        },
+        "p2_evidence": p2,
+        "prepared_at": datetime.now(timezone.utc).isoformat(),
+        "preparation_git": state,
+    }
+    engineering._write_json(destination, amendment)
+    return destination
+
+
+def load_formal_amendment(lock: Mapping[str, Any], lock_hash: str) -> tuple[dict[str, Any], str]:
+    path = e8.ROOT / FORMAL_AMENDMENT_PATH
+    if not path.is_file():
+        raise FileNotFoundError(f"E8 formal amendment 尚未建立: {path}")
+    amendment = json.loads(path.read_text(encoding="utf-8"))
+    amendment_hash = engineering._sha256(path)
+    policy = amendment.get("runtime_policy", {})
+    if (
+        amendment.get("schema_version") != 1
+        or amendment.get("protocol") != e8.PROTOCOL
+        or amendment.get("status") != "formal_runtime_compatibility_amendment_locked"
+        or amendment.get("base_formal_lock", {}).get("sha256") != lock_hash
+        or amendment.get("scope") != "runtime_gpu_capacity_compatibility_only"
+        or amendment.get("scientific_contract_changed") is not False
+        or int(policy.get("minimum_device_total_bytes", -1)) != MIN_FORMAL_DEVICE_TOTAL_BYTES
+        or int(policy.get("p2_max_peak_reserved_bytes", -1)) != P2_MAX_PEAK_RESERVED_BYTES
+        or float(policy.get("maximum_peak_reserved_fraction", -1)) != 0.8
+        or amendment.get("p2_evidence") != lock["p2_evidence"]
+    ):
+        raise ValueError("E8 formal amendment 合同漂移")
+    for relative in AMENDED_CODE_PATHS:
+        entry = amendment.get("amended_code_files", {}).get(relative, {})
+        if (
+            entry.get("base") != lock["code_files"][relative]
+            or entry.get("revised") != engineering._identity(e8.ROOT / relative)
+        ):
+            raise ValueError(f"E8 formal amendment 代码身份漂移: {relative}")
+    for cell in amendment["pre_amendment_matrix"]["cells"]:
+        for completed in cell["completed"]:
+            path_entry = Path(completed["path"])
+            if engineering._identity(path_entry / "manifest.json") != completed["manifest"]:
+                raise ValueError(f"E8 amendment 前成功产物漂移: {path_entry}")
+    return amendment, amendment_hash
+
+
+def load_formal_lock() -> tuple[dict[str, Any], str, dict[str, Any]]:
+    lock, lock_hash = _base_formal_lock()
     if engineering._identity(e8.ROOT / e8.SPEC_PATH) != lock["spec"]:
         raise ValueError("E8 formal spec 身份漂移")
+    amendment, amendment_hash = load_formal_amendment(lock, lock_hash)
+    amended = set(AMENDED_CODE_PATHS)
     for relative, expected in lock["code_files"].items():
-        if engineering._identity(e8.ROOT / relative) != expected:
+        if relative not in amended and engineering._identity(e8.ROOT / relative) != expected:
             raise ValueError(f"E8 formal 代码身份漂移: {relative}")
     p2 = verify_p2_evidence()
     if p2 != lock["p2_evidence"]:
@@ -294,7 +472,10 @@ def load_formal_lock() -> tuple[dict[str, Any], str, dict[str, Any]]:
         current = OmegaConf.to_container(e8.load_w0_baseline(seed), resolve=True)
         if current != lock["baselines"][str(seed)]:
             raise ValueError(f"E8 formal baseline 漂移: {seed}")
-    return lock, engineering._sha256(path), source_lock
+    lock = dict(lock)
+    lock["_runtime_amendment"] = amendment
+    lock["_runtime_amendment_sha256"] = amendment_hash
+    return lock, lock_hash, source_lock
 
 
 def runtime_preflight(device: str) -> dict[str, Any]:
@@ -324,7 +505,11 @@ def runtime_preflight(device: str) -> dict[str, Any]:
     }
 
 
-def _runtime_compatibility(runtime: Mapping[str, Any], accepted: Mapping[str, Any]) -> dict[str, Any]:
+def _runtime_compatibility(
+    runtime: Mapping[str, Any],
+    accepted: Mapping[str, Any],
+    amendment: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     matched = (
         "python",
         "torch",
@@ -337,13 +522,32 @@ def _runtime_compatibility(runtime: Mapping[str, Any], accepted: Mapping[str, An
     for key in matched:
         if runtime.get(key) != accepted.get(key):
             raise ValueError(f"E8 formal runtime 与 P2 不一致: {key}")
-    if int(runtime["device_total_bytes"]) < int(accepted["device_total_bytes"]):
-        raise ValueError("E8 formal GPU 总显存低于 P2 验收设备")
+    current_total = int(runtime["device_total_bytes"])
+    accepted_total = int(accepted["device_total_bytes"])
+    if amendment is None:
+        if current_total < accepted_total:
+            raise ValueError("E8 formal GPU 总显存低于 P2 验收设备")
+        return {
+            "matched_fields": list(matched),
+            "capacity_policy": "current_device_total_bytes_gte_p2",
+            "p2_device_total_bytes": accepted_total,
+            "current_device_total_bytes": current_total,
+        }
+    policy = amendment["runtime_policy"]
+    minimum = int(policy["minimum_device_total_bytes"])
+    peak_reserved = int(policy["p2_max_peak_reserved_bytes"])
+    limit = float(policy["maximum_peak_reserved_fraction"])
+    if current_total < minimum or peak_reserved / current_total > limit:
+        raise ValueError("E8 formal GPU 容量不满足 runtime amendment 安全线")
     return {
         "matched_fields": list(matched),
-        "capacity_policy": "current_device_total_bytes_gte_p2",
-        "p2_device_total_bytes": int(accepted["device_total_bytes"]),
-        "current_device_total_bytes": int(runtime["device_total_bytes"]),
+        "capacity_policy": "same_stack_exact_model_minimum_total_and_p2_peak_fraction",
+        "p2_device_total_bytes": accepted_total,
+        "current_device_total_bytes": current_total,
+        "minimum_device_total_bytes": minimum,
+        "p2_peak_reserved_bytes": peak_reserved,
+        "p2_peak_reserved_fraction_on_current_device": peak_reserved / current_total,
+        "limit_fraction": limit,
     }
 
 
@@ -598,6 +802,7 @@ def _formal_attempt(
     parent: Path,
     *,
     lock_hash: str,
+    amendment_hash: str | None = None,
     arm: str,
     seed: int,
 ) -> Iterator[Path]:
@@ -630,6 +835,7 @@ def _formal_attempt(
             "arm": arm,
             "seed": seed,
             "implementation_lock_sha256": lock_hash,
+            "formal_runtime_amendment_sha256": amendment_hash,
             "command": sys.argv,
             "started_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -682,16 +888,32 @@ def run_formal(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
         raise ValueError("E8 formal arm/seed 不属于冻结矩阵")
     seed = int(seed)
     lock, lock_hash, source_lock = load_formal_lock()
+    amendment = lock["_runtime_amendment"]
+    amendment_hash = str(lock["_runtime_amendment_sha256"])
     parent = e8.SOURCE_ROOT / e8.OUTPUT_ROOT / "formal" / arm / f"seed_{seed}"
-    with _formal_attempt(parent, lock_hash=lock_hash, arm=arm, seed=seed) as output:
+    with _formal_attempt(
+        parent,
+        lock_hash=lock_hash,
+        amendment_hash=amendment_hash,
+        arm=arm,
+        seed=seed,
+    ) as output:
         runtime = runtime_preflight(device)
-        compatibility = _runtime_compatibility(runtime, lock["p2_evidence"]["environment"])
+        compatibility = _runtime_compatibility(
+            runtime,
+            lock["p2_evidence"]["environment"],
+            amendment,
+        )
         engineering._write_json(output / "environment.json", runtime)
         engineering._write_json(
             output / "p2_source.json",
             {"evidence": lock["p2_evidence"], "runtime_compatibility": compatibility},
         )
-        engineering._write_json(output / "implementation_lock.json", lock)
+        engineering._write_json(
+            output / "implementation_lock.json",
+            {key: value for key, value in lock.items() if not key.startswith("_")},
+        )
+        engineering._write_json(output / "formal_runtime_amendment.json", amendment)
         baseline = OmegaConf.create(lock["baselines"][str(seed)])
         cfg = e8.derived_config(
             baseline,
@@ -729,6 +951,7 @@ def run_formal(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
             {
                 **receipt,
                 "implementation_lock_sha256": lock_hash,
+                "formal_runtime_amendment_sha256": amendment_hash,
                 "run_dir": str(run_dir.relative_to(output)),
                 "formal_wall_seconds": wall_seconds,
             },
@@ -756,6 +979,8 @@ def verify_formal_attempt(
     lock_hash: str,
     arm: str,
     seed: int,
+    amendment: Mapping[str, Any] | None = None,
+    amendment_hash: str | None = None,
 ) -> dict[str, Any]:
     freeze = json.loads((path / "freeze_receipt.json").read_text(encoding="utf-8"))
     manifest_path = path / "manifest.json"
@@ -771,6 +996,22 @@ def verify_formal_attempt(
         or int(manifest.get("seed", -1)) != int(seed)
     ):
         raise ValueError("E8 formal manifest 合同漂移")
+    preserved: dict[str, Mapping[str, Any]] = {}
+    if amendment is not None:
+        preserved = {
+            item["path"]: item
+            for cell in amendment["pre_amendment_matrix"]["cells"]
+            for item in cell["completed"]
+        }
+    preserved_entry = preserved.get(str(path))
+    if preserved_entry is not None:
+        if (
+            manifest.get("formal_runtime_amendment_sha256") is not None
+            or engineering._identity(manifest_path) != preserved_entry["manifest"]
+        ):
+            raise ValueError("E8 amendment 前成功 attempt 身份漂移")
+    elif amendment is not None and manifest.get("formal_runtime_amendment_sha256") != amendment_hash:
+        raise ValueError("E8 amendment 后 formal attempt 缺少修订身份")
     for relative, expected in manifest["files"].items():
         target = (path / relative).resolve()
         if not target.is_relative_to(path.resolve()) or engineering._identity(target) != expected:
@@ -783,11 +1024,18 @@ def verify_formal_attempt(
         or int(receipt.get("validation_rows", -1)) != COUNTS["val"]
     ):
         raise ValueError("E8 formal receipt 合同漂移")
+    if preserved_entry is not None:
+        if receipt.get("formal_runtime_amendment_sha256") is not None:
+            raise ValueError("E8 amendment 前 receipt 不应包含修订身份")
+    elif amendment is not None and receipt.get("formal_runtime_amendment_sha256") != amendment_hash:
+        raise ValueError("E8 amendment 后 receipt 修订身份漂移")
     return manifest
 
 
 def matrix_status() -> dict[str, Any]:
-    _lock, lock_hash, _source = load_formal_lock()
+    lock, lock_hash, _source = load_formal_lock()
+    amendment = lock["_runtime_amendment"]
+    amendment_hash = str(lock["_runtime_amendment_sha256"])
     cells: list[dict[str, Any]] = []
     for cell in formal_plan():
         parent = Path(cell["output_parent"])
@@ -808,6 +1056,8 @@ def matrix_status() -> dict[str, Any]:
                         lock_hash=lock_hash,
                         arm=cell["arm"],
                         seed=cell["seed"],
+                        amendment=amendment,
+                        amendment_hash=amendment_hash,
                     )
                     completed.append(str(attempt))
                 elif (attempt / "lifecycle_failed.json").is_file():
@@ -833,6 +1083,7 @@ def matrix_status() -> dict[str, Any]:
     return {
         "protocol": e8.PROTOCOL,
         "implementation_lock_sha256": lock_hash,
+        "formal_runtime_amendment_sha256": amendment_hash,
         "counts": counts,
         "cells": cells,
     }
