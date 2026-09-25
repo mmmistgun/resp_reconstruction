@@ -302,7 +302,8 @@ P2 只使用 synthetic tensors；在干净提交上由用户执行：
   benchmark --device cuda:0
 ```
 
-正式 train/validation 与 research-test 尚未开放。
+P2 收口后，formal 入口与完整命令见
+`docs/experiments/e8_film_decoder_redesign_v1_p3_formal_protocol_20260925.md`。Formal 必须先在干净提交上生成并提交唯一 execution lock；research-test 仍未开放。
 
 ## E7：聚合前尺度编码 × 尺度聚合
 

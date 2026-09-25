@@ -224,6 +224,7 @@ class CRDExperiment:
                 "tf_w_v2",
                 "tf_film_gamma",
                 "w0_structural_factorial_v1",
+                "e8_film_decoder_redesign_v1",
             }:
                 record.update(
                     {

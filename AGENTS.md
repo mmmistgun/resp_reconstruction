@@ -11,7 +11,7 @@
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E7 聚合前尺度编码 × 尺度聚合：主协议为 `docs/experiments/e7_scale_encoding_aggregation_factorial_protocol_20260924.md`；P3 当前证据入口为 `docs/experiments/e7_scale_encoding_aggregation_p3_closeout_20260924.md`，P4 formal 使用 `docs/experiments/e7_scale_encoding_aggregation_p4_formal_protocol_20260924.md`；validation 汇总和 research-test 按主协议阶段门控执行。
 - W0 三因素结构对照 v1：train/validation 与 research-test 均已完成并关闭；当前状态、结果、协议与冻结身份统一由 `docs/experiments/w0_structural_factorial_v1_closeout_20260925.md` 路由。
-- E8 FiLM 条件末端 × 波形解码端：主协议为 `docs/experiments/e8_film_decoder_redesign_v1_protocol_20260925.md`；P2 已完成并由 `docs/experiments/e8_film_decoder_redesign_v1_p2_closeout_20260925.md` 收口，formal 仍关闭，后续入口必须引用该收口的固定证据。
+- E8 FiLM 条件末端 × 波形解码端：主协议为 `docs/experiments/e8_film_decoder_redesign_v1_protocol_20260925.md`；P2 已由 `docs/experiments/e8_film_decoder_redesign_v1_p2_closeout_20260925.md` 收口，formal 使用 `docs/experiments/e8_film_decoder_redesign_v1_p3_formal_protocol_20260925.md` 并须引用固定 P2 证据与唯一 execution lock。
 
 先确定任务所属实验，再读取对应协议中与当前任务有关的章节；不要默认把某一协议应用到整个仓库。
 
