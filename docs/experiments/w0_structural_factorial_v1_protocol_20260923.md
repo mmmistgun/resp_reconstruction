@@ -506,9 +506,16 @@ runs/w0_structural_factorial_v1_es30p15/formal/<arm>/seed_<seed>/<lock-prefix>_<
 
 formal preflight 复核 clean Git、实验锁、P2 acceptance/benchmark manifests、运行环境、冻结 source/cache/index identities、train/validation row 集合与 subject 隔离。运行环境要求 Python、PyTorch、CUDA、cuDNN、原生依赖、GPU 型号和 BF16 口径与 P2 一致；当前设备总显存须不少于 P2 验收设备，并在 `environment.json` 与 `p2_source.json` 中记录两侧容量及判定策略。训练完成后回放 early stopping、最早 Local-RR minimum、6400-update LR 计划、optimizer state、checkpoint/config/history、2,675 行 validation identity/eligibility、summary 分母、finite 与运行资源。P3 入口不包含 P4 汇总或模型选择。
 
-### P4：一次性冻结汇总
+### P4：一次性冻结汇总（已授权）
 
 汇总输入严格限定为当前 implementation lock 产生的 24 个唯一完整 run。逐 run 回放 earliest legal stop、最早 Local-RR minimum、实际 updates/LR、checkpoint、2,675 row identity/order、指标/eligibility/denominator和finite；八组 × 三 seed 全部通过后生成一次性结果。
+
+执行入口要求干净 Git，先完整核验 24 个 formal manifest，再生成一个不可覆盖的 summary lifecycle：
+
+```bash
+./.venv/bin/python scripts/run_w0_structural_factorial_v1.py p4-summary \
+  --confirm-p4-summary
+```
 
 预期最小汇总产物：
 
@@ -525,8 +532,12 @@ metric_denominators.csv
 parameter_compute_memory.csv
 decision.json
 source_manifest.json
+summary_receipt.json
+access_receipt.json
 freeze_receipt.json
 ```
+
+另保存 `arm_reference_comparison.csv`、Local RR 跨 seed 描述、subject-macro 跨 seed 描述及逐受试者 conditional effect。P4 只汇总 validation 证据；三个 seed 继续表示训练随机性，7 个 `samp_id` 的等权结果只作异质性描述。
 
 ## 13. 风险与归因边界
 

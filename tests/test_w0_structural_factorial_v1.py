@@ -17,6 +17,7 @@ from resp_train.crd.training import build_crd_optimizer, crd_learning_rate
 from resp_train.paper_evidence import w0_structural_factorial_v1 as sf
 from resp_train.paper_evidence import w0_structural_factorial_v1_engineering as engineering
 from resp_train.paper_evidence import w0_structural_factorial_v1_formal as formal
+from resp_train.paper_evidence import w0_structural_factorial_v1_summary as p4
 from resp_train.paper_evidence.w0_structural_factorial_v1_model import (
     ARMS,
     ARM_SPECS,
@@ -576,6 +577,88 @@ def test_formal_cli_requires_explicit_execution_confirmation():
     )
     assert result.returncode != 0
     assert "--confirm-formal-training" in result.stderr
+
+
+def test_p4_subject_macro_and_tail_across_seed_are_complete():
+    windows = _window_metrics()
+    subject_metrics = sf.subject_stratified_metrics(windows)
+    by_seed, across = p4.subject_macro_tables(subject_metrics, expected_subjects=2)
+    tails = sf.local_rr_tail_summary(windows)
+    tail_across = p4.local_rr_tail_across_seed(tails)
+    assert len(by_seed) == len(ARMS) * len(sf.SEEDS) * len(sf.PRIMARY)
+    assert len(across) == len(ARMS) * len(sf.PRIMARY)
+    assert set(by_seed.subject_count) == {2}
+    assert len(tail_across) == len(ARMS)
+
+
+def test_p4_decision_applies_frozen_per_metric_tolerances():
+    seed_frame = _factor_seed_frame()
+    for metric in sf.PRIMARY:
+        seed_frame[metric] = 1.0
+    comparison = p4.arm_reference_comparison(seed_frame)
+    conditional = sf.conditional_effects_by_seed(seed_frame)
+    effects = sf.factorial_effects_by_seed(seed_frame)
+    across = sf.factorial_effects_across_seed(effects)
+    resources = pd.DataFrame(
+        [
+            {
+                "arm": arm,
+                "seed": seed,
+                "benchmark_train_samples_per_second": 100.0,
+                "benchmark_train_peak_allocated_bytes": 1000,
+            }
+            for arm in ARMS
+            for seed in sf.SEEDS
+        ]
+    )
+    decision = p4.build_decision(
+        seed_frame,
+        comparison,
+        conditional,
+        effects,
+        across,
+        resources,
+    )
+    assert len(decision["factor_assessments"]) == 3
+    assert all(
+        item["classification"] == "supports_level0_simplification"
+        for item in decision["factor_assessments"]
+    )
+    assert all(item["quality_preserving"] for item in decision["structural_simplifications"])
+    assert set(decision["tolerance_aware_pareto"]["pareto_arms"]) == set(ARMS)
+
+
+def test_verify_p4_summary_attempt_checks_manifest_and_counts(tmp_path):
+    lock_hash = "e" * 64
+    with sf.exclusive_attempt(
+        tmp_path,
+        phase="summary",
+        lock_hash=lock_hash,
+        reject_completed=True,
+    ) as output:
+        for filename in p4.SUMMARY_REQUIRED_FILES:
+            (output / filename).write_text("{}\n", encoding="utf-8")
+        sf.write_json(
+            output / "summary_receipt.json",
+            {
+                "status": "complete",
+                "formal_attempts": 24,
+                "validation_metric_rows": 24 * sf.COUNTS["val"],
+            },
+        )
+    assert p4.verify_summary_attempt(output, lock_hash=lock_hash)["status"] == "completed"
+
+
+def test_p4_cli_requires_explicit_execution_confirmation():
+    result = subprocess.run(
+        [sys.executable, str(sf.ROOT / sf.SCRIPT_PATH), "p4-summary"],
+        cwd=sf.ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "--confirm-p4-summary" in result.stderr
 
 
 def test_prepare_lock_requires_clean_worktree(tmp_path, monkeypatch):

@@ -30,6 +30,7 @@ from resp_train.paper_evidence.w0_structural_factorial_v1_formal import (
     matrix_status,
     run_formal,
 )
+from resp_train.paper_evidence.w0_structural_factorial_v1_summary import run_summary
 
 
 def main() -> None:
@@ -45,6 +46,8 @@ def main() -> None:
     formal.add_argument("--seed", required=True, type=int, choices=(20260811, 20260812, 20260813))
     formal.add_argument("--device", default="cuda:0")
     formal.add_argument("--confirm-formal-training", action="store_true")
+    summary = commands.add_parser("p4-summary", help="生成一次性 validation 因子汇总")
+    summary.add_argument("--confirm-p4-summary", action="store_true")
     gpu = commands.add_parser("gpu-acceptance", help="执行 P2 synthetic GPU 工程验收")
     gpu.add_argument("--device", default="cuda:0")
     benchmark = commands.add_parser("benchmark", help="执行 P2 八组独立进程效率测量")
@@ -80,6 +83,10 @@ def main() -> None:
         if not args.confirm_formal_training:
             raise SystemExit("formal 训练要求显式传入 --confirm-formal-training")
         result = str(run_formal(args.arm, args.seed, device=args.device))
+    elif args.phase == "p4-summary":
+        if not args.confirm_p4_summary:
+            raise SystemExit("P4 汇总要求显式传入 --confirm-p4-summary")
+        result = str(run_summary())
     elif args.phase == "gpu-acceptance":
         result = str(run_gpu_acceptance(args.device))
     elif args.phase == "benchmark":
