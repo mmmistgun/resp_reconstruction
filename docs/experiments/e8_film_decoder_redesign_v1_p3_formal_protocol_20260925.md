@@ -2,7 +2,7 @@
 
 日期：2026-09-25。协议 ID：`e8-film-decoder-redesign-factorial-v1-20260925`。
 
-状态：**Formal 入口已实现并完成 CPU 定向验证；唯一 execution lock 待在干净提交上生成。正式训练由用户执行，当前尚未启动。**
+状态：**Formal 入口、CPU 定向验证与唯一 execution lock 已完成；36 次正式训练由用户执行，当前矩阵为 `pending=36 / running=0 / failed=0 / completed=0`。**
 
 ## 1. 固定来源
 
@@ -10,7 +10,7 @@
 - P2 收口：`docs/experiments/e8_film_decoder_redesign_v1_p2_closeout_20260925.md`，SHA-256 `7e83f2045a586a0b6f7aabfcf4a3b6a71a3662ce9c397c600394dd99b3402010`。
 - P2 engineering identity：`aa80977f0c737906bdf011bd9b39367d1c77b39130404a39db9c1f6b2670f3d4`。
 - W0 train/validation 来源锁：`docs/experiments/w0_structural_factorial_v1_implementation_lock_r2_20260924.json`，SHA-256 `32141eab672ea41435055c45cbd7ec96325f8ddef2481a210db2941222c9e9f3`。
-- E8 formal execution lock：`docs/experiments/e8_film_decoder_redesign_v1_formal_execution_lock_20260925.json`。
+- E8 formal execution lock：`docs/experiments/e8_film_decoder_redesign_v1_formal_execution_lock_20260925.json`，SHA-256 `40b30fc6ecdcc9b40750c393be8fd2faf4e223da0566432df739aacb513713c5`。
 
 Execution lock 固定 12 arms × 3 seeds、P2 两份成功 attempt、W0 train/validation 来源、配置、停止合同和 formal 关键源码。它由全部 36 次训练与后续 validation 汇总共同复用。
 
