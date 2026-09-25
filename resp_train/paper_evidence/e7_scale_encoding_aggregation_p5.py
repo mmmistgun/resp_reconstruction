@@ -37,6 +37,16 @@ OUTPUT = Path("runs/e7_scale_encoding_aggregation/p5_validation")
 DIAGNOSTIC_MICROBATCH = 4
 DIAGNOSTIC_CHANNEL_INDICES = tuple(range(0, 96, 8))
 DIAGNOSTIC_TIME_INDICES = tuple(range(0, 360, 8))
+INTERVENTION_DELTA_COLUMNS = (
+    "arm",
+    "seed",
+    "condition",
+    "metric",
+    "full",
+    "intervened",
+    "utility_delta",
+    "positive_means",
+)
 
 
 def p5_contract() -> dict[str, Any]:
@@ -491,6 +501,18 @@ def diagnostic_conditions(arm: str) -> list[tuple[str, bool, bool]]:
     return conditions
 
 
+def read_intervention_delta(path: Path) -> pd.DataFrame:
+    """读取干预差表；早期无适用干预的单元格允许只有换行符。"""
+
+    try:
+        frame = pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        frame = pd.DataFrame(columns=INTERVENTION_DELTA_COLUMNS)
+    if tuple(frame.columns) != INTERVENTION_DELTA_COLUMNS:
+        raise ValueError(f"E7 P5 intervention delta schema 漂移: {path}")
+    return frame
+
+
 def _environment_matches(formal_environment: Mapping[str, Any], current: Mapping[str, Any]) -> None:
     keys = (
         "packages",
@@ -653,7 +675,9 @@ def run_diagnostic(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
                             "positive_means": "intervention_improves",
                         }
                     )
-            pd.DataFrame(deltas).to_csv(output / "intervention_delta.csv", index=False)
+            pd.DataFrame(deltas, columns=INTERVENTION_DELTA_COLUMNS).to_csv(
+                output / "intervention_delta.csv", index=False
+            )
             e7.write_json(
                 output / "diagnostic_receipt.json",
                 {
@@ -731,7 +755,7 @@ def run_finalize() -> Path:
                 if key in sources:
                     raise ValueError("E7 P5 final diagnostic cell 重复")
                 representations.append(pd.read_csv(path / "representation_diagnostics.csv"))
-                interventions.append(pd.read_csv(path / "intervention_delta.csv"))
+                interventions.append(read_intervention_delta(path / "intervention_delta.csv"))
                 sources[key] = {
                     "path": str(path),
                     "manifest": e7.identity(path / "manifest.json"),

@@ -6,6 +6,8 @@
 
 实现修订：前 17 个 diagnostic cell 完成后，`s2_axis_spanning__frequency_attention/20260813` 的有限 FP32 attention 权重出现最大 `|Σw−1|=1.0728836e-6`，略高于旧诊断固定阈值 `1e-6`。诊断入口改用 `8·eps_fp32·ceil(log2(97))` 的归约误差界，并保存实际最大误差与阈值；softmax、模型、checkpoint、数据、指标和诊断公式均未改变。旧 17 项与修订后单元格保持可比，失败 lifecycle 保留。
 
+最终冻结修订：`s0_shallow__mean` 没有适用的 checkpoint 内干预，其三个 `intervention_delta.csv` 合法为零行；早期实现只写出换行符。Finalize 现以固定 schema 读取这些历史零行文件，后续诊断也始终写出列头。该修订不改变任何已计算数值，首次失败 final lifecycle 保留。
+
 ## 1. 来源与阶段身份
 
 P5 复用 P4 execution lock `068ba8ec6c5866ebf1b17d560b4fb5f5448e7e921e0dc8b15dda66c2f907c193`，只接受其 18 个唯一成功 formal attempt。P5 不建立新的实验锁；运行 manifest 直接保存 P5 代码提交、源码 SHA、P4 lock identity、正式来源和输出身份。

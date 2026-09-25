@@ -86,6 +86,18 @@ def test_attention_statistics_uses_fp32_reduction_bound():
         p5.attention_statistics(invalid)
 
 
+def test_empty_intervention_delta_keeps_fixed_schema(tmp_path):
+    path = tmp_path / "intervention_delta.csv"
+    path.write_text("\n", encoding="utf-8")
+    frame = p5.read_intervention_delta(path)
+    assert frame.empty
+    assert tuple(frame.columns) == p5.INTERVENTION_DELTA_COLUMNS
+    malformed = tmp_path / "malformed.csv"
+    malformed.write_text("wrong\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="schema"):
+        p5.read_intervention_delta(malformed)
+
+
 @pytest.mark.parametrize(
     "arm,expected",
     [
