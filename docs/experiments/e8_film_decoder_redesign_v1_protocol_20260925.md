@@ -2,7 +2,7 @@
 
 日期：2026-09-25。协议 ID：`e8-film-decoder-redesign-factorial-v1-20260925`。
 
-状态：**P0/P1 已完成；P2 synthetic GPU acceptance 与独立进程 benchmark 入口已实现，等待用户执行。Formal、validation 汇总和 research-test 均未开放。**
+状态：**P0/P1 已完成；P2 synthetic GPU acceptance 与 benchmark 已完成并由 `e8_film_decoder_redesign_v1_p2_closeout_20260925.md` 收口。Formal、validation 汇总和 research-test 均未开放。**
 
 独立开发位置：
 
@@ -234,7 +234,7 @@ P2 只使用确定性 synthetic tensor，不读取 dataset index、真实 wavefo
 |---|---|---|
 | P0 | 问题、矩阵、冻结变量、计划对比 | 已完成 |
 | P1 | 十二个模型、配置、CLI、synthetic CPU 测试 | 已完成 |
-| P2 | Synthetic GPU acceptance 与 benchmark | 入口已实现；等待用户执行 |
+| P2 | Synthetic GPU acceptance 与 benchmark | 已完成并冻结 |
 | P3 | 实现身份冻结与 36-cell formal 入口 | 未开放 |
 | P4 | 36 次 train/validation | 未开放；由用户执行 |
 | P5 | 完整 validation 汇总与冻结 | 待 P4 完整完成 |
