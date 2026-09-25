@@ -2,7 +2,7 @@
 
 日期：2026-09-25。协议 ID：`e8-film-decoder-redesign-factorial-v1-20260925`。
 
-状态：**P0 科学问题与 `4×3×3 seeds=36` train/validation 矩阵已定义；P1 十二个模型、严格配置、CLI 与 19 项 synthetic CPU 定向测试已完成。GPU 工程验收、正式训练、validation 汇总和 research-test 均未开放。**
+状态：**P0/P1 已完成；P2 synthetic GPU acceptance 与独立进程 benchmark 入口已实现，等待用户执行。Formal、validation 汇总和 research-test 均未开放。**
 
 独立开发位置：
 
@@ -206,7 +206,14 @@ P1 synthetic CPU 必须覆盖：
 7. 多步梯度通路真实开启；
 8. 36-cell 计划完整且 formal gate 关闭。
 
-后续 P2 由用户执行 synthetic GPU batch-1 多步 forward/backward、batch-128/chunk-8 资源验收和独立进程 benchmark。只有 P2 完成、代码提交且实现身份冻结后，才能新增 formal 入口；当前不得运行真实数据训练。
+P2 由用户执行：
+
+1. 12 arms × 3 seeds 的 36 个 batch-1 cell，每项三次原生 loss/optimizer update，验证零初始化后的多步梯度开启与参数真实变化；
+2. 最大资源 arm `e8_res192_temporal` 的 synthetic batch-128、三次原生 update，固定 branch checkpoint chunk=8 并要求 peak reserved 不超过可见设备总显存的 80%；
+3. 最大资源 arm 的一轮 synthetic 原生 trainer lifecycle，保存 config、history、best/final checkpoint、validation metrics 和 runtime summary；
+4. 12 arms × eval/train 的 24 个独立进程 benchmark；每项 warm-up 5 次、测量 20 次，eval batch=1、train batch=128。
+
+P2 只使用确定性 synthetic tensor，不读取 dataset index、真实 waveform、W cache、历史 checkpoint 或 research-test。它以干净 Git commit 和关键源码逐文件 SHA 构成 engineering identity；成功与失败 attempt 均不可覆盖保留。只有 acceptance 与 benchmark 完成并收口后，才能新增 formal 入口。
 
 当前允许命令：
 
@@ -215,6 +222,8 @@ P1 synthetic CPU 必须覆盖：
 ./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py check-p1
 ./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py describe
 ./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py formal-plan
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py gpu-acceptance --device cuda:0
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py benchmark --device cuda:0
 ```
 
 `formal-plan` 只列计划，所有 cell 状态必须为 `blocked_until_engineering_acceptance`，不执行数据访问或训练。
@@ -224,8 +233,8 @@ P1 synthetic CPU 必须覆盖：
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | P0 | 问题、矩阵、冻结变量、计划对比 | 已完成 |
-| P1 | 十二个模型、配置、CLI、synthetic CPU 测试 | 已完成；19 tests passed |
-| P2 | Synthetic GPU acceptance 与 benchmark | 未开放；由用户执行 |
+| P1 | 十二个模型、配置、CLI、synthetic CPU 测试 | 已完成 |
+| P2 | Synthetic GPU acceptance 与 benchmark | 入口已实现；等待用户执行 |
 | P3 | 实现身份冻结与 36-cell formal 入口 | 未开放 |
 | P4 | 36 次 train/validation | 未开放；由用户执行 |
 | P5 | 完整 validation 汇总与冻结 | 待 P4 完整完成 |

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import json
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from torch import nn
 from resp_train.crd.blocks import DecoderResidual
 from resp_train.crd.training import build_crd_optimizer
 from resp_train.paper_evidence import e8_film_decoder_redesign_v1 as e8
+from resp_train.paper_evidence import e8_film_decoder_redesign_v1_engineering as engineering
 from resp_train.paper_evidence.e8_film_decoder_redesign_v1_model import (
     ARMS,
     ARM_SPECS,
@@ -263,3 +265,70 @@ def test_finite_and_shape_failures_are_explicit():
     model = E8FilmDecoderRedesignModel("e8_direct_temporal", e8.SEEDS[0])
     with pytest.raises(FloatingPointError, match="NaN/Inf"):
         model.base.decode_local(torch.full((1, 96, 1800), float("nan")))
+
+
+def test_p2_synthetic_batch_is_deterministic_finite_and_shape_safe():
+    first = engineering.synthetic_batch(2, 91)
+    second = engineering.synthetic_batch(2, 91)
+    assert first["x"].shape == (2, 1, 18_000)
+    assert first["target"].shape == (2, 1, 18_000)
+    assert first["tf"]["w"].shape == (2, 97, 360)
+    assert torch.equal(first["x"], second["x"])
+    assert torch.equal(first["target"], second["target"])
+    assert torch.equal(first["tf"]["w"], second["tf"]["w"])
+    engineering.finite_tree(first)
+    with pytest.raises(ValueError, match="必须为正"):
+        engineering.synthetic_batch(0, 91)
+
+
+def test_p2_factor_tracking_matches_each_structural_level():
+    assert engineering._factor_prefixes("e8_direct_single") == {
+        "film_projection": "branches.w.final_projection."
+    }
+    assert set(engineering._factor_prefixes("e8_fill65_pointwise")) == {
+        "film_projection",
+        "condition_refiner",
+        "decoder_residual",
+    }
+    assert set(engineering._factor_prefixes("e8_res192_temporal")) == {
+        "film_projection",
+        "condition_refiner",
+        "decoder_residual",
+    }
+    assert engineering.MAX_RESOURCE_ARM == "e8_res192_temporal"
+    assert engineering.BATCH1_UPDATES >= 3
+    assert engineering.PHYSICAL_BATCH_UPDATES >= 3
+    assert engineering.MEMORY_LIMIT_FRACTION == 0.80
+
+
+def test_p2_exclusive_lifecycle_freezes_success_and_preserves_failure(tmp_path):
+    identity_hash = "a" * 64
+    with engineering.exclusive_attempt(
+        tmp_path / "success",
+        phase="synthetic",
+        identity_hash=identity_hash,
+    ) as output:
+        (output / "result.txt").write_text("ok", encoding="utf-8")
+    completed = next((tmp_path / "success").glob("*/freeze_receipt.json")).parent
+    manifest = json.loads((completed / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "completed"
+    assert "result.txt" in manifest["files"]
+    with pytest.raises(FileExistsError, match="已完成"):
+        with engineering.exclusive_attempt(
+            tmp_path / "success",
+            phase="synthetic",
+            identity_hash=identity_hash,
+        ):
+            pass
+
+    with pytest.raises(RuntimeError, match="fixture"):
+        with engineering.exclusive_attempt(
+            tmp_path / "failure",
+            phase="synthetic",
+            identity_hash=identity_hash,
+        ) as output:
+            (output / "partial.txt").write_text("keep", encoding="utf-8")
+            raise RuntimeError("fixture failure")
+    failed = next((tmp_path / "failure").glob("*/lifecycle_failed.json")).parent
+    assert (failed / "partial.txt").read_text(encoding="utf-8") == "keep"
+    assert not (failed / "freeze_receipt.json").exists()
