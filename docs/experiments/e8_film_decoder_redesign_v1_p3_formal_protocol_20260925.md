@@ -2,7 +2,7 @@
 
 日期：2026-09-25。协议 ID：`e8-film-decoder-redesign-factorial-v1-20260925`。
 
-状态：**Formal 入口、CPU 定向验证与唯一 execution lock 已完成；36 次正式训练由用户执行，当前矩阵为 `pending=36 / running=0 / failed=0 / completed=0`。**
+状态：**Formal 入口与 base execution lock 已完成；2026-09-26 建立仅修改同型号 GPU 容量兼容门控的增量修订。修订前矩阵固定为 `completed=11 / failed=1 / pending=24 / running=0`，科学合同未改变。**
 
 ## 1. 固定来源
 
@@ -11,8 +11,23 @@
 - P2 engineering identity：`aa80977f0c737906bdf011bd9b39367d1c77b39130404a39db9c1f6b2670f3d4`。
 - W0 train/validation 来源锁：`docs/experiments/w0_structural_factorial_v1_implementation_lock_r2_20260924.json`，SHA-256 `32141eab672ea41435055c45cbd7ec96325f8ddef2481a210db2941222c9e9f3`。
 - E8 formal execution lock：`docs/experiments/e8_film_decoder_redesign_v1_formal_execution_lock_20260925.json`，SHA-256 `40b30fc6ecdcc9b40750c393be8fd2faf4e223da0566432df739aacb513713c5`。
+- Runtime amendment：`docs/experiments/e8_film_decoder_redesign_v1_formal_runtime_amendment_20260926.json`，SHA-256 `517bdf281a0db0902e0c10481b0ea210a7c514d627eb6397e9e982d95ba270e3`。
 
 Execution lock 固定 12 arms × 3 seeds、P2 两份成功 attempt、W0 train/validation 来源、配置、停止合同和 formal 关键源码。它由全部 36 次训练与后续 validation 汇总共同复用。
+
+### 1.1 Runtime amendment
+
+P2 在物理 GPU 1 上记录 `device_total_bytes=16,717,840,384`；同型号 GPU 0 报告 `16,710,500,352`，差 `7,340,032` bytes（约 0.044%），两者的型号、Python/PyTorch/CUDA/cuDNN、依赖与 BF16 合同一致。Base gate 使用逐 byte `current>=P2`，因此在任何训练开始前拒绝 GPU 0。
+
+修订只把容量判断改为同时满足：
+
+1. 原有软件栈、device name 与 BF16 字段继续精确相等；
+2. `device_total_bytes >= 16,710,500,352`；
+3. P2 最大 `peak_reserved=10,643,046,400` bytes 在当前设备上的比例不超过 0.8。
+
+GPU 0 对应比例约为 `0.6369`。模型、参数、初始化、数据、loss、optimizer、batch、停止合同、selector、指标和输出 identity 均未改变。修订前 11 个成功 cell 的路径与 manifest 身份全部进入 amendment allowlist；后续成功 cell 必须登记 amendment SHA。GPU 0 容量门控失败 attempt 保留为修订依据。
+
+用户要求移除的最后一个 Ctrl-C 中断 attempt（`e8_fill65_temporal / seed_20260812`）已移到可恢复隔离路径 `/tmp/e8_removed_failed_formal_40b30fc6ecdc_20260925T190025Z_1c8015a2f49a`，未作为科学证据或成功 cell 使用。
 
 ## 2. Formal 合同
 
