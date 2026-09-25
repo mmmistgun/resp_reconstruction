@@ -549,7 +549,7 @@ freeze_receipt.json
 6. 三 seed 足以描述固定随机种子的优化波动和交互方向，不足以作人群显著性推断。7 个 validation `samp_id` 的分层也只是有限开发样本上的异质性描述。
 7. Local RR 是窗口级频谱主峰误差，不是逐呼吸相位跟踪；trajectory/PCC/global modulation 必须共同解释。
 8. 统一 early stopping减少平均成本，但新组合可能晚恢复；max 80 仍是截断边界。实际停止 epoch作为优化行为报告，不用于事后延长单组。
-9. 当前 test 已被多轮开发使用。未来 test 阶段须另立 checkpoint allowlist 和专项授权，并保持 validation-selected checkpoint 与完整三 seed 集合。
+9. 当前 test 已被多轮开发使用。Research-test 阶段按 `w0_structural_factorial_v1_research_test_protocol_20260925.md` 建立 checkpoint allowlist，经专项授权后使用 validation-selected checkpoint 与完整三 seed 集合。
 
 ## 14. 适用边界与后续问题
 
