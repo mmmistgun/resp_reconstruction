@@ -364,7 +364,39 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD \
 P5 summary 与 diagnostics 只访问 validation；research-test 保持关闭。
 
 P5 已完成并由 `docs/experiments/e7_scale_encoding_aggregation_p5_closeout_20260926.md`
-收口。当前默认不再执行 validation 训练、诊断或汇总；后续 research-test 必须使用独立专项协议和当次授权。
+收口。当前默认不再执行 validation 训练、诊断或汇总。
+
+E7 research-test 使用
+`docs/experiments/e7_scale_encoding_aggregation_test_protocol_20260926.md`，固定 P5 之前已经选定的
+六臂×三 seed checkpoint。专项锁准备只读取冻结 metadata、既有 W0 指标和 cache manifest；正式评价由用户执行：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python -m pytest tests/test_e7_scale_encoding_aggregation_test.py -q
+
+./.venv/bin/python scripts/eval_e7_scale_encoding_aggregation_test.py prepare-lock
+./.venv/bin/python scripts/eval_e7_scale_encoding_aggregation_test.py check-lock
+
+for E7_TEST_SEED in 20260811 20260812 20260813; do
+  for E7_TEST_ARM in \
+    s0_shallow__mean \
+    s0_shallow__frequency_attention \
+    s1_deep_local__mean \
+    s1_deep_local__frequency_attention \
+    s2_axis_spanning__mean \
+    s2_axis_spanning__frequency_attention; do
+    env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+      ./.venv/bin/python scripts/eval_e7_scale_encoding_aggregation_test.py evaluate \
+      --arm "$E7_TEST_ARM" --seed "$E7_TEST_SEED" --device cuda:0 || break 2
+  done
+done
+
+./.venv/bin/python scripts/eval_e7_scale_encoding_aggregation_test.py check-completed
+./.venv/bin/python scripts/eval_e7_scale_encoding_aggregation_test.py summarize --completed
+```
+
+每项读取完整 2,310-window research-test，18 项共新增 41,580 条逐窗口指标；完整矩阵一次性汇总，
+validation 决定保持冻结。
 
 ## E4 v2：四种尺度聚合固定矩阵
 
