@@ -1,0 +1,37 @@
+schema_version: 1
+protocol: e8-film-decoder-redesign-factorial-v1-20260925
+output_root: runs/e8_film_decoder_redesign_v1
+source:
+  w0_config: configs/crd_tf_v1/crd_tf102_w_formal.yaml
+  w0_closeout: docs/experiments/w0_structural_factorial_v1_closeout_20260925.md
+  e7_protocol: docs/experiments/e7_scale_encoding_aggregation_factorial_protocol_20260924.md
+arms:
+  e8_fill65_pointwise: {condition_refiner: fill65, decoder: pointwise, trainable_parameters: 1219850, factor_covered_macs: 24364800}
+  e8_fill65_single: {condition_refiner: fill65, decoder: single, trainable_parameters: 1218793, factor_covered_macs: 22464000}
+  e8_fill65_temporal: {condition_refiner: fill65, decoder: temporal, trainable_parameters: 1220010, factor_covered_macs: 24652800}
+  e8_direct_pointwise: {condition_refiner: direct, decoder: pointwise, trainable_parameters: 1207274, factor_covered_macs: 1900800}
+  e8_direct_single: {condition_refiner: direct, decoder: single, trainable_parameters: 1206217, factor_covered_macs: 0}
+  e8_direct_temporal: {condition_refiner: direct, decoder: temporal, trainable_parameters: 1207434, factor_covered_macs: 2188800}
+  e8_res96_pointwise: {condition_refiner: res96, decoder: pointwise, trainable_parameters: 1225802, factor_covered_macs: 35078400}
+  e8_res96_single: {condition_refiner: res96, decoder: single, trainable_parameters: 1224745, factor_covered_macs: 33177600}
+  e8_res96_temporal: {condition_refiner: res96, decoder: temporal, trainable_parameters: 1225962, factor_covered_macs: 35366400}
+  e8_res192_pointwise: {condition_refiner: res192, decoder: pointwise, trainable_parameters: 1244234, factor_covered_macs: 68256000}
+  e8_res192_single: {condition_refiner: res192, decoder: single, trainable_parameters: 1243177, factor_covered_macs: 66355200}
+  e8_res192_temporal: {condition_refiner: res192, decoder: temporal, trainable_parameters: 1244394, factor_covered_macs: 68544000}
+matrix:
+  seeds: [20260811, 20260812, 20260813]
+  cell_count: 36
+  epochs: 80
+  updates_per_epoch: 80
+  planned_updates: 6400
+  early_stopping: {enabled: true, min_epoch: 30, patience: 15, min_delta: 0.0}
+  physical_batch: 128
+  gradient_accumulation_steps: 1
+  amp_dtype: bfloat16
+  checkpoint_selector: full_validation_local_rr_strict_minimum_earliest_tie
+  split: train_validation
+analysis:
+  primary_metrics: [whole_rr_abs_error_bpm, local_rr_mae_bpm, envelope_trajectory_mae, global_envelope_modulation_error, lag_aware_signed_pcc]
+  error_relative_tolerance: 0.005
+  pcc_absolute_tolerance: 0.002
+  seed_sd_ddof: 1

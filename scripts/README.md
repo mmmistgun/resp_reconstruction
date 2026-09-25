@@ -276,6 +276,24 @@ summary 固定案例身份后，render-cases --summary ... --device cuda:0 只�
 batch-128 上下文并保存选中窗口；最后用 finalize --summary ... --cases ... 生成中文结论与闭合回执。
 产物根为主仓库的 runs/w0_cwt_film_behavior_v1/；每阶段排他创建 attempt，失败现场保留。
 
+## E8：FiLM 条件末端 × 波形解码端
+
+状态：P1 已完成，十二个模型组成 `4 condition refiners × 3 decoders` 完整矩阵；
+三 seed 共 36 个 formal cell，但 formal gate 在 GPU 工程验收前保持关闭。协议为
+`docs/experiments/e8_film_decoder_redesign_v1_protocol_20260925.md`。
+
+当前只允许不访问数据的 P1 检查：
+
+```bash
+./.venv/bin/python -m pytest tests/test_e8_film_decoder_redesign_v1.py -q
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py check-p1
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py describe
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py formal-plan
+```
+
+`formal-plan` 只输出 `blocked_until_engineering_acceptance` 的计划单元格，不训练模型。
+GPU acceptance、benchmark、正式 train/validation 与 research-test 尚未开放。
+
 ## E7：聚合前尺度编码 × 尺度聚合
 
 状态：P2 已完成。独立六臂模型、严格配置、early-stop 回放、析因汇总、表征诊断、
