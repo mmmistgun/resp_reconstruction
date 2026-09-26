@@ -2,7 +2,7 @@
 
 日期：2026-09-25。协议 ID：`e8-film-decoder-redesign-factorial-v1-20260925`。
 
-状态：**Formal 入口与 base execution lock 已完成；2026-09-26 建立仅修改同型号 GPU 容量兼容门控的增量修订。修订前矩阵固定为 `completed=11 / failed=1 / pending=24 / running=0`，科学合同未改变。**
+状态：**36/36 个 formal train/validation cell 已完成；当前 `completed=36 / pending=0 / running=0`，一个训练前 GPU 容量门控失败生命周期保留。2026-09-26 的同型号 GPU 容量兼容修订未改变科学合同。后续 validation 汇总由 P5 专项协议执行。**
 
 ## 1. 固定来源
 
