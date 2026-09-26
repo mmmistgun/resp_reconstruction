@@ -366,9 +366,11 @@ P5 summary 与 diagnostics 只访问 validation；research-test 保持关闭。
 P5 已完成并由 `docs/experiments/e7_scale_encoding_aggregation_p5_closeout_20260926.md`
 收口。当前默认不再执行 validation 训练、诊断或汇总。
 
-E7 research-test 使用
-`docs/experiments/e7_scale_encoding_aggregation_test_protocol_20260926.md`，固定 P5 之前已经选定的
-六臂×三 seed checkpoint。专项锁准备只读取冻结 metadata、既有 W0 指标和 cache manifest；正式评价由用户执行：
+E7 research-test 已完成并由
+`docs/experiments/e7_scale_encoding_aggregation_test_results_20260926.md` 收口。18 个固定 checkpoint
+评价全部通过质量验收，完整汇总冻结于
+`runs/e7_scale_encoding_aggregation/research_test/summary/summary_0fcba39436c9_20260926T040914Z_8436abbf29e6/`。
+下列命令保留为历史执行记录：
 
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD \
@@ -395,8 +397,8 @@ done
 ./.venv/bin/python scripts/eval_e7_scale_encoding_aggregation_test.py summarize --completed
 ```
 
-每项读取完整 2,310-window research-test，18 项共新增 41,580 条逐窗口指标；完整矩阵一次性汇总，
-validation 决定保持冻结。
+每项读取完整 2,310-window research-test，18 项共新增 41,580 条逐窗口指标。结果没有形成稳定五指标
+Pareto 改善，validation 决定保持冻结。
 
 ## E4 v2：四种尺度聚合固定矩阵
 

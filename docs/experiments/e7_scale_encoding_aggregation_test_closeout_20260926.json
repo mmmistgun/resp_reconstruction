@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "protocol": "e7-scale-encoding-aggregation-research-test-v1-20260926",
+  "status": "completed",
+  "test_lock_sha256": "0fcba39436c9fbc5390d483787a6987fc8fb7a5a25e0e126932941076d421188",
+  "execution_git_commit": "27e1d37f0b92d03fac81efb5a2cf7adbd07cdcfc",
+  "matrix": {
+    "arms": 6,
+    "seeds": 3,
+    "cells": 18,
+    "rows_per_cell": 2310,
+    "new_metric_rows": 41580,
+    "samp_ids": 8
+  },
+  "quality": {
+    "completed_cells": 18,
+    "passed_cells": 18,
+    "joint_prediction_degenerate": 0,
+    "envelope_spearman_prediction_degenerate": 0,
+    "environment_consistent": true,
+    "clean_execution_worktree": true
+  },
+  "summary": {
+    "path": "runs/e7_scale_encoding_aggregation/research_test/summary/summary_0fcba39436c9_20260926T040914Z_8436abbf29e6",
+    "manifest": {
+      "size_bytes": 2545,
+      "sha256": "197b266d73ed6fc8bbe45950c4ffb5c77e5d0132f3e444dcec48b838ca0f9e10"
+    },
+    "receipt": {
+      "size_bytes": 12180,
+      "sha256": "d48556580475f657e4eefe348464228a8cad13a83b6700aa1f3fe42b04ae17f2"
+    }
+  },
+  "tables": {
+    "per_seed": 18,
+    "across_seed": 30,
+    "simple_effects_per_seed": 105,
+    "simple_effects_across_seed": 35,
+    "factorial_contrasts_per_seed": 75,
+    "factorial_contrasts_across_seed": 25,
+    "materiality_per_seed": 105,
+    "materiality_across_seed": 35,
+    "subject_macro": 810,
+    "w0_paired_per_seed": 90,
+    "w0_paired_across_seed": 30
+  },
+  "findings": {
+    "model_selection": "no_stable_five_metric_tolerance_aware_pareto_improvement",
+    "shallow_sufficiency": "limited_support_within_tested_family_budget_and_reused_research_test_population",
+    "deep_local": "no_stable_overall_gain_with_global_modulation_subject_macro_benefit_and_rr_tradeoff",
+    "axis_spanning": "no_stable_incremental_gain_over_deep_local",
+    "attention": "encoder_dependent_attribute_tradeoff",
+    "validation_alignment": "overall_decision_consistent_with_validation",
+    "validation_decision_changed": false
+  },
+  "interpretation": "reused research-test developmental description"
+}
