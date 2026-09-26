@@ -278,56 +278,36 @@ batch-128 上下文并保存选中窗口；最后用 finalize --summary ... --ca
 
 ## E8：FiLM 条件末端 × 波形解码端
 
-状态：P1 已完成，P2 synthetic GPU acceptance/benchmark 入口已实现；十二个模型组成
-`4 condition refiners × 3 decoders` 完整矩阵。三 seed 共 36 个 formal cell，但 formal gate
-在 GPU 工程验收收口前保持关闭。协议为
-`docs/experiments/e8_film_decoder_redesign_v1_protocol_20260925.md`。
+状态：P0–P6 全部完成并关闭。十二个模型组成
+`4 condition refiners × 3 decoders` 完整矩阵；三 seed 共 36 个 formal cell、P5 validation
+汇总、36 个固定 checkpoint research-test 评价及完整汇总均已冻结。最终状态与结论统一由
+`docs/experiments/e8_film_decoder_redesign_v1_closeout_20260926.md` 路由。
 
-当前只允许不访问数据的 P1 检查：
+以下检查与执行命令只保留为 provenance；已完成阶段不得重复执行：
 
 ```bash
 ./.venv/bin/python -m pytest tests/test_e8_film_decoder_redesign_v1.py -q
 ./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py check-p1
 ./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py describe
 ./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py formal-plan
-```
-
-`formal-plan` 只输出 `blocked_until_engineering_acceptance` 的计划单元格，不训练模型。
-P2 只使用 synthetic tensors；在干净提交上由用户执行：
-
-```bash
 ./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py \
   gpu-acceptance --device cuda:0
 ./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py \
   benchmark --device cuda:0
-```
-
-P2 收口后，formal 入口与完整命令见
-`docs/experiments/e8_film_decoder_redesign_v1_p3_formal_protocol_20260925.md`。Formal 必须先在干净提交上生成并提交唯一 execution lock；research-test 仍未开放。
-
-36/36 formal 与 P5 validation 汇总均已完成；以下命令只保留 provenance，不得重复执行：
-
-```bash
 ./.venv/bin/python scripts/summarize_e8_film_decoder_redesign_v1.py \
   --confirm-p5-summary
 ```
 
-完整输出与证据边界见
+Formal 执行合同见
+`docs/experiments/e8_film_decoder_redesign_v1_p3_formal_protocol_20260925.md`；validation 输出与证据边界见
 `docs/experiments/e8_film_decoder_redesign_v1_p5_validation_summary_protocol_20260926.md`，结果见
 `docs/experiments/e8_film_decoder_redesign_v1_validation_results_20260926.md`。
 
 E8 research-test 专项入口为 `scripts/run_e8_film_decoder_redesign_v1_test.py`，协议见
-`docs/experiments/e8_film_decoder_redesign_v1_research_test_protocol_20260926.md`。当前只允许：
-
-```bash
-./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1_test.py \
-  prepare-allowlist
-```
-
-36-checkpoint allowlist 已冻结为
+`docs/experiments/e8_film_decoder_redesign_v1_research_test_protocol_20260926.md`。36-checkpoint allowlist 已冻结为
 `runs/e8_film_decoder_redesign_v1/research_test/allowlist/allowlist_8b67c189b10c_20260926T083406Z_b300e95e53bc`，SHA-256 为
 `76ef0c8ac05cdddcf89caab46abb0a03b78d0d3e72d09b6ed5773521dc2576db`。生成阶段未读取 test arrays。
-评价与汇总仍需用户再次明确授权，并显式传入 `--confirm-research-test`。
+36 项评价与完整汇总均已完成；research-test 入口不得再次执行。
 
 ## E7：聚合前尺度编码 × 尺度聚合
 
