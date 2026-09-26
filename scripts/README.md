@@ -324,9 +324,10 @@ E8 research-test 专项入口为 `scripts/run_e8_film_decoder_redesign_v1_test.p
   prepare-allowlist
 ```
 
-该命令固定全部 36 个 validation-selected checkpoint，只读取 test cache manifest，不读取
-test arrays。评价与汇总必须等待 allowlist 冻结及用户再次明确授权，并显式传入
-`--confirm-research-test`。
+36-checkpoint allowlist 已冻结为
+`runs/e8_film_decoder_redesign_v1/research_test/allowlist/allowlist_8b67c189b10c_20260926T083406Z_b300e95e53bc`，SHA-256 为
+`76ef0c8ac05cdddcf89caab46abb0a03b78d0d3e72d09b6ed5773521dc2576db`。生成阶段未读取 test arrays。
+评价与汇总仍需用户再次明确授权，并显式传入 `--confirm-research-test`。
 
 ## E7：聚合前尺度编码 × 尺度聚合
 
