@@ -57,6 +57,9 @@ E4_CLOSEOUT = Path("docs/experiments/e4_closeout_20260922.md")
 E4_CLOSEOUT_SHA256 = "5f4b33ebbfae131a7fd504a3783b297011fdbe1b99da92130149681793366d16"
 SOURCE_AUDIT = Path("docs/experiments/e7_scale_encoding_aggregation_source_audit_20260924.json")
 LOCK_PATH = Path("docs/experiments/e7_scale_encoding_aggregation_p1_implementation_lock_20260924.json")
+MAINLINE_COMPATIBILITY_PATH = Path(
+    "docs/experiments/e7_scale_encoding_aggregation_mainline_compatibility_20260926.json"
+)
 OUTPUT = Path("runs/e7_scale_encoding_aggregation")
 COUNTS = {"train": 10_141, "val": 2_675}
 SAMP_IDS = {"train": 32, "val": 7}
@@ -314,8 +317,36 @@ def load_implementation_lock(root: Path = ROOT) -> tuple[dict[str, Any], str]:
         or lock.get("tolerances") != expected_spec()["tolerances"]
     ):
         raise ValueError("E7 P1 implementation lock 科学合同漂移")
+    compatibility_path = root / MAINLINE_COMPATIBILITY_PATH
+    amended_paths: set[str] = set()
+    if compatibility_path.is_file():
+        compatibility = json.loads(compatibility_path.read_text(encoding="utf-8"))
+        amended = compatibility.get("amended_code_files", {})
+        amended_paths = set(amended)
+        if (
+            compatibility.get("schema_version") != 1
+            or compatibility.get("protocol") != PROTOCOL
+            or compatibility.get("status") != "mainline_compatibility_locked"
+            or compatibility.get("scope") != "closed_experiment_mainline_coexistence"
+            or compatibility.get("scientific_contract_changed") is not False
+            or compatibility.get("experiment_rerun_authorized") is not False
+            or compatibility.get("base_implementation_lock", {}).get("path") != str(LOCK_PATH)
+            or compatibility.get("base_implementation_lock", {}).get("sha256")
+            != sha256_file(path)
+            or amended_paths
+            != {
+                str(CONTROL_PATH),
+                "resp_train/crd/experiment.py",
+            }
+        ):
+            raise ValueError("E7 mainline compatibility 合同漂移")
+        for relative, entry in amended.items():
+            if entry.get("base") != lock["code_files"].get(relative):
+                raise ValueError(f"E7 mainline compatibility 基线漂移: {relative}")
+            verify(root / relative, entry["revised"])
     for relative, expected in lock["code_files"].items():
-        verify(root / relative, expected)
+        if relative not in amended_paths:
+            verify(root / relative, expected)
     audit_path = root / SOURCE_AUDIT
     verify(audit_path, lock["source_audit"])
     validate_source_audit(json.loads(audit_path.read_text(encoding="utf-8")), root)

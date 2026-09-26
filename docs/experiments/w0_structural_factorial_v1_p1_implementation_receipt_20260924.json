@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "protocol": "w0-structural-factorial-v1-es30p15-20260923",
+  "phase": "p1_synthetic_cpu_implementation",
+  "date": "2026-09-24",
+  "branch": "codex/w0-structural-factorial-v1",
+  "source_baseline_commit": "e911efd",
+  "matrix": {
+    "arms": 8,
+    "seeds": [20260811, 20260812, 20260813],
+    "planned_formal_runs": 24
+  },
+  "implemented": [
+    "eight-arm native model factory",
+    "strict experiment specification and W0-derived configs",
+    "native CRD experiment adapter",
+    "early-stopping history audit",
+    "conditional/main/two-way/three-way factorial contrasts",
+    "Local-RR tail, subject, denominator and simplification summaries",
+    "exclusive success/failure lifecycle",
+    "implementation lock preparation and verification",
+    "check-config, prepare-lock, check-lock and describe CLI"
+  ],
+  "files": {
+    "configs/w0_structural_factorial_v1/experiment.yaml": {
+      "size_bytes": 2472,
+      "sha256": "8f5f2ffc6cbe5aa76c424b5f020e440a545ee0f4ecd731c3f893159dda050d90"
+    },
+    "resp_train/paper_evidence/w0_structural_factorial_v1_model.py": {
+      "size_bytes": 8759,
+      "sha256": "e0acf8f22ceb30d48525dac1f4f7468937b5236379485794a8b0123aa4717a2d"
+    },
+    "resp_train/paper_evidence/w0_structural_factorial_v1.py": {
+      "size_bytes": 39208,
+      "sha256": "0c1427be9d77e9de6d680afbba01c18209e239b97491157206c0486073921645"
+    },
+    "scripts/run_w0_structural_factorial_v1.py": {
+      "size_bytes": 2135,
+      "sha256": "bada883fa74445ebe0e92b5707c9270c73623ffc8e7f756b307007d5ac41ee92"
+    },
+    "tests/test_w0_structural_factorial_v1.py": {
+      "size_bytes": 15755,
+      "sha256": "8bcddb7040654d0355af0d6dba6bdfe16548883422f16bb77116ac6a098a582d"
+    },
+    "docs/experiments/w0_structural_factorial_v1_protocol_20260923.md": {
+      "size_bytes": 33430,
+      "sha256": "aa13cb9802e2ef213ac53bff24305f9492f2469a822752c3a734520121d56656"
+    }
+  },
+  "validation": {
+    "python_compile": "passed",
+    "check_config": "passed",
+    "describe": "passed",
+    "pytest": {
+      "command_scope": [
+        "tests/test_w0_structural_factorial_v1.py",
+        "tests/test_crd_tf_v1_model.py",
+        "tests/test_resp_temporal_v1_models.py"
+      ],
+      "passed": 50,
+      "failed": 0,
+      "duration_seconds": 19.90
+    }
+  },
+  "access": {
+    "raw_waveform_read": false,
+    "cache_array_read": false,
+    "checkpoint_tensor_read": false,
+    "real_data_smoke_run": false,
+    "gpu_run": false,
+    "formal_training_run": false,
+    "test_split_read": false
+  },
+  "next_gate": "create implementation lock from a clean worktree, then request P2 authorization"
+}

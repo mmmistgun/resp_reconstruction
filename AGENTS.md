@@ -10,6 +10,8 @@
 
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E7 聚合前尺度编码 × 尺度聚合：本轮 validation 与 research-test 均已完成；当前状态、协议、结果和来源锁统一由 `docs/experiments/e7_scale_encoding_aggregation_test_results_20260926.md` 路由。
+- W0 三因素结构对照 v1：train/validation 与 research-test 均已完成并关闭；当前状态、结果、协议与冻结身份统一由 `docs/experiments/w0_structural_factorial_v1_closeout_20260925.md` 路由。
+- E8 FiLM 条件末端 × 波形解码端：formal、validation 与固定36-checkpoint research-test 均已完成并关闭；最终状态、结果、来源与冻结身份统一由 `docs/experiments/e8_film_decoder_redesign_v1_closeout_20260926.md` 路由。
 
 先确定任务所属实验，再读取对应协议中与当前任务有关的章节；不要默认把某一协议应用到整个仓库。
 

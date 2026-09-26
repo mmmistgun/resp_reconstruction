@@ -276,6 +276,39 @@ summary 固定案例身份后，render-cases --summary ... --device cuda:0 只�
 batch-128 上下文并保存选中窗口；最后用 finalize --summary ... --cases ... 生成中文结论与闭合回执。
 产物根为主仓库的 runs/w0_cwt_film_behavior_v1/；每阶段排他创建 attempt，失败现场保留。
 
+## E8：FiLM 条件末端 × 波形解码端
+
+状态：P0–P6 全部完成并关闭。十二个模型组成
+`4 condition refiners × 3 decoders` 完整矩阵；三 seed 共 36 个 formal cell、P5 validation
+汇总、36 个固定 checkpoint research-test 评价及完整汇总均已冻结。最终状态与结论统一由
+`docs/experiments/e8_film_decoder_redesign_v1_closeout_20260926.md` 路由。
+
+以下检查与执行命令只保留为 provenance；已完成阶段不得重复执行：
+
+```bash
+./.venv/bin/python -m pytest tests/test_e8_film_decoder_redesign_v1.py -q
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py check-p1
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py describe
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py formal-plan
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py \
+  gpu-acceptance --device cuda:0
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1.py \
+  benchmark --device cuda:0
+./.venv/bin/python scripts/summarize_e8_film_decoder_redesign_v1.py \
+  --confirm-p5-summary
+```
+
+Formal 执行合同见
+`docs/experiments/e8_film_decoder_redesign_v1_p3_formal_protocol_20260925.md`；validation 输出与证据边界见
+`docs/experiments/e8_film_decoder_redesign_v1_p5_validation_summary_protocol_20260926.md`，结果见
+`docs/experiments/e8_film_decoder_redesign_v1_validation_results_20260926.md`。
+
+E8 research-test 专项入口为 `scripts/run_e8_film_decoder_redesign_v1_test.py`，协议见
+`docs/experiments/e8_film_decoder_redesign_v1_research_test_protocol_20260926.md`。36-checkpoint allowlist 已冻结为
+`runs/e8_film_decoder_redesign_v1/research_test/allowlist/allowlist_8b67c189b10c_20260926T083406Z_b300e95e53bc`，SHA-256 为
+`76ef0c8ac05cdddcf89caab46abb0a03b78d0d3e72d09b6ed5773521dc2576db`。生成阶段未读取 test arrays。
+36 项评价与完整汇总均已完成；research-test 入口不得再次执行。
+
 ## E7：聚合前尺度编码 × 尺度聚合
 
 状态：P2 已完成。独立六臂模型、严格配置、early-stop 回放、析因汇总、表征诊断、

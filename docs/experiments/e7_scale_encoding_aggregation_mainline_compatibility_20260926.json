@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "protocol": "e7-scale-encoding-aggregation-factorial-v1-20260924",
+  "status": "mainline_compatibility_locked",
+  "scope": "closed_experiment_mainline_coexistence",
+  "scientific_contract_changed": false,
+  "experiment_rerun_authorized": false,
+  "base_implementation_lock": {
+    "path": "docs/experiments/e7_scale_encoding_aggregation_p1_implementation_lock_20260924.json",
+    "sha256": "299448a12c4006f2f918f56645000838f83f044fbbf31d7cc281faa6540b11e1"
+  },
+  "reason": "主分支合入后续 W0/E8 实验时，共享 trainer 增加可覆盖数据构造入口及阶段计时字段；E7 已冻结科学合同与历史产物保持不变。",
+  "amended_code_files": {
+    "resp_train/paper_evidence/e7_scale_encoding_aggregation.py": {
+      "base": {
+        "size_bytes": 40405,
+        "sha256": "9f9f0b706fa8b18a48bf96bc7b4a065fc482dbdc8996c3929c70a87479639468"
+      },
+      "revised": {
+        "size_bytes": 42027,
+        "sha256": "1fe40024538f4472b2d27ec9f875d9487ee2839757bf586a88bd8cfbc494ad15"
+      }
+    },
+    "resp_train/crd/experiment.py": {
+      "base": {
+        "size_bytes": 25621,
+        "sha256": "94f6302b93ca61459f61403a6e264068d3d57fdf1966a0774a0023dc3b497e39"
+      },
+      "revised": {
+        "size_bytes": 25959,
+        "sha256": "be1f4e24ea850c32bb815bb3ee5b36403b84d5bd0de103c33fcd1324156c50eb"
+      }
+    }
+  }
+}

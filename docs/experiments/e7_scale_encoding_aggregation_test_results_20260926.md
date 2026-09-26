@@ -36,6 +36,9 @@ Summary manifest SHA-256 为 `197b266d73ed6fc8bbe45950c4ffb5c77e5d0132f3e444dcec
 
 18 个 cell 均完成质量验收，joint prediction 与 envelope Spearman prediction degeneration 计数均为零。全部评价使用提交 `27e1d37f0b92d03fac81efb5a2cf7adbd07cdcfc`、同一 GPU/软件环境和干净工作树。
 
+主分支合入后续结构实验后，共享 trainer 的增量接口由
+`e7_scale_encoding_aggregation_mainline_compatibility_20260926.json` 固定。该兼容记录只允许已列出的两个源码身份共存，不改变 E7 科学合同、历史产物或上述运行提交，也不开放重跑。
+
 ## 3. 六臂三 seed 均值
 
 四项 error 越低越好，PCC 越高越好。
@@ -84,4 +87,3 @@ Research-test 的个别属性方向与 validation 有变化，例如 S1-MEAN 的
 ## 7. 证据边界
 
 本轮新增 `41,580` 条逐窗口指标，test split 包含 2,310 个窗口和 8 个 `samp_id`。该 split 已参与多个历史科研阶段，因此本结果属于复用 research-test 上的开发性描述。Validation 的 checkpoint 选择、容差、指标和结论在 test 访问前已冻结，test 结果没有参与重选或训练调整。
-
