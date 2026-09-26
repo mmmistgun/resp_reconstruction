@@ -2,7 +2,7 @@
 
 日期：2026-09-26。协议 ID：`e8-film-decoder-redesign-factorial-v1-20260925`。
 
-状态：**36/36 个 formal train/validation cell 已完成；P5 一次性汇总入口已实现并完成 28 项 CPU 定向测试，等待用户执行。Research-test 未开放。**
+状态：**36/36 个 formal train/validation cell 与一次性 P5 汇总均已完成并冻结；当前结果入口为 `e8_film_decoder_redesign_v1_validation_results_20260926.md`。Research-test 未开放。**
 
 ## 1. 输入门控
 

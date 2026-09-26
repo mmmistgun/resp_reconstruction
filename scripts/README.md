@@ -305,7 +305,7 @@ P2 只使用 synthetic tensors；在干净提交上由用户执行：
 P2 收口后，formal 入口与完整命令见
 `docs/experiments/e8_film_decoder_redesign_v1_p3_formal_protocol_20260925.md`。Formal 必须先在干净提交上生成并提交唯一 execution lock；research-test 仍未开放。
 
-36/36 formal 完成后的 P5 validation 汇总入口为：
+36/36 formal 与 P5 validation 汇总均已完成；以下命令只保留 provenance，不得重复执行：
 
 ```bash
 ./.venv/bin/python scripts/summarize_e8_film_decoder_redesign_v1.py \
@@ -313,7 +313,8 @@ P2 收口后，formal 入口与完整命令见
 ```
 
 完整输出与证据边界见
-`docs/experiments/e8_film_decoder_redesign_v1_p5_validation_summary_protocol_20260926.md`。
+`docs/experiments/e8_film_decoder_redesign_v1_p5_validation_summary_protocol_20260926.md`，结果见
+`docs/experiments/e8_film_decoder_redesign_v1_validation_results_20260926.md`。
 
 ## E7：聚合前尺度编码 × 尺度聚合
 
