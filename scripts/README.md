@@ -316,6 +316,18 @@ P2 收口后，formal 入口与完整命令见
 `docs/experiments/e8_film_decoder_redesign_v1_p5_validation_summary_protocol_20260926.md`，结果见
 `docs/experiments/e8_film_decoder_redesign_v1_validation_results_20260926.md`。
 
+E8 research-test 专项入口为 `scripts/run_e8_film_decoder_redesign_v1_test.py`，协议见
+`docs/experiments/e8_film_decoder_redesign_v1_research_test_protocol_20260926.md`。当前只允许：
+
+```bash
+./.venv/bin/python scripts/run_e8_film_decoder_redesign_v1_test.py \
+  prepare-allowlist
+```
+
+该命令固定全部 36 个 validation-selected checkpoint，只读取 test cache manifest，不读取
+test arrays。评价与汇总必须等待 allowlist 冻结及用户再次明确授权，并显式传入
+`--confirm-research-test`。
+
 ## E7：聚合前尺度编码 × 尺度聚合
 
 状态：P2 已完成。独立六臂模型、严格配置、early-stop 回放、析因汇总、表征诊断、

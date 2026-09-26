@@ -2,7 +2,7 @@
 
 日期：2026-09-25。协议 ID：`e8-film-decoder-redesign-factorial-v1-20260925`。
 
-状态：**P0–P5 已完成，36/36 formal 与完整 validation 汇总已冻结；当前结果入口为 `e8_film_decoder_redesign_v1_validation_results_20260926.md`。Research-test 尚未开放。**
+状态：**P0–P5 已完成，36/36 formal 与完整 validation 汇总已冻结；P6 research-test 专项代码与协议已实现，当前只开放 36-checkpoint allowlist 生成，不授权 test 数组访问。**
 
 独立开发位置：
 
@@ -238,6 +238,6 @@ P2 只使用确定性 synthetic tensor，不读取 dataset index、真实 wavefo
 | P3 | 实现身份冻结与 36-cell formal 入口 | 已完成 |
 | P4 | 36 次 train/validation | 已完成；36/36 |
 | P5 | 完整 validation 汇总与冻结 | 已完成并冻结 |
-| P6 | Research-test 专项协议、allowlist 与固定 checkpoint 评价 | 待 P5，且需当次用户授权 |
+| P6 | Research-test 专项协议、allowlist 与固定 checkpoint 评价 | 专项代码已实现；allowlist 待生成，test 访问未授权 |
 
 本协议当前不授权独立测试集访问。E8 的 test 若未来开放，只能评价 P5 前已冻结的全部 validation-selected checkpoints；test 不参与 early stopping、checkpoint 选择、结构筛选或阈值修改。
