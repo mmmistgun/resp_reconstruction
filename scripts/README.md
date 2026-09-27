@@ -19,6 +19,20 @@
 - 独立测试集：现有 `test` 可在阶段性整理后重复评价，并可形成后续独立科研问题；不得用于重选既有run的epoch/checkpoint。
 - CRD 训练与普通 `eval_crd.py` 仍只读 train/validation；S1C 只允许 candidate lock 中的 12 个 checkpoint 通过专用入口各读取一次现有 research-test。
 
+## W0 测试集定性导出
+
+入口：`scripts/export_w0_test_qualitative.py`；固定原始 W0 seed `20260812`、epoch `15`，
+全量 2310 test windows，F0 固定呼吸频带与 IEWT 对照。
+[专项协议与运行命令](../docs/experiments/w0_test_qualitative_export_plan_20260927.md)说明完整数据合同和验收条件。
+
+- `export --output <新目录> --device cuda:0 --confirm-research-test-export`：保存预测、CWT、FiLM 张量与统计、RR/包络轨迹和逐窗口指标。真实数据/GPU 导出由用户执行。
+- `render --source <完成的导出目录> --output <新绘图目录>`：离线生成四联图、FiLM/CWT 附图、轨迹附图与可检索 `index.html`；默认全部窗口 PNG。
+- `render` 可指定 `--rows <row_id> ... --zoom 30 60`，从保存文件生成 PNG 局部放大图。
+- 快速 synthetic CPU 检查：`OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 ./.venv/bin/python -m pytest tests/test_w0_test_qualitative.py -q`。
+
+导出与绘图都拒绝覆盖已有目录；全量 FiLM 未压缩约 12.8 GB，建议为导出预留至少 20 GB，图形另计。
+单 seed 按已有 test 表现选择用于定性展示；模型性能仍按已有三 seed 结果报告。
+
 ## ADV 融合方式 × 位置 v1
 
 当前状态：六组工程验收、18组formal、validation与research-test及完整汇总均已完成并关闭；
