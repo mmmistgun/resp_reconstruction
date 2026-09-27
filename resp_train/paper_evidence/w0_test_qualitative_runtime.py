@@ -7,7 +7,6 @@ import html
 import json
 import shutil
 import subprocess
-import traceback
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -73,6 +72,177 @@ def finish(output: Path, receipt: dict[str, Any]) -> None:
         "files": {str(p.relative_to(output)): {"size_bytes": p.stat().st_size, "sha256": sha256(p)}
                   for p in sorted(output.rglob("*")) if p.is_file()},
     })
+
+
+def window_index(rows: pd.DataFrame, metrics: pd.DataFrame) -> pd.DataFrame:
+    index = rows[["dataset_row_id", "samp_id", "window_start_s", "window_end_s"]].copy()
+    index["file"] = index.dataset_row_id.map(lambda value: f"windows/row_{int(value)}.npz")
+    for method in METHODS:
+        view = metrics.loc[metrics.method == method, ["dataset_row_id", *PRIMARY]].rename(
+            columns={key: f"{method}_{key}" for key in PRIMARY})
+        index = index.merge(view, on="dataset_row_id", validate="one_to_one")
+    if len(index) != len(rows):
+        raise ValueError("指标表缺少窗口")
+    for method in ("F0", "IEWT"):
+        for key in PRIMARY:
+            index[f"W0_minus_{method}_{key}"] = index[f"W0_{key}"] - index[f"{method}_{key}"]
+    return index
+
+
+def anchor_summary(deltas: pd.DataFrame) -> pd.DataFrame:
+    """回放误差只作描述性报告；数据身份与有限性由独立检查保证。"""
+    values = deltas.assign(signed_delta=deltas.observed - deltas.expected)
+    return values.groupby("metric", sort=False).agg(
+        windows=("abs_delta", "size"), max_abs_delta=("abs_delta", "max"),
+        mean_abs_delta=("abs_delta", "mean"), mean_signed_delta=("signed_delta", "mean"),
+        within_reference_tolerance=("within_atol", "sum"),
+    ).reset_index()
+
+
+def saved_origin(output: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """从已保存配置、源码和访问元数据核对来源，不打开原始信号/cache/checkpoint。"""
+    from omegaconf import OmegaConf
+    baseline, test, entry = sources()
+    execution = json.loads((output / "execution.json").read_text())
+    access = json.loads((output / "access_started.json").read_text())
+    if (execution["seed"] != SEED or execution["epoch"] != EPOCH
+            or access["protocol"] != PROTOCOL or access["seed"] != SEED
+            or access["checkpoint"] != baseline["checkpoint"]
+            or access["source_locks"] != SOURCE_LOCKS or access["cache_root"] != test["cache_root"]):
+        raise ValueError("保存的运行/访问来源身份不一致")
+    verify(output / "training_config.yaml", baseline["config"])
+    original = OmegaConf.load(output / "training_config.yaml")
+    resolved = OmegaConf.load(output / "resolved_config.yaml")
+    original.training.device = resolved.training.device
+    original.training.show_progress = False
+    original.data.preload_windows = False
+    original.data.tf_research_test_cache_path = test["cache_root"]
+    if OmegaConf.to_container(original, resolve=True) != OmegaConf.to_container(resolved, resolve=True):
+        raise ValueError("导出配置与冻结训练配置不一致")
+    # 使用 Git blob 身份验证当时保存的源码，当前修复不改变旧源码快照。
+    commit = str(execution["git_commit"])
+    if len(commit) != 40 or any(c not in "0123456789abcdef" for c in commit):
+        raise ValueError("运行 commit 格式错误")
+    tree = subprocess.check_output(["git", "ls-tree", "-r", commit], cwd=ROOT, text=True)
+    tracked = {line.split("\t", 1)[1]: line.split()[2] for line in tree.splitlines()}
+    snapshots = [p for p in (output / "source_code").rglob("*") if p.is_file()]
+    required = {name for name in tracked if name.startswith("resp_train/") and name.endswith(".py")}
+    required.update({"scripts/export_w0_test_qualitative.py",
+                     "docs/experiments/w0_test_qualitative_export_plan_20260927.md"})
+    observed = {str(p.relative_to(output / "source_code")) for p in snapshots}
+    if observed != required:
+        raise ValueError("源码快照文件集合不一致")
+    for path in snapshots:
+        raw = path.read_bytes()
+        blob = hashlib.sha1(f"blob {len(raw)}\0".encode() + raw).hexdigest()
+        if blob != tracked[str(path.relative_to(output / "source_code"))]:
+            raise ValueError(f"保存源码与运行 commit 不一致: {path}")
+    reference_file = entry["baseline_test"]["research_test_metrics.csv"]
+    verify(Path(reference_file["path"]), reference_file)
+    reference = pd.read_csv(reference_file["path"])
+    rows = pd.read_csv(output / "test_rows.csv")
+    check_rows(rows, reference, test["row_order_sha256"])
+    if set(rows.samp_id.astype(int)) & set(entry["development_samp_ids"]):
+        raise ValueError("test 与开发主体交叉")
+    return reference, {
+        "source_locks": SOURCE_LOCKS, "checkpoint_identity": baseline["checkpoint"],
+        "reference_metrics": reference_file, "export_commit": commit,
+        "saved_code_matches_commit": True, "saved_config_matches_source": True,
+        "original_source_bytes_rechecked": False,
+        "provenance_basis": "saved config/code/access metadata and frozen reference metrics",
+    }
+
+
+def validate_saved_arrays(arrays: dict[str, np.ndarray], row_id: int) -> None:
+    """检查离线完整性；缺失 RR 必须有对应有效性标记。"""
+    shapes = {"bcg": (18000,), "waveforms": (4, 18000), "canonical_waveforms": (4, 18000),
+              "cwt_w": (97, 360), "local_rr_bpm": (4, 9), "local_rr_valid": (4, 9),
+              "local_rr_target_eligible": (9,), "local_rr_time_s": (9,),
+              "log_rms_envelopes": (4, 35), "centered_log_rms_envelopes": (4, 35),
+              "envelope_time_s": (35,), "rr_peak_valid_mask": (18000,), "latent_low_energy": (1800,)}
+    shapes.update({k: (96, 1800) for k in ("gamma_raw", "beta_raw", "g", "b", "z", "z_prime", "scale_delta", "total_delta")})
+    shapes.update({f"r_{k}_time": (1800,) for k in ("scale", "shift", "total")})
+    if int(arrays["dataset_row_id"]) != row_id or float(arrays["fs_hz"]) != 100:
+        raise ValueError(f"保存窗口身份或采样率错误: {row_id}")
+    for key, shape in shapes.items():
+        if arrays[key].shape != shape:
+            raise ValueError(f"保存数组 shape 错误: row={row_id}, {key}")
+    for key, value in arrays.items():
+        if value.dtype.kind == "O":
+            raise TypeError("禁止 object 数组")
+        if value.dtype.kind in "fc" and (np.isinf(value).any() or (key != "local_rr_bpm" and np.isnan(value).any())):
+            raise FloatingPointError(f"保存数组非有限: row={row_id}, {key}")
+    if not np.array_equal(np.isfinite(arrays["local_rr_bpm"]), arrays["local_rr_valid"]):
+        raise ValueError("保存 RR 有效性标记不一致")
+    for prefix, shape in (("film_time_bin_", (36,)), ("film_channel_", (96,))):
+        keys = [key for key in arrays if key.startswith(prefix)]
+        if not keys or any(arrays[key].shape != shape for key in keys):
+            raise ValueError(f"FiLM 统计数组缺失或 shape 错误: {prefix}")
+
+
+def finalize(output: Path, *, command: str) -> Path:
+    """核验已导出的完整窗口并追加索引与完成清单，不运行模型。"""
+    output = output.resolve()
+    new_files = ("window_index.csv", "anchor_summary.csv", "source_manifest.json", "receipt.json", "artifact_manifest.json")
+    if any((output / name).exists() for name in new_files):
+        raise FileExistsError("收尾产物已存在，拒绝覆盖")
+    reference, origin = saved_origin(output)
+    before = {str(p.relative_to(output)): record(p) for p in output.rglob("*") if p.is_file()}
+    rows = pd.read_csv(output / "test_rows.csv")
+    metrics = pd.read_csv(output / "metrics.csv")
+    film = pd.read_csv(output / "film_statistics.csv")
+    if len(metrics) != len(rows) * 3 or set(metrics.method) != set(METHODS) or set(metrics.seed) != {SEED}:
+        raise ValueError("指标 method/seed/数量错误")
+    for method in METHODS:
+        part = metrics.loc[metrics.method == method]
+        if part.dataset_row_id.duplicated().any() or set(part.dataset_row_id) != set(rows.dataset_row_id):
+            raise ValueError("指标窗口集合错误")
+        for key in ("samp_id", "split", "coupling_state_id"):
+            actual = part.set_index("dataset_row_id").loc[rows.dataset_row_id, key].to_numpy()
+            if not np.array_equal(actual, rows[key].to_numpy()):
+                raise ValueError(f"指标身份错误: {key}")
+        if not np.isfinite(part[list(PRIMARY)].to_numpy(float)).all():
+            raise FloatingPointError("五主指标非有限")
+    if film.dataset_row_id.duplicated().any() or set(film.dataset_row_id) != set(rows.dataset_row_id):
+        raise ValueError("FiLM 统计窗口集合错误")
+    if not np.isfinite(film.select_dtypes(include=["number"]).to_numpy()).all():
+        raise FloatingPointError("FiLM 统计非有限")
+    deltas = anchor_deltas(metrics.loc[metrics.method == "W0"], reference)
+    saved_deltas = pd.read_csv(output / "anchor_deltas.csv")
+    pd.testing.assert_frame_equal(deltas, saved_deltas, check_dtype=False, check_exact=False, rtol=1e-12, atol=1e-14)
+    expected_files = {f"row_{int(i)}.npz" for i in rows.dataset_row_id}
+    if {p.name for p in (output / "windows").iterdir()} != expected_files:
+        raise ValueError("窗口文件集合不完整或存在额外文件")
+    with np.load(output / "coordinates.npz", allow_pickle=False) as blob:
+        shapes = {"cwt_frequency_hz": (97,), "cwt_scales": (97,), "cwt_time_s": (360,),
+                  "latent_time_s": (1800,), "film_time_bin_centers_s": (36,)}
+        for key, shape in shapes.items():
+            if blob[key].shape != shape or not np.isfinite(blob[key]).all():
+                raise ValueError(f"坐标 shape/finite 错误: {key}")
+    for i, row_id in enumerate(rows.dataset_row_id):
+        with np.load(output / "windows" / f"row_{int(row_id)}.npz", allow_pickle=False) as blob:
+            validate_saved_arrays(dict(blob), int(row_id))
+        if (i + 1) % 128 == 0 or i + 1 == len(rows):
+            print(f"validated {i + 1}/{len(rows)} saved windows", flush=True)
+    for item in before.values():
+        verify(Path(item["path"]), item)
+    code_directory = output / "finalization_code"
+    code_directory.mkdir(exist_ok=False)
+    for path in (Path(__file__), Path(__file__).with_name("w0_test_qualitative.py"),
+                 ROOT / "scripts/export_w0_test_qualitative.py",
+                 ROOT / "docs/experiments/w0_test_qualitative_export_plan_20260927.md"):
+        shutil.copy2(path, code_directory / path.name)
+    window_index(rows, metrics).to_csv(output / "window_index.csv", index=False)
+    anchor_summary(deltas).to_csv(output / "anchor_summary.csv", index=False)
+    write_json(output / "source_manifest.json", {**origin, "saved_artifacts": before})
+    finish(output, {"phase": "export", "seed": SEED, "epoch": EPOCH, "rows": len(rows),
+                    "subjects": int(rows.samp_id.nunique()), "acceptance": "qualitative-export-v2",
+                    "anchor_role": "descriptive", "anchor_atol": ANCHOR_ATOL,
+                    "anchor_max_abs_delta": float(deltas.abs_delta.max()), "finalized_offline": True,
+                    "finalize_command": command, "original_dataset_read_during_finalize": False,
+                    "model_inference_during_finalize": False,
+                    "finalizer_code": record(Path(__file__))})
+    return output
 
 
 def export(output: Path, *, device: str, command: str) -> Path:
@@ -299,8 +469,7 @@ def export(output: Path, *, device: str, command: str) -> Path:
         pd.concat(film_frames, ignore_index=True).to_csv(output / "film_statistics.csv", index=False)
         deltas = anchor_deltas(metrics.loc[metrics.method == "W0"], reference)
         deltas.to_csv(output / "anchor_deltas.csv", index=False)
-        if not deltas.within_atol.all():
-            raise RuntimeError(f"冻结 test 指标回放失败，最大差值 {deltas.abs_delta.max():.8g}，容差 {ANCHOR_ATOL}")
+        anchor_summary(deltas).to_csv(output / "anchor_summary.csv", index=False)
         index = pd.DataFrame(index_records)
         for method in METHODS:
             view = metrics.loc[metrics.method == method, ["dataset_row_id", *PRIMARY]].rename(
@@ -314,11 +483,11 @@ def export(output: Path, *, device: str, command: str) -> Path:
             verify(Path(item["path"]), item)
         write_json(output / "source_manifest.json", {"source_locks": SOURCE_LOCKS, "files": records, "code": code_records})
         finish(output, {"phase": "export", "seed": SEED, "epoch": EPOCH, "rows": COUNT,
+                        "acceptance": "qualitative-export-v2", "anchor_role": "descriptive",
                         "subjects": 8, "anchor_atol": ANCHOR_ATOL,
                         "anchor_max_abs_delta": float(deltas.abs_delta.max()),
                         "test_read": True, "model_inference": True, "training": False})
-    except BaseException as error:
-        write_json(output / "failure.json", {"status": "failed", "error": str(error), "traceback": traceback.format_exc()})
+    except BaseException:
         raise
     return output
 
@@ -377,7 +546,6 @@ def render(source: Path, output: Path, *, row_ids: list[int] | None,
                         "source_manifest_sha256": sha256(source / "artifact_manifest.json"),
                         "rows": index.dataset_row_id.astype(int).tolist(), "format": "png",
                         "zoom": zoom, "original_dataset_read": False, "model_inference": False})
-    except BaseException as error:
-        write_json(output / "failure.json", {"status": "failed", "error": str(error), "traceback": traceback.format_exc()})
+    except BaseException:
         raise
     return output

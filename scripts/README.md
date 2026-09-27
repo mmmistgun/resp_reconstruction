@@ -28,6 +28,7 @@
 - `export --output <新目录> --device cuda:0 --confirm-research-test-export`：保存预测、CWT、FiLM 张量与统计、RR/包络轨迹和逐窗口指标。真实数据/GPU 导出由用户执行。
 - `render --source <完成的导出目录> --output <新绘图目录>`：离线生成四联图、FiLM/CWT 附图、轨迹附图与可检索 `index.html`；默认全部窗口 PNG。
 - `render` 可指定 `--rows <row_id> ... --zoom 30 60`，从保存文件生成 PNG 局部放大图。
+- `finalize --source <已有完整窗口导出目录>`：核验保存产物，追加描述性回放差异汇总、窗口索引和完成清单；不运行模型。验收采用 `qualitative-export-v2`，身份、完整性和非有限值检查保持严格。
 - 快速 synthetic CPU 检查：`OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 ./.venv/bin/python -m pytest tests/test_w0_test_qualitative.py -q`。
 
 导出与绘图都拒绝覆盖已有目录；全量 FiLM 未压缩约 12.8 GB，建议为导出预留至少 20 GB，图形另计。

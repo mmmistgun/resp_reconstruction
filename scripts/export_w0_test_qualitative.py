@@ -19,6 +19,8 @@ def main() -> None:
     export_parser.add_argument("--output", type=Path, required=True)
     export_parser.add_argument("--device", default="cuda:0")
     export_parser.add_argument("--confirm-research-test-export", action="store_true")
+    finalize_parser = sub.add_parser("finalize", help="检查已有完整导出并生成离线索引与完成清单")
+    finalize_parser.add_argument("--source", type=Path, required=True)
     render_parser = sub.add_parser("render", help="仅从导出文件重绘")
     render_parser.add_argument("--source", type=Path, required=True)
     render_parser.add_argument("--output", type=Path, required=True)
@@ -27,10 +29,12 @@ def main() -> None:
     args = parser.parse_args()
     if args.phase == "export" and not args.confirm_research_test_export:
         parser.error("真实 test 导出必须提供 --confirm-research-test-export")
-    from resp_train.paper_evidence.w0_test_qualitative_runtime import export, render
+    from resp_train.paper_evidence.w0_test_qualitative_runtime import export, finalize, render
     command = shlex.join([sys.executable, *sys.argv])
     if args.phase == "export":
         result = export(args.output, device=args.device, command=command)
+    elif args.phase == "finalize":
+        result = finalize(args.source, command=command)
     else:
         result = render(args.source, args.output, row_ids=args.rows,
                         zoom=tuple(args.zoom) if args.zoom else None, command=command)

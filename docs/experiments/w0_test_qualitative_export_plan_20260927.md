@@ -2,7 +2,7 @@
 
 协议 ID：`w0-test-qualitative-export-v1-20260927`。日期：2026-09-27。
 
-状态：用户已接受单 seed、F0 + IEWT 对照及补充导出内容；代码与 synthetic CPU 定向验证已完成，真实 test 导出待用户执行。本专项仅导出固定模型的定性分析资料，不改变历史冻结结果。
+状态：完整 2310 窗口导出及 `qualitative-export-v2` 离线收尾已完成，PNG 绘图待用户执行。产物目录为 `runs/w0_test_qualitative_v1/seed_20260812_export_01`，完成状态见其中 `receipt.json` 与 `artifact_manifest.json`。本专项仅导出固定模型的定性分析资料，不改变历史冻结结果。
 
 ## 1. 固定范围
 
@@ -16,7 +16,7 @@
 
 1. 单 seed 采用上述来源，保留选择依据与既有 checkpoint epoch。
 2. 第二幅图采用现有 F0 固定呼吸频带，第三幅图采用已有协议化 Python IEWT。
-3. Codex 本次执行范围为实现、文档与 synthetic CPU 验证。真实数据推理和全量绘图由用户运行本协议命令。
+3. Codex 执行范围为实现、文档、synthetic CPU 验证及用户已授权的已有产物离线收尾。真实数据推理和全量绘图由用户运行本协议命令。
 4. `export` 入口必须显式传入 `--confirm-research-test-export`；只开放本协议的固定 test 访问。绘图入口仅读取完成的导出产物。
 
 ## 2. 已有实现入口
@@ -41,7 +41,9 @@
 - 指标表：逐窗口、逐方法、逐 seed 的五主指标与资格/退化标记；绘图读取此表。基线与 W0 使用相同窗口和评价时段。
 - 来源：resolved config、命令、代码身份、checkpoint/cache/index/source metrics 的身份、运行环境、访问回执、完成/失败状态及 artifact manifest。
 
-同一次 W0 forward 捕获预测与 FiLM。固定 batch=128、尾 batch=6、BF16 AMP、eval + inference_mode、shuffle=false；不补齐或更换 batch。五主指标使用 `evaluate_task_predictions(..., include_test_only=False)`。导出后按 row 对齐既有冻结 test metrics，逐窗口×五主指标绝对容差固定为 `1e-6`，rtol=0，并核对 target eligibility。失败保存完整差值及现场，不能在看到差异后放宽容差。
+同一次 W0 forward 捕获预测与 FiLM。固定 batch=128、尾 batch=6、BF16 AMP、eval + inference_mode、shuffle=false；不补齐或更换 batch。五主指标使用 `evaluate_task_predictions(..., include_test_only=False)`。导出后按 row 对齐既有冻结 test metrics，并核对 target eligibility。`1e-6` 作为描述性参考精度保留在差异表中；`qualitative-export-v2` 的完成条件为来源身份、完整性与有限性检查通过。差异统计不阻断定性导出，绘图使用本次保存波形对应的指标；历史论文汇总保持冻结。
+
+本修订由用户于 2026-09-27 明确确认。该决定改变导出验收规则，不改变数据、模型、核心指标或历史结论，也不将数值差异视为已确定的 BF16 原因。
 
 非有限 input/target/prediction/FiLM/五主指标显式失败；退化局部 RR 用 NaN 和显式 valid 标记表示，其原生指标仍按既有 39 bpm 惩罚计算，不删除样本。保存的局部 RR 可用 target eligibility 和 prediction validity 重建原生 Local RR MAE。
 
@@ -108,11 +110,22 @@ FiLM 数值描述条件调制实际发生的强度和变化；仅凭 gamma/beta 
 - `coordinates.npz`：CWT 实际频率、scales、池化中心时间，latent 名义中心、FiLM 5 s 时间块中心。
 - `metrics.csv`：2310×3=6930 行，三种方法完整逐窗口指标，IEWT 分块边界与选中模式。
 - `film_statistics.csv`、`window_index.csv`：各 2310 行；`test_rows.csv` 保存来源、信号键、对齐与质量元数据。
-- `anchor_deltas.csv`：2310×5=11550 行，全部 `within_atol=true`。
+- `anchor_deltas.csv`：2310×5=11550 行，保存逐窗口原值与回放差异；`anchor_summary.csv` 保存逐指标最大/平均绝对差、均值有符号差与参考精度内的数量。
 - `source_manifest.json`、`source_code/`、配置、环境、`access_started.json`、`receipt.json`、`artifact_manifest.json`：复现与完整性信息。
 - 全量绘图：6930 张 PNG（三类图×2310窗口）；选定窗口可另存局部放大图到独立绘图目录。
 
-只有 `artifact_manifest.json` 完成且 `receipt.json` 标记 complete 才算成功；异常写入 `failure.json` 并保留已产生文件。绘图会校验所读文件哈希并拒绝不完整导出。失败目录保留，修复后的独立执行使用新目录名。
+只有 `artifact_manifest.json` 完成且 `receipt.json` 标记 complete 才算成功。异常直接报错退出，已生成数据保持原样。绘图会校验所读文件哈希并拒绝不完整导出。
+
+### 已有产物离线收尾
+
+```bash
+./.venv/bin/python scripts/export_w0_test_qualitative.py finalize \
+  --source runs/w0_test_qualitative_v1/seed_20260812_export_01
+```
+
+`finalize` 检查保存的训练配置、执行配置、源码快照与执行 commit、访问来源记录和冻结指标身份；检查完整窗口、FiLM 统计、数组 shape/finite、RR 有效性标记及指标 row/subject 对应关系。核验后追加窗口索引、差异汇总、来源清单、收尾代码快照和完成清单。已有窗口与指标不改写。
+
+该步骤只读取已保存导出和冻结指标表，不读取原始信号、cache 数组或 checkpoint，不重新推理。来源核验依据是已保存的配置/源码/访问元数据及冻结参考指标；本次离线收尾不能补证原导出未完成的原始 source bytes 首尾核验，此事实记录在 `source_manifest.json`。对已完成目录拒绝再次收尾。
 
 本次定向测试命令：
 
@@ -120,4 +133,4 @@ FiLM 数值描述条件调制实际发生的强度和变化；仅凭 gamma/beta 
 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 ./.venv/bin/python -m pytest tests/test_w0_test_qualitative.py -q
 ```
 
-真实 GPU 推理、指标回放一致性和全量图形仍须用户执行后验收；synthetic 测试不构成真实 test 完成记录。
+synthetic 测试不构成真实 test 完成记录。导出与离线收尾的实际完成状态以各目录的 receipt/manifest 为准；全量绘图由用户执行。

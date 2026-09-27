@@ -165,4 +165,46 @@ def test_offline_render_complete_export_and_tamper(sample, tmp_path):
     (source / "windows/row_7.npz").write_bytes(b"corrupted disposable fixture")
     with pytest.raises(RuntimeError, match="身份"):
         render(source, tmp_path / "tampered", row_ids=[7], zoom=None, command="synthetic")
-    assert (tmp_path / "tampered/failure.json").is_file()
+    assert (source / "windows/row_7.npz").read_bytes() == b"corrupted disposable fixture"
+
+
+def test_finalize_descriptive_deltas_and_complete_arrays(sample, tmp_path, monkeypatch):
+    from resp_train.paper_evidence import w0_test_qualitative_runtime as runtime
+    arrays, metrics = sample
+    source = tmp_path / "export"
+    (source / "windows").mkdir(parents=True)
+    metrics["seed"] = SEED
+    metrics["samp_id"] = 1
+    metrics["split"] = "test"
+    metrics["coupling_state_id"] = 2
+    frozen = metrics.loc[metrics.method == "W0"].copy()
+    frozen.loc[:, PRIMARY[0]] += .001
+    monkeypatch.setattr(runtime, "saved_origin", lambda _: (frozen, {"synthetic": True}))
+    pd.DataFrame([{"dataset_row_id": 7, "samp_id": 1, "split": "test", "coupling_state_id": 2,
+                   "window_start_s": 30, "window_end_s": 210}]).to_csv(source / "test_rows.csv", index=False)
+    metrics.to_csv(source / "metrics.csv", index=False)
+    pd.DataFrame([{"dataset_row_id": 7, "r_total": 0.1}]).to_csv(source / "film_statistics.csv", index=False)
+    anchor_deltas(metrics.loc[metrics.method == "W0"], frozen).to_csv(source / "anchor_deltas.csv", index=False)
+    coordinates = {key: arrays.pop(key) for key in ("cwt_frequency_hz", "latent_time_s")}
+    coordinates.update(cwt_scales=np.arange(97.), cwt_time_s=np.arange(360.)*.5,
+                       film_time_bin_centers_s=(np.arange(36)+.5)*5)
+    save_arrays(source / "coordinates.npz", coordinates)
+    arrays.update({key: np.zeros((96, 1800), dtype=np.float32) for key in
+                   ("gamma_raw", "beta_raw", "z", "z_prime", "scale_delta", "total_delta")})
+    arrays.update(rr_peak_valid_mask=np.ones(18000, dtype=bool), latent_low_energy=np.ones(1800, dtype=bool))
+    arrays.update(film_time_bin_r_total=np.zeros(36), film_channel_r_total=np.zeros(96))
+    save_arrays(source / "windows/row_7.npz", arrays)
+    # 缺失/非有限张量阻断完成；同一套完整数据允许产生描述性回放报告。
+    damaged = dict(arrays)
+    damaged["z"] = np.full((96, 1800), np.nan)
+    with pytest.raises(FloatingPointError):
+        runtime.validate_saved_arrays(damaged, 7)
+    with pytest.raises(KeyError):
+        runtime.validate_saved_arrays({k: v for k, v in arrays.items() if k != "z"}, 7)
+    assert runtime.finalize(source, command="synthetic finalize") == source
+    assert (source / "artifact_manifest.json").is_file()
+    summary = pd.read_csv(source / "anchor_summary.csv")
+    assert summary.max_abs_delta.max() == pytest.approx(.001)
+    assert len(pd.read_csv(source / "window_index.csv")) == 1
+    with pytest.raises(FileExistsError):
+        runtime.finalize(source, command="synthetic finalize")

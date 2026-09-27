@@ -23,7 +23,7 @@ PRIMARY = (
     "global_envelope_modulation_error", "lag_aware_signed_pcc",
 )
 METHODS = ("F0", "IEWT", "W0")
-# 沿用既有波形回放级别的严格误差检查，失败后保留产物用于诊断。
+# 逐窗口回放差异的参考精度，用于描述性统计。
 ANCHOR_ATOL = 1e-6
 
 
