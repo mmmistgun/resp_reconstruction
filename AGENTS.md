@@ -9,6 +9,8 @@
 ## 协议路由
 
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
+- E5 W0 时域前端替换：三 seed train/validation 与固定 checkpoint research-test 均已完成并关闭；当前状态、validation/test 结果与来源身份统一由 `docs/experiments/e5_temporal_frontend_closeout_20260927.md` 路由。
+- E6 20-Hz 学习解调前端：三 seed train/validation、效率记录与固定 checkpoint research-test 均已完成并关闭；当前状态与证据入口为 `docs/experiments/e6_temporal_frontend_closeout_20260924.md`。
 - E7 聚合前尺度编码 × 尺度聚合：本轮 validation 与 research-test 均已完成；当前状态、协议、结果和来源锁统一由 `docs/experiments/e7_scale_encoding_aggregation_test_results_20260926.md` 路由。
 - W0 三因素结构对照 v1：train/validation 与 research-test 均已完成并关闭；当前状态、结果、协议与冻结身份统一由 `docs/experiments/w0_structural_factorial_v1_closeout_20260925.md` 路由。
 - E8 FiLM 条件末端 × 波形解码端：formal、validation 与固定36-checkpoint research-test 均已完成并关闭；最终状态、结果、来源与冻结身份统一由 `docs/experiments/e8_film_decoder_redesign_v1_closeout_20260926.md` 路由。
@@ -23,6 +25,7 @@
 - 论文证据闭环：`docs/experiments/paper_evidence_closure_protocol_20260901.md`；center-30/60/90、research-test、P5、P6 等任务使用对应专项协议，存在 `supersedes` 或 v2 声明时按协议声明使用
 - ADV-v1 时间对齐双视图网络：本轮阶段已关闭；当前状态、执行协议、validation 与 research-test 结果及来源锁统一由 `docs/experiments/aligned_dual_view_v1_closeout_20260922.md` 路由。
 - ADV 融合方式 × 位置 v1：本轮train/validation与research-test均已完成并关闭；当前状态、协议、结果与来源锁统一由 `docs/experiments/adv_fusion_factorial_v1_closeout_20260923.md` 路由。
+- ADV 节律模块 v1：仅完成 CPU baseline 来源审计，未进入 GPU 验收、smoke、训练、validation 或 research-test，实验已关闭；证据边界、后续独立实验的研究问题覆盖与本地产物入口统一由 `docs/experiments/adv_rhythm_modules_v1_unexecuted_closeout_20260927.md` 路由。
 
 专项协议只在其明确作用域内覆盖总协议。协议发生冲突时，先核对任务身份、协议 ID、状态和日期；仍无法唯一确定时再询问用户。
 
