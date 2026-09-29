@@ -21,6 +21,9 @@
 
 ## 2. 已有实现入口
 
+统一窗口索引、案例清单、按需图类型选择和 R3 四条件干预见
+[按需定性分析协议](w0_qualitative_analysis_protocol_20260927.md)。新绘图按 `waveforms/conditioning/trajectories` 分类保存。
+
 | 功能 | 入口 | 复用范围 |
 |---|---|---|
 | W0 波形导出与绘图 | `resp_train/paper_evidence/p6_multi_attribute.py` 的 `export_p6_validation_waveforms` / `render_waveform_panel` | 参考数据关联、预测保存与指标回放方式；现有入口只允许预定 validation 样例 |

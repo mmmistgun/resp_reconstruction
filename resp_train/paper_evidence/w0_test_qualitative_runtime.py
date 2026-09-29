@@ -493,9 +493,16 @@ def export(output: Path, *, device: str, command: str) -> Path:
 
 
 def render(source: Path, output: Path, *, row_ids: list[int] | None,
-           zoom: tuple[float, float] | None, command: str) -> Path:
+           zoom: tuple[float, float] | None, command: str,
+           views: tuple[str, ...] = ("waveforms", "conditioning", "trajectories"),
+           cases: Path | None = None, channels: tuple[int, ...] | None = None) -> Path:
     """只读完成的导出；不回访数据集、cache 或模型。"""
     source, output = source.resolve(), output.resolve()
+    if cases is not None:
+        if row_ids is not None:
+            raise ValueError("rows 与 cases 不能同时指定")
+        from resp_train.paper_evidence.w0_qualitative_catalog import selection_rows
+        row_ids = selection_rows(cases, source)
     manifest = json.loads((source / "artifact_manifest.json").read_text())
     if manifest.get("protocol") != PROTOCOL or manifest.get("status") != "complete":
         raise ValueError("需要完整的本协议导出")
@@ -529,7 +536,7 @@ def render(source: Path, output: Path, *, row_ids: list[int] | None,
                 arrays = {**dict(blob), **coordinates}
             paths = render_window(arrays, metrics.loc[metrics.dataset_row_id == row_id], output / "figures",
                                   row_id=row_id, subject=int(row.samp_id), start_s=float(row.window_start_s),
-                                  zoom=zoom)
+                                  zoom=zoom, views=views, channels=channels)
             links = " ".join(f'<a href="{html.escape(str(p.relative_to(output)))}">{html.escape(p.stem.split("_", 2)[2])}.{p.suffix[1:]}</a>' for p in paths)
             table.append(f"<tr><td>{row_id}</td><td>{int(row.samp_id)}</td><td>{row.window_start_s:g}</td>"
                          f"<td>{row.W0_lag_aware_signed_pcc:.4f}</td><td>{row.W0_local_rr_mae_bpm:.4f}</td><td>{links}</td></tr>")
@@ -545,6 +552,8 @@ def render(source: Path, output: Path, *, row_ids: list[int] | None,
         finish(output, {"phase": "render", "command": command, "source": str(source),
                         "source_manifest_sha256": sha256(source / "artifact_manifest.json"),
                         "rows": index.dataset_row_id.astype(int).tolist(), "format": "png",
+                        "views": views, "cases": str(cases.resolve()) if cases else None,
+                        "channels": channels,
                         "zoom": zoom, "original_dataset_read": False, "model_inference": False})
     except BaseException:
         raise

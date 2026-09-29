@@ -130,11 +130,20 @@ def render_window(
     arrays: Mapping[str, np.ndarray], metrics: pd.DataFrame, destination: Path,
     *, row_id: int, subject: int, start_s: float,
     zoom: tuple[float, float] | None = None,
+    views: tuple[str, ...] = ("waveforms", "conditioning", "trajectories"),
+    channels: tuple[int, ...] | None = None,
 ) -> list[Path]:
     """四联图与两张诊断附图；只改变显示范围，保持波形时序与原始指标。"""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
+    if not views or len(set(views)) != len(views) or set(views) - {"waveforms", "conditioning", "trajectories"}:
+        raise ValueError("图类型无效或重复")
+    if channels is not None and (not channels or len(set(channels)) != len(channels)
+                                or min(channels) < 0 or max(channels) >= arrays['g'].shape[0]
+                                or 'conditioning' not in views):
+        raise ValueError("channels 必须是 conditioning 图中有效且不重复的通道编号")
 
     if set(metrics.method) != set(METHODS) or len(metrics) != 3:
         raise ValueError("绘图必须包含恰好三个方法")
@@ -149,8 +158,7 @@ def render_window(
         raise ValueError("zoom 必须在完整窗口内")
     bounds = zoom or (0.0, duration)
     suffix = "full" if zoom is None else f"zoom_{zoom[0]:g}_{zoom[1]:g}"
-    paths = [destination / f"row_{row_id}_{kind}_{suffix}.png"
-             for kind in ("waveforms", "conditioning", "trajectories")]
+    paths = [destination / kind / f"row_{row_id}_{kind}_{suffix}.png" for kind in views]
     if any(path.exists() for path in paths):
         raise FileExistsError("绘图目标已存在，拒绝覆盖")
     destination.mkdir(parents=True, exist_ok=True)
@@ -160,7 +168,10 @@ def render_window(
 
     def save(fig: Any, kind: str) -> None:
         try:
-            path = destination / f"row_{row_id}_{kind}_{suffix}.png"
+            if kind not in views:
+                return
+            path = destination / kind / f"row_{row_id}_{kind}_{suffix}.png"
+            path.parent.mkdir(parents=True, exist_ok=True)
             # exclusive-open 防止两个离线绘图进程互相覆盖。
             with path.open("xb") as handle:
                 fig.savefig(handle, format="png", dpi=160, bbox_inches="tight")
@@ -198,14 +209,18 @@ def render_window(
     axes[0].set_title("CWT network input: mean50(log1p(abs(CWT))); rows = ordered scales", fontsize=9)
     fig.colorbar(im, ax=axes[0], label="Feature value")
     for ax, key in zip(axes[1:3], ("g", "b"), strict=True):
-        im = ax.imshow(arrays[key], origin="lower", aspect="auto", cmap="RdBu_r", vmin=-.5, vmax=.5,
-                       extent=(0, duration, -.5, arrays[key].shape[0]-.5))
+        values = arrays[key] if channels is None else arrays[key][list(channels)]
+        im = ax.imshow(values, origin="lower", aspect="auto", cmap="RdBu_r", vmin=-.5, vmax=.5,
+                       extent=(0, duration, -.5, values.shape[0]-.5))
+        if channels is not None:
+            ticks = np.unique(np.linspace(0, len(channels)-1, min(12,len(channels))).astype(int))
+            ax.set_yticks(ticks, [str(channels[k]) for k in ticks])
         ax.set_ylabel("Latent channel")
         ax.set_title(f"Effective FiLM {key}", fontsize=9)
         fig.colorbar(im, ax=ax)
     for key, label in (("r_scale_time", "scale"), ("r_shift_time", "shift"), ("r_total_time", "total")):
         axes[3].plot(arrays["latent_time_s"], arrays[key], label=label, lw=.8)
-    axes[3].set_ylabel("Relative L2 strength")
+    axes[3].set_ylabel("Relative L2 (all channels)")
     axes[3].legend()
     axes[3].set_xlabel("Time within window (s)")
     for ax in axes:

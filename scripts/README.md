@@ -21,6 +21,10 @@
 
 ## W0 测试集定性导出
 
+按需入口新增 `index`、`select-cases`、`intervene-r3`、`render-intervention`；`render` 支持
+`--cases`、`--views` 和分类 PNG 目录。完整参数、案例选择规则、四条件科学合同与命令见
+[按需定性分析协议](../docs/experiments/w0_qualitative_analysis_protocol_20260927.md)。
+
 入口：`scripts/export_w0_test_qualitative.py`；固定原始 W0 seed `20260812`、epoch `15`，
 全量 2310 test windows，F0 固定呼吸频带与 IEWT 对照。
 [专项协议与运行命令](../docs/experiments/w0_test_qualitative_export_plan_20260927.md)说明完整数据合同和验收条件。

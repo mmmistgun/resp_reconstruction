@@ -142,6 +142,17 @@ def test_plot_rejects_mismatched_metrics(sample, tmp_path):
         render_window(arrays, metrics, tmp_path, row_id=7, subject=1, start_s=0, zoom=(90, 200))
 
 
+def test_selected_view_and_channels(sample, tmp_path):
+    arrays, metrics = sample
+    paths = render_window(arrays, metrics, tmp_path, row_id=7, subject=1, start_s=0,
+                          views=('conditioning',), channels=(0,12,40), zoom=(30,60))
+    assert len(paths)==1 and paths[0].parent.name=='conditioning'
+    assert not (tmp_path/'waveforms').exists()
+    with pytest.raises(ValueError, match='channels'):
+        render_window(arrays, metrics, tmp_path/'bad', row_id=7, subject=1, start_s=0,
+                      views=('conditioning',), channels=(96,))
+
+
 def test_offline_render_complete_export_and_tamper(sample, tmp_path):
     arrays, metrics = sample
     source = tmp_path / "export"
@@ -155,7 +166,8 @@ def test_offline_render_complete_export_and_tamper(sample, tmp_path):
     pd.DataFrame([index]).to_csv(source / "window_index.csv", index=False)
     finish(source, {"phase": "export", "seed": SEED})
     output = render(source, tmp_path / "plots", row_ids=[7], zoom=(30, 60), command="synthetic")
-    assert len(list((output / "figures").glob("*.png"))) == 3
+    assert len(list((output / "figures").rglob("*.png"))) == 3
+    assert {p.name for p in (output / "figures").iterdir()} == {"waveforms", "conditioning", "trajectories"}
     assert (output / "index.html").is_file()
     assert (output / "artifact_manifest.json").is_file()
     with pytest.raises(FileExistsError):
