@@ -3,6 +3,7 @@ from __future__ import annotations
 import gc
 from pathlib import Path
 
+import pandas as pd
 import pytest
 import torch
 from omegaconf import OmegaConf
@@ -340,12 +341,32 @@ def test_formal_runtime_compatibility_requires_same_stack_and_memory():
         formal._runtime_compatibility({**accepted, "torch": "other"}, accepted)
 
 
+def test_history_runtime_columns_are_optional_but_strict_when_present():
+    base = {"epoch": [1], "optimizer_update": [80]}
+    formal._validate_optional_history_runtime(pd.DataFrame(base))
+    with pytest.raises(ValueError, match="同时存在"):
+        formal._validate_optional_history_runtime(
+            pd.DataFrame({**base, "train_elapsed_seconds": [1.0]})
+        )
+    with pytest.raises(FloatingPointError, match="非有限"):
+        formal._validate_optional_history_runtime(
+            pd.DataFrame(
+                {
+                    **base,
+                    "train_elapsed_seconds": [float("nan")],
+                    "train_samples_per_second": [1.0],
+                }
+            )
+        )
+
+
 def test_formal_lifecycle_rejects_duplicate_completed_cell(tmp_path):
     lock_hash = "b" * 64
     parent = tmp_path / "formal" / "e9a_d96_h65" / "seed_20260811"
     with formal._formal_attempt(
         parent,
         lock_hash=lock_hash,
+        amendment_hash="c" * 64,
         arm="e9a_d96_h65",
         seed=20260811,
     ) as output:
@@ -362,6 +383,7 @@ def test_formal_lifecycle_rejects_duplicate_completed_cell(tmp_path):
         with formal._formal_attempt(
             parent,
             lock_hash=lock_hash,
+            amendment_hash="c" * 64,
             arm="e9a_d96_h65",
             seed=20260811,
         ):

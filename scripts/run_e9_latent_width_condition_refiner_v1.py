@@ -19,6 +19,7 @@ from resp_train.paper_evidence.e9_latent_width_condition_refiner_v1_engineering 
 from resp_train.paper_evidence.e9_latent_width_condition_refiner_v1_formal import (
     load_formal_lock,
     matrix_status,
+    prepare_formal_amendment,
     prepare_formal_lock,
     run_formal,
 )
@@ -36,6 +37,7 @@ def main() -> None:
     commands.add_parser("formal-plan", help="输出固定 18-cell 计划及逐 cell 命令")
     commands.add_parser("prepare-formal-lock", help="在干净提交上生成唯一 implementation lock")
     commands.add_parser("check-formal-lock", help="回载核验 implementation lock、P2 与数据来源")
+    commands.add_parser("prepare-formal-amendment", help="生成 post-training validation schema 修订锁")
     commands.add_parser("matrix-status", help="回载核验当前 formal 18-cell 状态")
     gpu = commands.add_parser("gpu-acceptance", help="运行 P2 synthetic GPU 工程验收")
     gpu.add_argument("--device", default="cuda:0")
@@ -64,6 +66,8 @@ def main() -> None:
             "implementation_lock_sha256": lock_hash,
             "status": "passed",
         }
+    elif args.phase == "prepare-formal-amendment":
+        result = str(prepare_formal_amendment())
     elif args.phase == "matrix-status":
         result = matrix_status()
     elif args.phase == "gpu-acceptance":

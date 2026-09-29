@@ -40,6 +40,15 @@ from resp_train.paper_evidence.e9_latent_width_condition_refiner_v1_model import
 FORMAL_PATH = Path(
     "resp_train/paper_evidence/e9_latent_width_condition_refiner_v1_formal.py"
 )
+FORMAL_AMENDMENT_PATH = Path(
+    "docs/experiments/e9_latent_width_condition_refiner_v1_formal_runtime_amendment_20260929.json"
+)
+AMENDED_CODE_PATHS = (
+    "docs/experiments/e9_latent_width_condition_refiner_v1_protocol_20260929.md",
+    "resp_train/paper_evidence/e9_latent_width_condition_refiner_v1_formal.py",
+    "scripts/run_e9_latent_width_condition_refiner_v1.py",
+    "tests/test_e9_latent_width_condition_refiner_v1.py",
+)
 P2_ACCEPTANCE = Path(
     "runs/e9_latent_width_condition_refiner_v1/gpu_acceptance/"
     "gpu_acceptance_dfd2efe9fa1b_20260929T052057Z_bd9c52bd4c27"
@@ -197,7 +206,7 @@ def prepare_formal_lock() -> Path:
     return destination
 
 
-def load_formal_lock() -> tuple[dict[str, Any], str, dict[str, Any]]:
+def _base_formal_lock() -> tuple[dict[str, Any], str]:
     path = e9.ROOT / e9.FORMAL_LOCK_PATH
     if not path.is_file():
         raise FileNotFoundError(f"E9 implementation lock 尚未建立: {path}")
@@ -219,10 +228,179 @@ def load_formal_lock() -> tuple[dict[str, Any], str, dict[str, Any]]:
         or lock.get("artifact_root") != str(e9.SOURCE_ROOT / e9.OUTPUT_ROOT)
     ):
         raise ValueError("E9 implementation lock 科学合同漂移")
+    return lock, lock_hash
+
+
+def _pre_amendment_matrix_snapshot(lock_hash: str) -> dict[str, Any]:
+    cells: list[dict[str, Any]] = []
+    for cell in formal_plan():
+        parent = Path(cell["output_parent"])
+        completed: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        running: list[str] = []
+        if parent.is_dir():
+            for attempt in sorted(path for path in parent.iterdir() if path.is_dir()):
+                started_path = attempt / "lifecycle_started.json"
+                if not started_path.is_file():
+                    continue
+                context = json.loads(started_path.read_text(encoding="utf-8"))
+                if context.get("implementation_lock_sha256") != lock_hash:
+                    continue
+                if (attempt / "freeze_receipt.json").is_file():
+                    completed.append(
+                        {
+                            "path": str(attempt),
+                            "manifest": engineering._identity(attempt / "manifest.json"),
+                        }
+                    )
+                elif (attempt / "lifecycle_failed.json").is_file():
+                    failed.append(
+                        {
+                            "path": str(attempt),
+                            "failure": engineering._identity(
+                                attempt / "lifecycle_failed.json"
+                            ),
+                        }
+                    )
+                else:
+                    running.append(str(attempt))
+        if running:
+            raise RuntimeError(
+                f"E9 amendment 前仍有运行 cell: {cell['arm']}/{cell['seed']}"
+            )
+        if len(completed) > 1:
+            raise RuntimeError(
+                f"E9 amendment 前存在重复成功 cell: {cell['arm']}/{cell['seed']}"
+            )
+        status = "completed" if completed else "failed" if failed else "pending"
+        cells.append(
+            {
+                "arm": cell["arm"],
+                "seed": cell["seed"],
+                "status": status,
+                "completed": completed,
+                "failed": failed,
+            }
+        )
+    counts = {
+        status: sum(cell["status"] == status for cell in cells)
+        for status in ("pending", "failed", "completed")
+    }
+    return {"counts": counts, "cells": cells}
+
+
+def prepare_formal_amendment() -> Path:
+    """冻结只影响 post-training validation schema 的增量修订。"""
+
+    destination = e9.ROOT / FORMAL_AMENDMENT_PATH
+    if destination.exists():
+        raise FileExistsError(f"E9 formal amendment 已存在: {destination}")
+    state = engineering._git_state()
+    if state["status_porcelain"]:
+        raise RuntimeError("E9 formal amendment 要求干净 Git 工作树")
+    lock, lock_hash = _base_formal_lock()
+    amended = set(AMENDED_CODE_PATHS)
+    for relative, expected in lock["code_files"].items():
+        if relative not in amended and engineering._identity(e9.ROOT / relative) != expected:
+            raise ValueError(f"E9 amendment 范围外代码漂移: {relative}")
+    p2 = verify_p2_evidence()
+    if p2 != lock["p2_evidence"]:
+        raise ValueError("E9 amendment P2 evidence 漂移")
+    source_lock, source_hash = sf_formal.load_formal_contract()
+    if source_hash != lock["w0_source_lock"]["sha256"]:
+        raise ValueError("E9 amendment W0 source lock 漂移")
+    for seed in e9.SEEDS:
+        current = OmegaConf.to_container(e9.load_w0_baseline(seed), resolve=True)
+        if current != lock["baselines"][str(seed)]:
+            raise ValueError(f"E9 amendment baseline 漂移: {seed}")
+    snapshot = _pre_amendment_matrix_snapshot(lock_hash)
+    amendment = {
+        "schema_version": 1,
+        "protocol": e9.PROTOCOL,
+        "status": "formal_post_training_validation_amendment_locked",
+        "base_formal_lock": {
+            "path": str(e9.FORMAL_LOCK_PATH),
+            "sha256": lock_hash,
+        },
+        "scope": "post_training_validation_history_runtime_fields_only",
+        "scientific_contract_changed": False,
+        "training_or_model_code_changed": False,
+        "validation_policy": {
+            "runtime_summary_required": True,
+            "history_runtime_columns": "validate_if_present",
+            "required_history_columns": [
+                "epoch",
+                "optimizer_update",
+                "train_loss_total",
+                "train_loss_sync",
+                "train_loss_effort",
+                "first_learning_rate",
+                "last_learning_rate",
+                "val_core_loss",
+                "val_local_rr_mae",
+            ],
+        },
+        "pre_amendment_matrix": snapshot,
+        "amended_code_files": {
+            relative: {
+                "base": lock["code_files"][relative],
+                "revised": engineering._identity(e9.ROOT / relative),
+            }
+            for relative in AMENDED_CODE_PATHS
+        },
+        "p2_evidence": p2,
+        "prepared_at": datetime.now(timezone.utc).isoformat(),
+        "preparation_git": state,
+    }
+    engineering._write_json(destination, amendment)
+    return destination
+
+
+def load_formal_amendment(
+    lock: Mapping[str, Any], lock_hash: str
+) -> tuple[dict[str, Any], str]:
+    path = e9.ROOT / FORMAL_AMENDMENT_PATH
+    if not path.is_file():
+        raise FileNotFoundError(f"E9 formal amendment 尚未建立: {path}")
+    amendment = json.loads(path.read_text(encoding="utf-8"))
+    amendment_hash = engineering._sha256(path)
+    if (
+        amendment.get("schema_version") != 1
+        or amendment.get("protocol") != e9.PROTOCOL
+        or amendment.get("status")
+        != "formal_post_training_validation_amendment_locked"
+        or amendment.get("base_formal_lock", {}).get("sha256") != lock_hash
+        or amendment.get("scope")
+        != "post_training_validation_history_runtime_fields_only"
+        or amendment.get("scientific_contract_changed") is not False
+        or amendment.get("training_or_model_code_changed") is not False
+        or amendment.get("p2_evidence") != lock["p2_evidence"]
+    ):
+        raise ValueError("E9 formal amendment 合同漂移")
+    for relative in AMENDED_CODE_PATHS:
+        entry = amendment.get("amended_code_files", {}).get(relative, {})
+        if (
+            entry.get("base") != lock["code_files"][relative]
+            or entry.get("revised") != engineering._identity(e9.ROOT / relative)
+        ):
+            raise ValueError(f"E9 formal amendment 代码身份漂移: {relative}")
+    for cell in amendment["pre_amendment_matrix"]["cells"]:
+        for failed in cell["failed"]:
+            if engineering._identity(
+                Path(failed["path"]) / "lifecycle_failed.json"
+            ) != failed["failure"]:
+                raise ValueError(f"E9 amendment 前失败产物漂移: {failed['path']}")
+    return amendment, amendment_hash
+
+
+def load_formal_lock() -> tuple[dict[str, Any], str, dict[str, Any]]:
+    lock, lock_hash = _base_formal_lock()
     if engineering._identity(e9.ROOT / e9.SPEC_PATH) != lock["spec"]:
         raise ValueError("E9 formal spec 身份漂移")
+    amendment, amendment_hash = load_formal_amendment(lock, lock_hash)
+    amended = set(AMENDED_CODE_PATHS)
     for relative, expected in lock["code_files"].items():
-        if engineering._identity(e9.ROOT / relative) != expected:
+        if relative not in amended and engineering._identity(e9.ROOT / relative) != expected:
             raise ValueError(f"E9 formal 代码身份漂移: {relative}")
     if verify_p2_evidence() != lock["p2_evidence"]:
         raise ValueError("E9 formal P2 evidence 漂移")
@@ -233,6 +411,9 @@ def load_formal_lock() -> tuple[dict[str, Any], str, dict[str, Any]]:
         current = OmegaConf.to_container(e9.load_w0_baseline(seed), resolve=True)
         if current != lock["baselines"][str(seed)]:
             raise ValueError(f"E9 formal baseline 漂移: {seed}")
+    lock = dict(lock)
+    lock["_runtime_amendment"] = amendment
+    lock["_runtime_amendment_sha256"] = amendment_hash
     return lock, lock_hash, source_lock
 
 
@@ -445,10 +626,7 @@ def validate_formal_run(
     history = pd.read_csv(run_dir / "train_history.csv")
     best_epoch = sf.validate_history(history, cfg)
     final_epoch = int(history.iloc[-1].epoch)
-    if not np.isfinite(
-        history[["train_elapsed_seconds", "train_samples_per_second"]].to_numpy()
-    ).all():
-        raise FloatingPointError("E9 formal history runtime 非有限")
+    _validate_optional_history_runtime(history)
     model = build_e9_latent_width_condition_refiner_model(cfg)
     expected_initialization = sf_formal.state_dict_identity(model.state_dict())
     saved_initialization = json.loads(initialization_path.read_text(encoding="utf-8"))
@@ -530,9 +708,25 @@ def validate_formal_run(
     }
 
 
+def _validate_optional_history_runtime(history: pd.DataFrame) -> None:
+    """E9 stage 的 runtime 位于 runtime_summary；兼容可选的逐 epoch runtime 列。"""
+
+    columns = {"train_elapsed_seconds", "train_samples_per_second"}
+    present = columns.intersection(history.columns)
+    if present and present != columns:
+        raise ValueError("E9 formal history runtime 列必须同时存在")
+    if present and not np.isfinite(history[sorted(columns)].to_numpy()).all():
+        raise FloatingPointError("E9 formal history runtime 非有限")
+
+
 @contextmanager
 def _formal_attempt(
-    parent: Path, *, lock_hash: str, arm: str, seed: int
+    parent: Path,
+    *,
+    lock_hash: str,
+    amendment_hash: str,
+    arm: str,
+    seed: int,
 ) -> Iterator[Path]:
     parent.mkdir(parents=True, exist_ok=True)
     lock_path = parent / f".execution_{lock_hash}.lock"
@@ -563,6 +757,7 @@ def _formal_attempt(
             "arm": arm,
             "seed": seed,
             "implementation_lock_sha256": lock_hash,
+            "formal_runtime_amendment_sha256": amendment_hash,
             "command": sys.argv,
             "started_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -612,8 +807,16 @@ def run_formal(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
         raise ValueError("E9 formal arm/seed 不属于冻结矩阵")
     seed = int(seed)
     lock, lock_hash, source_lock = load_formal_lock()
+    amendment = lock["_runtime_amendment"]
+    amendment_hash = str(lock["_runtime_amendment_sha256"])
     parent = e9.SOURCE_ROOT / e9.OUTPUT_ROOT / "formal" / arm / f"seed_{seed}"
-    with _formal_attempt(parent, lock_hash=lock_hash, arm=arm, seed=seed) as output:
+    with _formal_attempt(
+        parent,
+        lock_hash=lock_hash,
+        amendment_hash=amendment_hash,
+        arm=arm,
+        seed=seed,
+    ) as output:
         runtime = runtime_preflight(device)
         compatibility = _runtime_compatibility(
             runtime, lock["p2_evidence"]["environment"]
@@ -623,7 +826,11 @@ def run_formal(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
             output / "p2_source.json",
             {"evidence": lock["p2_evidence"], "runtime_compatibility": compatibility},
         )
-        engineering._write_json(output / "implementation_lock.json", lock)
+        engineering._write_json(
+            output / "implementation_lock.json",
+            {key: value for key, value in lock.items() if not key.startswith("_")},
+        )
+        engineering._write_json(output / "formal_runtime_amendment.json", amendment)
         baseline = OmegaConf.create(lock["baselines"][str(seed)])
         cfg = e9.derived_config(
             baseline,
@@ -661,6 +868,7 @@ def run_formal(arm: str, seed: int, *, device: str = "cuda:0") -> Path:
             {
                 **receipt,
                 "implementation_lock_sha256": lock_hash,
+                "formal_runtime_amendment_sha256": amendment_hash,
                 "run_dir": str(run_dir.relative_to(output)),
                 "formal_wall_seconds": wall_seconds,
             },
@@ -683,7 +891,12 @@ def formal_plan() -> list[dict[str, Any]]:
 
 
 def verify_formal_attempt(
-    path: Path, *, lock_hash: str, arm: str, seed: int
+    path: Path,
+    *,
+    lock_hash: str,
+    amendment_hash: str,
+    arm: str,
+    seed: int,
 ) -> dict[str, Any]:
     freeze = json.loads((path / "freeze_receipt.json").read_text(encoding="utf-8"))
     manifest_path = path / "manifest.json"
@@ -695,6 +908,7 @@ def verify_formal_attempt(
         or manifest.get("phase") != "formal"
         or manifest.get("status") != "completed"
         or manifest.get("implementation_lock_sha256") != lock_hash
+        or manifest.get("formal_runtime_amendment_sha256") != amendment_hash
         or manifest.get("arm") != arm
         or int(manifest.get("seed", -1)) != int(seed)
     ):
@@ -706,6 +920,7 @@ def verify_formal_attempt(
     receipt = json.loads((path / "formal_receipt.json").read_text(encoding="utf-8"))
     if (
         receipt.get("implementation_lock_sha256") != lock_hash
+        or receipt.get("formal_runtime_amendment_sha256") != amendment_hash
         or receipt.get("arm") != arm
         or int(receipt.get("seed", -1)) != int(seed)
         or int(receipt.get("validation_rows", -1)) != COUNTS["val"]
@@ -715,7 +930,8 @@ def verify_formal_attempt(
 
 
 def matrix_status() -> dict[str, Any]:
-    _lock, lock_hash, _source = load_formal_lock()
+    lock, lock_hash, _source = load_formal_lock()
+    amendment_hash = str(lock["_runtime_amendment_sha256"])
     cells: list[dict[str, Any]] = []
     for cell in formal_plan():
         parent = Path(cell["output_parent"])
@@ -734,6 +950,7 @@ def matrix_status() -> dict[str, Any]:
                     verify_formal_attempt(
                         attempt,
                         lock_hash=lock_hash,
+                        amendment_hash=amendment_hash,
                         arm=cell["arm"],
                         seed=cell["seed"],
                     )
@@ -761,6 +978,7 @@ def matrix_status() -> dict[str, Any]:
     return {
         "protocol": e9.PROTOCOL,
         "implementation_lock_sha256": lock_hash,
+        "formal_runtime_amendment_sha256": amendment_hash,
         "counts": counts,
         "cells": cells,
     }

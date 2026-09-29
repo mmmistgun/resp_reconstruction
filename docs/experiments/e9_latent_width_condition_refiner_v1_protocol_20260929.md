@@ -2,7 +2,7 @@
 
 日期：2026-09-29。协议 ID：`e9-latent-width-condition-refiner-v1`。
 
-状态：**P0/P1 已完成；P2 synthetic GPU acceptance 已完成并冻结；P3 formal runtime 已实现，等待在干净提交上生成并提交唯一 implementation lock。锁回载前18-cell formal train/validation 硬门控关闭。**
+状态：**P0/P1 与 P2 synthetic GPU acceptance 已完成；implementation lock 已建立。Post-training validator 的 history runtime schema 已修正，正在建立不改变科学合同的增量 amendment；amendment 回载后从18-cell pending矩阵重新开始。**
 
 独立身份：
 
@@ -124,7 +124,7 @@ E8 的 factor-covered MAC 范围与 E9 的 declared covered MAC 范围不同，�
 ```bash
 PYTHONPATH=. ./.venv/bin/python -m pytest \
   tests/test_e9_latent_width_condition_refiner_v1.py -q
-# 22 passed
+# 23 passed
 
 PYTHONPATH=. ./.venv/bin/python \
   scripts/run_e9_latent_width_condition_refiner_v1.py check-p1
@@ -185,6 +185,27 @@ PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1
 ```
 
 训练前矩阵必须为 `pending=18 / running=0 / failed=0 / completed=0`。
+
+### 8.1 Post-training validation schema amendment
+
+`validate_formal_run()` 读取 `train_history.csv` 时，曾把 `train_elapsed_seconds` 与 `train_samples_per_second` 当成 E9 stage 必需列。当前 `CRDExperiment` 只为既有若干 stage 写这两列；E9 的正式 runtime 证据位于必需的 `runtime_summary.json`。
+
+修订固定为：
+
+1. `runtime_summary.json` 继续必需且必须 finite；
+2. 两个逐 epoch runtime 列若同时存在则检查 finite，均不存在时按 E9 history schema 接受，只出现一个时显式失败；
+3. 模型、初始化、数据、loss、optimizer、batch、学习率、early stopping、selector、指标与 checkpoint 合同均不改变；
+4. Amendment 回载后的18个 cell 均建立新的不可覆盖 attempt。
+
+在所有运行中 cell 结束或停止后，于干净提交生成 amendment：
+
+```bash
+PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1.py prepare-formal-amendment
+git add docs/experiments/e9_latent_width_condition_refiner_v1_formal_runtime_amendment_20260929.json
+git commit -m '冻结E9正式运行校验修订'
+PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1.py check-formal-lock
+PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1.py matrix-status
+```
 
 ## 9. 18次 formal 计划命令
 
