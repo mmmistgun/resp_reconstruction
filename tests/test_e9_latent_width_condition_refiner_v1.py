@@ -12,6 +12,7 @@ from resp_train.crd.blocks import DecoderResidual
 from resp_train.crd.training import build_crd_optimizer
 from resp_train.paper_evidence import e9_latent_width_condition_refiner_v1 as e9
 from resp_train.paper_evidence import e9_latent_width_condition_refiner_v1_engineering as engineering
+from resp_train.paper_evidence import e9_latent_width_condition_refiner_v1_formal as formal
 from resp_train.paper_evidence.e9_latent_width_condition_refiner_v1_model import (
     ARMS,
     ARM_SPECS,
@@ -304,3 +305,64 @@ def test_p2_exclusive_lifecycle_freezes_success_and_preserves_failure(tmp_path):
     failed = next((tmp_path / "failure").glob("*/lifecycle_failed.json")).parent
     assert (failed / "partial.txt").read_text(encoding="utf-8") == "keep"
     assert not (failed / "freeze_receipt.json").exists()
+
+
+def test_p2_frozen_evidence_is_complete():
+    evidence = formal.verify_p2_evidence()
+    assert evidence["file_count"] == 24
+    assert evidence["engineering_identity_sha256"] == formal.P2_ENGINEERING_IDENTITY
+    assert evidence["max_resource"]["arm"] == engineering.MAX_RESOURCE_ARM
+    assert evidence["max_resource"]["batch_size"] == 128
+    assert evidence["max_resource"]["updates"] == 3
+    assert evidence["max_resource"]["peak_reserved_fraction"] < 0.85
+
+
+def test_formal_runtime_compatibility_requires_same_stack_and_memory():
+    accepted = {
+        "python": "3.12",
+        "torch": "2.12",
+        "cuda_runtime": "13.0",
+        "cudnn": 92000,
+        "dependencies": {"mamba-ssm": "2.3.2"},
+        "device_name": "GPU",
+        "amp_dtype": "bfloat16",
+        "device_total_bytes": 100,
+    }
+    receipt = formal._runtime_compatibility(
+        {**accepted, "device_total_bytes": 120}, accepted
+    )
+    assert receipt["capacity_policy"] == "current_device_total_bytes_gte_p2"
+    with pytest.raises(ValueError, match="总显存"):
+        formal._runtime_compatibility(
+            {**accepted, "device_total_bytes": 99}, accepted
+        )
+    with pytest.raises(ValueError, match="torch"):
+        formal._runtime_compatibility({**accepted, "torch": "other"}, accepted)
+
+
+def test_formal_lifecycle_rejects_duplicate_completed_cell(tmp_path):
+    lock_hash = "b" * 64
+    parent = tmp_path / "formal" / "e9a_d96_h65" / "seed_20260811"
+    with formal._formal_attempt(
+        parent,
+        lock_hash=lock_hash,
+        arm="e9a_d96_h65",
+        seed=20260811,
+    ) as output:
+        engineering._write_json(
+            output / "formal_receipt.json",
+            {
+                "implementation_lock_sha256": lock_hash,
+                "arm": "e9a_d96_h65",
+                "seed": 20260811,
+                "validation_rows": 2675,
+            },
+        )
+    with pytest.raises(FileExistsError, match="已完成"):
+        with formal._formal_attempt(
+            parent,
+            lock_hash=lock_hash,
+            arm="e9a_d96_h65",
+            seed=20260811,
+        ):
+            pass

@@ -2,7 +2,7 @@
 
 日期：2026-09-29。协议 ID：`e9-latent-width-condition-refiner-v1`。
 
-状态：**P0 科学合同与 P1 独立模型/配置/CPU synthetic 合同已实现；P2 synthetic GPU acceptance 与 P3 implementation lock 尚未执行，18-cell formal train/validation 硬门控关闭。**
+状态：**P0/P1 已完成；P2 synthetic GPU acceptance 已完成并冻结；P3 formal runtime 已实现，等待在干净提交上生成并提交唯一 implementation lock。锁回载前18-cell formal train/validation 硬门控关闭。**
 
 独立身份：
 
@@ -124,7 +124,7 @@ E8 的 factor-covered MAC 范围与 E9 的 declared covered MAC 范围不同，�
 ```bash
 PYTHONPATH=. ./.venv/bin/python -m pytest \
   tests/test_e9_latent_width_condition_refiner_v1.py -q
-# 19 passed
+# 22 passed
 
 PYTHONPATH=. ./.venv/bin/python \
   scripts/run_e9_latent_width_condition_refiner_v1.py check-p1
@@ -134,22 +134,33 @@ PYTHONPATH=. ./.venv/bin/python \
 
 `96` 全仓审计见 `e9_latent_width_condition_refiner_v1_96_hardcode_audit_20260929.md`。审计结论是建立 E9 专属 D64 路径，不修改冻结的通用 CRD、E4–E8、W0 或 RTM 文件。
 
-## 7. Synthetic GPU acceptance 计划
+## 7. Synthetic GPU acceptance
 
-P2 仅允许确定性 synthetic input/target/W tensor，不读 dataset index、真实 waveform、W cache、历史 checkpoint 或 test。
+P2 只使用确定性 synthetic input/target/W tensor，不读 dataset index、真实 waveform、W cache、历史 checkpoint 或 test。
 
 1. 六臂 × 三 seeds 的18个 batch-1 cell，每项三次原生 loss/optimizer update；要求 output/loss/model/optimizer finite，所有活跃参数被 optimizer 精确覆盖，FiLM 和适用 refiner 参数真实变化，第三步 refiner 内层梯度非零有限。
 2. 六臂逐项 native batch-1 forward/backward shape/finite，并登记 params、state_dict bytes、condition MACs、declared covered MACs 与 peak allocated/reserved。
 3. 最大资源 arm 固定为 `e9a_d96_h65`；batch=128、三次原生 update，branch checkpoint chunk=8。预注册 `peak reserved / device total ≤ 0.85`；P3 只能接受相同软件栈且总显存不低于验收设备的运行环境。
 4. 使用排他、不可覆盖 attempt；成功后以 freeze receipt/manifest 固定，失败 lifecycle 原位保留。
 
-P2 计划命令（当前未执行）：
+冻结产物：
+
+```text
+runs/e9_latent_width_condition_refiner_v1/gpu_acceptance/
+gpu_acceptance_dfd2efe9fa1b_20260929T052057Z_bd9c52bd4c27
+```
+
+- Engineering identity：`dfd2efe9fa1be8834c607b157f960f48e779af7348b57ce6bb45697212a7fb48`；
+- Manifest SHA-256：`37bef5f86c28fe239bf0ea0d65eabea544c05afd008ba1e768016b0141bdbeaa`，24个受管文件；
+- 18/18 batch-1 cell 均完成三次 update，最后一步所有适用 factor 梯度非零有限，参数真实变化；
+- 最大资源 arm `e9a_d96_h65` 完成 batch-128 三次 update，peak allocated=`9,204,315,648` bytes，peak reserved=`10,622,074,880` bytes，reserved fraction=`0.635653`；
+- `passed=true`，freeze receipt 与全部 manifest 文件已逐项回载验证。
+
+执行命令记录为：
 
 ```bash
 PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1.py gpu-acceptance --device cuda:0
 ```
-
-该入口已实现但当前未执行；它要求干净 Git 工作树/独立 worktree、可用 BF16 CUDA 设备和冻结依赖，并只写入新的不可覆盖 E9 attempt。
 
 ## 8. Implementation lock 与 formal 门控
 
@@ -161,11 +172,23 @@ P2 完成后，在干净 Git commit 上生成唯一 implementation lock。锁至
 - P2 acceptance freeze receipt、manifest、环境和安全阈值；
 - 输出根、selector、early stop、loss/optimizer/batch/BF16 与 planned updates。
 
-正式入口必须回载并逐项核验该锁；相同 `(lock,arm,seed)` 已成功 cell 拒绝重跑，失败现场保留。当前锁缺失且 P2 未完成，因此 `formal` 子命令显式退出，不读数据、不启动训练。
+正式入口必须回载并逐项核验该锁；相同 `(lock,arm,seed)` 已成功 cell 拒绝重跑，失败现场保留。当前只待生成并提交 implementation lock；锁存在且工作树干净后 formal 才开放。
+
+在包含 P3 runtime 的干净提交上生成锁：
+
+```bash
+PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1.py prepare-formal-lock
+git add docs/experiments/e9_latent_width_condition_refiner_v1_implementation_lock_20260929.json
+git commit -m '冻结E9正式实验实现'
+PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1.py check-formal-lock
+PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1.py matrix-status
+```
+
+训练前矩阵必须为 `pending=18 / running=0 / failed=0 / completed=0`。
 
 ## 9. 18次 formal 计划命令
 
-以下命令是冻结矩阵的逐 cell 计划，不是当前执行授权。P2、锁与用户执行时仍须满足后才可运行。
+以下命令固定18-cell矩阵；提交 implementation lock 并通过回载核验后即可运行。
 
 ```bash
 PYTHONPATH=. ./.venv/bin/python scripts/run_e9_latent_width_condition_refiner_v1.py formal --arm e9a_d96_h65 --seed 20260811 --device cuda:0 --confirm-formal-training
@@ -241,8 +264,9 @@ E9-A 固定对比：`H64−H65`、`H48−H65`、`H48−H64`。E9-B 固定对比�
 - `resp_train/paper_evidence/e9_latent_width_condition_refiner_v1_model.py`；
 - `resp_train/paper_evidence/e9_latent_width_condition_refiner_v1.py`；
 - `resp_train/paper_evidence/e9_latent_width_condition_refiner_v1_engineering.py`；
+- `resp_train/paper_evidence/e9_latent_width_condition_refiner_v1_formal.py`；
 - `scripts/run_e9_latent_width_condition_refiner_v1.py`；
 - `tests/test_e9_latent_width_condition_refiner_v1.py`；
 - 本协议、硬编码审计、validation 模板与 research-test 模板。
 
-P2/P3 后续产物：GPU acceptance freeze artifacts、唯一 implementation lock、formal runtime 与 validation summary runtime。无需修改 `resp_train/crd/{tf_v1_model,frontends,blocks,model}.py` 或 E8 文件。
+P3 后续产物为唯一 implementation lock；formal 完成后再建立 validation summary runtime。无需修改 `resp_train/crd/{tf_v1_model,frontends,blocks,model}.py` 或 E8 文件。

@@ -10,12 +10,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from resp_train.paper_evidence.e9_latent_width_condition_refiner_v1 import (
-    FORMAL_LOCK_PATH,
     check_p1,
     formal_plan,
 )
 from resp_train.paper_evidence.e9_latent_width_condition_refiner_v1_engineering import (
     run_gpu_acceptance,
+)
+from resp_train.paper_evidence.e9_latent_width_condition_refiner_v1_formal import (
+    load_formal_lock,
+    matrix_status,
+    prepare_formal_lock,
+    run_formal,
 )
 from resp_train.paper_evidence.e9_latent_width_condition_refiner_v1_model import (
     ARMS,
@@ -29,11 +34,14 @@ def main() -> None:
     commands = parser.add_subparsers(dest="phase", required=True)
     commands.add_parser("check-p1", help="核验六臂 P1 CPU/static 合同；不读取真实数据")
     commands.add_parser("formal-plan", help="输出固定 18-cell 计划及逐 cell 命令")
+    commands.add_parser("prepare-formal-lock", help="在干净提交上生成唯一 implementation lock")
+    commands.add_parser("check-formal-lock", help="回载核验 implementation lock、P2 与数据来源")
+    commands.add_parser("matrix-status", help="回载核验当前 formal 18-cell 状态")
     gpu = commands.add_parser("gpu-acceptance", help="运行 P2 synthetic GPU 工程验收")
     gpu.add_argument("--device", default="cuda:0")
     describe = commands.add_parser("describe", help="输出结构、参数与受管 MAC 合同")
     describe.add_argument("--arm", choices=ARMS)
-    formal = commands.add_parser("formal", help="P2/P3 冻结前硬阻断的 formal 占位入口")
+    formal = commands.add_parser("formal", help="执行一个锁定的 arm×seed formal cell")
     formal.add_argument("--arm", required=True, choices=ARMS)
     formal.add_argument(
         "--seed", required=True, type=int, choices=(20260811, 20260812, 20260813)
@@ -45,14 +53,25 @@ def main() -> None:
     if args.phase == "check-p1":
         result = check_p1()
     elif args.phase == "formal-plan":
-        result = {"cells": formal_plan(), "count": len(formal_plan())}
+        plan = formal_plan()
+        result = {"cells": plan, "count": len(plan)}
+    elif args.phase == "prepare-formal-lock":
+        result = str(prepare_formal_lock())
+    elif args.phase == "check-formal-lock":
+        lock, lock_hash, _source = load_formal_lock()
+        result = {
+            "protocol": lock["protocol"],
+            "implementation_lock_sha256": lock_hash,
+            "status": "passed",
+        }
+    elif args.phase == "matrix-status":
+        result = matrix_status()
     elif args.phase == "gpu-acceptance":
         result = str(run_gpu_acceptance(args.device))
     elif args.phase == "formal":
-        raise SystemExit(
-            "E9 formal 尚未开放：必须先完成 synthetic GPU acceptance，"
-            f"再于干净提交生成并回载 {FORMAL_LOCK_PATH}；当前命令不会访问数据或启动训练。"
-        )
+        if not args.confirm_formal_training:
+            raise SystemExit("E9 formal 要求显式传入 --confirm-formal-training")
+        result = str(run_formal(args.arm, args.seed, device=args.device))
     else:
         arms = {
             arm: {
