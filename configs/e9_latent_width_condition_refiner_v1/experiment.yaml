@@ -1,0 +1,38 @@
+schema_version: 1
+protocol: e9-latent-width-condition-refiner-v1
+status: p0_p1_engineering_design_formal_blocked
+output_roots:
+  experiment: runs/e9_latent_width_condition_refiner_v1
+  validation_summary: runs/e9_latent_width_condition_refiner_v1/validation_summary
+  research_test: runs/e9_latent_width_condition_refiner_v1/research_test
+implementation_lock: docs/experiments/e9_latent_width_condition_refiner_v1_implementation_lock_20260929.json
+source:
+  w0_config: configs/crd_tf_v1/crd_tf102_w_formal.yaml
+  e8_protocol: docs/experiments/e8_film_decoder_redesign_v1_protocol_20260925.md
+  e8_closeout: docs/experiments/e8_film_decoder_redesign_v1_closeout_20260926.md
+arms:
+  e9a_d96_h65: {family: e9a, latent_channels: 96, condition_refiner: h65, hidden_channels: 65, trainable_parameters: 1219850, condition_refiner_macs: 22464000, declared_covered_macs: 856224000}
+  e9a_d96_h64: {family: e9a, latent_channels: 96, condition_refiner: h64, hidden_channels: 64, trainable_parameters: 1219658, condition_refiner_macs: 22118400, declared_covered_macs: 855878400}
+  e9a_d96_h48: {family: e9a, latent_channels: 96, condition_refiner: h48, hidden_channels: 48, trainable_parameters: 1216586, condition_refiner_macs: 16588800, declared_covered_macs: 850348800}
+  e9b_d64_direct: {family: e9b, latent_channels: 64, condition_refiner: direct, hidden_channels: null, trainable_parameters: 592706, condition_refiner_macs: 0, declared_covered_macs: 445985280}
+  e9b_d64_h64: {family: e9b, latent_channels: 64, condition_refiner: h64, hidden_channels: 64, trainable_parameters: 600962, condition_refiner_macs: 14745600, declared_covered_macs: 460730880}
+  e9b_d64_h48: {family: e9b, latent_channels: 64, condition_refiner: h48, hidden_channels: 48, trainable_parameters: 598914, condition_refiner_macs: 11059200, declared_covered_macs: 457044480}
+matrix:
+  seeds: [20260811, 20260812, 20260813]
+  cell_count: 18
+  epochs: 80
+  updates_per_epoch: 80
+  planned_updates: 6400
+  early_stopping: {enabled: true, min_epoch: 30, patience: 15, min_delta: 0.0}
+  physical_batch: 128
+  gradient_accumulation_steps: 1
+  amp_dtype: bfloat16
+  checkpoint_selector: full_validation_local_rr_strict_minimum_earliest_tie
+  split: train_validation
+analysis:
+  primary_metrics: [whole_rr_abs_error_bpm, local_rr_mae_bpm, envelope_trajectory_mae, global_envelope_modulation_error, lag_aware_signed_pcc]
+  planned_contrasts: [e9a_d96_h64-e9a_d96_h65, e9a_d96_h48-e9a_d96_h65, e9a_d96_h48-e9a_d96_h64, e9b_d64_h64-e9b_d64_direct, e9b_d64_h48-e9b_d64_direct, e9b_d64_h48-e9b_d64_h64]
+  error_relative_tolerance: 0.005
+  pcc_absolute_tolerance: 0.002
+  seed_sd_ddof: 1
+  cross_metric_score: null
