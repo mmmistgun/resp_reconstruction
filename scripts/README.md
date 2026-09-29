@@ -19,6 +19,25 @@
 - 独立测试集：现有 `test` 可在阶段性整理后重复评价，并可形成后续独立科研问题；不得用于重选既有run的epoch/checkpoint。
 - CRD 训练与普通 `eval_crd.py` 仍只读 train/validation；S1C 只允许 candidate lock 中的 12 个 checkpoint 通过专用入口各读取一次现有 research-test。
 
+## W0 最终五指标 test 评价
+
+入口：`scripts/eval_w0_final_metrics.py`；固定原始 `crd_tf102_w` 三 seed
+`20260811/20260812/20260813`，validation-selected epoch `13/15/14`。
+[新口径专项协议](../docs/experiments/w0_final_evaluation_protocol_20260927.md)定义完整 RR、中央非重叠 RR、
+时延对齐波形 MAE、相对包络 MAE、有符号 PCC，及参考资格、失败语义和独立输出。
+
+```bash
+./.venv/bin/python scripts/eval_w0_final_metrics.py \
+  --device cuda:0 \
+  --output runs/w0_final_evaluation_v1/three_seed_01 \
+  --confirm-research-test
+```
+
+真实 test 由用户执行。完整结果为输出目录内 `results.md`、`summary.json`、`seed_metrics.csv`；
+逐窗表、统一中央选择、原始预测、源码/来源快照和完成/失败回执一并保存。输出目录必须不存在；
+仅完整三 seed 成功才接受总体结果。快速 CPU 定向测试：
+`./.venv/bin/python -m pytest -q tests/test_final_evaluation.py`。
+
 ## W0 测试集定性导出
 
 按需入口新增 `index`、`select-cases`、`intervene-r3`、`render-intervention`；`render` 支持
