@@ -1,0 +1,200 @@
+{
+  "kind": "worktree_source_inventory_not_experiment_lock",
+  "date": "2026-09-30",
+  "source_worktree": "/mnt/disk_code/marques/resp_reconstruction",
+  "destination_worktree": "/home/marques/.codex/worktrees/cwt-time-frequency-v1/resp_reconstruction",
+  "base_commit": "f8e10854c2123c5d56317bf55d139d9d723490b7",
+  "branch": "codex/cwt-time-frequency-v1",
+  "paper_plan": {
+    "path": "/mnt/disk_code/marques/paper/resp_rec/paper_rewriting_output/CWT时频信息与频带作用_实验交接计划_20260930.md",
+    "sha256": "767d937d29909d01a1afbd49f5a58c0c5a515648db505489e5669543484ebda5"
+  },
+  "copied_untracked_files": [
+    {
+      "relative_path": "configs/apor_activation_v1/experiment.yaml",
+      "size_bytes": 884,
+      "sha256": "9ccb53d612c1de28a05d0f70e57f16ce6f8fced135df9c6f7cb48b4065fbf56d"
+    },
+    {
+      "relative_path": "configs/apor_grid_decoder_v2/experiment.yaml",
+      "size_bytes": 818,
+      "sha256": "cdb511e3c19ad71ba1a448d8fabc2a887b7bb037ee6b8c7fc4cfefd72f227b90"
+    },
+    {
+      "relative_path": "configs/patch_apor_v1/experiment.yaml",
+      "size_bytes": 801,
+      "sha256": "c04f15ad5d8708d8a67b9edf05e3b66f18fc9e3d5e5458762f4c0c8dc7590b59"
+    },
+    {
+      "relative_path": "docs/experiments/apor_activation_v1_protocol_20260930.md",
+      "size_bytes": 5397,
+      "sha256": "67d5be22bcfbe519fef23b696fc175fcbc8053969a304a166d484669e25d55a1"
+    },
+    {
+      "relative_path": "docs/experiments/apor_activation_v1_recovery_20260930.md",
+      "size_bytes": 1814,
+      "sha256": "819b7ab6e067cad44595fba731d63db38a670847fcc7540666c2cc09b6450889"
+    },
+    {
+      "relative_path": "docs/experiments/apor_activation_v1_research_test_protocol_20260930.md",
+      "size_bytes": 3679,
+      "sha256": "f87f858e0d4eebfda54af9f12804baa8bfd81031eb8a0cab58c777a8e421ac23"
+    },
+    {
+      "relative_path": "docs/experiments/apor_activation_v1_results_20260930.md",
+      "size_bytes": 6366,
+      "sha256": "ac60bb9677c1dfd5b43d13f9b392d9f7a43435bf423062763be6e033c14fb477"
+    },
+    {
+      "relative_path": "docs/experiments/apor_grid_decoder_v2_research_plan_20260930.md",
+      "size_bytes": 20859,
+      "sha256": "276cdac598541bc5907d4fe58642e8bb06adfa779bc933c2659a7835b9eeacfb"
+    },
+    {
+      "relative_path": "docs/experiments/apor_grid_decoder_v2_research_test_protocol_20260930.md",
+      "size_bytes": 4567,
+      "sha256": "ed4975fd583f58e7579e0eb827c96a6fa3f615694306269a95edf1449589ef9a"
+    },
+    {
+      "relative_path": "docs/experiments/apor_grid_decoder_v2_research_test_results_20260930.md",
+      "size_bytes": 5857,
+      "sha256": "79ea95b069c7ea6cb3d4a1780ecd058ba30d793bc52cde3a0f6d6367c6a23e93"
+    },
+    {
+      "relative_path": "docs/experiments/apor_grid_decoder_v2_validation_results_20260930.md",
+      "size_bytes": 7095,
+      "sha256": "0502ff9bae153b3ca6c500bee5b8c1a25fd2c6cf5f2866e283980bfef454e706"
+    },
+    {
+      "relative_path": "docs/experiments/patch_apor_v1_protocol_20260930.md",
+      "size_bytes": 10291,
+      "sha256": "a4e5276519889b7ad4974dee853bc38f8c367f4b505a6f779465c347872bf51e"
+    },
+    {
+      "relative_path": "docs/experiments/patch_apor_v1_research_test_protocol_20260930.md",
+      "size_bytes": 6118,
+      "sha256": "f859b103d4674751268c325044e6f1f12c382760d5da4456e5704d451011f85b"
+    },
+    {
+      "relative_path": "docs/experiments/patch_apor_v1_research_test_results_20260930.md",
+      "size_bytes": 11863,
+      "sha256": "b8d3dc9c844e2c5f1c3b6d75041d572aa5a62148d9ca7fa0c85609004034315a"
+    },
+    {
+      "relative_path": "docs/experiments/patch_apor_v1_validation_results_20260930.md",
+      "size_bytes": 11094,
+      "sha256": "bcd4cc8d291d9a8e46aec1f6f93d913d5a6523b97094e486d1b21ff22c0ad2d1"
+    },
+    {
+      "relative_path": "docs/experiments/patch_apor_v1_validation_test_exclude670_conclusions_20260930.md",
+      "size_bytes": 10577,
+      "sha256": "95d3b85fd15032f9a6175c60760fae621a5dfb95387b3ccc7c30f08acd465b8a"
+    },
+    {
+      "relative_path": "resp_train/paper_evidence/patch_apor_v1.py",
+      "size_bytes": 36672,
+      "sha256": "c0a548658d5c8bd70d04a6bfe18f73fb4618f4be9cb96280e2b62a5c0f6cfc8b"
+    },
+    {
+      "relative_path": "resp_train/paper_evidence/patch_apor_v1_model.py",
+      "size_bytes": 11484,
+      "sha256": "d82f15ed281cd0bfaeda7acb218d952ac3a16ae8b443abf85740f00ff6251af7"
+    },
+    {
+      "relative_path": "scripts/apor_activation_v1_model.py",
+      "size_bytes": 2135,
+      "sha256": "0cab566ea50cd0dfa3aa7d96d264e00cb3ef488948494638f46bc6fedba3b99c"
+    },
+    {
+      "relative_path": "scripts/apor_activation_v1_runtime.py",
+      "size_bytes": 52897,
+      "sha256": "00fb5768c3ddee6246da21c8d3c716e7bc65e4a2b4e616a45892131adb6ce60d"
+    },
+    {
+      "relative_path": "scripts/apor_grid_decoder_v2_model.py",
+      "size_bytes": 4567,
+      "sha256": "f00af4e774af87ed098c5e6ad61c33308109a251642d12adbb81f450dbf94a9c"
+    },
+    {
+      "relative_path": "scripts/apor_grid_decoder_v2_runtime.py",
+      "size_bytes": 53359,
+      "sha256": "7de5c59adff99ef7bc98b16079212a9a3e4904a119d392896fade5ac5efa50bb"
+    },
+    {
+      "relative_path": "scripts/eval_apor_activation_v1_research_test.py",
+      "size_bytes": 34495,
+      "sha256": "8f9b725615569f8b4ac2d92548f1c9ef07d618fa58aece06bf1970f843722b2c"
+    },
+    {
+      "relative_path": "scripts/eval_apor_grid_decoder_v2_research_test.py",
+      "size_bytes": 35544,
+      "sha256": "b88fc7aa6b017baf72424f740afe0fa31ec9d8256a5741951a33a21927881f3c"
+    },
+    {
+      "relative_path": "scripts/eval_patch_apor_v1_research_test.py",
+      "size_bytes": 29623,
+      "sha256": "d6633cf58f319137e6dec9a9c3fceb31fbee64c1913cd4cd0bd62c8faa5c7906"
+    },
+    {
+      "relative_path": "scripts/recover_apor_activation_v1.py",
+      "size_bytes": 9480,
+      "sha256": "3dac2e83e0d5c085d6dc0e95cddfd6eaeb93e08a046e8807102f8d0916e49248"
+    },
+    {
+      "relative_path": "scripts/run_apor_activation_v1.py",
+      "size_bytes": 5143,
+      "sha256": "bacea1125c067fa689fa6c5f11d6c09241681b241795791e9affa3432618e6ca"
+    },
+    {
+      "relative_path": "scripts/run_apor_grid_decoder_v2.py",
+      "size_bytes": 4046,
+      "sha256": "4d669ebad45225449077c96f5edaa668e34e1a1fa8e88633de5f4decae94365f"
+    },
+    {
+      "relative_path": "scripts/run_patch_apor_v1.py",
+      "size_bytes": 3703,
+      "sha256": "6448b5fc5379cb23fb6e298206557852a4a6b4177e02110a5e593cfdde3c3e45"
+    },
+    {
+      "relative_path": "tests/test_apor_activation_v1.py",
+      "size_bytes": 9545,
+      "sha256": "7773c4b861e022b06f457efafbca23c367a3a12808da7c3282a258b4ccd76d14"
+    },
+    {
+      "relative_path": "tests/test_apor_activation_v1_recovery.py",
+      "size_bytes": 2167,
+      "sha256": "25129b2f06d726abbe2a9f4e2ae7003fd75bafa60b4a556163f85f880f2f131b"
+    },
+    {
+      "relative_path": "tests/test_apor_activation_v1_research_test.py",
+      "size_bytes": 9562,
+      "sha256": "ffbeababa77b91f262c29121431cb55f2616c1764af7fdaef5799927dc5907dc"
+    },
+    {
+      "relative_path": "tests/test_apor_grid_decoder_v2.py",
+      "size_bytes": 13063,
+      "sha256": "57d8b5a8b4d13e4673fdadc49970130fdcdfcb4de95fd0422cdfbd6da45bc005"
+    },
+    {
+      "relative_path": "tests/test_apor_grid_decoder_v2_research_test.py",
+      "size_bytes": 9612,
+      "sha256": "e13358c2a972695da6a60b97fb2229b23d465e2cf139bfa4eba838decf4d6edf"
+    },
+    {
+      "relative_path": "tests/test_patch_apor_v1.py",
+      "size_bytes": 18832,
+      "sha256": "906ec72a6da6b02d12762958ebee9e7846e634636658fa3482950e88b3a3daf8"
+    },
+    {
+      "relative_path": "tests/test_patch_apor_v1_research_test.py",
+      "size_bytes": 9051,
+      "sha256": "4b16dbdd652505655f902279bc6e1ed278eb93cb954113d7df29178976a9e022"
+    }
+  ],
+  "notes": [
+    "复制的文件仅提供工程参考，未在新 worktree 执行历史实验入口。",
+    "原工作区未提交内容保持不变；未复制或链接 runs、缓存、checkpoint、数据及 .venv。",
+    "原 scripts/README.md 的用户修改保留在原工作区。",
+    "历史 runner 的路径、来源核验与冻结矩阵仍需适配，复制不代表本轮可直接运行。"
+  ]
+}

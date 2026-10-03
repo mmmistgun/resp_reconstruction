@@ -15,6 +15,7 @@
 - W0 三因素结构对照 v1：train/validation 与 research-test 均已完成并关闭；当前状态、结果、协议与冻结身份统一由 `docs/experiments/w0_structural_factorial_v1_closeout_20260925.md` 路由。
 - E8 FiLM 条件末端 × 波形解码端：formal、validation 与固定36-checkpoint research-test 均已完成并关闭；最终状态、结果、来源与冻结身份统一由 `docs/experiments/e8_film_decoder_redesign_v1_closeout_20260926.md` 路由。
 - E9 潜在宽度 × 条件末端：18-cell formal train/validation 与固定18-checkpoint research-test均已完成并关闭；当前状态、validation/test结果与冻结身份统一由 `docs/experiments/e9_latent_width_condition_refiner_v1_closeout_20260929.md` 路由。
+- CWT-APOR v2时频表示与频带机制：60-cell train/validation、固定checkpoint research-test及三seed机制分析均已完成并关闭；当前状态、结果和来源由 `docs/experiments/cwt_apor_v2_results_summary_20261002.md` 路由，机制验收细节见 `docs/experiments/cwt_apor_v2_mechanisms_results_20261002.md`。
 
 先确定任务所属实验，再读取对应协议中与当前任务有关的章节；不要默认把某一协议应用到整个仓库。
 
