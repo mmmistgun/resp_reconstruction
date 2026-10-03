@@ -8,6 +8,8 @@
 
 结果图表整理入口为`scripts/build_cwt_apor_v2_report.py`，读取已完成汇总表并输出新的独立报告目录。核心代码依赖`resp_train/paper_evidence/patch_apor_v1_model.py`，来源身份见[worktree来源清单](../docs/experiments/cwt_time_frequency_v1_worktree_sources_20260930.json)。
 
+调制谱、FiLM路径和受试者差异的既存产物分析使用`scripts/analyze_cwt_apor_v2_mechanism_evidence.py`，范围见[分析约定](../docs/experiments/cwt_apor_v2_mechanism_evidence_analysis_20261003.md)，图表与解释见[机制证据整理结果](../docs/experiments/cwt_apor_v2_mechanism_evidence_results_20261003.md)。该入口只读取保存的表格、PSD、预测和案例，输出独立目录；不执行模型前向。
+
 ## CWT 时频信息与频带作用 v1（已停止）
 
 阶段状态见[停止记录](../docs/experiments/cwt_time_frequency_v1_stopped_20261001.md)。实现与协议保留用于原产物来源核验；其中模型无关的CWT缓存、校准和信号分析已由APOR v2只读复用。
