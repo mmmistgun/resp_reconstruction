@@ -1,0 +1,49 @@
+# 开发合同：正式归一化/预算尚未由实验结果支持，不提供真实数据运行入口。
+protocol:
+  name: respdiff-tho-v1
+  stage: synthetic_development
+  formal_enabled: false
+source:
+  root: /mnt/disk_code/marques/reference_repos/RespDiff
+  commit: 3ff05545c34f67e1ad415e36e4daea80269880b0
+model:
+  profile: source_fft
+  hidden_dim: 1024
+  num_layers: 6
+  output_dim: 128
+signal:
+  parent_fs: 100
+  parent_samples: 18000
+  model_fs: 30
+  chunk_samples: 150
+  chunks_per_parent: 36
+  normalization_candidates: [segment_soft_z, source_minmax]
+  formal_normalization: null
+  resample: scipy.signal.resample
+  lowpass: {order: 8, cutoff_hz: 1, padtype: odd, padlen: 27}
+diffusion:
+  steps: 50
+  beta_start: 0.0001
+  beta_end: 0.5
+  spectral_weight: 0.01
+  noise_reduction: sum_div_length
+  fft_reduction: mean
+  sampler: ddpm
+training:
+  formal_max_updates: null
+  formal_validation_interval: null
+  formal_validation_samples: null
+  dtype: float32
+  proposed_batch: 128
+  optimizer: adam
+  learning_rate: 0.0001
+  weight_decay: 0
+  seeds: [20260811, 20260812, 20260813]
+synthetic_smoke:
+  seed: 20260929
+  hidden_dim: 8
+  num_layers: 1
+  output_dim: 4
+  train_batch: 2
+  sampling_batch: 12
+  n_samples: 1

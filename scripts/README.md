@@ -4,6 +4,14 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## RespDiff-THO 开发入口
+
+核心模型与CPU合成流程见[实现与验收记录](../docs/experiments/respdiff_tho_implementation_20260929.md)。
+`scripts/run_respdiff_tho_v1.py` 当前提供 `check-source` 和 `synthetic-smoke --output <新目录>`，
+只核验参考源码或运行短时CPU合成fixture。正式训练与真实test入口尚未开放。
+定向测试为 `PYTHONPATH=. <项目解释器> -m pytest tests/test_respdiff.py -q`。
+配置见 `configs/respdiff_tho_v1/experiment.yaml`；worktree与现有环境的完整命令见上述验收记录。
+
 ## 当前固定口径
 
 - 数据：2026-06-20 research v2 soft-z。
