@@ -22,7 +22,7 @@ from resp_train.respdiff.data import (
 )
 from resp_train.respdiff.diffusion import keyed_noise
 from resp_train.respdiff.experiment import (
-    LocalRRSelector, evaluate_chunk_predictions, load_checkpoint, save_checkpoint, train_step,
+    evaluate_chunk_predictions, load_checkpoint, save_checkpoint, train_step,
 )
 from resp_train.respdiff.provenance import verify_source
 
@@ -243,7 +243,7 @@ def test_chunk_identity_split_and_parent_dataset():
     assert counts == {"chunks": 72, "unique_source_intervals": 37, "max_multiplicity": 2}
 
 
-def test_complete_validation_and_selector():
+def test_complete_validation():
     metadata = rows()
     manifest = chunk_manifest(metadata)
     predictions = prepare_condition(wave())
@@ -253,12 +253,6 @@ def test_complete_validation_and_selector():
     assert evaluated["summary"]["rr180_mae_bpm"] < .01
     with pytest.raises(ValueError, match="身份"):
         evaluate_chunk_predictions(predictions, manifest.iloc[::-1], metadata, wave()[None])
-    selector = LocalRRSelector()
-    assert selector.consider(update=1, local_rr=.5, observed_ids=[1], expected_ids=[1])
-    assert not selector.consider(update=2, local_rr=.5, observed_ids=[1], expected_ids=[1])
-    assert selector.best_update == 1
-    with pytest.raises(ValueError, match="完整"):
-        selector.consider(update=3, local_rr=.4, observed_ids=[], expected_ids=[1])
 
 
 def test_update_checkpoint_roundtrip_and_nonfinite(tmp_path):
@@ -329,7 +323,8 @@ def test_cpu_cli_completion_and_failure_receipts(tmp_path, monkeypatch):
     assert not (output / "failure.json").exists()
     assert np.load(output / "prediction.npy").shape == (1, 18000)
     metrics = json.loads((output / "metrics.json").read_text())
-    assert np.isfinite(metrics["selector"]["selector_local_rr_mae"])
+    assert set(metrics) == {"training", "validation"}
+    assert np.isfinite(metrics["validation"]["rr180_mae_bpm"])
     with pytest.raises(FileExistsError):
         module.synthetic_smoke(output, SOURCE)
     def fail(*args, **kwargs):

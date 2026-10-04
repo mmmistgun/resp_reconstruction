@@ -1,13 +1,12 @@
 """开发阶段的更新、完整父窗口评价和checkpoint工具；正式预算尚未冻结。"""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
 import torch
 
 from resp_train.metrics.final_evaluation import evaluate_window, select_nonoverlap_centers, summarize_windows
-from resp_train.metrics.task import validation_local_rr_mean
 from .data import array, chunk_manifest, restore_parent, validate_rows
 from .diffusion import RespDiff
 from .model import RespDiffSpec, finite
@@ -34,34 +33,6 @@ def train_step(model, optimizer, condition, target, *, generator):
             if isinstance(value, torch.Tensor):
                 finite(f"optimizer:{name}", value)
     return {key: float(value.detach()) for key, value in losses.items()}
-
-
-@dataclass
-class LocalRRSelector:
-    best: float = float("inf")
-    best_update: int | None = None
-    last_update: int = 0
-
-    def consider(self, *, update, local_rr, observed_ids, expected_ids):
-        if list(observed_ids) != list(expected_ids) or not expected_ids or len(set(expected_ids)) != len(expected_ids):
-            raise ValueError("selector要求完整、唯一且同顺序的validation父row")
-        if type(update) is not int or update <= self.last_update or not np.isfinite(local_rr) or local_rr < 0:
-            raise ValueError("selector要求递增update与有限非负Local RR")
-        self.last_update = update
-        improved = local_rr < self.best
-        if improved:
-            self.best, self.best_update = float(local_rr), update
-        return improved
-
-
-def select_validation_checkpoint(evaluated, references, *, metric_config, selector, update, expected_ids):
-    """复用项目原Local RR；与报告用的最终五指标保持独立命名。"""
-    observed = [record["dataset_row_id"] for record in evaluated["records"]]
-    if observed != list(expected_ids):
-        raise ValueError("Local RR要求完整且有序的validation父row")
-    score = validation_local_rr_mean({"r_tho_hat": evaluated["waveform"], "tho_ref": references}, metric_config)
-    improved = selector.consider(update=update, local_rr=score, observed_ids=observed, expected_ids=expected_ids)
-    return {"selector_local_rr_mae": score, "improved": improved, "best_update": selector.best_update}
 
 
 def evaluate_chunk_predictions(predictions, manifest, rows, references):

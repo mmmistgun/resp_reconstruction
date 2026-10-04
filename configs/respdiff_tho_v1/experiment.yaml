@@ -1,4 +1,4 @@
-# 开发合同：正式归一化/预算尚未由实验结果支持，不提供真实数据运行入口。
+# 方法参数按论文，论文未给出的细节按固定发布源码补齐；真实数据入口尚未开放。
 protocol:
   name: respdiff-tho-v1
   stage: synthetic_development
@@ -6,6 +6,8 @@ protocol:
 source:
   root: /mnt/disk_code/marques/reference_repos/RespDiff
   commit: 3ff05545c34f67e1ad415e36e4daea80269880b0
+  paper_version: arXiv:2410.04366v1
+  parameter_policy: paper_then_source
 model:
   profile: source_fft
   hidden_dim: 1024
@@ -30,15 +32,36 @@ diffusion:
   fft_reduction: mean
   sampler: ddpm
 training:
-  formal_max_updates: null
-  formal_validation_interval: null
-  formal_validation_samples: null
+  # epoch指一次完整train chunk遍历；update数由实际chunk数推导。
+  epochs: 400
+  batch_size: 128
+  shuffle: true
+  drop_last: false
+  gradient_accumulation_steps: 1
+  gradient_clip_norm: null
+  early_stopping: false
+  checkpoint_policy: final_epoch
+  validation_timing: after_training
   dtype: float32
-  proposed_batch: 128
   optimizer: adam
   learning_rate: 0.0001
   weight_decay: 0
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+  amsgrad: false
+  scheduler:
+    name: multi_step_lr
+    milestones: [280, 396]
+    gamma: 0.1
+    step_unit: epoch_end
+  # 发布代码未给定seed；保留项目重复性设置，不归因于论文。
   seeds: [20260811, 20260812, 20260813]
+inference:
+  batch_size: 64
+  n_samples: 100
+  aggregation: mean
+  shuffle: false
+  drop_last: false
 synthetic_smoke:
   seed: 20260929
   hidden_dim: 8

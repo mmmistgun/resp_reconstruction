@@ -4,6 +4,15 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## RespDiff-BCG v1
+
+当前修复尝试见 [loss 修复验证协议](../docs/experiments/respdiff_bcg_loss_repair_v1_protocol_20261004.md)：`scripts/run_respdiff_bcg_loss_repair_v1.py` 提供 SNR 加权 FFT 与 epsilon-only 两个独立 objective，均为 batch=64、6400 updates。实现与 CPU 验证已完成，新 GPU/训练尚未执行；顺序执行命令见该协议。
+
+用户确认的 A–H 适配见 [RespDiff-BCG 协议](../docs/experiments/respdiff_bcg_v1_protocol_20261003.md)：20 Hz、30 秒片段、15 秒 hop、六步 DDIM、固定 6400 updates。
+`scripts/run_respdiff_bcg_v1.py` 提供 `synthetic-smoke`、`gpu-check`、`train --confirm-training`，均要求 `--output <新目录>`。
+基础配置为 `configs/respdiff_bcg_v1/experiment.yaml`；本轮实际使用 batch=64 的配置，三个 seed 的 6400-update train/validation 均已完成。结果和产物核对见上述协议，已有运行不重跑。终端显示阶段、步数、loss 与 ETA，同时保存 `run.log`；独立测试集未开放。
+定向测试：`PYTHONPATH=. <项目解释器> -m pytest tests/test_respdiff_bcg.py -q`。
+
 ## RespDiff-THO 开发入口
 
 核心模型与CPU合成流程见[实现与验收记录](../docs/experiments/respdiff_tho_implementation_20260929.md)。

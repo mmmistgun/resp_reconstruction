@@ -4,6 +4,8 @@
 
 状态：核心移植和合成数据接入已实现，21项CPU定向测试通过（13.08秒）。原规模GPU验收、真实数据访问和正式训练尚未执行。当前CLI只提供来源核验与CPU合成流程。
 
+2026-10-03更新：当前参数与工作树位置见[方法参数核对记录](respdiff_parameter_alignment_20261003.md)。主配置按来源采用400 epochs、末轮checkpoint、DDPM50/N100；同日约定审查已移除额外Local RR选模组件，相关17项测试通过。下文21项为9月29日原始CPU验收记录，不代表当前还存在选模接口。
+
 ## 已实现范围
 
 | 文件 | 实现与证据 |
@@ -11,9 +13,9 @@
 | `resp_train/respdiff/model.py` | FFT/plain两个来源profile，保留state_dict键、初始化顺序及时间步嵌入差异 |
 | `resp_train/respdiff/diffusion.py` | 原归约噪声loss、FFT loss、50步DDPM、按样本身份固定噪声、逐轨迹均值 |
 | `resp_train/respdiff/data.py` | segment soft-z/source min-max两种开发profile，重采样/低通、36块身份、完整重组、主体/记录隔离和重复区间统计 |
-| `resp_train/respdiff/experiment.py` | 单次Adam更新检查、checkpoint严格回载与防覆盖、完整父窗口五指标、独立Local RR selector |
+| `resp_train/respdiff/experiment.py` | 单次Adam更新检查、checkpoint严格回载与防覆盖、固定checkpoint的完整父窗口五指标 |
 | `resp_train/respdiff/provenance.py` | 固定上游4个文件SHA-256；不导入有训练副作用的脚本 |
-| `configs/respdiff_tho_v1/experiment.yaml` | 开发合同、原规模网络声明、小模型合成配置；正式归一化、预算和验证频率保留null |
+| `configs/respdiff_tho_v1/experiment.yaml` | 开发合同、原规模网络声明、小模型合成配置；10月3日已补齐来源训练/推理设置，正式归一化保留null |
 | `scripts/run_respdiff_tho_v1.py` | check-source、synthetic-smoke；来源/配置/源码哈希、完成/失败receipt |
 | `tests/test_respdiff.py` | 来源对照、DDPM、信号适配、临时ResearchV2 NPZ及CLI生命周期 |
 
@@ -35,14 +37,14 @@ source_plain用于验证来源行为，主移植网络采用source_fft。两个�
 
 临时NPZ/CSV fixture实际调用ResearchV2WindowDataset，再由ChunkDataset包装；核对父dataset实际row身份，显式拒绝test、主体交叉、错误父row、缺块、重复、错序。父窗口重叠导致的重复区间按原采样权重保留并统计。
 
-合成CLI测试执行一次小模型Adam更新，保存/回载checkpoint，使用DDPM50、N=1生成36块，重组180秒输出并计算最终五指标及独立的原Local RR selector。该fixture仅验证流程，没有真实train/validation质量含义。测试还验证相同目录拒绝覆盖、注入训练失败后保存failure.json并不写完成receipt。
+9月29日合成CLI测试执行一次小模型Adam更新，保存/回载checkpoint，使用DDPM50、N=1生成36块，重组180秒输出并计算最终五指标；当时还测试了独立Local RR selector，该组件已在10月3日移除。该fixture仅验证流程，没有真实train/validation质量含义。完成/失败与防覆盖测试保留。
 
 ## 复查命令
 
 在新worktree执行，解释器复用主仓库现有环境；无需安装依赖：
 
 ```bash
-cd /home/marques/.codex/worktrees/resp-diff/resp_reconstruction
+cd /home/marques/.codex/worktrees/respdiff-paper/resp_reconstruction
 PYTHONPATH=. /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python \
   -m pytest tests/test_respdiff.py -q
 ```
@@ -68,6 +70,6 @@ PYTHONPATH=. /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python \
 
 ## 下一阶段边界
 
-工程入口和正式训练runner尚待原规模资源合同与预算确定后补齐；目前没有读取真实数据的CLI命令。下一步是原规模150点网络的GPU资源验收，并在train/validation开发范围解决归一化桥接对照与充分训练规则。正式归一化、训练预算、验证频率、采样N与三seed矩阵冻结后才开放真实训练。独立test仍需匹配协议与当次授权。
+工程入口和正式训练runner尚待原规模资源与数据合同确定后补齐；目前没有读取真实数据的CLI命令。2026-10-03已按来源固定训练/推理方法参数；下一步是原规模150点网络GPU资源验收，以及归一化/数据身份确认。独立test仍需匹配协议与当次授权。
 
 本次仅新增隔离实现和文档，未修改既有loss/metrics、数据、split、checkpoint或W0/E9产物；无需重算旧结果。

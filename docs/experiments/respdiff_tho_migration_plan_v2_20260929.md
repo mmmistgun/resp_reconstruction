@@ -2,7 +2,7 @@
 
 日期：2026-09-29。修订：v2。分支：`codex/resp-diff`。
 
-状态：核心模型、信号适配与CPU合成入口已实现，21项定向测试通过；详见[实现与CPU验收记录](respdiff_tho_implementation_20260929.md)。正式训练入口、归一化选择与预算仍待后续工程/开发证据。本方案取代 `respdiff_tho_migration_plan_20260929.md`。
+状态：核心模型、信号适配与CPU合成入口已实现，历史21项定向测试通过；详见[实现与CPU验收记录](respdiff_tho_implementation_20260929.md)。2026-10-03按用户要求完成[方法参数与约定审查](respdiff_parameter_alignment_20261003.md)，采用来源训练/末轮评价设置，并移除额外Local RR选模组件；最新相关17项测试通过。正式训练入口与数据归一化仍待准备。本方案取代 `respdiff_tho_migration_plan_20260929.md`。
 
 ## 1. 目标与来源
 
@@ -30,14 +30,14 @@
 | 采样方式 | p.3–4：DDPM/DDIM，表II列50/6 NFE | 训练脚本只调用flag=1的DDPM50；FFT文件另有DDIM | DDPM50为质量主路径，DDIM6为后续加速路径 |
 | 采样条数 | 论文未明确轨迹平均条数N | 脚本第214–215行N=100、取均值 | N与NFE分开记录，不能把代码N=100当成论文表II已明确的设置 |
 | DDIM细节 | 论文未给出完整实现 | 第318行每步对全batch做min-max；eta未实际使用 | 来源DDIM单独对照；THO版需定义保持目标尺度的更新并验收 |
-| 训练/选择 | LOSO，未完整列出优化预算 | Adam 1e-4、batch128、400 epochs、280/396降lr、末轮checkpoint | 固定主体split、updates预算、validation selector均标注为适配 |
+| 训练/选择 | LOSO，未完整列出优化预算 | Adam 1e-4、batch128、400 epochs、280/396降lr、末轮checkpoint | 保留来源训练/末轮选择设置；主体split与评价指标使用项目合同 |
 | 评价 | 60秒FFT主峰RR与波形MAE | RR窗60秒/步20秒、分母漏+1；另算整条波形MAE | 使用项目指标函数，修复行为不沿用原错误分母 |
 
 论文“6步生成8分钟用7秒”未配齐硬件、batch和N等条件，不能推算本机耗时。50/6 NFE指一条轨迹的调用数；若N=100，每个条件batch分别需要5000/600次网络调用。
 
 ## 3. 主配置与来源校验
 
-**主比较命名为RespDiff-THO。**保留多尺度卷积、双向RNN、扩散与频谱目标、30 Hz/5秒生成及顺序拼接；适配BCG/THO模态、segment幅值空间、固定split、训练预算、selector与项目评价。建议首轮只有这一主配置的三seed。
+**主比较命名为RespDiff-THO。**保留多尺度卷积、双向RNN、扩散与频谱目标、30 Hz/5秒生成、来源训练设置及顺序拼接；适配BCG/THO模态、数据幅值空间、固定split与项目评价。建议首轮只有这一主配置的三seed，正式归一化在数据合同中明确。
 
 **来源行为校验使用synthetic fixture。**对照原forward、loss、DDPM单步以及逐5秒min-max预处理，不自动增加正式实验臂。若另需THO上的`source_minmax`训练对照，应另注册；推理不能读取目标统计恢复幅值。该目标变换消除了跨5秒片段相对幅值，其包络成绩只能描述该版本，不能代替主适配模型的能力。完整BIDMC数值复现属于独立LOSO任务。
 
@@ -91,25 +91,24 @@ L_total = L_noise + 0.01 * L_fft
 ### DDPM与DDIM
 
 - DDPM主路径：50步、beta线性0.0001→0.5，建议N=100均值。调度注册buffer，保持数值合同，t=0不读取无用前一时刻项。
-- 训练/验证RNG分离。采样身份包含seed/split/parent/chunk/trajectory/step；各checkpoint使用相同验证随机数和batch分组，降低随机采样对selector的干扰。
+- 训练/评价RNG分离。采样身份包含seed/split/parent/chunk/trajectory/step，用于固定末轮checkpoint的可重复评价；batch分组按已记录的推理合同执行。
 - `sample_mean`使用eval+inference_mode，逐轨迹累加，避免保存全部轨迹；明确浮点容差和跨环境可重复边界。
 - DDIM6有论文加速依据，列为第二阶段可选推理评估。源码的每步全batch min-max会改变幅值空间、耦合样本；THO版应定义eta=0、固定timesteps、保持目标尺度的更新公式，单独登记与来源DDIM的差异。改变sampler不重训，但产生新评价身份。
-- 如果采用DDIM6选checkpoint、DDPM50最终报告，须在正式训练前固定二者角色。不得按中途质量切换或用较好的sampler结果替换已冻结主结果。
+- 主合同按源码使用400 epochs末轮checkpoint与DDPM50评价。DDIM6作为独立推理评估，不按中途质量替换已确定主结果。
 
 ## 6. 训练预算与评价成本
 
 按既有记录规模，10141×36=365076训练chunk，2675×36=96300 validation chunk；实际运行仍须核验父级row集合，数字不是新的准入规则。
 
-**预算以optimizer updates定义。**全chunk batch128每次完整遍历需2853次更新；机械沿用400 epochs会变成1141200次更新/seed。原400 epochs属于BIDMC留一折的数据量，不能直接迁移。
+**方法预算按来源400 epochs定义，update数随实际数据规模推导。**全chunk batch128每次完整遍历需2853次更新，400 epochs为1141200次更新/seed。此设置有源码依据，但不代表与BIDMC等更新量或等计算成本。
 
-可审查的初始提案：
+- Adam lr=1e-4、weight decay=0、physical batch128、FP32；seeds 20260811/12/13为项目重复性设置。
+- 按完整train chunk集合遍历400轮，第280/396轮结束后学习率×0.1；保留尾batch，不增加早停或梯度累积。
+- 使用第400轮完成后的checkpoint，训练后完整validation；项目Local RR和五指标用于报告，不重新选择主checkpoint。
+- DDPM50、N=100均值，推理batch64；真实资源验收不会自动修改这些参数。
+- 报告updates、实际chunk数/信号时长暴露、wall-time、params、显存和推理成本；W0作为同任务参照，不宣称等算力架构比较。
 
-- Adam lr=1e-4、weight decay=0、physical batch128、FP32；seeds 20260811/12/13。
-- 全chunk集合逐遍打乱，计划15600 updates；第10920/15444次完成更新后lr×0.1，对应70%/99%。15600仅以每人8分钟约96段、52人训练、约39 batch×400估计原训练量级，未读取真实BIDMC验证精确计数。
-- 按固定预算完成训练；候选每390 updates完整validation，共40个checkpoint（含末步）。项目原Local RR严格最小选优，并列取最早。另保存末步身份，不根据test重新二选一。
-- 同时报告updates、实际chunk数/信号时长暴露、wall-time、params、显存和推理成本。同updates不等于同数据暴露或同算力；W0是既有同任务参照，不宣称严格等计算量比较。
-
-**这些数值是待资源验收的提案。**96300个validation chunk、batch64需要1505个batch；DDPM50×N100约7525000次去噪网络调用/完整validation。短片段降低单次显存，完整验证仍可能主导成本。先测单batch采样，再在首个正式训练前一次确定checkpoint候选数、N和sampler；用协议修订记录调整。partial validation、噪声loss或已知target的x0还原不能充当生成波形Local RR。
+96300个validation chunk、batch64需要1505个batch；当前串行DDPM50×N100约7525000次去噪网络调用/完整validation。原规模训练及一次完整验证的资源需求仍须测量。若无法承担，应说明开销并明确修订实验，而不是自动缩减来源设置。
 
 ## 7. 接口与实施顺序
 
@@ -118,7 +117,7 @@ L_total = L_noise + 0.01 * L_fft
 | `resp_train/respdiff/model.py` | 来源FFT网络与tensor映射 |
 | `resp_train/respdiff/diffusion.py` | loss、调度、sample_mean、随机数接口 |
 | `resp_train/respdiff/data.py` | parent→36 chunks、信号处理、身份与拼接 |
-| `resp_train/respdiff/experiment.py` | updates训练、完整生成式validation、selector、产物 |
+| `resp_train/respdiff/experiment.py` | 更新组件、固定checkpoint的完整父窗口评价、产物 |
 | `configs/respdiff_tho_v1/experiment.yaml` | 模型/变换/采样/预算/新输出根，未决合同阻止正式运行 |
 | `scripts/run_respdiff_tho_v1.py` | CPU检查、工程验收、train/validation入口 |
 | `tests/test_respdiff.py` | 数学一致性、信号对齐、生命周期测试 |
@@ -127,9 +126,9 @@ L_total = L_noise + 0.01 * L_fft
 
 **P0，来源与adapter：**固定paper/code身份；synthetic CPU对照forward、三项loss、一次backward、DDPM单步和state_dict。小fixture测试梯度与失败行为，原规模meta核对参数。验证18000→5400→36×150→5400→18000长度/时间位置、已知正弦/脉冲/慢幅值调制与边界；来源min-max另做测试，主预测路径检查无目标统计输入。
 
-**P1，runner：**临时NPZ/index验证主体隔离、chunk映射、完整重组、selector、五指标资格/分母和中央选窗；验证新identity防覆盖、失败中止与test入口拒绝。固定batch条件下测试可重复采样。
+**P1，runner：**临时NPZ/index验证主体隔离、chunk映射、完整重组、五指标资格/分母和中央选窗；验证新identity防覆盖、失败中止与test入口拒绝。固定batch条件下测试可重复采样。
 
-**P2，资源验收：**由用户执行或另行授权；保持L=150、6层/1024 hidden，batch1逐步到训练128/验证64，FP32测forward/backward/update、50步单轨迹，再校准完整N100采样与36段拼接成本。逐项限时，保留失败；据实估计全validation、候选40次验证和三seed成本，再冻结第6节。DDIM6另验收公式与幅值合同。
+**P2，资源验收：**由用户执行或另行授权；保持L=150、6层/1024 hidden，batch1逐步到训练128/验证64，FP32测forward/backward/update、50步单轨迹，再校准完整N100采样与36段拼接成本。逐项限时，保留失败；据实估计400 epochs、一次完整validation和三seed成本。DDIM6另验收公式与幅值合同。
 
 **P3，正式运行：**确定全部合同后，记录Git/source manifest、resolved config、父子row身份、seeds、命令、环境、模型/优化器、history、checkpoint、逐parent指标和完成/失败receipt。输出独立不可覆盖的 `runs/respdiff_tho_v1/<identity>/seed_<seed>/<attempt>`。真实数据smoke、GPU和正式训练遵循仓库授权；独立test须匹配专项协议及当次授权。W0最终五指标产物确认完成且版本一致后再并表。
 
@@ -142,16 +141,16 @@ L_total = L_noise + 0.01 * L_fft
 | `breathing_bidmc.py` | `2e15c37f7faf732c2b9d195fcbc77a186b65638df4c199a0d10a6c61a67c0360` |
 | `breathing_bidmc_fft.py` | `38b6191e163a37ca6b9dc3832cba7de3b495d007459c4915f3086f77ce07fec8` |
 
-方案调研阶段只完成论文—代码对照；后续已新增核心实现并执行CPU合成更新/采样，当前证据见实现记录。正式信号变换选择和预算仍为新增RespDiff适配提案，既有实验结果不因此改变。
+方案调研阶段只完成论文—代码对照；后续已新增核心实现并执行CPU合成更新/采样，当前证据见实现记录。2026-10-03已按来源固定方法参数；正式归一化仍待数据合同确定，既有实验结果不因此改变。
 
 ## 9. 完整性与合理性复核
 
 结论：本方案保留核心网络和5秒生成机制，是THO任务适配，尚不构成BIDMC论文数值复现或已验证的源码等价实现。方案中的合理动机与已验证效果必须区分。
 
-- **归一化是实质科学变化。**由逐5秒min-max改为segment soft-z，会改变target的均值、能量、范围及固定alpha调度下的信噪比，也会影响频谱项的数值尺度。保留努力幅值有任务依据，但只通过synthetic来源测试不足以证明适配训练有效。若要解释归一化对结果的影响，需要在相同THO数据、网络、预算、selector和推理合同下，比较源码归一化与segment归一化；这属于待注册的桥接对照，不自动开放新训练。
-- **15600 updates不是充分训练证据。**按batch128粗算约199.68万个chunk暴露，相当于365076个展开chunk约5.5遍；尾batch使实际暴露略少。与原数据约400遍相比，相近updates并不代表相近优化程度。应依据train/validation开发曲线和可接受预算预注册充分训练规则，再统一执行正式矩阵；不得用独立test来决定预算。
-- **40次DDPM50×N100全validation尚无可行性证据。**第6节调用数是当前串行采样实现的估算；条件缓存和等价的轨迹并行可能降低成本，但必须分别验证。工程验收前不冻结这一验证频率。
+- **归一化是实质科学变化。**由逐5秒min-max改为segment soft-z，会改变target的均值、能量、范围及固定alpha调度下的信噪比，也会影响频谱项的数值尺度。数据空间映射须明确记录；synthetic来源测试只证明实现行为，不能证明适配后的实际质量。额外归一化对照属于独立研究，不作为当前复现的强制前置阶段。
+- **400 epochs采用来源设置，开销仍须验收。**THO展开chunk数更大，约114万updates/seed是固定方法参数在当前数据规模上的代价。配置符合来源不等于资源可行或效果已证实；不能用test决定是否缩减预算。
+- **完整DDPM50×N100评价尚无资源证据。**主合同训练后评价一次；第6节调用数对应当前串行实现，条件缓存和等价轨迹并行可能降低成本，但必须分别验证。
 - **公平性有三种不同范围。**同主体划分/同评价窗口/同指标可支持同任务方法比较；5秒与180秒上下文、30 Hz与100 Hz带宽、不同训练目标和数据暴露不能支持严格等信息或等算力的纯架构结论。最终指标对参考及预测统一处理，但不能补回片段归一化或降采样已丢失的信息。
 - **完整复现仍缺实际证据。**核心实现的CPU来源forward/loss/采样对照与chunk身份/重组已通过；原规模更新、实际BN分组合同、真实完整validation和三seed结果仍待验证。若声称复现论文1.18 bpm及表II，还需BIDMC LOSO、论文与代码冲突处理、sampler/N及原指标口径的独立复现证据。
 
-推荐先完成源码一致性实现和短片段工程验收；正式方案冻结前解决归一化证据与充分训练规则。DDIM6保留为后续独立推理适配，主结果先用可追溯的DDPM路径。
+源码一致性实现与短片段工程验收服务于来源设置的可运行性；数据身份和归一化映射确定后，按来源训练及末轮评价流程执行。DDIM6保留为有论文依据的可选路径。
