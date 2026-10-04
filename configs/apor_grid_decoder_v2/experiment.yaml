@@ -1,0 +1,29 @@
+schema_version: 1
+protocol: apor-grid-decoder-v2-20260930
+arms: [N0, N1, D0, D1]
+train_arms: [N1, D1]
+seeds: [20260811, 20260812, 20260813]
+reference_arms: {N0: A0, D0: A3}
+source_session: runs/patch_apor_v1/session_20260929T181607Z_77e89165fef0
+source_session_sha256: cdf6337db77d73724f93508a3568669863a17011066e7d332cf69b18b4e98fa2
+output_root: runs/apor_grid_decoder_v2
+training:
+  epochs: 80
+  min_epoch: 30
+  patience: 15
+  min_delta: 0.0
+  planned_updates: 6400
+  batch_size: 128
+  accumulation: 1
+  amp_dtype: bfloat16
+  selector: full_validation_local_rr_strict_minimum_earliest_tie
+data:
+  splits: [train, val]
+  windows: {train: 10141, val: 2675}
+  samp_ids: {train: 32, val: 7}
+engineering:
+  updates: 3
+  physical_batch: 128
+  max_reserved_fraction: 0.85
+activation_stage: deferred
+research_test: deferred
