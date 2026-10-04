@@ -1,0 +1,12 @@
+# 模型结构配置；训练与数据协议由后续实验单独定义。
+model:
+  name: patch_aligned_tf_mamba
+  initialization_seed: 20261004
+  patch_aligned_tf_mamba:
+    dimension: 96
+    waveform_channels: 64
+    condition_channels: 32
+    heads: 4
+    layers: 6
+    dropout: 0.1
+    window_epsilon: 0.001

@@ -4,6 +4,12 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## Patch-aligned TF-Mamba 模型检查
+
+模型入口为 `resp_train.models.patch_aligned_tf_mamba`，结构配置为 `configs/patch_aligned_tf_mamba/model.yaml`。
+`scripts/check_patch_aligned_tf_mamba.py --device cpu` 使用合成信号、原生 H-CWT 和显式 Mamba 测试替身检查前后向；`--device cuda:0` 使用官方 Mamba2，由用户执行。
+结构、定向测试命令与验收标准见[实现说明](../docs/experiments/patch_aligned_tf_mamba_v1_implementation_20261004.md)。当前入口用于模型工程验证，训练协议由后续实验定义。
+
 ## Test 受试者 670 排除敏感性分析
 
 2026-09-30 已完成既有 test 指标的描述性重算，覆盖 25 个实验/任务分组、99 个候选、293 个 cell。入口为 `scripts/analyze_test_subject670_sensitivity.py` 与 `scripts/report_test_subject670_sensitivity.py`；只读取历史 CSV，不加载波形或模型。结果、覆盖边界、执行记录与产物见[敏感性分析报告](../docs/experiments/test_subject670_sensitivity_results_20260930.md)，完整数值见[附表](../docs/experiments/test_subject670_sensitivity_tables_20260930.md)。原冻结 test 和 checkpoint 选择保持原位，现有分析目录拒绝覆盖。
