@@ -1,0 +1,29 @@
+schema_version: 1
+protocol: apor-activation-v1-20260930
+arms: [U0, U1]
+train_arms: [U1]
+seeds: [20260811, 20260812, 20260813]
+reference_arms: {U0: A0}
+source_session: runs/patch_apor_v1/session_20260929T181607Z_77e89165fef0
+source_session_sha256: cdf6337db77d73724f93508a3568669863a17011066e7d332cf69b18b4e98fa2
+structure_decision_sha256: 4e69b062349e4139746cc83c7b7aff4f2e305b27afbdf10b2cdc9fd3a4810a8c
+output_root: runs/apor_activation_v1
+training:
+  epochs: 80
+  min_epoch: 30
+  patience: 15
+  min_delta: 0.0
+  planned_updates: 6400
+  batch_size: 128
+  accumulation: 1
+  amp_dtype: bfloat16
+  selector: full_validation_local_rr_strict_minimum_earliest_tie
+data:
+  splits: [train, val]
+  windows: {train: 10141, val: 2675}
+  samp_ids: {train: 32, val: 7}
+engineering:
+  updates: 3
+  physical_batch: 128
+  max_reserved_fraction: 0.85
+research_test: fixed_checkpoint_after_validation

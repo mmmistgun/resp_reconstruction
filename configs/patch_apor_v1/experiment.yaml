@@ -1,0 +1,38 @@
+schema_version: 1
+protocol: patch-apor-module-v1-20260930
+arms: [M0, M1, M2, M3, M4, M5, M6, M7, A0, A1, A2, A3, A4]
+seeds: [20260811, 20260812, 20260813]
+baseline: configs/crd_tf_v1/crd_tf102_w_formal.yaml
+output_root: runs/patch_apor_v1
+training:
+  epochs: 80
+  min_epoch: 30
+  patience: 15
+  min_delta: 0.0
+  planned_updates: 6400
+  batch_size: 128
+  accumulation: 1
+  amp_dtype: bfloat16
+  selector: full_validation_local_rr_strict_minimum_earliest_tie
+data:
+  splits: [train, val]
+  windows: {train: 10141, val: 2675}
+  samp_ids: {train: 32, val: 7}
+engineering:
+  updates: 3
+  batch1_seeds: [20260811, 20260812, 20260813]
+  physical_batch: 128
+  max_reserved_fraction: 0.85
+comparisons:
+  M1: M0
+  M2: M0
+  M3: M0
+  M4: M0
+  M5: M0
+  M6: M0
+  M7: M0
+  A0: M0
+  A1: A0
+  A2: A0
+  A3: A0
+  A4: A0

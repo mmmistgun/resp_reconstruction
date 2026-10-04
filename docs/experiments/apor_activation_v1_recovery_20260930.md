@@ -1,0 +1,13 @@
+# APOR activation v1 并发故障恢复
+
+本记录是原三seed训练与固定checkpoint research-test任务的工程恢复附件。科学合同、样本、指标、selector和原代码快照保持原身份。
+
+2026-09-30 原session `session_20260930T120541Z_324e56049c8a` 中，seed 20260811成功；seed 20260812完成训练后，在保存共享validation参考波形时被非阻塞文件锁拒绝；调度器随后中断尚在来源审计阶段的seed 20260813。原失败attempt和全部文件保留。
+
+恢复入口为 `scripts/recover_apor_activation_v1.py`，持有原调度器的controller及execution排他锁，串行补齐seed 20260812的最终validation导出和seed 20260813的原定训练，随后按原协议完成三seed validation汇总、test allowlist与research-test。原冻结代码不修改，共享参考波形写入通过单写入者串行执行规避锁竞争。
+
+seed 20260812使用新attempt。训练history、初始化、optimizer分组与原训练manifest原样复制；best/final checkpoint产生可追溯的派生副本，仅修改内嵌config的outputs.run_root以满足新目录的既有审计。所有其余checkpoint内容（包含权重、optimizer、epoch及metrics）逐项精确验证。原始与派生文件哈希、恢复代码及本附件均进入新manifest。派生副本不代表重新训练。
+
+只重做原失败的最终validation导出，要求波形与失败前已保存的prediction逐元素完全一致，并核对行顺序。恢复中的optimizer更新数为0。原训练峰值内存未保存，明确记为未知。seed 20260813按原配置和已通过的GPU验收重新建立独立attempt；不重训已完成的seed 20260811/12。
+
+只有完整三seed验证成功才继续test。恢复不改变原实验结论边界，也不增加训练cell或test候选。
