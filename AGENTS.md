@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- H-only＋H64 消融 v1：实现与 synthetic CPU 定向验收已完成；GPU、正式训练、HA16 复用核验和 research-test 待执行。17配置×3seed矩阵、执行入口与证据边界见 `docs/experiments/h_only_ablation_v1_protocol_20261004.md`。
+
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E5 W0 时域前端替换：三 seed train/validation 与固定 checkpoint research-test 均已完成并关闭；当前状态、validation/test 结果与来源身份统一由 `docs/experiments/e5_temporal_frontend_closeout_20260927.md` 路由。
 - E6 20-Hz 学习解调前端：三 seed train/validation、效率记录与固定 checkpoint research-test 均已完成并关闭；当前状态与证据入口为 `docs/experiments/e6_temporal_frontend_closeout_20260924.md`。
