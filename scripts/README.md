@@ -1,5 +1,19 @@
 # 当前 THO 与 CRD 实验入口
 
+## CWT-APOR v2（已完成并关闭）
+
+20配置×3seed train/validation、固定60-checkpoint research-test与3seed×18条件机制分析均已完成。当前状态、结果与证据入口统一见[实验结果总览](../docs/experiments/cwt_apor_v2_results_summary_20261002.md)；机制验收与三视图汇总见[机制完成记录](../docs/experiments/cwt_apor_v2_mechanisms_results_20261002.md)。
+
+模型为APOR/A0，最多80轮、min_epoch30/patience15/min_delta0早停，学习率按6400次更新规划。[原执行协议](../docs/experiments/cwt_apor_v2_protocol_20261001.md)、[运行顺序](../docs/experiments/cwt_apor_v2_formal_execution_20261001.md)与对应入口保留冻结运行身份；最终机制采用[同batch验收修订r2](../docs/experiments/cwt_apor_v2_mechanisms_r2_20261002.md)，入口为`scripts/run_cwt_apor_v2_mechanisms_r2.py`。已完成阶段禁止自行重跑。
+
+结果图表整理入口为`scripts/build_cwt_apor_v2_report.py`，读取已完成汇总表并输出新的独立报告目录。核心代码依赖`resp_train/paper_evidence/patch_apor_v1_model.py`，来源身份见[worktree来源清单](../docs/experiments/cwt_time_frequency_v1_worktree_sources_20260930.json)。
+
+调制谱、FiLM路径和受试者差异的既存产物分析使用`scripts/analyze_cwt_apor_v2_mechanism_evidence.py`，范围见[分析约定](../docs/experiments/cwt_apor_v2_mechanism_evidence_analysis_20261003.md)，图表与解释见[机制证据整理结果](../docs/experiments/cwt_apor_v2_mechanism_evidence_results_20261003.md)。该入口只读取保存的表格、PSD、预测和案例，输出独立目录；不执行模型前向。
+
+## CWT 时频信息与频带作用 v1（已停止）
+
+阶段状态见[停止记录](../docs/experiments/cwt_time_frequency_v1_stopped_20261001.md)。实现与协议保留用于原产物来源核验；其中模型无关的CWT缓存、校准和信号分析已由APOR v2只读复用。
+
 本文只描述当前冻结的新呼吸重建协议。旧 E/F/G probe、旧 loss、旧 metrics、旧 gate/topK 和历史 checkpoint 语义不再属于当前 workflow；旧代码与说明通过 Git 追溯，历史 run 原地保留。
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
