@@ -1,59 +1,71 @@
-# Patch-aligned TF-Mamba v1 模型实现
+# Patch-aligned TF-Mamba 模型实现
 
-本文件定义本轮模型实现与定向工程验证。当前阶段为模型实现；训练矩阵、数据划分、loss、metrics、checkpoint selector 和 research-test 访问由后续独立实验协议定义。本轮不产生模型性能结论。
+更新日期：2026-10-05。当前阶段为模型与训练数据接口工程验证。训练矩阵、loss、metrics、checkpoint selector 和正式 validation 协议由后续实验定义；当前工程检查不产生重建性能结论。分支已合并 main 的 `b40c2d1`，包含 CWT-APOR 时频表示与机制记录。
 
-## 结构
+## 物理几何
 
-输入 BCG 为 `(B,1,18000)`，采样率 100 Hz。连续小核 CNN 提取 100 Hz 特征，再用 200 点窗口、50 点步长形成 357 个观察单元。相对中心时间编码参与注意力池化，生成 `(B,357,96)` token。
+输入为 100 Hz、180 秒 BCG 和对应冻结 H-CWT。配置包含 sample_rate=100、window_samples=18000、patch_samples=200、patch_hop_samples=50、cwt_pool_samples=50、patch_chunk_size=16、checkpoint_local=true。
 
-连续 CNN：`Conv(1,32,k7) → GELU → 残差(k5) → Conv(32,64,k5) → GELU → 残差(k3)`。残差块使用逐位置通道 LayerNorm、depthwise 卷积、GELU 和 pointwise 卷积。连续 stem 的时间感受野为 17 个采样点。位置池化在 200 个特征位置上运算；其对应原始信号感受野包含 CNN 的邻域。
+设输入长度 L、片段长度 P、步长 S、CWT 池化长度 Q。约束为 `P % Q == 0`、`S == Q`、`(L-P) % S == 0`，且 `0<P<=L`。冻结表示要求采样率、输入长度和池化分别为 100、18000、50；修改这三项需要独立表示合同。
 
-H-CWT 通过已有 `cwt_magnitude_features` 生成原生 Morlet `log1p(abs(CWT))` 的 50 点均值，从实际映射频率中选取 `(0.8,8] Hz`，保留 41 行的升序排列。返回的频率元数据与特征行一一对应。该选取与 H-only 分支所用的原生网格、频带与池化定义一致；实现复用本分支已有变换函数。
+`N=(L-P)/S+1`、`R=P/Q`。1/2/4 秒分别得到 359/357/353 个 patch，各读取 2/4/8 个 CWT 时间格。相对时间坐标为 `(r*Q+(Q-1)/2-(P-1)/2)/sample_rate`；2 秒时为 `[-0.75,-0.25,0.25,0.75]` 秒。
 
-二维条件编码器为 `Conv2d(1,32,3×3) → 通道LayerNorm → GELU → DWConv2d(3×3) → GELU → Conv2d(1×1)`，保留 `(41,360)` 网格。逐位置通道归一化使其时间感受野保持在 5 个 CWT 时间格。
+## 连续波形表示
 
-第 j 个 token 读取 CWT 编码特征的 `j:j+4`，每个 query 对应 164 个 K/V。K/V 在整张特征图上投影一次，再形成局部窗口。注意力使用 4 头，位置偏置来自实际频率的自然对数和相对中心时间 `[-0.75,-0.25,0.25,0.75]` 秒。读取位置对齐；CWT 和编码器的实际感受野包含邻域。
+完整 BCG 经 `Conv(1,32,k7) → GELU → 残差(k5) → Conv(32,64,k5) → GELU → 残差(k3)`，再接五个 k3 残差块，dilation 为 `1/2/4/8/16`。残差块使用逐时间位置通道 LayerNorm、depthwise 卷积、GELU 和 pointwise 卷积；时间卷积使用 reflect padding。
 
-FiLM 为 `u=z*(1+0.5*tanh(gamma))+0.5*tanh(beta)`。条件 MLP 为 `96→96→192`，最终投影权重、偏置均零初始化。FiLM 后接 6 层现有独立正反向 Mamba2 block，D=96，d_state=64，d_conv=4，expand=2，headdim=32，ngroups=1，chunk_size=256，dropout=0.1。
+感受野为 `17+2*sum(stem_dilations)=79` 点，即 0.79 秒。`stem_dilations` 随配置保存。该增强使局部特征在池化前具备亚秒级组合信息，其任务收益仍需 validation 验证。
 
-解码器 `Linear(96,96) → GELU → Linear(96,200)` 输出局部波形。对称 Hann 窗取正下限 epsilon=0.001，按累计权重归一化重叠合成，完整覆盖 18000 点。epsilon 是记录在配置中的数值参数。双向时序建模适用于离线窗口重建。
+位置池化使用相对中心物理时间。线性 score 分为内容项与位置项，相加后沿片段时间 softmax；局部特征与位置向量分别加权求和，再投影为 D 维 token。这与对 `feature+position` 评分并聚合在数学上等价；中间张量按 patch 分块计算。
 
-## 接口与复现
+## 时频条件与合成
 
-- 模型：`resp_train.models.patch_aligned_tf_mamba.PatchAlignedTFMamba`。
-- 通用模型注册名：`patch_aligned_tf_mamba`。
-- 结构配置：`configs/patch_aligned_tf_mamba/model.yaml`。
-- 调用：`model(x, tf={"w": h_cwt})["waveform"]`。H-CWT 的频率行顺序必须与构造模型时的元数据相同。
-- `h_cwt_features(waveform)` 返回 `(41,360)` 特征及 41 个实际频率；注册 builder 按同一原生映射构造频率元数据。
-- 实际频率、相对时间与合成窗保存为 state_dict buffer；模型结构配置及初始化 seed 随未来运行的 resolved config 一起保存。
-- 输入、条件、FiLM 投影和输出非有限值显式失败。CPU 测试显式注入替身；正式构造调用官方 Mamba2。
+H-CWT 为 `(B,41,360)`，频率范围 `(0.8,8] Hz`。编码器为：时间 reflect/频率 replicate padding、3×3 Conv、GroupNorm、GELU、同样的分轴 padding、3×3 DWConv、GELU、1×1 Conv。默认通道数 32，GroupNorm 为 8 组。
 
-2 秒窗口作为局部观察尺度，与四个 0.5 秒 CWT 区间建立确定几何关系。窗口时长和局部 token 压缩能力仍需后续 validation 实验检验。
+GroupNorm 在每个样本内按组覆盖通道和时频空间统计。卷积支持为 5×5 邻域，归一化依赖整个时频网格。局部幅度扰动检查验证编码器可感知局部变化；这不等于对整窗统一增益保持绝对幅度。
 
-## 定向验证
+每个波形 token 作为 Query，读取同区间 `41×R` 个 K/V。K/V 在原生 `(B,41,360,D)` 上投影一次，按时间偏移及 patch 分块计算。位置偏置来自缓存的实际 log-frequency 和相对中心秒数；默认 4 头。点积、softmax、累计使用 float32，局部激活在反向时重算。分块限制后端布局转换的临时存储。
 
-2026-10-04：11 项合成 CPU 单元测试通过；默认结构的原生 CWT 合成检查通过，输出 `[1,1,18000]`，条件与参数梯度检查通过。官方 Mamba2 CUDA 前后向尚未执行。
+FiLM 为 `u=z*(1+0.5*tanh(gamma))+0.5*tanh(beta)`，条件 MLP 为 `D→D→2D`，最后一层权重、偏置零初始化。第一步由输出投影开始学习；投影更新后，梯度进入条件编码器和注意力。
 
-在本 worktree 根目录执行，复用现有 Python 环境：
+随后为 6 层独立正反向 Mamba2，D=96、d_state=64、d_conv=4、expand=2、headdim=32、ngroups=1、chunk_size=256、dropout=0.1。宽度和深度沿用 APOR 容量，作为结构验证起点。
+
+解码器为 `Linear(D,D) → GELU → Linear(D,P)`，使用对称 Hann 窗及正下限 epsilon=0.001，经累计权重归一化合成完整窗口。epsilon 是记录在配置中的数值参数。双向结构适用于离线重建。
+
+## 冻结缓存与训练接口
+
+模型入口为 `resp_train.models.patch_aligned_tf_mamba.PatchAlignedTFMamba`，注册名为 `patch_aligned_tf_mamba`。将 `configs/patch_aligned_tf_mamba/model.yaml` 与调用方的数据、训练配置合并，并显式赋值 `data.tf_cache_path`。此 YAML 是模型与缓存接口片段，尚不是正式实验配置。
+
+`model.tf_representations=[w]`。`ResearchV2WindowDataset` 按模型名选择 `FrozenHCWTReader`，复用原 `TfV1CacheReader` 的冻结 manifest、row identity 和只读映射验证。adapter 从冻结 `(N,97,360)` W cache 按实际频率选取 41 行，以 `tf['w']` 交给模型。
+
+模型 builder 与 reader 共用 `w_frequencies_hz.npy`，验证 manifest 和频率文件 SHA-256、表示规格、频率顺序及维度；读取样本时验证整条源记录 finite。模型构造和训练读取均不计算 CWT。train/val 为当前开放 split；该接口拒绝 test，后续评价须由对应协议与授权开放。
+
+标准 DataLoader、`batch_tf_to_device`、engine 的特征转发和 `train_one_epoch` 可沿用。合成临时缓存验证了 dataset→loader→engine→model 两个优化步骤。`h_cwt_features()` 保留用于独立合成检查。
+
+实际频率、相对时间、合成窗保存在 state_dict；结构配置与初始化 seed 随 resolved config 保存。输入、条件、FiLM 投影和输出非有限值显式失败。此前模型 checkpoint 的参数布局与本轮新增 stem、归一化结构不兼容，不能作为本结构的严格恢复 checkpoint。
+
+## CPU 验证
+
+2026-10-05：模型定向测试 27 项通过，数据加载及特征转发相关回归 12 项通过；默认结构结合原生 CWT 的 CPU BF16 两步 AdamW 检查通过。均使用合成输入或临时 fixture，Mamba 为显式测试替身。官方 CUDA 与实际峰值显存尚未验证。
+
+在本 worktree 根目录，使用现有环境：
 
 ```bash
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-  /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python \
-  -m pytest -q tests/test_patch_aligned_tf_mamba.py
-
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-  /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python \
-  scripts/check_patch_aligned_tf_mamba.py --device cpu
+CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q tests/test_patch_aligned_tf_mamba.py
+CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python scripts/check_patch_aligned_tf_mamba.py --device cpu --dtype bfloat16
 ```
 
-单元测试覆盖时间索引、局部读取的显式参考计算、连续卷积感受野、合成首尾与梯度、FiLM 零初始化、条件梯度、输入失败、state_dict 恢复和模型注册。合成检查脚本使用真实原生 CWT 变换和默认结构；CPU 模式明确使用 Mamba 测试替身。
+测试使用合成信号、临时 cache 与显式 Mamba 替身，覆盖几何、OLA 首尾与梯度、0.79 秒 stem 支持、局部幅度响应、边界延拓、分块参考前向/梯度、保存张量边界、BF16、元数据篡改、test 拒绝及两个 engine 优化步骤。
 
-官方 Mamba2 CUDA 前后向由用户执行：
+## CUDA 工程验证
+
+由用户在目标 GPU 执行。先检查小 batch 官方内核，再测目标 batch 的 BF16 训练 step 与显存。报告路径须尚不存在，失败也保存状态。
 
 ```bash
-OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-  /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python \
-  scripts/check_patch_aligned_tf_mamba.py --device cuda:0
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python scripts/check_patch_aligned_tf_mamba.py --device cuda:0 --dtype float32 --batch-size 1 --steps 2 --report /tmp/patch_tf_cuda_fp32_b1_20261005.json
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python scripts/check_patch_aligned_tf_mamba.py --device cuda:0 --dtype bfloat16 --batch-size 128 --steps 2 --patch-chunk-size 16 --report /tmp/patch_tf_cuda_bf16_b128_20261005.json
 ```
 
-验收为 JSON 报告 `status=passed`、`mamba=official_mamba2`、输出 shape `[1,1,18000]`、有限且有效的条件梯度以及有限参数梯度。命令只生成合成信号并向终端输出报告，不读取数据集或写入实验产物。GPU 显存、混合精度与正式训练效率仍需后续获准阶段验证。
+验收为 `status=passed`、`mamba=official_mamba2`、输出 `[B,1,18000]`、两步有限 loss/参数/梯度，以及第二步条件梯度非零。报告包含配置、batch、精度、软件版本、设备、参数量、耗时、`peak_allocated_bytes` 和 `peak_reserved_bytes`。峰值统计覆盖 forward/backward/AdamW step，包括优化器状态分配；耗时仅作工程检查，不用于正式效率比较。
+
+批量 128 是否适合目标 GPU 尚待实测，不能由 CPU 测试或张量元素估算替代。正式训练前还需匹配训练精度与 optimizer 配置的获准验证。

@@ -21,7 +21,8 @@
 ## Patch-aligned TF-Mamba 模型检查
 
 模型入口为 `resp_train.models.patch_aligned_tf_mamba`，结构配置为 `configs/patch_aligned_tf_mamba/model.yaml`。
-`scripts/check_patch_aligned_tf_mamba.py --device cpu` 使用合成信号、原生 H-CWT 和显式 Mamba 测试替身检查前后向；`--device cuda:0` 使用官方 Mamba2，由用户执行。
+标准 dataset 通过 `model.tf_representations=[w]` 和显式 `data.tf_cache_path` 接入冻结 W cache，adapter 按实际频率选择 H 频带。
+`scripts/check_patch_aligned_tf_mamba.py --device cpu` 使用合成信号、原生 H-CWT 和显式 Mamba 测试替身检查两个优化步骤；`--device cuda:0` 使用官方 Mamba2，由用户执行。支持 `--dtype bfloat16 --batch-size 128 --steps 2 --report <新文件路径>`，记录峰值显存并拒绝覆盖报告。
 结构、定向测试命令与验收标准见[实现说明](../docs/experiments/patch_aligned_tf_mamba_v1_implementation_20261004.md)。当前入口用于模型工程验证，训练协议由后续实验定义。
 
 ## Test 受试者 670 排除敏感性分析
