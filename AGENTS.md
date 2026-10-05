@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- CWT-APOR v2 H-only 医学参考呼吸率三区间：本轮 research-test 产物分析已完成并关闭；口径、结果和来源入口为 `docs/experiments/h_only_medical_rr_strata_v1_results_20261005.md`。
+
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E5 W0 时域前端替换：三 seed train/validation 与固定 checkpoint research-test 均已完成并关闭；当前状态、validation/test 结果与来源身份统一由 `docs/experiments/e5_temporal_frontend_closeout_20260927.md` 路由。
 - E6 20-Hz 学习解调前端：三 seed train/validation、效率记录与固定 checkpoint research-test 均已完成并关闭；当前状态与证据入口为 `docs/experiments/e6_temporal_frontend_closeout_20260924.md`。

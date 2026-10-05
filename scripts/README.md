@@ -4,6 +4,12 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## H-only 医学参考 RR 三区间分析
+
+入口为 `scripts/analyze_h_only_medical_rr_strata.py --confirm-research-test`，仅消费固定 CWT-APOR v2 H-only 三seed research-test 指标及同源 THO 参考波形，按 `<12`、`12–20`、`>20 bpm` 汇总窗口平均。2026-10-05 已完成并关闭，见[结果及来源](../docs/experiments/h_only_medical_rr_strata_v1_results_20261005.md)和[专项协议](../docs/experiments/h_only_medical_rr_strata_v1_protocol_20261005.md)。已完成分析不自行重跑；输出使用独立目录，不覆盖来源。
+
+在当前 worktree 根目录执行定向 synthetic CPU 验证：`/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q tests/test_h_only_medical_rr_strata.py`。
+
 ## Test 受试者 670 排除敏感性分析
 
 2026-09-30 已完成既有 test 指标的描述性重算，覆盖 25 个实验/任务分组、99 个候选、293 个 cell。入口为 `scripts/analyze_test_subject670_sensitivity.py` 与 `scripts/report_test_subject670_sensitivity.py`；只读取历史 CSV，不加载波形或模型。结果、覆盖边界、执行记录与产物见[敏感性分析报告](../docs/experiments/test_subject670_sensitivity_results_20260930.md)，完整数值见[附表](../docs/experiments/test_subject670_sensitivity_tables_20260930.md)。原冻结 test 和 checkpoint 选择保持原位，现有分析目录拒绝覆盖。
