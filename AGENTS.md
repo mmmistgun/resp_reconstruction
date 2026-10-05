@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- CWT-APOR v2 H-only 窗口SA事件有无：本轮research-test产物分析已完成并关闭；分组、结果和来源入口为 `docs/experiments/h_only_sa_presence_v1_results_20261006.md`。
+
 - CWT-APOR v2 H-only 医学参考呼吸率三区间：本轮 research-test 产物分析已完成并关闭；口径、结果和来源入口为 `docs/experiments/h_only_medical_rr_strata_v1_results_20261005.md`。
 
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。

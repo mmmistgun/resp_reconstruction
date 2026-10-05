@@ -4,6 +4,12 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## H-only 窗口 SA 事件有无分析
+
+入口 `scripts/analyze_h_only_sa_presence.py --confirm-research-test`，按 PSG 暂停/低通气事件与180秒窗口是否存在正时长交集，汇总固定 H-only 三seed既有research-test五项指标。2026-10-06已完成并关闭，430窗含事件、1880窗无SA标注事件；结果、主体构成与来源见[完成记录](../docs/experiments/h_only_sa_presence_v1_results_20261006.md)，合同见[专项协议](../docs/experiments/h_only_sa_presence_v1_protocol_20261006.md)。已完成分析不自行重跑。
+
+定向 synthetic CPU 验证：`/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q tests/test_h_only_sa_presence.py`。
+
 ## H-only 医学参考 RR 三区间分析
 
 入口为 `scripts/analyze_h_only_medical_rr_strata.py --confirm-research-test`，仅消费固定 CWT-APOR v2 H-only 三seed research-test 指标及同源 THO 参考波形，按 `<12`、`12–20`、`>20 bpm` 汇总窗口平均。2026-10-05 已完成并关闭，见[结果及来源](../docs/experiments/h_only_medical_rr_strata_v1_results_20261005.md)和[专项协议](../docs/experiments/h_only_medical_rr_strata_v1_protocol_20261005.md)。已完成分析不自行重跑；输出使用独立目录，不覆盖来源。
