@@ -20,6 +20,20 @@
 
 ## Patch-aligned TF-Mamba 模型检查
 
+2026-10-06：固定 9-checkpoint research-test 与汇总也已完成并关闭，详见[research-test 结果记录](../docs/experiments/patch_aligned_tf_mamba_research_test_results_20261006.md)。以下命令保留为执行与复现说明，已完成评价不自行重跑。
+
+固定 9-checkpoint research-test 入口：`scripts/eval_patch_aligned_tf_mamba.py`。
+`prepare` 仅读取 development 产物并固定完整 allowlist；`evaluate`/`summarize` 要求 `--confirm-research-test`。
+双 GPU 分别执行 `bash scripts/run_patch_tf_test_shard.sh ALLOWLIST 0 0` 与 `bash scripts/run_patch_tf_test_shard.sh ALLOWLIST 1 1`，脚本带 `env -u LD_LIBRARY_PATH -u LD_PRELOAD`。
+范围、来源、指标与命令见[research-test 协议](../docs/experiments/patch_aligned_tf_mamba_research_test_v1_20261006.md)。
+
+2026-10-06：9-cell train/validation 与汇总已完成并关闭，当前状态和结果见[validation 结果记录](../docs/experiments/patch_aligned_tf_mamba_validation_results_20261006.md)。下列训练入口作为复现说明保留，已完成的 session 不自行重跑。
+
+正式 train/validation 入口为 `scripts/run_patch_aligned_tf_mamba.py`，矩阵为 1/2/4 秒 patch × 三 seed。
+`prepare` 保存会话身份，`run` 支持固定分片和 `--resume`，`status` 查看进度，`summarize` 汇总完整 9-cell。
+双 GPU 分别执行 `bash scripts/run_patch_tf_shard.sh SESSION 0 0` 和 `bash scripts/run_patch_tf_shard.sh SESSION 1 1`；脚本包含 `env -u LD_LIBRARY_PATH -u LD_PRELOAD`。
+完整命令、64×2 累积、数据合同和恢复规则见[训练协议](../docs/experiments/patch_aligned_tf_mamba_training_v1_20261005.md)。正式运行由用户启动。
+
 模型入口为 `resp_train.models.patch_aligned_tf_mamba`，结构配置为 `configs/patch_aligned_tf_mamba/model.yaml`。
 标准 dataset 通过 `model.tf_representations=[w]` 和显式 `data.tf_cache_path` 接入冻结 W cache，adapter 按实际频率选择 H 频带。
 `scripts/check_patch_aligned_tf_mamba.py --device cpu` 使用合成信号、原生 H-CWT 和显式 Mamba 测试替身检查两个优化步骤；`--device cuda:0` 使用官方 Mamba2，由用户执行。支持 `--dtype bfloat16 --batch-size 128 --steps 2 --report <新文件路径>`，记录峰值显存并拒绝覆盖报告。

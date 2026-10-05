@@ -8,6 +8,9 @@
 
 ## 协议路由
 
+- Patch-aligned TF-Mamba 时长敏感性：1/2/4 秒 patch × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、结果及来源由 `docs/experiments/patch_aligned_tf_mamba_validation_results_20261006.md` 路由。
+- Patch-aligned TF-Mamba 固定 9-checkpoint research-test：评价及汇总已完成并关闭；当前状态、结果、协议与来源由 `docs/experiments/patch_aligned_tf_mamba_research_test_results_20261006.md` 路由。
+
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E5 W0 时域前端替换：三 seed train/validation 与固定 checkpoint research-test 均已完成并关闭；当前状态、validation/test 结果与来源身份统一由 `docs/experiments/e5_temporal_frontend_closeout_20260927.md` 路由。
 - E6 20-Hz 学习解调前端：三 seed train/validation、效率记录与固定 checkpoint research-test 均已完成并关闭；当前状态与证据入口为 `docs/experiments/e6_temporal_frontend_closeout_20260924.md`。

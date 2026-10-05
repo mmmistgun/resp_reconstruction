@@ -46,7 +46,7 @@ FiLM 为 `u=z*(1+0.5*tanh(gamma))+0.5*tanh(beta)`，条件 MLP 为 `D→D→2D`�
 
 ## CPU 验证
 
-2026-10-05：模型定向测试 27 项通过，数据加载及特征转发相关回归 12 项通过；默认结构结合原生 CWT 的 CPU BF16 两步 AdamW 检查通过。均使用合成输入或临时 fixture，Mamba 为显式测试替身。官方 CUDA 与实际峰值显存尚未验证。
+2026-10-05：模型定向测试 27 项通过，数据加载及特征转发相关回归 12 项通过；默认结构结合原生 CWT 的 CPU BF16 两步 AdamW 检查通过。CPU 检查均使用合成输入或临时 fixture，Mamba 为显式测试替身。后续官方 CUDA 检查已完成，结果见下文。
 
 在本 worktree 根目录，使用现有环境：
 
@@ -59,13 +59,15 @@ CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 
 
 ## CUDA 工程验证
 
+经用户授权，官方 Mamba2 FP32 batch=1 与 BF16 batch=32/64 的两步优化检查通过；BF16 batch=128 显存不足。batch=64 峰值分配为 9.100 GiB、峰值预留为 9.938 GiB。详情与产物身份见 [CUDA 工程验证记录](patch_aligned_tf_mamba_cuda_validation_20261005.md)。
+
 由用户在目标 GPU 执行。先检查小 batch 官方内核，再测目标 batch 的 BF16 训练 step 与显存。报告路径须尚不存在，失败也保存状态。
 
 ```bash
 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python scripts/check_patch_aligned_tf_mamba.py --device cuda:0 --dtype float32 --batch-size 1 --steps 2 --report /tmp/patch_tf_cuda_fp32_b1_20261005.json
-OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python scripts/check_patch_aligned_tf_mamba.py --device cuda:0 --dtype bfloat16 --batch-size 128 --steps 2 --patch-chunk-size 16 --report /tmp/patch_tf_cuda_bf16_b128_20261005.json
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 /mnt/disk_code/marques/resp_reconstruction/.venv/bin/python scripts/check_patch_aligned_tf_mamba.py --device cuda:0 --dtype bfloat16 --batch-size 32 --steps 2 --patch-chunk-size 16 --report /tmp/patch_tf_cuda_bf16_b32_recheck.json
 ```
 
 验收为 `status=passed`、`mamba=official_mamba2`、输出 `[B,1,18000]`、两步有限 loss/参数/梯度，以及第二步条件梯度非零。报告包含配置、batch、精度、软件版本、设备、参数量、耗时、`peak_allocated_bytes` 和 `peak_reserved_bytes`。峰值统计覆盖 forward/backward/AdamW step，包括优化器状态分配；耗时仅作工程检查，不用于正式效率比较。
 
-批量 128 是否适合目标 GPU 尚待实测，不能由 CPU 测试或张量元素估算替代。正式训练前还需匹配训练精度与 optimizer 配置的获准验证。
+本轮目标 GPU 上的直接批量 128 检查失败；批量 64 已通过。正式训练前还需匹配任务 loss、训练精度与 optimizer 配置的获准验证；有效批量和梯度累积由正式协议定义。
