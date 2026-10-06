@@ -2,6 +2,8 @@
 
 截至 2026-10-05，原版三 seed 与两项单 seed loss 修复验证均已完成。修复后的节律和波形相关性明显改善，但原始输出仍存在尖峰与幅值偏差。当前证据覆盖 train/validation，独立测试集未开放。
 
+2026-10-06 新阶段：[双 1 Hz 呼吸基带三臂](respdiff_bcg_baseband_v1_protocol_20261006.md)已实现，41 项 CPU 定向测试通过。正式候选为 Hann-rFFT 呼吸带 SNR spectral，配套 epsilon-only 与 source-equivalent 控制；GPU 和真实 train/validation 待执行。新 target 为低通 THO，下表仍保留原 target 合同结果。
+
 ## 实验过程
 
 | 阶段 | 内容与结论 | 证据入口 |
@@ -33,7 +35,7 @@ epsilon-only 的呼吸带能量占比中位数从原版的约 11.5% 提升到 87
 
 在固定等距的 64-window 后处理诊断中，PCC 为原输出 0.4565、1 Hz 低通 0.4567、5 点中值 0.4666。这些是诊断子集结果，不能替换上表全量 validation 或直接确立正式后处理。
 
-两项修复目前各只有一个 seed，epsilon-only 的小幅领先尚不足以证明多 seed 稳健优势。训练约 4500 步后 noise MSE 基本平台化，最终 lr=1e-6；现有证据不能保证简单续训消除尖峰。后续优先核对新 checkpoint 的高噪声步和宽脉冲来源，再定义新的训练预算或输出处理对照。
+两项修复目前各只有一个 seed，epsilon-only 的小幅领先尚不足以证明多 seed 稳健优势。训练约 4500 步后 noise MSE 基本平台化，最终 lr=1e-6；现有证据不能保证简单续训消除尖峰。后续按上述双低通新协议从头训练三臂，并用固定 timestep 参数梯度与实际 reverse first-step 幅值诊断检查新合同。
 
 ## 代码与产物管理
 

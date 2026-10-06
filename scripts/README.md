@@ -6,6 +6,8 @@
 
 ## RespDiff-BCG v1
 
+当前新增 [双 1 Hz 呼吸基带三臂协议](../docs/experiments/respdiff_bcg_baseband_v1_protocol_20261006.md)：`epsilon_only`、`source_equivalent`、`snr_resp_spectral`。入口 `scripts/run_respdiff_bcg_baseband_v1.py`；父窗口双低通、固定 timestep 梯度 probe 与验证幅值/频带诊断已接入。GPU 检查及三臂正式 train/validation 待执行；新 target 合同要求三臂重新训练。完整命令及验收标准见新协议。
+
 过程、结果及证据入口统一见 [RespDiff-BCG 实验索引](../docs/experiments/respdiff_bcg_progress_20261005.md)。
 
 当前修复结果见 [loss 修复验证协议](../docs/experiments/respdiff_bcg_loss_repair_v1_protocol_20261004.md)：SNR 加权 FFT 与 epsilon-only 两项 seed=20260811、batch=64、6400-update train/validation 均已完成。指标明显改善，原始幅值/尖峰仍有问题；同 seed 比较与产物核对见协议，已有运行不重跑。

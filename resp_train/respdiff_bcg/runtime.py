@@ -129,7 +129,8 @@ def make_model(cfg, *, tiny=False):
 
 
 def train_updates(model, dataset, cfg, output, *, updates=6400, batch_size=None,
-                  checkpoint_schema="respdiff-bcg-v1", checkpoint_metadata=None):
+                  checkpoint_schema="respdiff-bcg-v1", checkpoint_metadata=None,
+                  diagnostic_callback=None, history_extra=None):
     device = next(model.parameters()).device
     generator = torch.Generator().manual_seed(int(cfg.training.seed))
     loader = DataLoader(dataset, batch_size=batch_size or int(cfg.training.batch_size),
@@ -145,6 +146,8 @@ def train_updates(model, dataset, cfg, output, *, updates=6400, batch_size=None,
     progress = Progress("训练 update", updates, unit="update")
     iterator, epoch = iter(loader), 0
     model.train()
+    if diagnostic_callback is not None:
+        diagnostic_callback(0)
     with (output / "history.jsonl").open("x") as history:
         for update in range(1, updates + 1):
             try:
@@ -167,10 +170,17 @@ def train_updates(model, dataset, cfg, output, *, updates=6400, batch_size=None,
             record = {"update": update, "epoch_zero_based": epoch, "lr": lr,
                       "chunk_indices": batch["index"].tolist(),
                       **{k: float(v.detach()) for k, v in losses.items()}}
+            if history_extra is not None:
+                extra = history_extra()
+                if record.keys() & extra.keys():
+                    raise ValueError("诊断字段与训练记录重名")
+                record.update(extra)
             history.write(json.dumps(record, allow_nan=False) + "\n")
             history.flush()
             detail = " ".join(f"{key}={record[key]:.6g}" for key in losses)
             progress.update(update, f"{detail} lr={lr:.3g}" + cuda_memory_detail(device))
+            if diagnostic_callback is not None:
+                diagnostic_callback(update)
     for name, value in model.state_dict().items():
         finite(f"checkpoint {name}", value)
     for state in optimizer.state.values():

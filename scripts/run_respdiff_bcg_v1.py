@@ -25,10 +25,10 @@ from resp_train.respdiff_bcg.runtime import (
 )
 
 
-def synthetic_dataset(output, cfg, split):
+def synthetic_dataset(output, cfg, split, *, n_parents=2):
     """走实际 ResearchV2 NPZ 读取器；所有文件只写入本次 disposable 输出。"""
     rows = []
-    for index in range(2):
+    for index in range(n_parents):
         row_id = index + (0 if split == "train" else 10)
         time = np.arange(18000) / 100
         target = (1 + 0.3 * np.sin(2 * np.pi * 0.015 * time)) * np.sin(
