@@ -7,9 +7,10 @@
 | 项目 | 配置 |
 | --- | --- |
 | 主机名 | `dell-PowerEdge-T630` |
-| 系统 | Ubuntu |
+| 系统 | Ubuntu 24.04.5 LTS（Noble Numbat） |
 | SSH 地址 | `marques@192.168.199.188` |
-| GPU | 3 × NVIDIA GeForce RTX 2080 Ti |
+| GPU | 3 × NVIDIA GeForce RTX 2080 Ti，每张 11264 MiB |
+| NVIDIA 驱动 | `595.91.07` |
 | 项目目录 | `/data/disk1/cxh/code/resp_reconstruction` |
 | Python 解释器 | `/data/disk1/cxh/code/resp_reconstruction/.venv/bin/python` |
 
@@ -27,12 +28,19 @@
 
 | 组件 | 版本 |
 | --- | --- |
-| Python | 3.12 |
+| Python | `3.12.13` |
+| uv | `0.12.23`（x86_64-unknown-linux-gnu） |
 | PyTorch | `2.12.0+cu130` |
 | PyTorch CUDA runtime | `13.0` |
 | cuDNN | `9.20.0`（`torch.backends.cudnn.version()` 返回 `92000`） |
 | causal-conv1d | `1.6.2.post1` |
 | mamba-ssm | `2.3.2.post1` |
+| NumPy | `1.26.4` |
+| SciPy | `1.17.1` |
+| pandas | `3.0.3` |
+| OmegaConf | `2.3.0` |
+
+完整已安装版本见[依赖快照](workstation2_poweredge_t630_requirements.txt)，来自该机 `uv pip freeze --python .venv/bin/python` 的输出，用于环境版本核对。
 
 ## 运行方式
 
