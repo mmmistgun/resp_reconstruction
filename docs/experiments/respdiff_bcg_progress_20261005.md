@@ -2,7 +2,7 @@
 
 截至 2026-10-05，原版三 seed 与两项单 seed loss 修复验证均已完成。修复后的节律和波形相关性明显改善，但原始输出仍存在尖峰与幅值偏差。当前证据覆盖 train/validation，独立测试集未开放。
 
-2026-10-06 新阶段：[双 1 Hz 呼吸基带三臂](respdiff_bcg_baseband_v1_protocol_20261006.md)已实现，41 项 CPU 定向测试通过。正式候选为 Hann-rFFT 呼吸带 SNR spectral，配套 epsilon-only 与 source-equivalent 控制；GPU 和真实 train/validation 待执行。新 target 为低通 THO，下表仍保留原 target 合同结果。
+2026-10-06 新阶段：[双 1 Hz 呼吸基带三臂](respdiff_bcg_baseband_v1_protocol_20261006.md)已实现，41 项 CPU 定向测试通过。正式候选为 Hann-rFFT 呼吸带 SNR spectral，配套 epsilon-only 与 source-equivalent 控制；用户 GPU 检查的训练与采样阶段通过，梯度 probe OOM；显存修复已通过 20 项 CPU 定向测试，待 GPU 重试，真实 train/validation 待执行。新 target 为低通 THO，下表仍保留原 target 合同结果。
 
 ## 实验过程
 

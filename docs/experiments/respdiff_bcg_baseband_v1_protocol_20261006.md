@@ -2,7 +2,7 @@
 
 协议 ID：`respdiff-bcg-baseband-v1-20261006`。
 
-当前状态：按用户 2026-10-06 定案实现；41 项 CPU 定向测试通过，含三臂合成全链路与旧入口兼容检查。三臂正式训练、GPU 验收和真实 validation 尚未执行。真实运行由用户执行或另行明确授权代跑。本协议仅开放 train/validation。
+当前状态：按用户 2026-10-06 定案实现；初版 41 项 CPU 定向测试通过。用户在 RTX 2080 Ti 上运行主候选 GPU 检查，B64 训练与采样通过，参数梯度 probe OOM；修复及重试说明见末节。正式训练和真实 validation 尚未执行。真实运行由用户执行或另行明确授权代跑。本协议仅开放 train/validation。
 
 ## 科学合同与数据
 
@@ -40,6 +40,8 @@ source-equivalent 仅控制作者源码的相对 loss balance；由于预处理�
 
 固定 update=[0,1600,3200,4800,6400] 执行 probe，取 train 前 64 个全局 chunk，独立 CPU generator seed=20261006 固定 forward noise，遍历 t=[0,9,19,29,39,49]。逐 t 计算完整可训练参数上的 `r_t=||grad(weighted_spec)||/||grad(noise)||`；epsilon-only 的分子为零。模型参数、optimizer、已有 .grad、模式、buffer 和全局 torch RNG 不因 probe 改变。probe 输入及身份单独保存。
 
+梯度执行采用两个独立的完整 B64 前向，各自反向后释放计算图。两次使用相同参数、输入、t 和 noise；当前网络无 dropout，BN 不保存 running stats，故保持原梯度定义与 batch 统计。epsilon-only 只需一次反向。`probe_identity.json` 记录执行方式。
+
 每次 probe 另从固定 parent-keyed reverse initial noise，在 eval mode 实际执行 DDIM 第一步 t=49 的 x0_hat，记录绝对值 P99.9/max（另带 RMS/P99）。该统计与 q_sample 后的重建分开定义，写入同一 update 的六条 probe 记录；不为每个训练 update 额外执行一次采样。记录 r_t>1 标志，不根据中间诊断改变系数、训练矩阵或 checkpoint selector。主损失梯度为零导致比值无定义时显式失败。
 
 完整 validation 保存公共五指标：lag-aware signed PCC、Whole RR、Local RR、envelope trajectory、global envelope modulation error。同时新增逐 parent 原始重建输出诊断：0.05–0.70 Hz 与 >1 Hz 能量比、prediction/target std、最大绝对幅值、top 1% 时间采样点能量占比，及 parent max 的 P95/P99 汇总。能量谱采用完整 180 s 去均值、无窗 rFFT，非 DC/Nyquist bin 双倍实现 Parseval；top 1% 为原波形最大 180 个平方值占总平方能量。预测与参考均报告。零能量或零 target std 的比值记 null，并显式记录零分母与有效/无定义计数；非有限波形或溢出失败。
@@ -74,3 +76,20 @@ PYTHONPATH=. "$PY" -m pytest tests/test_respdiff_bcg_baseband.py tests/test_resp
 ```
 
 2026-10-06 执行结果：41 passed in 35.46s；仅 CPU、小网络及合成 NPZ，临时目录 `/tmp/respdiff_baseband_tests_20261006_v1`。覆盖父窗口滤波增益/相位与先后顺序、全 50 timestep 的稳定 loss/梯度等价、source-equivalent 常数系数、三臂相同网络初始化、probe 前后训练参数/.grad/RNG 逐值一致、输出能量比与零分母、独立 checkpoint/配置身份、不可覆盖输出和 train 授权门。`git diff --check` 通过。
+
+## 2026-10-06 GPU probe 显存修复
+
+用户提供的 21:50 日志：RTX 2080 Ti（可用总容量 10.57 GiB）上主候选 B64 三次训练 update、B1/B64 六步采样通过，已报告阶段峰值 allocated=7.10 GiB；随后 B64 probe 在 `autograd.grad(..., retain_graph=True)` 请求额外 2.11 GiB 时 OOM，完整 GPU 验收失败。原目录 `snr_resp_spectral_gpucheck_v1` 保留。此记录依据用户日志，未在本机复跑 GPU。
+
+修复将共享并保留的图改为上述独立前向、各自释放；保留 train/inference/probe B64、t 网格、样本及科学合同。CPU 定向测试 20 passed in 32.11s，包含三臂重算梯度与原共享图范数一致、禁止 probe 使用 retain_graph、训练轨迹/.grad/RNG 无扰动及三臂合成全链路。临时产物位于 `/tmp/respdiff_baseband_probe_fix_20261006_v1`。GPU 峰值仍待用户重试确认，CPU 测试不证明 GPU 显存已适配。
+
+同步修复代码后，在用户机器仓库目录重试：
+
+```bash
+env -u LD_LIBRARY_PATH CUDA_VISIBLE_DEVICES=0 \
+  .venv/bin/python scripts/run_respdiff_bcg_baseband_v1.py gpu-check \
+  --config configs/respdiff_bcg_baseband_v1/snr_resp_spectral.yaml \
+  --output runs/respdiff_bcg_baseband_v1/snr_resp_spectral_gpucheck_v2
+```
+
+以完整六 timestep probe 后的 `receipt.json status=complete` 为通过标准；中途“GPU 检查通过”只覆盖训练与采样。若仍需减小 probe batch，须三臂统一修订并记录：BN 使用当前 batch 统计，缩小 probe batch 会影响 r_t，不能宣称与 B64 数值等价。

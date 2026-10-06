@@ -140,6 +140,43 @@ def test_probe_preserves_optimizer_trajectory_rng_and_grad(tmp_path):
     assert torch.equal(states[0][2], states[1][2])
 
 
+@pytest.mark.parametrize("objective", OBJECTIVES)
+def test_recomputed_probe_matches_shared_graph_gradients(tmp_path, monkeypatch, objective):
+    cfg = config(objective)
+    dataset = fixture(tmp_path, cfg, "train")
+    model = RespDiffBCGBaseband(RespDiffSpec(8, 1, 4), objective=objective)
+    output = tmp_path / "probe"
+    output.mkdir()
+    probe = TrainingProbe(model, dataset, cfg, output, tiny=True)
+    parameters = tuple(model.parameters())
+    expected = []
+    for step in cfg.diagnostics.timesteps:
+        losses = model.training_loss(probe.condition, probe.target, noise=probe.noise,
+                                     step=torch.full((2,), step, dtype=torch.long))
+        norms = []
+        for key in ("loss_noise", "loss_spec_weighted"):
+            if not losses[key].requires_grad:
+                norms.append(0.)
+                continue
+            grads = torch.autograd.grad(losses[key], parameters, retain_graph=True, allow_unused=True)
+            norms.append(float(sum(g.double().square().sum() for g in grads if g is not None).sqrt()))
+        expected.append(norms)
+    del losses
+    grad = torch.autograd.grad
+    calls = []
+    def releasing_grad(*args, **kwargs):
+        assert not kwargs.get("retain_graph", False)
+        calls.append(1)
+        return grad(*args, **kwargs)
+    monkeypatch.setattr(torch.autograd, "grad", releasing_grad)
+    probe(0)
+    assert len(calls) == (6 if objective == "epsilon_only" else 12)
+    records = [json.loads(line) for line in (output / "training_probes.jsonl").read_text().splitlines()]
+    for record, (noise_norm, spec_norm) in zip(records, expected):
+        assert record["grad_noise_norm"] == pytest.approx(noise_norm, rel=1e-6)
+        assert record["grad_weighted_spec_norm"] == pytest.approx(spec_norm, rel=1e-6)
+
+
 def test_output_ratios_energy_and_zero_denominators():
     time = np.arange(18000) / 100
     wave = np.sin(2 * np.pi * .2 * time) + 2 * np.sin(2 * np.pi * 2 * time)

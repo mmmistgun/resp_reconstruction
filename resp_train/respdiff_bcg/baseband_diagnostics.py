@@ -13,10 +13,10 @@ from .runtime import LOGGER, write_json
 from .signal import parent_noise
 
 
-def gradient_norm(loss, parameters, *, retain_graph=False):
+def gradient_norm(loss, parameters):
     if not loss.requires_grad:
         return 0.0
-    gradients = torch.autograd.grad(loss, parameters, retain_graph=retain_graph, allow_unused=True)
+    gradients = torch.autograd.grad(loss, parameters, allow_unused=True)
     squared = loss.new_zeros((), dtype=torch.float64)
     for value in gradients:
         if value is not None:
@@ -54,7 +54,8 @@ class TrainingProbe:
             "forward_noise_seed": int(cfg.diagnostics.noise_seed),
             "reverse_noise_seed": int(cfg.inference.noise_seed), "split": "train",
             "first_step_definition": "DDIM reverse t=49 from parent-keyed initial noise",
-            "quantiles": "absolute magnitude, linear interpolation"})
+            "quantiles": "absolute magnitude, linear interpolation",
+            "gradient_execution": "separate full-batch forwards; release graph after each backward"})
         with (output / "training_probes.jsonl").open("x"):
             pass
 
@@ -81,21 +82,33 @@ class TrainingProbe:
                     alpha = model.alpha_torch[49]
                     x0 = (initial - (1 - alpha).sqrt() * prediction) / alpha.sqrt()
                     first = {f"first_step_x0_{key}": value for key, value in absolute_stats(x0).items()}
+                del prediction, initial, x0
                 # cuDNN RNN backward 要求 train mode；网络没有 dropout，BN 不保存 running stats。
                 model.train()
                 for step in self.cfg.diagnostics.timesteps:
                     steps = torch.full((len(target),), int(step), dtype=torch.long, device=device)
                     losses = model.training_loss(condition, target, noise=noise, step=steps)
-                    noise_norm = gradient_norm(losses["loss_noise"], parameters, retain_graph=True)
-                    spec_norm = gradient_norm(losses["loss_spec_weighted"], parameters)
+                    values = {key: float(value.detach()) for key, value in losses.items()}
+                    residual_stats = dict(model.last_diagnostics)
+                    noise_norm = gradient_norm(losses["loss_noise"], parameters)
+                    del losses
+                    # 完整 B64 的 BN 统计必须保持；重算前向让每次 backward 及时释放
+                    # RNN 激活，避免 retain_graph 与 cuDNN workspace 同时占用显存。
+                    # 固定输入/t/noise；当前网络无 dropout、无可变 running stats。
+                    if model.objective == "epsilon_only":
+                        spec_norm = 0.0
+                    else:
+                        losses = model.training_loss(condition, target, noise=noise, step=steps)
+                        spec_norm = gradient_norm(losses["loss_spec_weighted"], parameters)
+                        del losses
                     if noise_norm == 0:
                         raise FloatingPointError("probe 主损失参数梯度为零，r_t 无定义")
                     ratio = spec_norm / noise_norm
                     if not math.isfinite(ratio):
                         raise FloatingPointError("probe r_t 非有限")
                     record = {"update": update, "timestep": int(step), "objective": model.objective,
-                        **{key: float(value.detach()) for key, value in losses.items()},
-                        **{key: value for key, value in model.last_diagnostics.items() if key != "timestep"},
+                        **values,
+                        **{key: value for key, value in residual_stats.items() if key != "timestep"},
                         **first, "grad_noise_norm": noise_norm, "grad_weighted_spec_norm": spec_norm,
                         "r_t": ratio, "spectral_gradient_exceeds_noise": ratio > 1}
                     with (self.output / "training_probes.jsonl").open("a") as stream:
