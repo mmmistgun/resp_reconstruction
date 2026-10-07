@@ -2,7 +2,7 @@
 
 协议 ID：`respdiff-bcg-baseband-v1-20261006`。
 
-当前状态：按用户 2026-10-06 定案实现；初版 41 项 CPU 定向测试通过。用户在 RTX 2080 Ti 上运行主候选 GPU 检查，B64 训练与采样通过，参数梯度 probe OOM；修复及重试说明见末节。正式训练和真实 validation 尚未执行。真实运行由用户执行或另行明确授权代跑。本协议仅开放 train/validation。
+当前状态（2026-10-07）：三臂 seed=20260811 的 6400-update train/validation 与修复后的完整 GPU 检查均已完成，本轮关闭。回传产物 66 项 SHA256 校验匹配；结果、诊断与来源见[三臂 validation 结果](respdiff_bcg_baseband_v1_results_20261007.md)。以下保留执行合同、历史命令和工程验证记录，已有运行不重跑。独立测试集未开放。
 
 ## 科学合同与数据
 
