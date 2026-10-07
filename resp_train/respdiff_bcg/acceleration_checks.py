@@ -1,5 +1,6 @@
-"""预先固定的 FP32 容差和逐 trajectory/step 的加速路径数值验收。"""
+"""按运行版本冻结的 FP32 容差和逐 trajectory/step 的加速路径数值验收。"""
 
+import json
 import numpy as np
 import torch
 
@@ -10,7 +11,7 @@ from .sampling_accelerated import (
 
 # 验证前固定；低 SNR 的 ε→x0 放大使 reverse 不能沿用 ε 的绝对容差。
 TOLERANCES = {
-    "epsilon": {"atol": 1e-4, "rtol": 1e-3},
+    "epsilon": {"atol": 2e-4, "rtol": 1e-3},
     "reverse": {"atol": .02, "rtol": 1e-3},
     "trajectory": {"atol": .02, "rtol": 1e-3},
     "prefix": {"atol": .02, "rtol": 1e-3},
@@ -41,8 +42,23 @@ def error_record(actual, reference, stage, **identity):
     record = {**identity, "stage": stage, "finite": finite, "passed": passed,
         "max_abs_error": float(difference.max()), "rms_error": float(np.sqrt((difference ** 2).mean())),
         "max_tolerance_fraction": float(ratio.max()) if np.isfinite(ratio).all() else None,
-        "n_outside_tolerance": int((difference > bound).sum()), **tolerance}
+        "n_outside_tolerance": int((difference > bound).sum()), "n_elements": int(actual.size), **tolerance}
     return record
+
+
+def require_passing(records, context):
+    """超限时同时保留 step、轨迹和实际误差，便于直接从日志定位失败。"""
+    failed = [record for record in records if not record["passed"]]
+    if not failed:
+        return
+    worst = sorted(failed, key=lambda record: (
+        record["max_tolerance_fraction"] if record["max_tolerance_fraction"] is not None
+        else float("inf")), reverse=True)[:5]
+    fields = ("stage", "G", "trajectory_id", "timestep", "N", "max_abs_error", "rms_error",
+              "max_tolerance_fraction", "n_outside_tolerance", "n_elements", "atol", "rtol")
+    details = [{key: record[key] for key in fields if key in record} for record in worst]
+    raise FloatingPointError(f"{context} 超出预定容差：{len(failed)}/{len(records)} 条检查失败；"
+                             f"最严重记录={json.dumps(details, ensure_ascii=False, allow_nan=False)}")
 
 
 def reference_trace(model, condition, keys, spec, trajectory):

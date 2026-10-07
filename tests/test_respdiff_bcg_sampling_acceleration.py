@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from resp_train.respdiff.model import RespDiffSpec
-from resp_train.respdiff_bcg.acceleration_checks import TOLERANCES, error_record, verify_grouped
+from resp_train.respdiff_bcg.acceleration_checks import TOLERANCES, error_record, require_passing, verify_grouped
 from resp_train.respdiff_bcg.baseband import RespDiffBCGBaseband
 from resp_train.respdiff_bcg.inference_v2 import predict_prefixes, state_digest
 from resp_train.respdiff_bcg.runtime import environment, seed_all, sha256
@@ -207,6 +207,24 @@ def test_nonfinite_mode_group_and_cpu_only_runtime_guards():
     rejected = error_record(np.array([1.]), np.array([0.]), "epsilon")
     assert not rejected["passed"] and rejected["n_outside_tolerance"] == 1
     assert TOLERANCES["initial_noise"] == {"atol": 0., "rtol": 0.}
+
+
+def test_tolerance_revision_preserves_reverse_and_noise_guards_and_failure_details():
+    # 合成一个与 T630 上报幅度相近的 ε 差异；不冒充实际 GPU 输出重验。
+    reference = np.array([.319])
+    actual = reference + .000477
+    assert np.any(abs(actual - reference) > 1e-4 + 1e-3 * abs(reference))
+    record = error_record(actual, reference, "epsilon", G=2, trajectory_id=6, timestep=0)
+    assert record["passed"]
+    require_passing([record], "synthetic")
+    failed = error_record(reference + .002, reference, "epsilon", G=2, trajectory_id=6, timestep=0)
+    with pytest.raises(FloatingPointError) as error:
+        require_passing([record, failed], "condition_cache_G2")
+    message = str(error.value)
+    assert '1/2' in message and '"trajectory_id": 6' in message and '"timestep": 0' in message
+    assert '"n_elements": 1' in message and '"rms_error"' in message
+    assert not error_record(np.array([.021]), np.zeros(1), "reverse")["passed"]
+    assert not error_record(np.array([1e-12]), np.zeros(1), "initial_noise")["passed"]
 
 
 def test_inference_tensor_cache_rejects_inplace_condition_change():

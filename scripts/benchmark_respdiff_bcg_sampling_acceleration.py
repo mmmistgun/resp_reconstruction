@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from resp_train.respdiff_bcg.acceleration_checks import TOLERANCES, error_record, verify_grouped
+from resp_train.respdiff_bcg.acceleration_checks import TOLERANCES, error_record, require_passing, verify_grouped
 from resp_train.respdiff_bcg.baseband import LPF_CONTRACT, lowpass_parent
 from resp_train.respdiff_bcg.inference_v2 import load_frozen_source, state_digest
 from resp_train.respdiff_bcg.runtime import (
@@ -162,8 +162,7 @@ def run(output, *, source_run=DEFAULT_SOURCE, device="cuda:0", sampler="ddim", n
                         verified = verify_grouped(model, condition, keys, spec, acceleration, counts=counts)
                         errors.extend({"variant": label, **record} for record in verified)
                         pd.DataFrame(errors).to_csv(output / "numerical_errors.csv", index=False)
-                        if not all(record["passed"] for record in verified):
-                            raise FloatingPointError(f"{label} 逐 step/trajectory 超出预定容差")
+                        require_passing(verified, f"{label} 逐 step/trajectory")
                     gc.collect()
                     torch.cuda.empty_cache()
                     for _ in range(warmup):
@@ -182,8 +181,7 @@ def run(output, *, source_run=DEFAULT_SOURCE, device="cuda:0", sampler="ddim", n
                             checked = waveform_checks(values, reference_means, spec, group)
                             errors.extend({"variant": label, **record} for record in checked)
                             pd.DataFrame(errors).to_csv(output / "numerical_errors.csv", index=False)
-                            if not all(record["passed"] for record in checked):
-                                raise FloatingPointError(f"{label} ensemble/重建波形超出预定容差")
+                            require_passing(checked, f"{label} ensemble/重建波形")
                         del values
                     median = float(np.median(times))
                     if acceleration is None:
