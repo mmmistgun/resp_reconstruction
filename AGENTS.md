@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- Patch-aligned TF-Mamba P1组件M4窗口SA事件有无：本轮research-test产物分析已完成并关闭；分组、结果和来源入口为 `docs/experiments/p1_m4_sa_presence_v1_results_20261007.md`。
+
 - CWT-APOR v2 H-only 窗口SA事件有无：本轮research-test产物分析已完成并关闭；分组、结果和来源入口为 `docs/experiments/h_only_sa_presence_v1_results_20261006.md`。
 
 - CWT-APOR v2 H-only 医学参考呼吸率三区间：本轮 research-test 产物分析已完成并关闭；口径、结果和来源入口为 `docs/experiments/h_only_medical_rr_strata_v1_results_20261005.md`。
