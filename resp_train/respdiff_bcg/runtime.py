@@ -97,10 +97,10 @@ def source_identity(cfg):
             "config": OmegaConf.to_container(cfg, resolve=True), "aa_taps_sha256": TAPS_SHA256}
 
 
-def environment():
+def environment(*, cpu_only=False):
     return {"python": sys.version, "torch": torch.__version__, "numpy": np.__version__,
             "scipy": scipy.__version__, "cuda": torch.version.cuda,
-            "cudnn": torch.backends.cudnn.version(),
+            "cudnn": None if cpu_only else torch.backends.cudnn.version(),
             "git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
             "command": sys.argv}
 
@@ -112,12 +112,17 @@ def save_source_snapshot(output, identity):
             archive.add(ROOT / relative, arcname=relative, recursive=False)
 
 
-def seed_all(seed):
+def seed_all(seed, *, cpu_only=False):
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
+    if cpu_only:
+        torch.set_rng_state(torch.Generator(device="cpu").manual_seed(seed).get_state())
+    else:
+        torch.manual_seed(seed)
+    if not cpu_only and torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+    if cpu_only:
+        return
     torch.backends.cudnn.benchmark = False
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False

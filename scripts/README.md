@@ -6,6 +6,8 @@
 
 ## RespDiff-BCG v1
 
+新增[单 GPU 缓存与 trajectory 分组加速说明](../docs/experiments/respdiff_bcg_sampling_acceleration_v1_20261007.md)：独立路径支持 G=1/2/4/8，condition 按原 B 编码，维持 ε-v2 数学/噪声/保幅合同。13 项 CPU 定向测试通过；本次按用户要求未调用 GPU。`scripts/benchmark_respdiff_bcg_sampling_acceleration.py` 提供 native checkpoint 的短时 warmup/时间/显存/误差比较，`scripts/run_respdiff_bcg_epsilon_accelerated_v1.py` 是独立推理入口。GPU 命令、验收标准及未实测的收益边界见说明。
+
 固定 source-equivalent checkpoint 的 [ε 推理 v2 结果](../docs/experiments/respdiff_bcg_epsilon_inference_v2_results_20261007.md)已完成：DDIM6 nested N={1,2,4,8,16}、DDPM50 N={1,2,4} 的固定子集及一次全量 DDIM6 N16 validation 均已关闭。N16 尚未满足 plateau，作为预算上限使用；完整 validation Local RR=0.9628、PCC=0.6513，残余幅值异常仍存在。入口 `scripts/run_respdiff_bcg_epsilon_inference_v2.py` 的 `synthetic-smoke`、`subset`、`full-validation` 合同见[协议](../docs/experiments/respdiff_bcg_epsilon_inference_v2_protocol_20261007.md)，已有运行不重跑。
 
 当前 [双 1 Hz 呼吸基带三臂结果](../docs/experiments/respdiff_bcg_baseband_v1_results_20261007.md)已完成：`epsilon_only`、`source_equivalent`、`snr_resp_spectral` 的 B64 GPU 检查及 seed=20260811、6400-update train/validation 均已结束。source-equivalent 五指标最佳，三臂原始输出均残留尖峰。入口 `scripts/run_respdiff_bcg_baseband_v1.py`，历史执行合同见[协议](../docs/experiments/respdiff_bcg_baseband_v1_protocol_20261006.md)；已有运行不重跑。

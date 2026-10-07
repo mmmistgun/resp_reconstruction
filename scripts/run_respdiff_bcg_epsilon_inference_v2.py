@@ -31,17 +31,21 @@ CONFIG_DIR = ROOT / "configs/respdiff_bcg_epsilon_inference_v2"
 DEFAULT_SOURCE = ROOT / "runs/respdiff_bcg_baseband_v1_from_t630_20261007/source_equivalent_seed20260811_v1"
 
 
-def implementation_identity(cfg):
+def implementation_identity(cfg, acceleration=None):
     identity = source_identity(cfg)
     for path in (Path(__file__).resolve(), ROOT / "scripts/run_respdiff_bcg_baseband_v1.py",
         ROOT / "configs/respdiff_bcg_v1/gpu_b64_b64.yaml",
         ROOT / "docs/experiments/respdiff_bcg_epsilon_inference_v2_protocol_20261007.md",
         CONFIG_DIR / "ddim.yaml", CONFIG_DIR / "ddpm.yaml"):
         identity["files"][str(path.relative_to(ROOT))] = sha256(path)
+    if acceleration is not None:
+        for path in (ROOT / "scripts/run_respdiff_bcg_epsilon_accelerated_v1.py",
+                     ROOT / "docs/experiments/respdiff_bcg_sampling_acceleration_v1_20261007.md"):
+            identity["files"][str(path.relative_to(ROOT))] = sha256(path)
     return identity
 
 
-def read_subset_selection(path, checkpoint_identity, configurations):
+def read_subset_selection(path, checkpoint_identity, configurations, acceleration=None):
     receipt = json.loads((path / "receipt.json").read_text())
     if receipt.get("status") != "complete" or receipt.get("mode") != "subset":
         raise ValueError("full-validation 要求完成的真实 diagnostic subset")
@@ -50,7 +54,8 @@ def read_subset_selection(path, checkpoint_identity, configurations):
             raise ValueError(f"subset 选择产物身份变化：{name}")
     identity = json.loads((path / "inference_identity.json").read_text())
     if (identity["checkpoint"]["checkpoint_sha256"] != checkpoint_identity["checkpoint_sha256"]
-            or identity["configurations"] != configurations):
+            or identity["configurations"] != configurations
+            or identity.get("acceleration") != acceleration):
         raise ValueError("full-validation 与 subset 的 checkpoint/sampler 合同不同")
     selection = json.loads((path / "selection.json").read_text())
     recomputed = choose_ensemble(pd.read_csv(path / "ensemble_curve.csv"))
@@ -61,7 +66,7 @@ def read_subset_selection(path, checkpoint_identity, configurations):
     return selection
 
 
-def run(mode, output, *, source_run=DEFAULT_SOURCE, subset_run=None, device="cuda:0"):
+def run(mode, output, *, source_run=DEFAULT_SOURCE, subset_run=None, device="cuda:0", acceleration=None):
     if mode not in {"synthetic-smoke", "subset", "full-validation"}:
         raise ValueError("未知 mode")
     if mode == "full-validation" and subset_run is None:
@@ -76,7 +81,7 @@ def run(mode, output, *, source_run=DEFAULT_SOURCE, subset_run=None, device="cud
         started = time.perf_counter()
         try:
             configs = {kind: load_sampler_config(CONFIG_DIR / f"{kind}.yaml") for kind in ("ddim", "ddpm")}
-            seed_all(20260811)
+            seed_all(20260811, cpu_only=tiny)
             if tiny:
                 torch.set_num_threads(1)
                 cfg = config_contract("source_equivalent")
@@ -100,22 +105,27 @@ def run(mode, output, *, source_run=DEFAULT_SOURCE, subset_run=None, device="cud
             parameter_identity = state_digest(model)
             selection = None
             if mode == "full-validation":
-                selection = read_subset_selection(Path(subset_run).resolve(), checkpoint_identity, configs)
+                acceleration_identity = ({"condition_cache": True,
+                    "trajectory_group_size": acceleration.trajectory_group_size} if acceleration is not None else None)
+                selection = read_subset_selection(Path(subset_run).resolve(), checkpoint_identity, configs,
+                                                   acceleration=acceleration_identity)
                 grids = {"ddim": (selection["selected_N"],)}
                 write_json(output / "selection.json", {**selection, "subset_run": str(Path(subset_run).resolve())})
             inventory = source_file_inventory(dataset.rows)
             index_hash = sha256(index_path)
-            implementation = implementation_identity(cfg)
+            implementation = implementation_identity(cfg, acceleration)
             write_json(output / "source_identity.json", implementation)
             save_source_snapshot(output, implementation)
-            write_json(output / "environment.json", environment())
+            write_json(output / "environment.json", environment(cpu_only=tiny))
             OmegaConf.save(cfg, output / "source_resolved_config.yaml")
             write_json(output / "inference_identity.json", {"protocol": NAME, "mode": mode,
                 "checkpoint": checkpoint_identity, "configurations": configs, "execution_counts": grids,
                 "model_spec": vars(model.spec), "device": str(next(model.parameters()).device),
                 "batch_size": batch_size, "parent_indices": indices,
                 "source_file_stats": inventory, "index_path": str(index_path), "index_sha256": index_hash,
-                "parameter_sha256_before": parameter_identity})
+                "parameter_sha256_before": parameter_identity,
+                **({"acceleration": {"condition_cache": True,
+                    "trajectory_group_size": acceleration.trajectory_group_size}} if acceleration is not None else {})})
             dataset.rows.to_csv(output / "validation_parents.csv", index=False)
             dataset.manifest().to_csv(output / "validation_chunks.csv", index=False)
             LOGGER.info("阶段=%s；固定 parents=%d chunks=%d；checkpoint=%s", mode,
@@ -127,7 +137,7 @@ def run(mode, output, *, source_run=DEFAULT_SOURCE, subset_run=None, device="cud
                 sampling_output = output / f"{kind}_sampling"
                 sampling_output.mkdir()
                 predictions, profile = predict_prefixes(model, dataset, spec, counts, sampling_output,
-                                                         batch_size=batch_size)
+                                                         batch_size=batch_size, acceleration=acceleration)
                 profiles.extend(profile)
                 for count in counts:
                     stage = f"{kind}_N{count}_metrics"
@@ -160,7 +170,7 @@ def run(mode, output, *, source_run=DEFAULT_SOURCE, subset_run=None, device="cud
                 raise ValueError("推理期间 checkpoint 文件字节变化")
             if inventory != source_file_inventory(dataset.rows) or index_hash != sha256(index_path):
                 raise ValueError("推理期间数据身份变化")
-            if implementation_identity(cfg) != implementation:
+            if implementation_identity(cfg, acceleration) != implementation:
                 raise ValueError("推理期间代码或配置变化")
             # nested 设置目录单独列哈希；root artifact_manifest 不遍历目录。
             nested_artifacts = {str(p.relative_to(output)): sha256(p) for p in sorted(output.rglob("*"))

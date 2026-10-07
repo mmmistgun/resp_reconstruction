@@ -128,11 +128,13 @@ def _synchronize(device):
         torch.cuda.synchronize(device)
 
 
-def predict_prefixes(model, dataset, spec, counts, output, *, batch_size=64):
+def predict_prefixes(model, dataset, spec, counts, output, *, batch_size=64, acceleration=None):
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     device = next(model.parameters()).device
     accumulated = {count: [] for count in counts}
     elapsed = {count: 0. for count in counts}
+    delivered = {count: 0. for count in counts}
+    readiness = {}
     seen = []
     progress = Progress(f"{spec.sampler.upper()} nested ensemble", len(loader), every=1)
     LOGGER.info("%s N=%s：parents=%d chunks=%d batch=%d", spec.sampler, list(counts),
@@ -147,9 +149,30 @@ def predict_prefixes(model, dataset, spec, counts, output, *, batch_size=64):
         condition = batch["x"].to(device)
         _synchronize(device)
         start = time.perf_counter()
-        for count, mean in ensemble_prefixes(model, condition, keys, spec, checkpoints=counts):
+        ready, groups_completed = {}, 0
+        def group_completed(ids):
+            nonlocal groups_completed
             _synchronize(device)
-            elapsed[count] += time.perf_counter() - start
+            groups_completed += 1
+            wall = time.perf_counter() - start
+            for count in counts:
+                if ids[0] < count <= ids[-1] + 1:
+                    ready[count] = {"wall": wall, "completed_trajectories": ids[-1] + 1,
+                                    "completed_groups": groups_completed}
+        if acceleration is None:
+            generator = ensemble_prefixes(model, condition, keys, spec, checkpoints=counts)
+        else:
+            from .sampling_accelerated import accelerated_prefixes
+            generator = accelerated_prefixes(model, condition, keys, spec, acceleration,
+                checkpoints=counts, completion_observer=group_completed)
+        for count, mean in generator:
+            _synchronize(device)
+            delivery_wall = time.perf_counter() - start
+            delivered[count] += delivery_wall
+            stamp = ready.get(count, {"wall": delivery_wall, "completed_trajectories": count,
+                                      "completed_groups": count})
+            elapsed[count] += stamp["wall"]
+            readiness[count] = stamp
             accumulated[count].append(mean.cpu().numpy())
         seen.extend(indices)
         progress.update(batch_index, f"N={spec.n_trajectories} chunks={len(seen)}/{len(dataset)}")
@@ -159,10 +182,19 @@ def predict_prefixes(model, dataset, spec, counts, output, *, batch_size=64):
               for count, parts in accumulated.items()}
     profiles = [{"sampler": spec.sampler, "N": count, "nfe_per_trajectory": spec.nfe,
         "denoiser_calls_per_chunk": count * spec.nfe,
-        "batched_denoiser_forward_calls": len(loader) * count * spec.nfe,
+        "batched_denoiser_forward_calls": len(loader) * readiness[count]["completed_groups"] * spec.nfe,
         "sampling_seconds": elapsed[count], "n_parents": len(dataset.rows),
         "n_chunks": len(dataset), "batch_size": batch_size,
-        "runtime_definition": "cumulative prefix wall time within shared max-N execution"} for count in counts]
+        "runtime_definition": ("shared group prefix readiness wall time; not independent N runtime"
+            if acceleration is not None else "cumulative prefix wall time within shared max-N execution"),
+        **({"condition_cache": True, "trajectory_group_size": acceleration.trajectory_group_size,
+            "prefix_delivery_seconds": delivered[count],
+            "completed_trajectories_when_prefix_ready": readiness[count]["completed_trajectories"],
+            "logical_calls_completed_per_chunk_when_prefix_ready":
+                readiness[count]["completed_trajectories"] * spec.nfe,
+            "grouped_forward_calls_per_batch_when_prefix_ready":
+                readiness[count]["completed_groups"] * spec.nfe} if acceleration is not None else {})}
+        for count in counts]
     write_json(output / "sampling_identity.json", {"spec": asdict(spec), "timesteps": list(spec.timesteps),
         "counts": list(counts), "ordered_chunk_indices": seen, "profiles": profiles})
     return result, profiles
