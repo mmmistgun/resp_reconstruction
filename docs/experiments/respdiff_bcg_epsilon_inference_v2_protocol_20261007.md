@@ -2,7 +2,7 @@
 
 协议 ID：`respdiff-bcg-epsilon-inference-v2-20261007`。
 
-当前状态：按用户 2026-10-07 任务一实现，10 项 CPU 合成定向测试通过，待任务指定的 validation 推理实验；不重新训练。用户任务指定本轮 diagnostic subset 两个 sampler 的预算及按固定规则选定 N 后的一次完整 validation。独立测试集未开放。
+当前状态（2026-10-07）：CPU 合成验证、66-parent diagnostic subset、固定 N 选择及一次完整 DDIM6 N16 validation 均完成，本轮关闭。固定规则判定 `ensemble not converged by N=16`，按预算上限 N16 执行全量，未声称收敛。145 项产物哈希核验通过，checkpoint 字节和参数未改变。完整结果、图与证据入口见[ε 推理 v2 结果](respdiff_bcg_epsilon_inference_v2_results_20261007.md)。以下执行命令保留作历史记录，已有运行不重跑，独立测试集未开放。
 
 ## 论文语义与来源
 

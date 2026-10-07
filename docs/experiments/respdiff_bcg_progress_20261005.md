@@ -4,6 +4,8 @@
 
 2026-10-07 更新：[双 1 Hz 呼吸基带三臂结果](respdiff_bcg_baseband_v1_results_20261007.md)已完成并核对回传产物。source-equivalent 五项主指标最佳，SNR 呼吸带候选梯度比保持较小，但三臂均残留千级尖峰。修复后的 B64 GPU 检查全部通过，三臂 train/validation 关闭。新 target 为低通 THO，下表仍保留原 target 合同结果。
 
+同日完成[固定 ε checkpoint 多轨迹推理 v2](respdiff_bcg_epsilon_inference_v2_results_20261007.md)：66-parent DDIM/DDPM 预算曲线、固定规则选 N 与全量 DDIM6 N16 + parent LPF validation 均结束。ensemble 到 N16 尚未收敛；新主结果 Local RR=0.9628、PCC=0.6513，幅值尾部明显改善但仍有异常。checkpoint 未改变。
+
 ## 实验过程
 
 | 阶段 | 内容与结论 | 证据入口 |
@@ -15,6 +17,7 @@
 | Loss 修复验证 | SNR 加权 FFT 与 epsilon-only 各运行 seed=20260811；五项指标均明显改善，后者本轮略优 | [修复协议与完整结果](respdiff_bcg_loss_repair_v1_protocol_20261004.md) |
 | 后处理诊断 | 固定等距 64 窗口及两个异常窗口；普通低通收益很小，3/5 点中值有有限帮助 | [滤波与训练走势](respdiff_bcg_postfilter_probe_20261005.md) |
 | 双低通基带三臂 | 6400-update 单 seed 全部完成；source-equivalent 五指标最佳，三臂仍有千级尖峰 | [三臂 validation 与梯度诊断](respdiff_bcg_baseband_v1_results_20261007.md) |
+| ε 多轨迹推理 v2 | 固定 source-equivalent checkpoint；N16 预算上限完整 validation 改善，DDPM 子集提供质量 anchor | [ensemble 曲线、N 选择与全量结果](respdiff_bcg_epsilon_inference_v2_results_20261007.md) |
 
 ## 同 seed 完整 validation 对比
 

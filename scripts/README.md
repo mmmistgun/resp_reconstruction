@@ -6,7 +6,7 @@
 
 ## RespDiff-BCG v1
 
-固定 source-equivalent checkpoint 的 [ε 推理协议 v2](../docs/experiments/respdiff_bcg_epsilon_inference_v2_protocol_20261007.md)新增 `scripts/run_respdiff_bcg_epsilon_inference_v2.py`：`synthetic-smoke`、`subset` 和按固定 plateau 规则选 N 的 `full-validation`。DDIM6 nested N={1,2,4,8,16}、DDPM50 N={1,2,4}，保幅在线均值及完整 parent 1 Hz 后滤波；10 项 CPU 测试通过。真实推理结果按新 run receipt 记录。
+固定 source-equivalent checkpoint 的 [ε 推理 v2 结果](../docs/experiments/respdiff_bcg_epsilon_inference_v2_results_20261007.md)已完成：DDIM6 nested N={1,2,4,8,16}、DDPM50 N={1,2,4} 的固定子集及一次全量 DDIM6 N16 validation 均已关闭。N16 尚未满足 plateau，作为预算上限使用；完整 validation Local RR=0.9628、PCC=0.6513，残余幅值异常仍存在。入口 `scripts/run_respdiff_bcg_epsilon_inference_v2.py` 的 `synthetic-smoke`、`subset`、`full-validation` 合同见[协议](../docs/experiments/respdiff_bcg_epsilon_inference_v2_protocol_20261007.md)，已有运行不重跑。
 
 当前 [双 1 Hz 呼吸基带三臂结果](../docs/experiments/respdiff_bcg_baseband_v1_results_20261007.md)已完成：`epsilon_only`、`source_equivalent`、`snr_resp_spectral` 的 B64 GPU 检查及 seed=20260811、6400-update train/validation 均已结束。source-equivalent 五指标最佳，三臂原始输出均残留尖峰。入口 `scripts/run_respdiff_bcg_baseband_v1.py`，历史执行合同见[协议](../docs/experiments/respdiff_bcg_baseband_v1_protocol_20261006.md)；已有运行不重跑。
 
