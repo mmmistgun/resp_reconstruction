@@ -86,6 +86,81 @@ env -u LD_LIBRARY_PATH CUDA_VISIBLE_DEVICES=0 "$PY" \
 
 GPU group 建议尚待实测。G1 的缓存收益可独立评估；G2/G4/G8 可减少 forward 次数但增加计算 batch 与临时内存。本次不承诺任何实际加速倍数。
 
+## T630 执行准备
+
+根据[已记录环境](../environments/workstation2_poweredge_t630.md)，T630 有三张 RTX 2080 Ti（每张 11264 MiB），项目位于 `/data/disk1/cxh/code/resp_reconstruction`，已有 `.venv` 与本实验所需的 PyTorch/NumPy/SciPy/pandas/OmegaConf。沿用现有环境；本任务没有新增依赖。以下是用户在 T630 上执行的命令，本地未调用 GPU 或连接该主机。
+
+### 同步代码与核对来源
+
+先查看工作树；有未提交改动时保留并处理这些改动，再切换分支、拉取。不要通过 reset/clean 覆盖它们。
+
+```bash
+cd /data/disk1/cxh/code/resp_reconstruction
+git status --short --branch
+git switch codex/respdiff-paper-settings
+git pull --ff-only origin codex/respdiff-paper-settings
+git log -1 --oneline
+git merge-base --is-ancestor 6c23c89 HEAD
+```
+
+T630 应使用当地原始训练目录。下面假定其为 `runs/respdiff_bcg_baseband_v1/source_equivalent_seed20260811_v1`；若当地目录不同，修改 `SOURCE_RUN`。本地回传目录名中的 `_from_t630_20261007` 不是 T630 的默认路径。这个 benchmark 必需四个来源文件：`final.pt`、`receipt.json`、`resolved_config.yaml`、`val_parents.csv`；不只复制 checkpoint。完整原始运行目录应继续保留。
+
+```bash
+SOURCE_RUN=runs/respdiff_bcg_baseband_v1/source_equivalent_seed20260811_v1
+env -u LD_LIBRARY_PATH CUDA_VISIBLE_DEVICES= .venv/bin/python - "$SOURCE_RUN" <<'PY'
+import sys
+from pathlib import Path
+import numpy, scipy, pandas, torch
+from omegaconf import OmegaConf
+from resp_train.respdiff_bcg.inference_v2 import load_frozen_source
+
+source = Path(sys.argv[1])
+for name in ("final.pt", "receipt.json", "resolved_config.yaml", "val_parents.csv"):
+    if not (source / name).is_file():
+        raise FileNotFoundError(source / name)
+model, cfg, identity = load_frozen_source(source, torch.device("cpu"))
+print("来源验收通过:", identity)
+print("torch/numpy/scipy/pandas:", torch.__version__, numpy.__version__,
+      scipy.__version__, pandas.__version__)
+PY
+```
+
+该检查在 CPU 加载模型，核对 receipt 中的配置/validation 身份、checkpoint SHA256、final6400/seed20260811/objective 元数据以及参数 finite；不访问 waveform。预期 checkpoint SHA256 为 `08713b693ca709a659eaa29898f689814f32651136a42ce2fe61223cffb8f6f6`。benchmark 使用合成输入，不要求同步真实数据、旧预测数组或 cache。后续若执行完整 validation，再按对应协议核对真实数据路径与 row identity。
+
+### 选卡与后台运行
+
+由用户在 T630 查看 `nvidia-smi`，选择空闲且无其他实验的卡。下面以物理 GPU0 为例；选 GPU1/2 时只替换 `CUDA_VISIBLE_DEVICES`，程序内仍为 `cuda:0`。保持 `env -u LD_LIBRARY_PATH`，防止外部 CUDA/cuDNN 库干扰当前环境。
+
+先运行 DDIM6 N8 B64：同一次 invocation 自动比较原串行、缓存 G1、G2、G4、G8。固定 B64 时，最大 RNN 计算 batch 分别为 64、64、128、256、512。2080 Ti 上较大 G 的显存是否足够尚未实测；某个加速组 OOM 是需要记录的硬件边界，不自动改变 B/G。
+
+```bash
+OUT=runs/respdiff_bcg_sampling_acceleration_v1/t630_ddim6_N8_B64_v1
+LOG="${OUT}.console.log"
+mkdir -p runs/respdiff_bcg_sampling_acceleration_v1
+if [ -e "$OUT" ] || [ -e "$LOG" ]; then
+  echo '输出或日志已存在；请使用新的 v2/v3 identity，保留已有产物。'
+else
+  nohup env -u LD_LIBRARY_PATH CUDA_VISIBLE_DEVICES=0 .venv/bin/python \
+    scripts/benchmark_respdiff_bcg_sampling_acceleration.py \
+    --device cuda:0 --sampler ddim --n-trajectories 8 \
+    --batch-size 64 --warmup 1 --repeats 2 \
+    --source-run "$SOURCE_RUN" --output "$OUT" > "$LOG" 2>&1 &
+  echo "后台 PID=$!；日志=$LOG"
+fi
+```
+
+进程输出同时保存在 console log 与输出目录 `run.log`。benchmark 运行期间不拉取或修改源码/配置/本协议，结束时会核对这些文件身份。该任务没有在 T630 测量耗时；逐步数值验收也会执行采样，不能只按两个 timed repeats 估算总耗时。
+
+DDIM benchmark 完成后，可按前节 DDPM50 N4 B13 命令验收完整 50 步，并将项目路径、解释器、`--source-run` 和独立输出 identity 替换为 T630 对应值。若后续 DDPM 推理要使用 B64，应另用 `--batch-size 64` 做相同 N4 benchmark；B13 的最佳 G 不外推 B64。当前 DDPM 的 N 上限为 4，N8/N16/N32/N100 需要后续独立预算修订。
+
+### 收集与验收
+
+- 查看 `receipt.json`：`complete` 或 `complete_with_oom` 表示执行完成；`failure.json` 表示失败，保留错误与原 identity。
+- `numerical_errors.csv` 的已完成检查须 finite 且 passed；误差门槛沿用本协议冻结值，不在失败后临时放宽。
+- `runtime_profile.csv` 比较采样时间、缓存与合批的独立收益、allocated/reserved；只从 passed 且无 OOM 的变体选择 G。
+- `summary.json` 确认 checkpoint bytes、参数和 buffer 未改变。最佳 G 仅适用于所测 GPU/B/sampler/N，不直接外推到未来 N100。
+- 回传整个独立 benchmark 输出目录和 console log；真实 checkpoint 和输入数据已存在本地，无须再重复回传。
+
 ## CPU 验证与交付边界
 
 使用小网络 hidden=8/layers=1/output=4、合成 condition 与 disposable checkpoint，未执行真实 checkpoint 的 GPU 推理或性能测试。测试在 CPU 单线程运行，并将 CUDA 初始化、可用性查询、全设备 seed 和 synchronize 调用设为失败；另显式设置 `CUDA_VISIBLE_DEVICES=`。
