@@ -1,6 +1,6 @@
 # 单 GPU ε 推理加速 v1
 
-当前状态：condition 缓存与 trajectory 分组已实现，首版 13 项 CPU 合成定向测试通过（12 项整文件测试＋新增 DDPM N4 定向测试）。用户在 T630 执行首轮 GPU benchmark：串行与缓存 G1 完成，G2 的一条 ε 检查超限，G4/G8 未执行。当前按用户既有“阈值不要定太低”要求修订 ε 绝对容差，待独立 identity 重验。Codex 未调用 GPU，未重训、未重跑完整 validation。实现分支为 `codex/respdiff-paper-settings`。
+当前状态：condition 缓存与 trajectory 分组已实现，首版 13 项 CPU 合成定向测试和容差修订后 3 项定向测试通过。用户在 T630 执行 DDIM6 N8 B64 benchmark：v1 的 G2 单元素 ε 超限；v2 的 G1/G2/G4 已通过、G8 OOM，最快已通过组为 G4，采样时间较串行减少 15.43%。DDPM50 的 native GPU benchmark 尚未执行。Codex 未调用 GPU，未重训、未重跑完整 validation。实现分支为 `codex/respdiff-paper-settings`。
 
 ## 合同与实现
 
@@ -47,6 +47,48 @@ parent 重建仍为 ensemble chunk mean→Hann OLA→100 Hz Fourier interpolatio
 首轮性能由用户终端日志提供：serial_reference 中位数 `15.519 s`、peak allocated/reserved `2.08/2.15 GiB`；condition_cache_G1 为 `16.217 s`、`2.13/2.18 GiB`，相对串行 speedup=`0.957x`。该次测量未显示缓存 G1 墙钟收益；G2 的性能和 G4/G8 的误差/性能仍未知。当前未在本地拿到完整 receipt/profile，因此这些值仅作为用户上报的部分执行记录。
 
 修订后的最小 CPU 定向验证：`tests/test_respdiff_bcg_sampling_acceleration.py -k 'nonfinite_mode_group or tolerance_revision or (all_groups_per_step and ddim)'`，3 passed、11 deselected，16.74 s。覆盖 DDIM 的 G1/2/4/8 逐步/终态/prefix 检查、合成的小幅 ε 差异在新门槛下接受、较大差异仍拒绝、reverse 与 noise 原门槛以及异常详情。未执行新 GPU benchmark，亦未将合成案例当作 T630 实际输出复验。
+
+## T630 DDIM 实测（2026-10-08 用户执行）
+
+来源是用户粘贴的 `t630_ddim6_N8_B64_v2.console.log` 与该目录完整 `summary.json`；summary 所列 ε 门槛为 `atol=2e-4,rtol=1e-3`，与此前推送的 `b1af3da` 修订一致；实际 git/source identity 尚未回传核对。模型、输入、noise、FP32/TF32、B64、DDIM6 N8 与前述合同相同；warmup=1、timed repeats=2。未访问真实 waveform、未执行完整 validation。
+
+| 变体 | 中位采样时间/s | 相对串行 speedup | 时间减少 | peak allocated/GiB | peak reserved/GiB | 状态 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| serial_reference | 15.551 | 1.000x | 0% | 2.075 | 2.150 | passed |
+| condition_cache_G1 | 16.195 | 0.960x | -4.14% | 2.130 | 2.180 | passed |
+| condition_cache_G2 | 14.511 | 1.072x | 6.69% | 3.835 | 3.938 | passed |
+| condition_cache_G4 | 13.152 | 1.182x | 15.43% | 7.248 | 7.377 | passed |
+| condition_cache_G8 | — | — | — | — | — | oom |
+
+G4 两次 timed pass 分别为 13.155637/13.148140 s，串行为 15.419668/15.683144 s。G4 相对缓存 G1 的 speedup 为 1.231x，`ensemble_chunks_per_second` 为 4.866（一个 ensemble chunk 已含 N8）。forward 调用从串行的 48 降为 12，逻辑计算预算仍为 48 calls/chunk；调用数减少 4 倍未形成 4 倍墙钟收益。
+
+缓存 G1 在 v1/v2 都略慢于串行，本轮未显示单独缓存的速度收益。合批 G2/G4 才表现出净加速；G4 为本张 RTX2080Ti、B64、DDIM6 N8 合成 fixture 的最快已通过配置。若同卡还有其他任务，G2 的较低显存是可比较的选择；本实验的速度结论仅对应单进程条件。
+
+G8 在验收过程中尝试额外分配 10.15 GiB 时 OOM，当时本进程已有约 4.59 GiB、GPU 总容量 10.57 GiB；该分配需求超过整卡容量，不能仅据错误中的通用 allocator 提示判断为碎片问题。G8 不具备已通过的数值或性能结果，保留 OOM 文件；未降低 B/G 重试。
+
+`summary.json` 报告 checkpoint bytes 与 parameters/buffers 均未改变。passed 变体已经经过脚本的逐 step/trajectory/prefix 与完整 parent 重建门槛；当前只收到 summary 与 console log，尚未回传逐元素误差 CSV、environment 和 receipt 文件，因此未独立核对实际最大误差或产物哈希。v1 失败仍保留为失败，v2 采用修订后门槛取得通过结果。
+
+下一项用户执行的验收使用 DDPM50 N4 B64，保持与拟用推理相同的 B64，测量 50 步条件下的误差与速度，当前不能把 DDIM 的最佳 G 直接写成 DDPM 推荐值。下面命令使用新 identity；空闲物理 GPU 不是 GPU0 时替换 `CUDA_VISIBLE_DEVICES`。
+
+```bash
+cd /data/disk1/cxh/code/resp_reconstruction
+SOURCE_RUN=runs/respdiff_bcg_baseband_v1/source_equivalent_seed20260811_v1
+OUT=runs/respdiff_bcg_sampling_acceleration_v1/t630_ddpm50_N4_B64_v1
+LOG="${OUT}.console.log"
+mkdir -p runs/respdiff_bcg_sampling_acceleration_v1
+if [ -e "$OUT" ] || [ -e "$LOG" ]; then
+  echo '输出或日志已存在；请使用新的版本 identity。'
+else
+  nohup env -u LD_LIBRARY_PATH CUDA_VISIBLE_DEVICES=0 .venv/bin/python \
+    scripts/benchmark_respdiff_bcg_sampling_acceleration.py \
+    --device cuda:0 --sampler ddpm --n-trajectories 4 \
+    --batch-size 64 --warmup 1 --repeats 2 \
+    --source-run "$SOURCE_RUN" --output "$OUT" > "$LOG" 2>&1 &
+  echo "后台 PID=$!；日志=$LOG"
+fi
+```
+
+本次 DDPM 的 N4 上限意味着 G8 实际也只运行 4 条轨迹，不能据其测量声称 G8 满组能力。DDPM 的 reverse noise 逐值一致和所有输出门槛保持当前冻结值；如有超限，先查看已保存的实际误差，不自动变更容差。未启动这项 GPU benchmark，也未扩大到 N8/N16/N32/N100。
 
 ## 独立推理入口和 runtime 口径
 
