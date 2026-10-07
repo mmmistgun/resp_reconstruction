@@ -8,6 +8,9 @@
 
 ## 协议路由
 
+- P1 组件消融 v1：固定 1 秒 patch，七个主臂及三个补充臂 × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、结果、协议及来源由 `docs/experiments/p1_components_v1_validation_results_20261007.md` 路由。
+- P1 组件消融固定 30-checkpoint research-test：评价及完整汇总已完成并关闭；当前状态、结果、协议及来源由 `docs/experiments/p1_components_research_test_results_20261007.md` 路由。
+
 - Patch-aligned TF-Mamba 时长敏感性：1/2/4 秒 patch × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、结果及来源由 `docs/experiments/patch_aligned_tf_mamba_validation_results_20261006.md` 路由。
 - Patch-aligned TF-Mamba 固定 9-checkpoint research-test：评价及汇总已完成并关闭；当前状态、结果、协议与来源由 `docs/experiments/patch_aligned_tf_mamba_research_test_results_20261006.md` 路由。
 

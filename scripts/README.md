@@ -18,6 +18,16 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## P1 组件消融
+
+2026-10-07：完整 30-cell train/validation 与汇总已完成并关闭，当前状态与结果见 [P1 组件消融结果记录](../docs/experiments/p1_components_v1_validation_results_20261007.md)。以下命令保留为执行与复现说明，已完成阶段不自行重跑。
+
+`scripts/run_p1_components.py` 提供固定 1 秒 patch、10 臂 × 三 seed 的 `prepare / plan / smoke / run / status / summarize`。
+默认统一微批量 32、累积 4 次、BF16；每卡一个 worker，双 GPU 分别执行 `bash scripts/run_p1_components_shard.sh SESSION 0 0` 与 `bash scripts/run_p1_components_shard.sh SESSION 1 1`，各串行运行 15 组。
+shell 入口包含 `env -u LD_LIBRARY_PATH -u LD_PRELOAD`；`--resume` 从完整 epoch 恢复。模型、表示范围、共有初始化与正式命令见 [P1 组件消融协议](../docs/experiments/p1_components_v1_protocol_20261006.md)。
+
+2026-10-07：固定 30-checkpoint research-test 评价及完整汇总已完成并关闭，当前状态、结果和来源见 [P1 research-test 结果记录](../docs/experiments/p1_components_research_test_results_20261007.md)。历史执行入口为 `scripts/eval_p1_components.py` 的 `prepare / evaluate / status / summarize`，双 GPU 分片使用 `scripts/run_p1_components_test_shard.sh`。固定 batch=32、BF16；完整命令与证据角色见 [P1 research-test 专项协议](../docs/experiments/p1_components_research_test_v1_20261007.md)，已完成评价不自行重跑。
+
 ## Patch-aligned TF-Mamba 模型检查
 
 2026-10-06：固定 9-checkpoint research-test 与汇总也已完成并关闭，详见[research-test 结果记录](../docs/experiments/patch_aligned_tf_mamba_research_test_results_20261006.md)。以下命令保留为执行与复现说明，已完成评价不自行重跑。
