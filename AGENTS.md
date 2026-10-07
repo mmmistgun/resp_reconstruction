@@ -8,13 +8,7 @@
 
 ## 协议路由
 
-- M4与IEWT医学RR分层及窗口SA：本轮research-test产物分析已完成并关闭；结果和来源入口为 `docs/experiments/m4_iewt_strata_v1_results_20261007.md`。
-
-- Patch-aligned TF-Mamba P1组件M4窗口SA事件有无：本轮research-test产物分析已完成并关闭；分组、结果和来源入口为 `docs/experiments/p1_m4_sa_presence_v1_results_20261007.md`。
-
-- CWT-APOR v2 H-only 窗口SA事件有无：本轮research-test产物分析已完成并关闭；分组、结果和来源入口为 `docs/experiments/h_only_sa_presence_v1_results_20261006.md`。
-
-- CWT-APOR v2 H-only 医学参考呼吸率三区间：本轮 research-test 产物分析已完成并关闭；口径、结果和来源入口为 `docs/experiments/h_only_medical_rr_strata_v1_results_20261005.md`。
+- 呼吸率与SA窗口分层（CWT-APOR v2 H-only、Patch-aligned TF-Mamba P1组件M4、IEWT）：全部research-test产物分析已完成并关闭；统一结果、口径、协议与来源入口为 `docs/experiments/rr_sa_stratified_results_20261007.md`。
 
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E5 W0 时域前端替换：三 seed train/validation 与固定 checkpoint research-test 均已完成并关闭；当前状态、validation/test 结果与来源身份统一由 `docs/experiments/e5_temporal_frontend_closeout_20260927.md` 路由。

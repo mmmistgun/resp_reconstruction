@@ -4,29 +4,18 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
-## M4与IEWT RR分层及窗口SA分析
+## 呼吸率与SA窗口分层：H-only、M4、IEWT
 
-入口 `scripts/analyze_m4_iewt_strata.py --confirm-research-test`，复用冻结THO医学RR组别和SA窗口组别，汇总M4三seed及IEWT确定性单次research-test指标。2026-10-07已完成并关闭，见[结果与来源](../docs/experiments/m4_iewt_strata_v1_results_20261007.md)及[专项协议](../docs/experiments/m4_iewt_strata_v1_protocol_20261007.md)。已完成分析不自行重跑。
+全量、医学RR三区间、SA两组、主体构成及全部执行来源统一见[结果总报告](../docs/experiments/rr_sa_stratified_results_20261007.md)。全部分析已完成并关闭，后续查阅与更新以总报告为入口。
 
-定向synthetic CPU验证：`/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q tests/test_m4_iewt_strata.py`。
+| 脚本（均需`--confirm-research-test`） | 执行内容 | 定向CPU测试 |
+|---|---|---|
+| `analyze_h_only_medical_rr_strata.py` | H-only RR组别与指标 | `tests/test_h_only_medical_rr_strata.py` |
+| `analyze_h_only_sa_presence.py` | SA组别与H-only指标 | `tests/test_h_only_sa_presence.py` |
+| `analyze_p1_m4_sa_presence.py` | M4 SA指标 | `tests/test_p1_m4_sa_presence.py` |
+| `analyze_m4_iewt_strata.py` | M4／IEWT RR与SA指标 | `tests/test_m4_iewt_strata.py` |
 
-## Patch-aligned TF-Mamba M4 窗口 SA 事件有无分析
-
-入口 `scripts/analyze_p1_m4_sa_presence.py --confirm-research-test`，复用冻结430/1880窗口SA分组，汇总P1-Full-Add M4三seed既存指标。2026-10-07已完成并关闭，见[结果与来源](../docs/experiments/p1_m4_sa_presence_v1_results_20261007.md)及[专项协议](../docs/experiments/p1_m4_sa_presence_v1_protocol_20261007.md)。已完成分析不自行重跑。
-
-定向synthetic CPU验证：`/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q tests/test_p1_m4_sa_presence.py tests/test_h_only_sa_presence.py`。
-
-## H-only 窗口 SA 事件有无分析
-
-入口 `scripts/analyze_h_only_sa_presence.py --confirm-research-test`，按 PSG 暂停/低通气事件与180秒窗口是否存在正时长交集，汇总固定 H-only 三seed既有research-test五项指标。2026-10-06已完成并关闭，430窗含事件、1880窗无SA标注事件；结果、主体构成与来源见[完成记录](../docs/experiments/h_only_sa_presence_v1_results_20261006.md)，合同见[专项协议](../docs/experiments/h_only_sa_presence_v1_protocol_20261006.md)。已完成分析不自行重跑。
-
-定向 synthetic CPU 验证：`/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q tests/test_h_only_sa_presence.py`。
-
-## H-only 医学参考 RR 三区间分析
-
-入口为 `scripts/analyze_h_only_medical_rr_strata.py --confirm-research-test`，仅消费固定 CWT-APOR v2 H-only 三seed research-test 指标及同源 THO 参考波形，按 `<12`、`12–20`、`>20 bpm` 汇总窗口平均。2026-10-05 已完成并关闭，见[结果及来源](../docs/experiments/h_only_medical_rr_strata_v1_results_20261005.md)和[专项协议](../docs/experiments/h_only_medical_rr_strata_v1_protocol_20261005.md)。已完成分析不自行重跑；输出使用独立目录，不覆盖来源。
-
-在当前 worktree 根目录执行定向 synthetic CPU 验证：`/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q tests/test_h_only_medical_rr_strata.py`。
+定向测试使用 `/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q <对应测试文件>`。协议及运行产物见总报告第7节，已完成分析不自行重跑。
 
 ## Test 受试者 670 排除敏感性分析
 
