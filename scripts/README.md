@@ -4,6 +4,12 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## M4与IEWT RR分层及窗口SA分析
+
+入口 `scripts/analyze_m4_iewt_strata.py --confirm-research-test`，复用冻结THO医学RR组别和SA窗口组别，汇总M4三seed及IEWT确定性单次research-test指标。2026-10-07已完成并关闭，见[结果与来源](../docs/experiments/m4_iewt_strata_v1_results_20261007.md)及[专项协议](../docs/experiments/m4_iewt_strata_v1_protocol_20261007.md)。已完成分析不自行重跑。
+
+定向synthetic CPU验证：`/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q tests/test_m4_iewt_strata.py`。
+
 ## Patch-aligned TF-Mamba M4 窗口 SA 事件有无分析
 
 入口 `scripts/analyze_p1_m4_sa_presence.py --confirm-research-test`，复用冻结430/1880窗口SA分组，汇总P1-Full-Add M4三seed既存指标。2026-10-07已完成并关闭，见[结果与来源](../docs/experiments/p1_m4_sa_presence_v1_results_20261007.md)及[专项协议](../docs/experiments/p1_m4_sa_presence_v1_protocol_20261007.md)。已完成分析不自行重跑。

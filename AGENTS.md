@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- M4与IEWT医学RR分层及窗口SA：本轮research-test产物分析已完成并关闭；结果和来源入口为 `docs/experiments/m4_iewt_strata_v1_results_20261007.md`。
+
 - Patch-aligned TF-Mamba P1组件M4窗口SA事件有无：本轮research-test产物分析已完成并关闭；分组、结果和来源入口为 `docs/experiments/p1_m4_sa_presence_v1_results_20261007.md`。
 
 - CWT-APOR v2 H-only 窗口SA事件有无：本轮research-test产物分析已完成并关闭；分组、结果和来源入口为 `docs/experiments/h_only_sa_presence_v1_results_20261006.md`。
