@@ -1,6 +1,6 @@
 # 单 GPU ε 推理加速 v1
 
-当前状态：condition 缓存与 trajectory 分组已实现，首版 13 项 CPU 合成定向测试和容差修订后 3 项定向测试通过。用户在 T630 执行 DDIM6 N8 B64 benchmark：v1 的 G2 单元素 ε 超限；v2 的 G1/G2/G4 已通过、G8 OOM，最快已通过组为 G4，采样时间较串行减少 15.43%。DDPM50 的 native GPU benchmark 尚未执行。Codex 未调用 GPU，未重训、未重跑完整 validation。实现分支为 `codex/respdiff-paper-settings`。
+当前状态：condition 缓存与 trajectory 分组已实现，首版 13 项 CPU 合成定向测试和容差修订后 3 项定向测试通过。用户在 T630 完成 DDIM6 N8 B64 与 DDPM50 N4 B64 benchmark，两者最快已通过组均为 G4，采样时间较串行分别减少 15.43%/19.37%。DDIM 的满组 G8 OOM；DDPM 的 G8 实际只含 N4 的四条轨迹，其通过不代表满组 G8 能运行。Codex 未调用 GPU，未重训、未重跑完整 validation。实现分支为 `codex/respdiff-paper-settings`。
 
 ## 合同与实现
 
@@ -68,7 +68,7 @@ G8 在验收过程中尝试额外分配 10.15 GiB 时 OOM，当时本进程已�
 
 `summary.json` 报告 checkpoint bytes 与 parameters/buffers 均未改变。passed 变体已经经过脚本的逐 step/trajectory/prefix 与完整 parent 重建门槛；当前只收到 summary 与 console log，尚未回传逐元素误差 CSV、environment 和 receipt 文件，因此未独立核对实际最大误差或产物哈希。v1 失败仍保留为失败，v2 采用修订后门槛取得通过结果。
 
-下一项用户执行的验收使用 DDPM50 N4 B64，保持与拟用推理相同的 B64，测量 50 步条件下的误差与速度，当前不能把 DDIM 的最佳 G 直接写成 DDPM 推荐值。下面命令使用新 identity；空闲物理 GPU 不是 GPU0 时替换 `CUDA_VISIBLE_DEVICES`。
+DDPM50 N4 B64 的用户执行命令如下，该 identity 已完成（结果见下一节）；保留命令用于复现与审计，后续重跑必须使用新 identity。空闲物理 GPU 不是 GPU0 时替换 `CUDA_VISIBLE_DEVICES`。
 
 ```bash
 cd /data/disk1/cxh/code/resp_reconstruction
@@ -88,7 +88,38 @@ else
 fi
 ```
 
-本次 DDPM 的 N4 上限意味着 G8 实际也只运行 4 条轨迹，不能据其测量声称 G8 满组能力。DDPM 的 reverse noise 逐值一致和所有输出门槛保持当前冻结值；如有超限，先查看已保存的实际误差，不自动变更容差。未启动这项 GPU benchmark，也未扩大到 N8/N16/N32/N100。
+本次 DDPM 的 N4 上限意味着 G8 实际也只运行 4 条轨迹，不能据其测量声称 G8 满组能力。DDPM 的 reverse noise 逐值一致和所有输出门槛保持当前冻结值；如有超限，先查看已保存的实际误差，不自动变更容差。用户已经执行这项 GPU benchmark；Codex 未代跑，也未扩大到 N8/N16/N32/N100。
+
+## T630 DDPM 实测（2026-10-08 用户执行）
+
+来源为用户粘贴的 `t630_ddpm50_N4_B64_v1.console.log` 与完整 `summary.json`。warmup=1、timed repeats=2、B64、DDPM50 N4、当前 ε `atol=2e-4,rtol=1e-3`，其他门槛与前述合同相同。所有变体 status=passed、finite=true；summary 报告 checkpoint bytes、parameters/buffers 均未改变。实际 git/source/environment、逐步误差 CSV 与 receipt 尚未回传核对，当前不能列出实际最大误差数值。
+
+| 变体 | 实际最大组大小 | 中位采样时间/s | 相对串行 speedup | 时间减少 | peak allocated/GiB | peak reserved/GiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| serial_reference | 1 | 68.412 | 1.000x | 0% | 2.075 | 2.150 |
+| condition_cache_G1 | 1 | 68.789 | 0.995x | -0.55% | 2.130 | 2.180 |
+| condition_cache_G2 | 2 | 60.863 | 1.124x | 11.04% | 3.835 | 3.938 |
+| condition_cache_G4 | 4 | 55.162 | 1.240x | 19.37% | 7.248 | 7.377 |
+| condition_cache_G8 | 4 | 55.203 | 1.239x | 19.31% | 7.248 | 7.377 |
+
+G4 两次 timed pass 为 55.166526/55.156856 s，相对缓存 G1 的 speedup=1.247x，吞吐为 1.160 ensemble chunks/s。串行每原始 batch 执行 200 次 denoiser forward，G4 执行 50 次；逻辑计算预算仍为 200 calls/chunk。缓存 G1 与串行接近、略慢，此轮没有单独缓存收益。
+
+G4 与标为 G8 的变体都只计算一个四轨迹组（B*4=256），两者时间相近符合实际执行方式。**T630 当前推荐 G4**，其在 DDIM6 N8 和 DDPM50 N4 的合成 fixture 中均通过数值验收且最快；需要更多显存余量时可比较 G2。尚未据这些工程验收结果重跑真实 validation 或作出新的科研指标结论。
+
+### 更大 DDPM N 的成本估算
+
+当前 N4/G4 的 55.161691 s 对应一个四轨迹组。在线均值只持有当前 G 组，因此固定 B64/G4 时 N 增大不会创建完整 N 维 GPU 状态；计算耗时仍随组数近似增长。以下仅按 `55.161691 * ceil(N/4)` 外推，不是实测结果，也不构成新预算授权。
+
+参考[既有推理数据身份](respdiff_bcg_epsilon_inference_v2_results_20261007.md)：66-parent 子集为 858 chunks、14 batches；2675-parent 完整 validation 为 34775 chunks、544 batches。将尾 batch 也按 B64 估算，未计入 I/O、parent 重建、metrics 和机器负载差异。
+
+| DDPM N | 单 B64 batch 估算/s | 66-parent 子集采样估算/h | 完整 validation 采样估算/h |
+| --- | ---: | ---: | ---: |
+| 8 | 110.3 | 0.43 | 16.67 |
+| 16 | 220.6 | 0.86 | 33.34 |
+| 32 | 441.3 | 1.72 | 66.68 |
+| 100 | 1379.0 | 5.36 | 208.39（约 8.7 天） |
+
+G4 的约 1.24x 加速不改变较大 N 的线性预算成本。未来更大 N 实验应先明确子集、候选 N、停止规则与执行预算，再修订当前 DDPM≤4 的入口限制；当前保持既有预算与结果冻结状态。
 
 ## 独立推理入口和 runtime 口径
 
@@ -134,7 +165,7 @@ env -u LD_LIBRARY_PATH CUDA_VISIBLE_DEVICES=0 "$PY" \
 
 验收产物：`numerical_errors.csv`（逐 step/trajectory 和重建误差）、`runtime_profile.csv`、`shared_prefix_runtime_profile.csv`、`summary.json`、输入 fixture、source snapshot/identity、environment、benchmark identity、receipt/failure。checkpoint 文件、参数和所有 buffer 前后不变；最快 G 仅从已通过数值验收且未 OOM 的实测变体中选择。
 
-GPU group 建议尚待实测。G1 的缓存收益可独立评估；G2/G4/G8 可减少 forward 次数但增加计算 batch 与临时内存。本次不承诺任何实际加速倍数。
+T630 的用户执行实测见上文：G4 在 DDIM6 N8 与 DDPM50 N4 的 B64 合成 fixture 中最快，分别为串行的 1.182x/1.240x；独立缓存 G1 没有表现出速度收益。其他 GPU 或 B/sampler/N 的最佳 G 仍须按对应实测确定。
 
 ## T630 执行准备
 
@@ -181,7 +212,7 @@ PY
 
 由用户在 T630 查看 `nvidia-smi`，选择空闲且无其他实验的卡。下面以物理 GPU0 为例；选 GPU1/2 时只替换 `CUDA_VISIBLE_DEVICES`，程序内仍为 `cuda:0`。保持 `env -u LD_LIBRARY_PATH`，防止外部 CUDA/cuDNN 库干扰当前环境。
 
-先运行 DDIM6 N8 B64：同一次 invocation 自动比较原串行、缓存 G1、G2、G4、G8。固定 B64 时，最大 RNN 计算 batch 分别为 64、64、128、256、512。2080 Ti 上较大 G 的显存是否足够尚未实测；某个加速组 OOM 是需要记录的硬件边界，不自动改变 B/G。
+DDIM6 N8 B64 的一次 invocation 自动比较原串行、缓存 G1、G2、G4、G8。固定 B64 时，最大 RNN 计算 batch 分别为 64、64、128、256、512。T630 现有实测为 G1/G2/G4 通过、G8 OOM；OOM 是需要记录的硬件边界，不自动改变 B/G。下方旧 v1 identity 也已有失败产物，不可覆盖；复现时使用新的独立版本名称。
 
 ```bash
 OUT=runs/respdiff_bcg_sampling_acceleration_v1/t630_ddim6_N8_B64_v1
@@ -222,7 +253,7 @@ env CUDA_VISIBLE_DEVICES= PYTHONPATH=. "$PY" -m pytest \
   tests/test_respdiff_bcg_sampling_acceleration.py -q
 ```
 
-最终执行记录：整文件当时的 12 项测试在 57.11 s 内通过，产物 `/tmp/respdiff_sampling_acceleration_cpu_20261007_v4`；随后为完整 DDPM N4 新增一项参数化案例，仅运行该新增案例，1 passed in 47.35 s，产物 `/tmp/respdiff_sampling_acceleration_ddpm4_cpu_20261007_v1`。当前文件共 13 个案例，均按修订后的冻结容差通过。
+该阶段执行记录：整文件当时的 12 项测试在 57.11 s 内通过，产物 `/tmp/respdiff_sampling_acceleration_cpu_20261007_v4`；随后为完整 DDPM N4 新增一项参数化案例，仅运行该新增案例，1 passed in 47.35 s，产物 `/tmp/respdiff_sampling_acceleration_ddpm4_cpu_20261007_v1`。这 13 个案例均有通过记录；后来新增的第 14 个容差/异常详情案例与两项既有测试在本文件前述修订验证中通过，未宣称重新执行整个 14-case 文件。
 
 覆盖原始 B3/B64 缓存 forward 逐值一致、缓存跨 batch/原地改动拒绝、G1/G2/G4/G8、DDIM N9 与 DDPM N3/N4、逐 step epsilon/reverse、逐 trajectory 终态和各 nested prefix、initial/reverse noise 逐值一致、最后不足 G 的组、输入 B5/B5/B3 尾 batch、完整 parent OLA/插值/后滤波、checkpoint/parameter/buffer 不变、非有限失败与合理超限拒绝。weakref 案例还验证上一组 Tensor 在下一组计算前释放，未累计持有旧组。
 
@@ -236,4 +267,4 @@ env CUDA_VISIBLE_DEVICES= PYTHONPATH=. "$PY" -m pytest \
 
 所有记录 finite 且通过当前逐元素门槛。完整 parent 重建案例（B13、N3）各 G 的 raw/postfiltered waveform 逐值一致。源真实 checkpoint 文件的 SHA256 再核对仍为固定值；CPU fixture 的参数和 buffer 前后不变。语法检查和 benchmark `--help` 检查通过。
 
-这些结果验证实现与误差检查机制，不代表 native 六层 H1024 模型在某张 GPU 上的精度、显存或速度验收。当前未实测 condition 缓存的墙钟收益、G2/G4/G8 的额外收益或最佳 G；使用上面的 GPU 命令取得通过的 native checkpoint 实测后，再按最快且未 OOM 的组选择。
+CPU 结果验证实现与误差检查机制；native 六层 H1024 checkpoint 的 GPU 误差门槛、显存与速度证据来自用户执行的上述 T630 benchmark。两类证据分别保留，T630 合成 fixture 的最佳 G 不外推成完整 validation 的科研指标结论。
