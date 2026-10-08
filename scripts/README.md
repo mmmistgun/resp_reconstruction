@@ -18,6 +18,16 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## M4-v2 单投影时频残差
+
+2026-10-08：完整 18-cell train/validation 与汇总已完成并关闭，当前状态、全部指标及来源见 [M4-v2 validation 结果](../docs/experiments/m4_residual_v2_validation_results_20261008.md)。以下入口保留为执行与复现说明，已完成阶段不自行重跑。
+
+`scripts/run_m4_residual.py` 提供固定 1 秒 patch、6 臂 × 三 seed 的 `prepare / plan / smoke / run / status / summarize`。A0 为单一零初始化输出投影的 cross-attention residual；矩阵同时包含 NoTF、MeanTF-Residual、NoMamba、Query RMSNorm 与 ContentAttention。
+
+默认微批量 32、累积 4 次、BF16；双 GPU 分别运行 `bash scripts/run_m4_residual_shard.sh SESSION 0 0` 和 `... SESSION 1 1`，各串行 9 组。恢复使用 `--resume`。完整 validation 汇总包含主候选配对与 NoTF→MeanTF→ContentAttention→物理坐标 attention 的预设递增比较。当前合同、来源准备及正式命令见 [M4-v2 协议](../docs/experiments/m4_residual_v2_protocol_20261007.md)。
+
+2026-10-08：固定 18-checkpoint research-test 评价与完整汇总已完成并关闭，当前状态、全部指标及来源见 [M4-v2 research-test 结果](../docs/experiments/m4_residual_v2_research_test_results_20261008.md)。历史入口为 `scripts/eval_m4_residual.py` 的 `prepare / evaluate / status / summarize`，双 GPU 分片使用 `scripts/run_m4_residual_test_shard.sh`。执行合同见 [专项协议](../docs/experiments/m4_residual_v2_research_test_v1_20261008.md)，已完成评价不自行重跑。
+
 ## P1 组件消融
 
 2026-10-07：完整 30-cell train/validation 与汇总已完成并关闭，当前状态与结果见 [P1 组件消融结果记录](../docs/experiments/p1_components_v1_validation_results_20261007.md)。以下命令保留为执行与复现说明，已完成阶段不自行重跑。

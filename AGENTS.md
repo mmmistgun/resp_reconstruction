@@ -8,6 +8,9 @@
 
 ## 协议路由
 
+- M4-v2 单投影时频残差：固定 6 臂 × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、全部指标、预设比较、协议及来源由 `docs/experiments/m4_residual_v2_validation_results_20261008.md` 路由。
+- M4-v2 固定 18-checkpoint research-test：评价及完整汇总已完成并关闭；当前状态、全部指标、协议及来源由 `docs/experiments/m4_residual_v2_research_test_results_20261008.md` 路由。
+
 - P1 组件消融 v1：固定 1 秒 patch，七个主臂及三个补充臂 × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、结果、协议及来源由 `docs/experiments/p1_components_v1_validation_results_20261007.md` 路由。
 - P1 组件消融固定 30-checkpoint research-test：评价及完整汇总已完成并关闭；当前状态、结果、协议及来源由 `docs/experiments/p1_components_research_test_results_20261007.md` 路由。
 
