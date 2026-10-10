@@ -190,7 +190,14 @@ def _build_crd_v1(cfg: Any) -> nn.Module:
     return build_crd_model(cfg)
 
 
+def _build_patch_aligned_tf_mamba(cfg: Any) -> nn.Module:
+    from resp_train.models.patch_aligned_tf_mamba import build_patch_aligned_tf_mamba
+
+    return build_patch_aligned_tf_mamba(cfg)
+
+
 _REGISTRY: dict[str, ModelFactory] = {
+    "patch_aligned_tf_mamba": _build_patch_aligned_tf_mamba,
     "unet1d_tiny": lambda cfg: UNet1DTiny(
         in_channels=int(cfg.model.in_channels),
         out_channels=int(cfg.model.out_channels),

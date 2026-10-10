@@ -1,0 +1,24 @@
+protocol: m4-components-v1-20261008
+arms: [B0, B1, B2, B3, B4, B5, B6, B7]
+seeds: [20260811, 20260812, 20260813]
+patch_seconds: 1
+normalization: groupnorm_representation_variant
+baseline: configs/crd_tf_v1/crd_tf102_w_formal.yaml
+training:
+  epochs: 80
+  batch_size: 32
+  gradient_accumulation_steps: 4
+  early_stopping_min_epoch: 30
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  amp_dtype: bfloat16
+data:
+  train_windows: 10141
+  val_windows: 2675
+  train_subjects: 32
+  val_subjects: 7
+selector: full_validation_local_rr_strict_minimum_earliest_tie
+comparisons: {B1: B0, B2: B0, B3: B0, B4: B0, B5: B0, B6: B0, B7: B0}
+increments: {tf_information: [B2, B1], content_attention: [B3, B2], physical_coordinates: [B0, B3]}
+references: {B0: M4, B1: M1}
+reference_session_sha256: 34d0c62cb64adae16fca4db512687d28bb96e74e89857c049a506d66c4e71fb6

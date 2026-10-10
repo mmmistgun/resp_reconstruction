@@ -11,6 +11,21 @@
 - H-only＋H64 消融 v1：实现与 synthetic CPU 定向验收已完成；GPU、正式训练、HA16 复用核验和 research-test 待执行。17配置×3seed矩阵、执行入口与证据边界见 `docs/experiments/h_only_ablation_v1_protocol_20261004.md`。
 - 呼吸率与SA窗口分层（CWT-APOR v2 H-only、Patch-aligned TF-Mamba P1组件M4、IEWT）：全部research-test产物分析已完成并关闭；统一结果、口径、协议与来源入口为 `docs/experiments/rr_sa_stratified_results_20261007.md`。
 
+- 原始 M4 高频时间结构机制补充：完整三 seed×十条件 validation、research-test、汇总与图册均已完成并关闭；当前状态、配对效应、均值替换结果及受试者差异由 `docs/experiments/m4_high_frequency_v1_results_20261009.md` 路由。原执行协议和源码保持冻结身份。
+
+- 原始 P1-M4 固定 checkpoint research-test：18 项新增评价与完整八臂 × 三 seed 汇总已完成并关闭，B0/B1 只读引用 P1 六项历史结果；当前状态、全部指标、跨 split 结论及来源由 `docs/experiments/m4_components_research_test_results_20261009.md` 路由。
+
+- 原始 P1-M4 组件消融 v1：18 个新增 train/validation cell 与完整八臂 × 三 seed 汇总已完成并关闭，B0/B1 只读引用原 P1 六个冻结 cell；当前状态、全部指标、配对结论与来源统一由 `docs/experiments/m4_components_v1_validation_results_20261009.md` 路由；research-test 亦已完成，见上方专项结果。
+
+- M4-v2 单投影时频残差：固定 6 臂 × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、全部指标、预设比较、协议及来源由 `docs/experiments/m4_residual_v2_validation_results_20261008.md` 路由。
+- M4-v2 固定 18-checkpoint research-test：评价及完整汇总已完成并关闭；当前状态、全部指标、协议及来源由 `docs/experiments/m4_residual_v2_research_test_results_20261008.md` 路由。
+
+- P1 组件消融 v1：固定 1 秒 patch，七个主臂及三个补充臂 × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、结果、协议及来源由 `docs/experiments/p1_components_v1_validation_results_20261007.md` 路由。
+- P1 组件消融固定 30-checkpoint research-test：评价及完整汇总已完成并关闭；当前状态、结果、协议及来源由 `docs/experiments/p1_components_research_test_results_20261007.md` 路由。
+
+- Patch-aligned TF-Mamba 时长敏感性：1/2/4 秒 patch × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、结果及来源由 `docs/experiments/patch_aligned_tf_mamba_validation_results_20261006.md` 路由。
+- Patch-aligned TF-Mamba 固定 9-checkpoint research-test：评价及汇总已完成并关闭；当前状态、结果、协议与来源由 `docs/experiments/patch_aligned_tf_mamba_research_test_results_20261006.md` 路由。
+
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E5 W0 时域前端替换：三 seed train/validation 与固定 checkpoint research-test 均已完成并关闭；当前状态、validation/test 结果与来源身份统一由 `docs/experiments/e5_temporal_frontend_closeout_20260927.md` 路由。
 - E6 20-Hz 学习解调前端：三 seed train/validation、效率记录与固定 checkpoint research-test 均已完成并关闭；当前状态与证据入口为 `docs/experiments/e6_temporal_frontend_closeout_20260924.md`。
@@ -21,6 +36,7 @@
 - CWT-APOR v2时频表示与频带机制：60-cell train/validation、固定checkpoint research-test及三seed机制分析均已完成并关闭；当前状态、结果和来源由 `docs/experiments/cwt_apor_v2_results_summary_20261002.md` 路由，机制验收细节见 `docs/experiments/cwt_apor_v2_mechanisms_results_20261002.md`。
 - APOR统一GELU、H64与Direct独立对照：train/validation已完成并关闭，当前状态、结果与来源由 `docs/experiments/apor_gelu_refiner_v1_validation_results_20261001.md` 路由；前序SiLU对照的完成状态与来源见 `docs/experiments/apor_activation_v1_results_20260930.md`。
 - APOR统一GELU、H64与Direct固定checkpoint research-test：九项新增评价及完整12-cell汇总已完成并关闭，当前状态、结果与来源由 `docs/experiments/apor_gelu_refiner_v1_research_test_results_20261001.md` 路由。
+
 
 先确定任务所属实验，再读取对应协议中与当前任务有关的章节；不要默认把某一协议应用到整个仓库。
 

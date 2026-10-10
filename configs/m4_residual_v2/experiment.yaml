@@ -1,0 +1,25 @@
+protocol: m4-residual-v2-20261007
+arms: [A0, A1, A2, A3, S1, S2]
+seeds: [20260811, 20260812, 20260813]
+patch_seconds: 1
+normalization: groupnorm_full_w
+baseline: configs/crd_tf_v1/crd_tf102_w_formal.yaml
+training:
+  epochs: 80
+  batch_size: 32
+  gradient_accumulation_steps: 4
+  early_stopping_min_epoch: 30
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  amp_dtype: bfloat16
+data:
+  train_windows: 10141
+  val_windows: 2675
+  train_subjects: 32
+  val_subjects: 7
+selector: full_validation_local_rr_strict_minimum_earliest_tie
+comparisons: {A1: A0, A2: A0, A3: A0, S1: A0, S2: A0}
+increments:
+  tf_information: [A2, A1]
+  content_attention: [S2, A2]
+  physical_coordinates: [A0, S2]

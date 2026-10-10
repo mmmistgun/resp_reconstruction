@@ -1,0 +1,24 @@
+# 模型结构配置；训练与数据协议由后续实验单独定义。
+model:
+  name: patch_aligned_tf_mamba
+  tf_representations: [w]
+  initialization_seed: 20261004
+  patch_aligned_tf_mamba:
+    dimension: 96
+    waveform_channels: 64
+    condition_channels: 32
+    heads: 4
+    layers: 6
+    dropout: 0.1
+    window_epsilon: 0.001
+    sample_rate: 100
+    window_samples: 18000
+    patch_samples: 200
+    patch_hop_samples: 50
+    cwt_pool_samples: 50
+    stem_dilations: [1, 2, 4, 8, 16]
+    patch_chunk_size: 16
+    checkpoint_local: true
+data:
+  # 与调用方的数据配置合并；必须显式提供冻结 cache 路径。
+  tf_cache_path: ???

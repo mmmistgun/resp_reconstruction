@@ -76,6 +76,9 @@ class ResearchV2WindowDataset(Dataset):
         tf_cache_path = cfg.data.get("tf_cache_path", None)
         model_cfg = cfg.get("model", {})
         representations = model_cfg.get("tf_representations", [])
+        patch_tf = str(model_cfg.get("name", "")) == "patch_aligned_tf_mamba"
+        if patch_tf and (not tf_cache_path or list(representations) != ["w"]):
+            raise ValueError("Patch-aligned TF 数据要求冻结 tf_cache_path 和 tf_representations=[w]")
         if tf_cache_path and representations:
             from resp_train.crd.tf_w_v2 import P1_VARIANTS, verify_p1_source_identity
 
@@ -86,7 +89,11 @@ class ResearchV2WindowDataset(Dataset):
                 raise ValueError(f"CRD-TF dataset 必须只含单一 split，实际 {sorted(splits)}")
             split = next(iter(splits))
             research_test_cache_path = cfg.data.get("tf_research_test_cache_path", None)
-            if split == "test" and research_test_cache_path:
+            if patch_tf:
+                from resp_train.data.patch_aligned_tf import FrozenHCWTReader
+
+                self._tf_v1_cache = FrozenHCWTReader(str(tf_cache_path), split=split)
+            elif split == "test" and research_test_cache_path:
                 from resp_train.crd.tf_v1_research_test_data import TfV1ResearchTestCacheReader
 
                 self._tf_v1_cache = TfV1ResearchTestCacheReader(
