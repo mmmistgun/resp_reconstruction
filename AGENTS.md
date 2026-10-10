@@ -85,6 +85,8 @@
 
 ## Git 与产物
 
+- 本项目的持久产物、实验输出、checkpoint、cache、日志、图表、可视化和源码快照，实体文件统一存放在 `/mnt/disk_code/marques/resp_reconstruction` 内；新 worktree 使用该目录下的 `.worktrees/`。历史 `/home` 路径仅允许作为指向项目目录的兼容链接，新增产物直接使用项目内路径。
+- 存储位置与历史路径迁移记录见 `docs/experiments/project_storage_migration_20261010.md`；迁存须先保存、校验文件完整性并记录来源，再清理源端实体副本。
 - Git 提交消息使用简洁中文。
 - `runs/`、checkpoint、日志和生成图不进入 Git。
 - 工作树可能包含用户改动；保留无关修改，不覆盖或回退用户内容。

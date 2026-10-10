@@ -1,5 +1,7 @@
 # 分支归并与 worktree 产物保存记录（2026-10-10）
 
+当前存储位置以 [项目产物存储迁移记录](project_storage_migration_20261010.md) 为准：本文首次整理时位于 `/home` 的实体快照已迁回项目目录；以下历史清单和哈希继续保留，旧路径通过兼容链接解析到项目内。
+
 ## 代码归并
 
 代码归并点为 `9643628c2cae76cf235356ede5026e136807b68f`，包含以下分支的完整提交历史。主工作目录 `/mnt/disk_code/marques/resp_reconstruction` 使用 `main`。
