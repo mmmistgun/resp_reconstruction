@@ -1,5 +1,9 @@
 # 当前 THO 与 CRD 实验入口
 
+## H-only＋H64 消融 v1（实现完成，实验待执行）
+
+入口 `scripts/run_h_only_ablation_v1.py`；完整定义和命令见[实验协议](../docs/experiments/h_only_ablation_v1_protocol_20261004.md)。17配置×3seed统一以HA0为参照，先完成HA0三实例，再执行结构、损失与增益消融；HA16按同合同的高频H-only/H65核验后复用。所有新训练与评价使用独立session，完整51-checkpoint清单固定后才开放本轮research-test。GPU、训练和真实数据操作由用户执行。
+
 ## CWT-APOR v2（已完成并关闭）
 
 20配置×3seed train/validation、固定60-checkpoint research-test与3seed×18条件机制分析均已完成。当前状态、结果与证据入口统一见[实验结果总览](../docs/experiments/cwt_apor_v2_results_summary_20261002.md)；机制验收与三视图汇总见[机制完成记录](../docs/experiments/cwt_apor_v2_mechanisms_results_20261002.md)。
