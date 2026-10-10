@@ -18,6 +18,26 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## 原始 M4 高频时间结构机制补充
+
+`run_m4_high_frequency.py` 提供 `plan / prepare / run / summarize`，`plot_m4_high_frequency.py` 从已完成产物输出 PNG/SVG/HTML。固定原始 M4 三 checkpoint、H=(0.8,8] Hz、FULL/三组共同错位/逐尺度时间均值，以及自然/固定 GN，共十条件。分别准备 validation 与 research-test session；test 推理要求 `--confirm-research-test`。成功产物经核验复用，失败需检查后用 `--retry` 新建 attempt。
+
+2026-10-09：完整三 seed×十条件 validation、research-test、配对汇总与 PNG/SVG/HTML 图册均已完成并关闭。当前结果和来源见 [M4 高频机制结果](../docs/experiments/m4_high_frequency_v1_results_20261009.md)；已完成阶段不自行重跑。原命令、来源、配对统计和验收标准保留于 [M4 高频机制协议](../docs/experiments/m4_high_frequency_v1_protocol_20261009.md)，协议和源码保持运行时冻结身份。
+
+## 原始 P1-M4 组件消融 v1
+
+`scripts/run_m4_components.py` 提供 `audit-references / prepare / plan / smoke / run / status / summarize`。八臂 × 三 seed 中，B0/B1 只读引用原 P1 的 M4/M1 六个冻结 cell；默认训练队列为 B2–B7 的 18 个新 cell。Full CWT 基线保持原 P1 的双投影 residual-add 与初始化，新增 MeanTF、ContentAttention、H、L、NoMamba、UniformPatchPool 对照。
+
+先运行 `audit-references` 与 `prepare --session runs/m4_components_v1/formal_v1_20261008`。双 GPU 分别执行 `bash scripts/run_m4_components_shard.sh runs/m4_components_v1/formal_v1_20261008 0 0` 和 `... 1 1`，各串行 9 个新 cell；恢复加 `--resume`。微批量 32、累积 4、BF16，训练前自动进行合成 GPU 验收。完整汇总包含 24-cell、预设配对、三条递增比较、seed 方向计数、subject-macro、尾部与来源表。
+
+2026-10-09：18 个新增 train/validation cell 与完整 24-cell 汇总已完成并关闭，全部指标、预设比较及来源见 [原始 M4 validation 结果](../docs/experiments/m4_components_v1_validation_results_20261009.md)。上述命令保留为复现入口，已完成阶段不自行重跑；research-test 亦已完成，见下方专项结果。模型和运行合同见 [原始 M4 组件协议](../docs/experiments/m4_components_v1_protocol_20261008.md)。
+
+## 原始 P1-M4 固定 checkpoint research-test
+
+`scripts/eval_m4_components.py` 提供 `prepare / evaluate / status / summarize`。固定完整 24-cell：B2–B7 新增 18 项评价，B0/B1 只读复用 P1 的六项已完成结果。准备入口校验 development 选点与历史 test provenance，不访问 test 原始数据或执行推理；评价和汇总要求 `--confirm-research-test`。
+
+准备命令为 `prepare --training-session runs/m4_components_v1/formal_v1_20261008 --output runs/m4_components_v1/research_test_v1_20261009`。执行授权后，双 GPU 分别使用 `bash scripts/run_m4_components_test_shard.sh runs/m4_components_v1/research_test_v1_20261009 0 0` 与 `... 1 1`，每卡串行 9 个新 checkpoint；失败后核对原因并使用 `--retry-failed`，成功产物经校验复用。2026-10-09：18 项新增 test 评价及完整 24-cell 汇总已完成并关闭，全部指标、配对和跨 split 结论见 [research-test 结果](../docs/experiments/m4_components_research_test_results_20261009.md)。上述命令保留为复现说明，已完成阶段不自行重跑；固定选点及原合同见 [research-test 专项协议](../docs/experiments/m4_components_research_test_v1_20261009.md)。
+
 ## M4-v2 单投影时频残差
 
 2026-10-08：完整 18-cell train/validation 与汇总已完成并关闭，当前状态、全部指标及来源见 [M4-v2 validation 结果](../docs/experiments/m4_residual_v2_validation_results_20261008.md)。以下入口保留为执行与复现说明，已完成阶段不自行重跑。

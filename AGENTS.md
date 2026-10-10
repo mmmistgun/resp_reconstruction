@@ -8,6 +8,12 @@
 
 ## 协议路由
 
+- 原始 M4 高频时间结构机制补充：完整三 seed×十条件 validation、research-test、汇总与图册均已完成并关闭；当前状态、配对效应、均值替换结果及受试者差异由 `docs/experiments/m4_high_frequency_v1_results_20261009.md` 路由。原执行协议和源码保持冻结身份。
+
+- 原始 P1-M4 固定 checkpoint research-test：18 项新增评价与完整八臂 × 三 seed 汇总已完成并关闭，B0/B1 只读引用 P1 六项历史结果；当前状态、全部指标、跨 split 结论及来源由 `docs/experiments/m4_components_research_test_results_20261009.md` 路由。
+
+- 原始 P1-M4 组件消融 v1：18 个新增 train/validation cell 与完整八臂 × 三 seed 汇总已完成并关闭，B0/B1 只读引用原 P1 六个冻结 cell；当前状态、全部指标、配对结论与来源统一由 `docs/experiments/m4_components_v1_validation_results_20261009.md` 路由；research-test 亦已完成，见上方专项结果。
+
 - M4-v2 单投影时频残差：固定 6 臂 × 三 seed 的 train/validation 与汇总已完成并关闭；当前状态、全部指标、预设比较、协议及来源由 `docs/experiments/m4_residual_v2_validation_results_20261008.md` 路由。
 - M4-v2 固定 18-checkpoint research-test：评价及完整汇总已完成并关闭；当前状态、全部指标、协议及来源由 `docs/experiments/m4_residual_v2_research_test_results_20261008.md` 路由。
 
