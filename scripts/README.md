@@ -22,6 +22,68 @@
 
 唯一主协议见 `docs/experiments/loss_metrics_restart_plan_20260729.md`；CRD-v1.1 S0/S1 的规范附件见 `docs/experiments/crd_v1_protocol_20260808.md`。
 
+## 呼吸率与SA窗口分层：H-only、M4、IEWT
+
+全量、医学RR三区间、SA两组、主体构成及全部执行来源统一见[结果总报告](../docs/experiments/rr_sa_stratified_results_20261007.md)。全部分析已完成并关闭，后续查阅与更新以总报告为入口。
+
+| 脚本（均需`--confirm-research-test`） | 执行内容 | 定向CPU测试 |
+|---|---|---|
+| `analyze_h_only_medical_rr_strata.py` | H-only RR组别与指标 | `tests/test_h_only_medical_rr_strata.py` |
+| `analyze_h_only_sa_presence.py` | SA组别与H-only指标 | `tests/test_h_only_sa_presence.py` |
+| `analyze_p1_m4_sa_presence.py` | M4 SA指标 | `tests/test_p1_m4_sa_presence.py` |
+| `analyze_m4_iewt_strata.py` | M4／IEWT RR与SA指标 | `tests/test_m4_iewt_strata.py` |
+
+定向测试使用 `/mnt/disk_code/marques/resp_reconstruction/.venv/bin/python -m pytest -q <对应测试文件>`。协议及运行产物见总报告第7节，已完成分析不自行重跑。
+
+## Test 受试者 670 排除敏感性分析
+
+2026-09-30 已完成既有 test 指标的描述性重算，覆盖 25 个实验/任务分组、99 个候选、293 个 cell。入口为 `scripts/analyze_test_subject670_sensitivity.py` 与 `scripts/report_test_subject670_sensitivity.py`；只读取历史 CSV，不加载波形或模型。结果、覆盖边界、执行记录与产物见[敏感性分析报告](../docs/experiments/test_subject670_sensitivity_results_20260930.md)，完整数值见[附表](../docs/experiments/test_subject670_sensitivity_tables_20260930.md)。原冻结 test 和 checkpoint 选择保持原位，现有分析目录拒绝覆盖。
+
+## PATCH/TM0/REF0 模块消融与 APOR
+
+入口：`scripts/run_patch_apor_v1.py`；13臂×3 seed共39次train/validation。
+模型定义、数据来源、训练合同和恢复规则见[统一协议](../docs/experiments/patch_apor_v1_protocol_20260930.md)。
+该专项沿用结构实验五指标与min30/patience15停止规则。
+
+本轮39-cell训练与validation汇总已完成并冻结，结果与来源见[完成记录](../docs/experiments/patch_apor_v1_validation_results_20260930.md)。以下命令保留为执行记录，不重复启动已完成矩阵。
+
+全部39个固定checkpoint的research-test使用独立入口
+`scripts/eval_patch_apor_v1_research_test.py`，来源、样本与访问范围见
+[专项test协议](../docs/experiments/patch_apor_v1_research_test_protocol_20260930.md)。
+本轮39项test及完整汇总已完成并冻结，结果、跨split比较与来源见
+[test完成记录](../docs/experiments/patch_apor_v1_research_test_results_20260930.md)。
+Validation与排除670的test子集并列分析见
+[综合结论](../docs/experiments/patch_apor_v1_validation_test_exclude670_conclusions_20260930.md)，该子集属于事后病例敏感性分析。
+下一轮[主干网格×调制后时间细化方案](../docs/experiments/apor_grid_decoder_v2_research_plan_20260930.md)已实现，入口为`scripts/run_apor_grid_decoder_v2.py`；第一阶段复用A0/A3六个参照，新训练N1/D1六个cell，验收与训练使用独立session。随后单独检验激活规范化。
+该轮六次新增训练与完整12-cell validation汇总已完成；[validation结果](../docs/experiments/apor_grid_decoder_v2_validation_results_20260930.md)记录候选N0及后续阶段边界。
+V2 research-test入口为`scripts/eval_apor_grid_decoder_v2_research_test.py`，固定六个新checkpoint并复用六份参照；[test附件](../docs/experiments/apor_grid_decoder_v2_research_test_protocol_20260930.md)定义全量、排除670与670单病例的统一汇总。
+该轮research-test已完成，[三视图结果](../docs/experiments/apor_grid_decoder_v2_research_test_results_20260930.md)保存完整数值、跨split解释及来源身份。
+后续[激活规范化](../docs/experiments/apor_activation_v1_protocol_20260930.md)固定N0结构，入口`scripts/run_apor_activation_v1.py`，复用U0三seed、新训练U1三seed；`pipeline`按完整validation→固定checkpoint test顺序执行，test合同见[附件](../docs/experiments/apor_activation_v1_research_test_protocol_20260930.md)。
+该test历史入口为`prepare-allowlist`后接`parallel --allowlist /返回路径 --devices cuda:0 cuda:1 --confirm-research-test`；已完成矩阵不重复推理或重选checkpoint。
+该轮已完成并关闭，结果见[激活完成记录](../docs/experiments/apor_activation_v1_results_20260930.md)。
+新一轮[统一GELU与条件残差独立对照](../docs/experiments/apor_gelu_refiner_v1_protocol_20260930.md)入口为`scripts/run_apor_gelu_refiner_v1.py`：复用B0三seed，新训练GELU/H64/DIRECT各三seed，当前实现范围为train/validation。
+该轮9次新增训练与完整12-cell validation汇总已完成并冻结，三个候选均未通过预设保护线，结果与网络中断后的汇总记录见[validation完成记录](../docs/experiments/apor_gelu_refiner_v1_validation_results_20261001.md)。历史训练入口为`parallel --devices cuda:0 cuda:1 --confirm-training`；已完成矩阵不重跑。
+2026-10-01用户已授权开启固定九checkpoint research-test，入口为`scripts/eval_apor_gelu_refiner_v1_research_test.py`，执行合同及完整三视图范围见[test附件](../docs/experiments/apor_gelu_refiner_v1_research_test_protocol_20261001.md)。`prepare-allowlist --session /训练session`绑定来源，再以`parallel --allowlist /返回目录 --devices cuda:0 cuda:1 --confirm-research-test`评价；B0复用既有A0三份test。
+该轮9项test与完整12-cell三视图汇总已完成并冻结，[test完成记录](../docs/experiments/apor_gelu_refiner_v1_research_test_results_20261001.md)保存H64的RR收益、Direct的形态代价及聚合口径差异。上述命令为历史入口，已完成评价不重跑。
+
+```bash
+CUDA_VISIBLE_DEVICES='' PYTHONPATH=. ./.venv/bin/python -m pytest tests/test_patch_apor_v1.py -q
+./.venv/bin/python scripts/run_patch_apor_v1.py plan
+```
+
+两张GPU一次启动synthetic验收、完整矩阵训练和validation汇总：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  ./.venv/bin/python scripts/run_patch_apor_v1.py parallel \
+  --devices cuda:0 cuda:1 --confirm-training
+```
+
+39个cell固定交错拆为20/19，分别由两张GPU的独立进程运行，全部完成后汇总。启动打印独立`SESSION`目录及两份worker日志。恢复时传`--session /实际session路径`；检查失败现场后加
+`--retry-failed`从新attempt重试失败cell，已完成cell经核验后跳过。输出位于
+`runs/patch_apor_v1/`，包含源码/配置快照、GPU验收、各cell checkpoint/history/metrics及完整配对汇总。
+`status --session ...`查看矩阵状态；`summarize --session ...`读取完整39-cell的冻结validation指标。
+
 ## 当前固定口径
 
 - 数据：2026-06-20 research v2 soft-z。

@@ -9,6 +9,7 @@
 ## 协议路由
 
 - H-only＋H64 消融 v1：实现与 synthetic CPU 定向验收已完成；GPU、正式训练、HA16 复用核验和 research-test 待执行。17配置×3seed矩阵、执行入口与证据边界见 `docs/experiments/h_only_ablation_v1_protocol_20261004.md`。
+- 呼吸率与SA窗口分层（CWT-APOR v2 H-only、Patch-aligned TF-Mamba P1组件M4、IEWT）：全部research-test产物分析已完成并关闭；统一结果、口径、协议与来源入口为 `docs/experiments/rr_sa_stratified_results_20261007.md`。
 
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E5 W0 时域前端替换：三 seed train/validation 与固定 checkpoint research-test 均已完成并关闭；当前状态、validation/test 结果与来源身份统一由 `docs/experiments/e5_temporal_frontend_closeout_20260927.md` 路由。
@@ -18,6 +19,8 @@
 - E8 FiLM 条件末端 × 波形解码端：formal、validation 与固定36-checkpoint research-test 均已完成并关闭；最终状态、结果、来源与冻结身份统一由 `docs/experiments/e8_film_decoder_redesign_v1_closeout_20260926.md` 路由。
 - E9 潜在宽度 × 条件末端：18-cell formal train/validation 与固定18-checkpoint research-test均已完成并关闭；当前状态、validation/test结果与冻结身份统一由 `docs/experiments/e9_latent_width_condition_refiner_v1_closeout_20260929.md` 路由。
 - CWT-APOR v2时频表示与频带机制：60-cell train/validation、固定checkpoint research-test及三seed机制分析均已完成并关闭；当前状态、结果和来源由 `docs/experiments/cwt_apor_v2_results_summary_20261002.md` 路由，机制验收细节见 `docs/experiments/cwt_apor_v2_mechanisms_results_20261002.md`。
+- APOR统一GELU、H64与Direct独立对照：train/validation已完成并关闭，当前状态、结果与来源由 `docs/experiments/apor_gelu_refiner_v1_validation_results_20261001.md` 路由；前序SiLU对照的完成状态与来源见 `docs/experiments/apor_activation_v1_results_20260930.md`。
+- APOR统一GELU、H64与Direct固定checkpoint research-test：九项新增评价及完整12-cell汇总已完成并关闭，当前状态、结果与来源由 `docs/experiments/apor_gelu_refiner_v1_research_test_results_20261001.md` 路由。
 
 先确定任务所属实验，再读取对应协议中与当前任务有关的章节；不要默认把某一协议应用到整个仓库。
 
