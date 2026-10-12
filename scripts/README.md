@@ -2199,3 +2199,10 @@ F0 与 IEWT 不训练、无 seed：
 CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json`；后者记录训练到最终 validation 复评期间的 CUDA peak allocated/reserved 和显存占比。`train_history.csv` 还记录 optimizer update、每 epoch 首末 LR。CRD checkpoint 的 `extra_state` 保存协议版本、actual update index、planned total updates、依赖版本与 `resume_supported=false`；P6a 另存 early-stop monitor/patience/wait/triggered/completed epochs。
 
 不再生成或解释旧 `checkpoint.pt`、`checkpoint_best_rr.pt`、`checkpoint_best_task.pt`、`checkpoint_topN.pt`、`epoch_metrics.csv`、旧 target-feature cache 或旧指标 summary。
+
+## 原始 P1-M4 单投影配对对照
+
+入口 `scripts/run_m4_single_projection.py` 支持 prepare、reuse-m4、run、status、summarize。
+固定 M4/SP × 三 seed；默认可只读引用来源和环境匹配的历史 M4，运行 SP 三组。
+完整启动、同期六组替代方案、产物和 CPU 检查命令见
+[`m4_single_projection_v1_protocol_20261012.md`](../docs/experiments/m4_single_projection_v1_protocol_20261012.md)。

@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- 原始 P1-M4 单投影配对对照：独立实现与 synthetic CPU 检查；历史 M4 可在来源和环境匹配门槛下只读复用。训练/validation 待用户执行，入口为 `docs/experiments/m4_single_projection_v1_protocol_20261012.md`。
+
 - H-only＋H64 消融 v1：实现与 synthetic CPU 定向验收已完成；GPU、正式训练、HA16 复用核验和 research-test 待执行。17配置×3seed矩阵、执行入口与证据边界见 `docs/experiments/h_only_ablation_v1_protocol_20261004.md`。
 - 呼吸率与SA窗口分层（CWT-APOR v2 H-only、Patch-aligned TF-Mamba P1组件M4、IEWT）：全部research-test产物分析已完成并关闭；统一结果、口径、协议与来源入口为 `docs/experiments/rr_sa_stratified_results_20261007.md`。
 
