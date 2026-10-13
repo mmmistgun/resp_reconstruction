@@ -8,6 +8,7 @@
 
 ## 协议路由
 
+- RespDiff-BCG 训练诊断与 DDPM/DDIM/N 最终评定：统一推进入口为 `docs/experiments/respdiff_bcg_training_and_sampling_plan_v1_20261010.md`；历史已关闭实验按该计划链接读取。
 - H-only＋H64 消融 v1：实现与 synthetic CPU 定向验收已完成；GPU、正式训练、HA16 复用核验和 research-test 待执行。17配置×3seed矩阵、执行入口与证据边界见 `docs/experiments/h_only_ablation_v1_protocol_20261004.md`。
 - 呼吸率与SA窗口分层（CWT-APOR v2 H-only、Patch-aligned TF-Mamba P1组件M4、IEWT）：全部research-test产物分析已完成并关闭；统一结果、口径、协议与来源入口为 `docs/experiments/rr_sa_stratified_results_20261007.md`。
 
@@ -87,6 +88,8 @@
 
 - 本项目的持久产物、实验输出、checkpoint、cache、日志、图表、可视化和源码快照，实体文件统一存放在 `/mnt/disk_code/marques/resp_reconstruction` 内；新 worktree 使用该目录下的 `.worktrees/`。历史 `/home` 路径仅允许作为指向项目目录的兼容链接，新增产物直接使用项目内路径。
 - 仓库归并、产物位置与追溯入口见 `docs/experiments/repository_consolidation_20261010.md`；迁存须先保存、校验文件完整性并记录来源，再清理源端实体副本。
+- 绘图默认仅保存 PNG；除非用户另行明确要求，不生成 PDF 图片。
+- 波形案例对比图默认在第一行展示模型实际输入的 BCG，并准确标注输入预处理口径。
 - Git 提交消息使用简洁中文。
 - `runs/`、checkpoint、日志和生成图不进入 Git。
 - 工作树可能包含用户改动；保留无关修改，不覆盖或回退用户内容。
