@@ -8,6 +8,7 @@
 
 ## 协议路由
 
+- RespDiff-BCG 训练诊断与 DDPM/DDIM/N 最终评定：统一推进入口为 `docs/experiments/respdiff_bcg_training_and_sampling_plan_v1_20261010.md`；历史已关闭实验按该计划链接读取。
 - E4 尺度聚合及频带机制检查：当前阶段与证据入口为 `docs/experiments/e4_closeout_20260922.md`；各执行协议与来源锁按该索引定位。
 - E5 W0 时域前端替换：三 seed train/validation 与固定 checkpoint research-test 均已完成并关闭；当前状态、validation/test 结果与来源身份统一由 `docs/experiments/e5_temporal_frontend_closeout_20260927.md` 路由。
 - E6 20-Hz 学习解调前端：三 seed train/validation、效率记录与固定 checkpoint research-test 均已完成并关闭；当前状态与证据入口为 `docs/experiments/e6_temporal_frontend_closeout_20260924.md`。

@@ -1,0 +1,17 @@
+protocol: respdiff-bcg-training-and-sampling-v1-20261010
+diagnostics:
+  parents_per_split: 32
+  selection_seed: 20261010
+  timesteps: [0, 9, 19, 29, 39, 49]
+  forward_noise_seeds: [20261010, 20261011, 20261012]
+  pairing_seeds: [20261020, 20261021, 20261022]
+  pressure_rows: [10382, 12226, 10322]
+sampling_grid:
+  - {sampler: ddim, S: 6, N: [1, 2, 4, 8, 16, 32]}
+  - {sampler: ddim, S: 10, N: [1, 2, 4, 8, 16]}
+  - {sampler: ddim, S: 20, N: [1, 2, 4, 8]}
+  - {sampler: ddim, S: 50, N: [1, 2, 4]}
+  - {sampler: ddpm, S: 50, N: [1, 2, 4, 8]}
+batch_size: 64
+sampling_noise_seed: 20261003
+trajectory_group_size: 1

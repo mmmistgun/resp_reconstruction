@@ -6,6 +6,16 @@
 
 ## RespDiff-BCG v1
 
+P5 扩展配置全量入口为 `scripts/run_respdiff_bcg_full_validation_v1.py`：`freeze` 绑定三个已完成的 `long_stretched` final16000 模型与 P4-N2 选择；`run --confirm-data-access` 执行完整 validation 的 DDIM6/N64、DDPM50/N16、DDIM6/N16 参照；`summarize` 校验并汇总九项结果。DDIM 共享 N16/N64 前缀，各配置独立计时。GPU0 单卡串行执行、命令和预算见训练与采样计划第 32 节。
+
+P4-N2 额外噪声入口为 `scripts/run_respdiff_bcg_extension_noise_v1.py`：固定 N64/N16、sampling seeds20261013/20261014，同 seed 旧 N 前缀核验及显存记录，两臂结束后复用主 seed 与历史参照生成九项敏感性汇总，保持原选择。合同与执行范围见训练与采样计划第 28 节。
+
+P4-N2 扩展入口为 `scripts/run_respdiff_bcg_extension_v1.py`：独立支持 DDIM6/N64、DDPM50/N16，保持首轮入口上限；同一采样 seed 下核对旧 N 前缀、记录真实显存峰值，并只读合并为 24 点。固定合同和执行范围见训练与采样计划第 26 节。
+
+P2-A2 学习率降档入口为 `scripts/run_respdiff_bcg_cooldown_v1.py`：固定从 P2 update1600 完整恢复，仅将后续 lr 改为 `1e-5`，继续到 update3200。具体授权、来源 hash、序列核验与评价合同见训练与采样计划第 18 节；需要 `--confirm-data-access --confirm-training`。
+
+新的[训练与采样推进计划](../docs/experiments/respdiff_bcg_training_and_sampling_plan_v1_20261010.md)由 `scripts/run_respdiff_bcg_study_v1.py` 提供诊断、可恢复训练及 DDIM6/10/20/50、DDPM50 的 N 网格与三 seed 最终评价。P1/P2 已完成，当前状态及阶段判断见计划。P2-A1 定向审计入口为 `scripts/audit_respdiff_bcg_training_sampling_v1.py`：固定三个 checkpoint 和八个 parent，测量分 t 原始参数梯度、训练/评价与串行/缓存采样一致性，以及 batch 上下文效应，优化器更新次数为零；参数、预算、容差和来源锁定见计划第 16 节。
+
 新增[单 GPU 缓存与 trajectory 分组加速说明](../docs/experiments/respdiff_bcg_sampling_acceleration_v1_20261007.md)：独立路径支持 G=1/2/4/8，condition 按原 B 编码，维持 ε-v2 数学/噪声/保幅合同。13 项 CPU 定向测试通过；本次按用户要求未调用 GPU。`scripts/benchmark_respdiff_bcg_sampling_acceleration.py` 提供 native checkpoint 的短时 warmup/时间/显存/误差比较，`scripts/run_respdiff_bcg_epsilon_accelerated_v1.py` 是独立推理入口。GPU 命令、验收标准及未实测的收益边界见说明。
 
 固定 source-equivalent checkpoint 的 [ε 推理 v2 结果](../docs/experiments/respdiff_bcg_epsilon_inference_v2_results_20261007.md)已完成：DDIM6 nested N={1,2,4,8,16}、DDPM50 N={1,2,4} 的固定子集及一次全量 DDIM6 N16 validation 均已关闭。N16 尚未满足 plateau，作为预算上限使用；完整 validation Local RR=0.9628、PCC=0.6513，残余幅值异常仍存在。入口 `scripts/run_respdiff_bcg_epsilon_inference_v2.py` 的 `synthetic-smoke`、`subset`、`full-validation` 合同见[协议](../docs/experiments/respdiff_bcg_epsilon_inference_v2_protocol_20261007.md)，已有运行不重跑。

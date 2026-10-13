@@ -214,7 +214,7 @@ def output_diagnostics(predictions, targets, rows):
     return pd.DataFrame(records)
 
 
-def evaluate_setting(chunks, dataset, cfg, output, spec, count):
+def evaluate_setting(chunks, dataset, cfg, output, spec, count, *, method_prefix="RespDiff-epsilon-inference-v2"):
     output.mkdir(parents=True, exist_ok=False)
     started = time.perf_counter()
     raw, filtered, targets = [], [], []
@@ -239,7 +239,7 @@ def evaluate_setting(chunks, dataset, cfg, output, spec, count):
         for start in range(0, len(dataset.rows), 64):
             part = {key: value[start:start + 64] for key, value in payload.items()}
             metric_parts.append(evaluate_task_predictions(part, cfg,
-                method=f"RespDiff-epsilon-inference-v2/{spec.sampler}/N{count}/{view}", include_test_only=False))
+                method=f"{method_prefix}/{spec.sampler}/N{count}/{view}", include_test_only=False))
         metrics = pd.concat(metric_parts, ignore_index=True)
         check_primary_metrics(metrics)
         metrics.to_csv(output / f"validation_{view}_per_parent.csv", index=False)
