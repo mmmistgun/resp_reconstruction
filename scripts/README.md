@@ -2206,3 +2206,10 @@ CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json
 固定 M4/SP × 三 seed；默认可只读引用来源和环境匹配的历史 M4，运行 SP 三组。
 完整启动、同期六组替代方案、产物和 CPU 检查命令见
 [`m4_single_projection_v1_protocol_20261012.md`](../docs/experiments/m4_single_projection_v1_protocol_20261012.md)。
+
+## M4/SP双选点重训
+
+`scripts/run_m4_dual_selector.py` 固定两臂×三seed从头训练，RR负责early stopping，
+另存最低validation总loss checkpoint。`completed.json` 中的 `best_loss_checkpoint`
+给出对应完整模型文件；两种选点各有完整validation评价与配对汇总。
+启动与恢复命令见[双选点协议](../docs/experiments/m4_dual_selector_v1_protocol_20261013.md)。
