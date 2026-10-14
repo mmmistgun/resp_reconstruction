@@ -1,5 +1,11 @@
 # 当前 THO 与 CRD 实验入口
 
+## BCG–CWT patch Mamba v1
+
+`scripts/check_bcg_cwt_patch_mamba.py` 执行默认长度合成前后向与任务损失检查，CPU 使用显式 `--synthetic-mamba`，官方内核使用 `--device cuda:0`。`scripts/train_bcg_cwt_patch_mamba.py --print-config` 仅解析配置；去掉该选项启动真实 train/val，默认微批量 2 × 累积 64，有效 batch 128，新运行指定全新 `outputs.run_root`。中断后使用 `--config <运行目录>/resolved_config.yaml --resume` 恢复完整 epoch 状态。
+
+模型、参数量、完整测试命令和实际检查记录见[使用说明](../docs/models/bcg_cwt_patch_mamba.md)，数据与训练定义见[协议](../docs/experiments/bcg_cwt_patch_mamba_v1_protocol_20261014.md)。实现及合成工程检查已完成；正式运行的状态和结果以 `runs/bcg_cwt_patch_mamba_v1/` 内各运行回执为准。
+
 ## H-only＋H64 消融 v1（实现完成，实验待执行）
 
 入口 `scripts/run_h_only_ablation_v1.py`；完整定义和命令见[实验协议](../docs/experiments/h_only_ablation_v1_protocol_20261004.md)。17配置×3seed统一以HA0为参照，先完成HA0三实例，再执行结构、损失与增益消融；HA16按同合同的高频H-only/H65核验后复用。所有新训练与评价使用独立session，完整51-checkpoint清单固定后才开放本轮research-test。GPU、训练和真实数据操作由用户执行。

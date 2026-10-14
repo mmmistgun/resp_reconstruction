@@ -1,0 +1,104 @@
+# BCG–CWT 呼吸波形重建模型的默认结构配置。
+# 数据实际频率由模型工厂从 data.tf_cache_path 读取；直接构造时显式传入。
+model:
+  name: bcg_cwt_patch_mamba_v1
+  initialization_seed: 20261013
+  architecture:
+    sample_rate: 100
+    window_samples: 18000
+    patch_samples: 100
+    patch_hop_samples: 100
+    cwt_pool_samples: 50
+    cwt_frequency_count: 97
+    dimension: 96
+
+    waveform_encoder:
+      stage1_channels: 32
+      stage1_kernel: 7
+      stage1_residual_kernel: 5
+      stage2_channels: 64
+      stage2_kernel: 5
+      stage2_residual_kernel: 3
+      context_kernel: 3
+      context_dilations: [1, 2, 4, 8, 16]
+      residual_type: pre_norm_depthwise_gelu_pointwise
+      norm: per_position_channel_layernorm
+      norm_eps: 0.00001
+      padding_mode: reflect
+      activation: gelu
+      conv_bias: true
+
+    patch_embedding:
+      type: ordered_feature_patch_projection
+      implementation: conv1d
+      padding: 0
+      bias: true
+      # kernel_size=patch_samples；stride=patch_hop_samples。
+      # 输入通道=waveform_encoder.stage2_channels，输出通道=dimension。
+
+    tf_encoder:
+      channels: 32
+      stem_kernel: 3
+      stem_norm: groupnorm
+      norm_groups: 8
+      norm_eps: 0.00001
+      local_depthwise_kernel: 3
+      activation: gelu
+      conv_bias: true
+      time_padding: reflect
+      frequency_padding: replicate
+
+    tf_position:
+      type: additive_frequency_and_local_time_tables
+      initialization: normal
+      initialization_std: 0.02
+      # 频率表：[cwt_frequency_count, tf_encoder.channels]。
+      # 时间表：[patch_samples/cwt_pool_samples, tf_encoder.channels]。
+
+    fusion:
+      type: aligned_patch_cross_attention_block
+      layers: 1
+      heads: 4
+      key_input_dimension: 32
+      value_input_dimension: 32
+      attention_dropout: 0.0
+      residual_dropout: 0.1
+      ffn_hidden_dimension: 384
+      ffn_dropout: 0.1
+      activation: gelu
+      norm: layernorm
+      norm_eps: 0.00001
+      bias: true
+      patch_chunk_size: 16
+
+    temporal:
+      type: bidirectional_mamba2
+      placement: after_fusion
+      layers: 6
+      parameter_sharing: independent_blocks_and_directions
+      external_norm: rmsnorm
+      external_norm_eps: 0.00001
+      residual_dropout: 0.1
+      mamba2:
+        d_state: 64
+        d_conv: 4
+        expand: 2
+        headdim: 32
+        ngroups: 1
+        chunk_size: 256
+        rmsnorm: true
+        bias: false
+        conv_bias: true
+        use_mem_eff_path: true
+
+    decoder:
+      type: shared_patch_mlp
+      hidden_dimension: 96
+      activation: gelu
+      bias: true
+      # 末层输出维度=patch_samples；输出值为呼吸采样值。
+
+    reconstruction:
+      type: chronological_patch_concatenation
+      output_dtype: float32
+      # prediction[b,0,j*P+r] = patches[b,j,r]。

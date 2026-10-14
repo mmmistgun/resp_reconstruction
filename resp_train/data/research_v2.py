@@ -56,6 +56,9 @@ class ResearchV2WindowDataset(Dataset):
     ) -> None:
         self.index_csv_path = Path(index_csv_path)
         self.cfg = cfg
+        if (str(cfg.get("model", {}).get("name", "")) == "bcg_cwt_patch_mamba_v1"
+                and bool(cfg.data.get("drop_nonfinite_windows", False))):
+            raise ValueError("BCG-CWT 要求 drop_nonfinite_windows=false，非有限样本必须显式失败")
         self.rows = rows.copy().reset_index(drop=True)
         if bool(cfg.data.get("filter_unusable", True)) and "usable" in self.rows.columns:
             self.rows = self.rows[self.rows["usable"]].reset_index(drop=True)
@@ -77,6 +80,9 @@ class ResearchV2WindowDataset(Dataset):
         model_cfg = cfg.get("model", {})
         representations = model_cfg.get("tf_representations", [])
         patch_tf = str(model_cfg.get("name", "")) == "patch_aligned_tf_mamba"
+        bcg_cwt = str(model_cfg.get("name", "")) == "bcg_cwt_patch_mamba_v1"
+        if bcg_cwt and (not tf_cache_path or list(representations) != ["w"]):
+            raise ValueError("BCG-CWT 数据要求 tf_cache_path 和 tf_representations=[w]")
         if patch_tf and (not tf_cache_path or list(representations) != ["w"]):
             raise ValueError("Patch-aligned TF 数据要求冻结 tf_cache_path 和 tf_representations=[w]")
         if tf_cache_path and representations:
@@ -89,7 +95,11 @@ class ResearchV2WindowDataset(Dataset):
                 raise ValueError(f"CRD-TF dataset 必须只含单一 split，实际 {sorted(splits)}")
             split = next(iter(splits))
             research_test_cache_path = cfg.data.get("tf_research_test_cache_path", None)
-            if patch_tf:
+            if bcg_cwt:
+                from resp_train.data.bcg_cwt import FrozenWCWTReader
+
+                self._tf_v1_cache = FrozenWCWTReader(str(tf_cache_path), split=split)
+            elif patch_tf:
                 from resp_train.data.patch_aligned_tf import FrozenHCWTReader
 
                 self._tf_v1_cache = FrozenHCWTReader(str(tf_cache_path), split=split)

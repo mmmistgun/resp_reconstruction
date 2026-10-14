@@ -1,0 +1,26 @@
+# 训练入口复用现有数据预处理、任务损失及评价字段。
+task_base: ../crd_tf_v1/crd_tf101_m_smoke.yaml
+model_config: model.yaml
+protocol:
+  name: bcg-cwt-patch-mamba-v1-20261014
+data:
+  max_train_windows: null
+  max_val_windows: null
+  preload_windows: false
+model:
+  tf_representations: [w]
+training:
+  epochs: 80
+  batch_size: 2
+  gradient_accumulation_steps: 64
+  seed: 20261013
+  device: cuda:0
+  use_amp: true
+  amp_dtype: bfloat16
+  # 仅监控 validation Local RR MAE；从首轮累计等待，最早在第 30 轮停止。
+  early_stopping_enabled: true
+  early_stopping_min_epoch: 30
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+outputs:
+  run_root: /mnt/disk_code/marques/resp_reconstruction/runs/bcg_cwt_patch_mamba_v1/seed_20261013_run01
