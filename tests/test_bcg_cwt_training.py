@@ -85,8 +85,8 @@ def test_default_training_config_preserves_task_semantics():
     assert cfg.training.early_stopping_min_epoch == 30
     assert cfg.training.early_stopping_patience == 15
     assert cfg.training.early_stopping_min_delta == 0.
-    assert (cfg.training.batch_size, cfg.training.gradient_accumulation_steps) == (2, 64)
-    assert run.optimizer_updates_per_epoch((10141 + 1) // 2, 64) == 80
+    assert (cfg.training.batch_size, cfg.training.gradient_accumulation_steps) == (64, 2)
+    assert run.optimizer_updates_per_epoch((10141 + 63) // 64, 2) == 80
     assert cfg.data.max_train_windows is None and cfg.data.max_val_windows is None
     for key, value in (("data.train_split", "test"), ("data.drop_nonfinite_windows", "true"),
                        ("training.amp_dtype", "float16"), ("training.resume", "1"),
@@ -451,13 +451,14 @@ def test_metric_reuse_matches_original_selector_and_checks_eligibility(fixture_d
     with pytest.raises(ValueError): run.local_rr_from_metrics(metrics.iloc[2:])
 
 
-def test_accumulation_2_by_64_performs_one_correct_update(fixture_data):
+@pytest.mark.parametrize("microbatch,accumulation", [(2, 64), (64, 2)])
+def test_effective_batch_128_performs_one_correct_update(fixture_data, microbatch, accumulation):
     cfg, _, data = fixture_data
-    cfg.training.gradient_accumulation_steps = 64
+    cfg.training.gradient_accumulation_steps = accumulation
     batch = next(iter(data.train.loader))
-    batch["x"] = batch["x"].repeat(2, 1, 1)
-    batch["target"] = batch["target"].repeat(2, 1, 1)
-    batch["tf"]["w"] = batch["tf"]["w"].repeat(2, 1, 1)
+    batch["x"] = batch["x"].repeat(microbatch, 1, 1)
+    batch["target"] = batch["target"].repeat(microbatch, 1, 1)
+    batch["tf"]["w"] = batch["tf"]["w"].repeat(microbatch, 1, 1)
     model = SmallStochasticModel()
     model.net[2].p = 0.
     from copy import deepcopy
@@ -465,7 +466,7 @@ def test_accumulation_2_by_64_performs_one_correct_update(fixture_data):
     loss = run.RespirationTaskLoss(cfg)
     optimizer, _ = run.build_crd_optimizer(model, cfg)
     other_optimizer, _ = run.build_crd_optimizer(reference, cfg)
-    _, update = run.train_epoch(model, [batch] * 64, loss, optimizer, cfg, 0, 6400, 1)
+    _, update = run.train_epoch(model, [batch] * accumulation, loss, optimizer, cfg, 0, 6400, 1)
     cfg.training.gradient_accumulation_steps = 1
     _, other_update = run.train_epoch(reference, [batch], loss, other_optimizer, cfg, 0, 6400, 1)
     assert update == other_update == 1

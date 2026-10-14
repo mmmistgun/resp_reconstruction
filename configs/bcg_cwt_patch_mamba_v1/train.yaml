@@ -11,8 +11,8 @@ model:
   tf_representations: [w]
 training:
   epochs: 80
-  batch_size: 2
-  gradient_accumulation_steps: 64
+  batch_size: 64
+  gradient_accumulation_steps: 2
   seed: 20261013
   device: cuda:0
   use_amp: true
@@ -23,4 +23,4 @@ training:
   early_stopping_patience: 15
   early_stopping_min_delta: 0.0
 outputs:
-  run_root: /mnt/disk_code/marques/resp_reconstruction/runs/bcg_cwt_patch_mamba_v1/seed_20261013_run01
+  run_root: /mnt/disk_code/marques/resp_reconstruction/runs/bcg_cwt_patch_mamba_v1/seed_20261013_run02

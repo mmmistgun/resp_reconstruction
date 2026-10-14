@@ -4,6 +4,8 @@
 
 工程状态：模型实现、合成数据工程检查和官方 Mamba2 CUDA 合成检查已完成。正式 train/val 运行记录位于 `runs/bcg_cwt_patch_mamba_v1/`，各运行的启动、完成与失败状态以目录内回执为准。模型、命令及实际检查记录见[使用说明](../models/bcg_cwt_patch_mamba.md)。
 
+运行记录（2026-10-14）：`seed_20261013_run01` 已以退出码 137 结束，其运行目录及启动日志已清理。文件清单、哈希和完成回执保存在 `runs/bcg_cwt_patch_mamba_v1/cleanup_seed_20261013_run01_20261014*.json`。该 identity 停用，后续新运行默认使用 `seed_20261013_run02`，状态以该目录的运行回执为准。
+
 ## 模型与输入
 
 结构默认值来自 `configs/bcg_cwt_patch_mamba_v1/model.yaml`。窗口为 100 Hz、18000 点，输入 BCG `[B,1,18000]` 与完整 W-CWT `[B,97,360]`，输出为 float32 呼吸波形 `[B,1,18000]`。每 100 点形成一个 token，与两个连续 CWT 时间列对齐；六层双向 Mamba2 在融合后处理 180 个 token。
@@ -24,7 +26,7 @@
 
 ## 运行与记录
 
-开发者使用 `scripts/train_bcg_cwt_patch_mamba.py` 启动。默认最多训练 80 epoch、微批量 2、梯度累积 64 次、有效 batch 128、AdamW、bfloat16 AMP，构造 seed 和训练 seed 均为 20261013；完整解析值由 `--print-config` 输出。按 10,141 个训练窗口计算，每 epoch 为 80 次更新，最大预算为 6,400 次，warmup 为 320 次。学习率计划按最大预算计算，早停结束后保留已完成的训练前缀。此训练预算修订用于新运行，不能在恢复时更改已有运行的 batch、累积或最大 epoch。
+开发者使用 `scripts/train_bcg_cwt_patch_mamba.py` 启动。默认最多训练 80 epoch、微批量 64、梯度累积 2 次、有效 batch 128、AdamW、bfloat16 AMP，构造 seed 和训练 seed 均为 20261013；完整解析值由 `--print-config` 输出。按 10,141 个训练窗口计算，每 epoch 为 80 次更新，最大预算为 6,400 次，warmup 为 320 次。学习率计划按最大预算计算，早停结束后保留已完成的训练前缀。此训练预算修订用于新运行，不能在恢复时更改已有运行的 batch、累积或最大 epoch。
 
 新运行使用全新 `outputs.run_root`。训练保存解析配置、源码快照与文件哈希、Git commit、环境版本、实际频率、数据访问记录、split 行表、优化器分组、完整 epoch history、每 epoch validation metrics 与 checkpoint。`--config <运行目录>/resolved_config.yaml --resume` 从最后一个通过回执校验的完整 epoch 恢复；完整 checkpoint 保存模型、优化器、全部使用到的 RNG、更新预算及计数、RR 最优与早停状态、loss 最优状态。
 

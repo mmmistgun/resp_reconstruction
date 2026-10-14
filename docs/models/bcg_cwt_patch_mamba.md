@@ -105,15 +105,15 @@ python scripts/train_bcg_cwt_patch_mamba.py --print-config
 
 # 由开发者启动真实 train/val 训练；每次使用全新的输出目录。
 python scripts/train_bcg_cwt_patch_mamba.py \
-  --set outputs.run_root=/mnt/disk_code/marques/resp_reconstruction/runs/bcg_cwt_patch_mamba_v1/seed_20261013_run01
+  --set outputs.run_root=/mnt/disk_code/marques/resp_reconstruction/runs/bcg_cwt_patch_mamba_v1/seed_20261013_run02
 
 # 从该运行最后一个完整 epoch 恢复；直接读取保存的解析配置。
 python scripts/train_bcg_cwt_patch_mamba.py \
-  --config /mnt/disk_code/marques/resp_reconstruction/runs/bcg_cwt_patch_mamba_v1/seed_20261013_run01/resolved_config.yaml \
+  --config /mnt/disk_code/marques/resp_reconstruction/runs/bcg_cwt_patch_mamba_v1/seed_20261013_run02/resolved_config.yaml \
   --resume
 ```
 
-`--output 新文件.json` 可保存 smoke 结果，已有文件会被拒绝。smoke 输入为人工 BCG/CWT 张量，测试频率网格明确作为人工元信息。训练命令默认读取完整 train/val、最多 80 epoch、微批量 2、梯度累积 64 次、有效 batch 128、bfloat16 AMP。按 10,141 个训练窗口和 `drop_last=false`，每 epoch 更新 80 次，最大预算 6,400 次，5% warmup 为 320 次更新。训练种子与模型构造种子独立记录，多 seed 运行时可分别通过 `training.seed` 与 `model.initialization_seed` 设置。
+`--output 新文件.json` 可保存 smoke 结果，已有文件会被拒绝。smoke 输入为人工 BCG/CWT 张量，测试频率网格明确作为人工元信息。训练命令默认读取完整 train/val、最多 80 epoch、微批量 64、梯度累积 2 次、有效 batch 128、bfloat16 AMP。按 10,141 个训练窗口和 `drop_last=false`，每 epoch 更新 80 次，最大预算 6,400 次，5% warmup 为 320 次更新。训练种子与模型构造种子独立记录，多 seed 运行时可分别通过 `training.seed` 与 `model.initialization_seed` 设置。
 
 训练目录保存 resolved config、源码快照及哈希、环境、访问记录、实际 train/val 行表、优化器分组、每 epoch 的任务统计、逐样本 validation metrics、checkpoint 和完成回执。新运行使用全新目录，恢复时显式指定 `--resume`（也可设置 `training.resume=true`）。失败会记录 `failed.json` 并抛出错误。
 
@@ -134,6 +134,8 @@ python scripts/train_bcg_cwt_patch_mamba.py \
 模型与数据接入检查记录：**45 passed，0 failed，0 skipped**，耗时 53.45 秒。其中 3 项使用官方 CUDA 内核，40 项为本模型 CPU 外围/配置/数据/训练集成测试，2 项为原 H-CWT 数据路径回归。另有 12 条来自官方依赖的 autocast API 弃用告警。
 
 训练恢复与累积检查（2026-10-14）：`BCG_CWT_RUN_CUDA=1 python -m pytest -q tests/test_bcg_cwt_training.py -rs`，**24 passed，0 failed，0 skipped**，耗时 16.39 秒。23 项 CPU 检查及 1 项 CUDA/bfloat16 小模型检查覆盖：2×64 累积只执行一次正确更新；CPU 和 CUDA 下中断恢复与连续运行的模型、优化器、RNG 及选点状态逐值一致；首轮重试、失败轮保留、早停后导出恢复、配置/源码/数据行/checkpoint 身份拒绝、并发互斥；Local RR 复用结果与原 selector 相同且不重复执行信号处理。RR 早停与最低 loss 独立保存的既有用例继续通过。累积与恢复测试使用小型可微模型和既有任务损失，官方 Mamba2 模型验收见下方独立记录。
+
+当前默认微批量 64 × 累积 2 的 CPU 定向检查：`test_default_training_config_preserves_task_semantics` 与 `test_effective_batch_128_performs_one_correct_update[64-2]`，**2 passed**，耗时 12.23 秒。验证有效 batch 128、每 epoch 80 次更新，以及累积梯度和一次优化器更新的正确性。该检查使用合成小模型；完整官方模型的正式 GPU 训练状态和结果见运行目录回执。
 
 ```bash
 BCG_CWT_RUN_CUDA=1 python -m pytest -q \
