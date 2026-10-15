@@ -4,7 +4,9 @@
 
 `scripts/check_bcg_cwt_patch_mamba.py` 执行默认长度合成前后向与任务损失检查，CPU 使用显式 `--synthetic-mamba`，官方内核使用 `--device cuda:0`。`scripts/train_bcg_cwt_patch_mamba.py --print-config` 仅解析配置；去掉该选项启动真实 train/val，默认微批量 64、梯度累积 2 次，有效 batch 128，新运行指定全新 `outputs.run_root`。中断后使用 `--config <运行目录>/resolved_config.yaml --resume` 恢复完整 epoch 状态。
 
-模型、参数量、完整测试命令和实际检查记录见[使用说明](../docs/models/bcg_cwt_patch_mamba.md)，数据与训练定义见[协议](../docs/experiments/bcg_cwt_patch_mamba_v1_protocol_20261014.md)。实现及合成工程检查已完成；正式运行的状态和结果以 `runs/bcg_cwt_patch_mamba_v1/` 内各运行回执为准。
+模型、参数量、完整测试命令和实际检查记录见[使用说明](../docs/models/bcg_cwt_patch_mamba.md)，数据与训练定义见[协议](../docs/experiments/bcg_cwt_patch_mamba_v1_protocol_20261014.md)。本轮单 seed 训练与两项固定 checkpoint 评价已完成并关闭，结果与来源见[完成记录](../docs/experiments/bcg_cwt_patch_mamba_v1_results_20261015.md)。
+
+固定 validation-selected checkpoint 的 research-test 入口为 `scripts/eval_bcg_cwt_patch_mamba.py`：`prepare --run <训练目录> --output <新目录>` 固定 RR 最优和最低 loss 两项清单；`evaluate --output <准备目录> --confirm-research-test` 执行评价。完整合同见[专项协议](../docs/experiments/bcg_cwt_patch_mamba_research_test_v1_20261015.md)。
 
 ## H-only＋H64 消融 v1（实现完成，实验待执行）
 

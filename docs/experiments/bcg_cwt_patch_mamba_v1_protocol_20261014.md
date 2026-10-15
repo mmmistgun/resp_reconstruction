@@ -2,9 +2,9 @@
 
 协议 ID：`bcg-cwt-patch-mamba-v1-20261014`。
 
-工程状态：模型实现、合成数据工程检查和官方 Mamba2 CUDA 合成检查已完成。正式 train/val 运行记录位于 `runs/bcg_cwt_patch_mamba_v1/`，各运行的启动、完成与失败状态以目录内回执为准。模型、命令及实际检查记录见[使用说明](../models/bcg_cwt_patch_mamba.md)。
+当前状态：模型实现与工程检查、run02 单 seed train/validation 及两个固定 checkpoint research-test 已完成并关闭。结果与来源见[完成记录](bcg_cwt_patch_mamba_v1_results_20261015.md)，各运行生命周期以 `runs/bcg_cwt_patch_mamba_v1/` 内回执为准。模型、命令及实际检查记录见[使用说明](../models/bcg_cwt_patch_mamba.md)。
 
-运行记录（2026-10-14）：`seed_20261013_run01` 已以退出码 137 结束，其运行目录及启动日志已清理。文件清单、哈希和完成回执保存在 `runs/bcg_cwt_patch_mamba_v1/cleanup_seed_20261013_run01_20261014*.json`。该 identity 停用，后续新运行默认使用 `seed_20261013_run02`，状态以该目录的运行回执为准。
+运行记录：`seed_20261013_run01` 于 2026-10-14 以退出码 137 结束，其运行目录及启动日志已按用户授权清理。文件清单、哈希和完成回执保存在 `runs/bcg_cwt_patch_mamba_v1/cleanup_seed_20261013_run01_20261014*.json`。该 identity 停用；后续 `seed_20261013_run02` 已完成 30 epoch 并早停，结果见完成记录。
 
 ## 模型与输入
 
@@ -32,10 +32,10 @@
 
 恢复核对配置、源码、环境、数据 index/cache 与实际行顺序。失败 epoch 保留，重试使用独立目录；恢复尝试记录在 `attempts/` 下。已触发早停或到达预算时只补齐完成产物，已经完成的运行校验后直接返回。回执作为完整 epoch 的提交标记，内容包含 checkpoint、record 和 metrics 的哈希；损坏或不连续的完整记录显式失败。恢复开关与终端进度显示不属于训练身份，其余配置保持一致。
 
-训练只访问 train/val。本协议不开放 research-test；未来独立测试集评价需要匹配的专项协议及当次授权。真实数据训练默认由开发者执行。
+训练只访问 train/val。固定 checkpoint 的本次 research-test 由[专项评价协议](bcg_cwt_patch_mamba_research_test_v1_20261015.md)及 2026-10-15 当次用户授权开放，使用独立入口与产物目录。
 
 ## 工程验收与结论范围
 
 本轮自动检查仅使用人工 tensor、临时 NPZ/cache 和官方内核上的少量合成样本。CPU 依赖注入用于接口与外围算子验证；官方 CUDA 测试验证默认长度前后向、任务损失、参数更新及 checkpoint 往返。
 
-这些检查支持实现和接入正确性。真实波形重建质量、输出片段边界质量、泛化与运行吞吐由后续训练和评价确定。
+这些检查支持实现和接入正确性。正式训练与固定 checkpoint 重建指标见完成记录；片段边界质量与运行吞吐未在本轮单独形成评定结论。

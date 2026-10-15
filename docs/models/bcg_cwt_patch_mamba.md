@@ -2,6 +2,8 @@
 
 `bcg_cwt_patch_mamba_v1` 用连续卷积编码同一窗口的 BCG 与完整 CWT 幅值图，在一秒片段内做交叉注意力，再通过六层双向 Mamba2 和共享输出头重建呼吸波形。模型用于整窗离线重建。
 
+本轮单 seed train/validation 与两个固定 checkpoint research-test 已完成并关闭；指标、历史参照与产物位置见[结果记录](../experiments/bcg_cwt_patch_mamba_v1_results_20261015.md)。
+
 ## 输入、时间几何与主路径
 
 ```python
@@ -103,7 +105,7 @@ python scripts/check_bcg_cwt_patch_mamba.py --device cuda:0 --precision bfloat16
 # 仅解析真实训练配置。
 python scripts/train_bcg_cwt_patch_mamba.py --print-config
 
-# 由开发者启动真实 train/val 训练；每次使用全新的输出目录。
+# run02 历史训练命令；该 identity 已完成，新实验须另设输出目录与授权。
 python scripts/train_bcg_cwt_patch_mamba.py \
   --set outputs.run_root=/mnt/disk_code/marques/resp_reconstruction/runs/bcg_cwt_patch_mamba_v1/seed_20261013_run02
 
