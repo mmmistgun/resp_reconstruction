@@ -1,0 +1,25 @@
+protocol: m4-cross-time-bias-v1-20261018
+arms: [A0, A1]
+seeds: [20260811, 20260812, 20260813]
+patch_seconds: 1
+normalization: groupnorm_representation_variant
+baseline: configs/crd_tf_v1/crd_tf102_w_formal.yaml
+training:
+  epochs: 80
+  batch_size: 32
+  gradient_accumulation_steps: 4
+  early_stopping_min_epoch: 30
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  amp_dtype: bfloat16
+data:
+  train_windows: 10141
+  val_windows: 2675
+  train_subjects: 32
+  val_subjects: 7
+selector: full_validation_local_rr_strict_minimum_earliest_tie
+comparisons: {A1: A0}
+references: {A0: M4}
+reference_session_sha256: 34d0c62cb64adae16fca4db512687d28bb96e74e89857c049a506d66c4e71fb6
+mean_delta_threshold: 0.01
+threshold_rule: absolute_mean_delta_lt_threshold_is_no_obvious_mean_difference

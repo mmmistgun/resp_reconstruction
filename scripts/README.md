@@ -2199,3 +2199,31 @@ F0 与 IEWT 不训练、无 seed：
 CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json`；后者记录训练到最终 validation 复评期间的 CUDA peak allocated/reserved 和显存占比。`train_history.csv` 还记录 optimizer update、每 epoch 首末 LR。CRD checkpoint 的 `extra_state` 保存协议版本、actual update index、planned total updates、依赖版本与 `resume_supported=false`；P6a 另存 early-stop monitor/patience/wait/triggered/completed epochs。
 
 不再生成或解释旧 `checkpoint.pt`、`checkpoint_best_rr.pt`、`checkpoint_best_task.pt`、`checkpoint_topN.pt`、`epoch_metrics.csv`、旧 target-feature cache 或旧指标 summary。
+
+## M4 交叉注意力时间 bias 消融
+
+`scripts/run_m4_cross_time_bias.py` 提供 plan、audit-initialization、audit-references、prepare、smoke、run、status、summarize。A1 仅移除交叉注意力 Δt 时间 bias，A0 引用三个原始 P1-M4 冻结 cell。科学合同、授权和命令见 [执行协议](../docs/experiments/m4_cross_time_bias_v1_protocol_20261018.md)。`scripts/run_m4_cross_time_bias_shard.sh SESSION GPU_INDEX` 在单卡串行三个 seed，成功后自动生成配对指标、0.01 判据、PNG 和中文报告。CPU 定向测试为 `tests/test_m4_cross_time_bias.py`。
+
+该轮 train/validation 与完整参照比较已完成并关闭，0.01 判据和来源见 [validation 结果](../docs/experiments/m4_cross_time_bias_v1_validation_results_20261019.md)。
+
+固定三个最佳 checkpoint 的 test 入口为 `scripts/eval_m4_cross_time_bias.py`。`scripts/run_m4_cross_time_bias_test.sh ALLOWLIST GPU_INDEX` 串行评价三个 A1 checkpoint，复用原始 M4 的三个历史 test 结果，自动生成完整配对、validation/test 的 0.01 对照和结构判断报告。授权与来源见 [test 协议](../docs/experiments/m4_cross_time_bias_research_test_v1_20261019.md)，合成 CPU 测试为 `tests/test_m4_cross_time_bias_research_test.py`。
+
+该轮 test 与跨 split 比较已完成并关闭，完整 0.01 判断及受试者分解见 [test 结果](../docs/experiments/m4_cross_time_bias_research_test_results_20261019.md)。
+
+## M4 片段池化相对位置消融
+
+ABCD 十二个固定最佳 checkpoint 的 research-test 入口为 `scripts/eval_m4_pool_position_paths.py`（prepare/evaluate/status/summarize）。`scripts/run_m4_pool_position_paths_test_shard.sh ALLOWLIST GPU_INDEX` 在一张卡串行评价完整矩阵，成功后自动保存效应 CSV、两张交互 PNG 和中文报告。执行授权、固定来源和验收见 [test 协议](../docs/experiments/m4_pool_position_paths_research_test_v1_20261017.md)，synthetic CPU 测试为 `tests/test_m4_pool_position_paths_research_test.py`。
+
+十二项 test 已完成并关闭，评分/值路径、交互效应与 validation 对照见 [test 结果](../docs/experiments/m4_pool_position_paths_research_test_results_20261017.md)。
+
+第二阶段 C/D 入口为 `scripts/run_m4_pool_position_paths.py`，完整比较引用第一阶段冻结 A/B。矩阵、路径效应和命令见 [位置路径协议](../docs/experiments/m4_pool_position_paths_v1_protocol_20261016.md)。定向测试为 `tests/test_m4_pool_position_paths.py`，真实运行使用独立 session。
+
+第一阶段 A/B × 三 seed 的配置、初始化核验、准备、训练及汇总入口为 `scripts/run_m4_pool_position.py`。
+运行安排和阈值确认见 [实验协议](../docs/experiments/m4_pool_position_v1_protocol_20261015.md)。
+`plan` 只列矩阵；`audit-initialization` 仅在 CPU 构造官方 Mamba2；`prepare --session <新路径>` 保存来源、配置和初始化报告。
+r3 的正式 `run` 按固定 A/B 矩阵执行描述性比较；阈值为空时，汇总保留实测效应及方向，门槛判断字段为空。GPU 验收与正式训练使用后台进程，并将日志保存到对应 session。并发分片等待环境登记，环境检查失败记录于所属 attempt。
+最小 synthetic CPU 验证：
+
+```bash
+env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 PYTHONPATH=. .venv/bin/python -m pytest -q tests/test_m4_pool_position.py
+```

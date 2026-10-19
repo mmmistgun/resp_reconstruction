@@ -8,6 +8,18 @@
 
 ## 协议路由
 
+- M4 当前简化基线：采用交叉频率 bias 保留、Δt 时间 bias 移除的配置；窗口加权 0.01 选择口径、基线身份及后续融合消融目标见 `docs/experiments/m4_simplified_baseline_decision_20261019.md`。
+
+- M4 交叉注意力 Δt 时间 bias 固定 checkpoint research-test：三个新评价、原始 M4 历史参照及 validation/test 完整对照均已完成并关闭。0.01 判据、受试者差异及冻结来源见 `docs/experiments/m4_cross_time_bias_research_test_results_20261019.md`。
+
+- M4 交叉注意力 Δt 时间 bias 消融：三 seed train/validation、原始 M4 三个冻结参照的完整比较均已完成并关闭。0.01 判据、受试者宏平均与冻结来源见 `docs/experiments/m4_cross_time_bias_v1_validation_results_20261019.md`；research-test 亦已完成，见上方结果。
+
+- M4 池化位置路径固定十二个 checkpoint research-test：评价、完整汇总与 validation 对照均已完成并关闭。评分路径、值路径、交互效应及冻结来源见 `docs/experiments/m4_pool_position_paths_research_test_results_20261017.md`。
+
+- M4 片段池化位置评分/值路径：C/D 六个 train/validation cell、复用 A/B 后的十二 cell 汇总及固定案例图均已完成并关闭。评分路径、值路径与交互的结果、协议及来源见 `docs/experiments/m4_pool_position_paths_v1_validation_results_20261016.md`。
+
+- M4 片段池化相对位置消融 v1：第一阶段 A/B × 三 seed train/validation、汇总与固定案例图已完成并关闭；结果、指标取舍、执行协议及来源由 `docs/experiments/m4_pool_position_v1_validation_results_20261016.md` 路由。第二阶段结果见上方位置路径实验。
+
 - RespDiff-BCG 训练诊断与 DDPM/DDIM/N 最终评定：统一推进入口为 `docs/experiments/respdiff_bcg_training_and_sampling_plan_v1_20261010.md`；历史已关闭实验按该计划链接读取。
 - H-only＋H64 消融 v1：实现与 synthetic CPU 定向验收已完成；GPU、正式训练、HA16 复用核验和 research-test 待执行。17配置×3seed矩阵、执行入口与证据边界见 `docs/experiments/h_only_ablation_v1_protocol_20261004.md`。
 - 呼吸率与SA窗口分层（CWT-APOR v2 H-only、Patch-aligned TF-Mamba P1组件M4、IEWT）：全部research-test产物分析已完成并关闭；统一结果、口径、协议与来源入口为 `docs/experiments/rr_sa_stratified_results_20261007.md`。

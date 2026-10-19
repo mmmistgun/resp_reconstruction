@@ -1,0 +1,28 @@
+protocol: m4-pool-position-paths-v1-20261016
+arms: [A, B, C, D]
+train_arms: [C, D]
+references: [A, B]
+reference_session_sha256: ae108d17e8fb24ec5b19a789fedfa8c549ca4992fc5920347f465024ec4a318f
+seeds: [20260811, 20260812, 20260813]
+patch_seconds: 1
+normalization: groupnorm_representation_variant
+baseline: configs/crd_tf_v1/crd_tf102_w_formal.yaml
+training:
+  epochs: 80
+  batch_size: 32
+  gradient_accumulation_steps: 4
+  early_stopping_min_epoch: 30
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  amp_dtype: bfloat16
+data:
+  train_windows: 10141
+  val_windows: 2675
+  train_subjects: 32
+  val_subjects: 7
+selector: full_validation_local_rr_strict_minimum_earliest_tie
+comparisons: {B: A, C: A, D: A}
+decision:
+  local_rr_margin_bpm: null
+  confirmed: false
+  rule: mean_gain_at_least_margin_and_all_three_seeds_positive
