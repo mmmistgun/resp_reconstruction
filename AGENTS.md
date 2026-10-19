@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- M4 linear fusion 消融：基于已采用的简化基线，新增单投影三 seed train/validation，分配两张空闲 GPU 并发执行，与冻结双投影基线比较。协议、命令与来源见 `docs/experiments/m4_linear_fusion_v1_protocol_20261019.md`。
+
 - M4 当前简化基线：采用交叉频率 bias 保留、Δt 时间 bias 移除的配置；窗口加权 0.01 选择口径、基线身份及后续融合消融目标见 `docs/experiments/m4_simplified_baseline_decision_20261019.md`。
 
 - M4 交叉注意力 Δt 时间 bias 固定 checkpoint research-test：三个新评价、原始 M4 历史参照及 validation/test 完整对照均已完成并关闭。0.01 判据、受试者差异及冻结来源见 `docs/experiments/m4_cross_time_bias_research_test_results_20261019.md`。
