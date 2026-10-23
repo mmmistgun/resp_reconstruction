@@ -2204,6 +2204,12 @@ CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json
 
 后续 linear fusion 单/双投影对照入口为 `scripts/run_m4_linear_fusion.py`。`scripts/run_m4_linear_fusion_parallel.sh SESSION GPU_FIRST GPU_SECOND` 将 seed 20260811/20260813 与 seed 20260812 分配到不同 GPU，等待两组均成功后自动汇总。L0 复用冻结简化基线，L1 新训练；配置与验收见 [linear fusion 协议](../docs/experiments/m4_linear_fusion_v1_protocol_20261019.md)，定向测试为 `tests/test_m4_linear_fusion.py`。
 
+本轮三个新增 cell 与完整六 cell validation 汇总已完成并关闭，窗口加权 0.01 判据、逐 seed 配对及受试者差异见 [linear fusion validation 结果](../docs/experiments/m4_linear_fusion_v1_validation_results_20261019.md)。
+
+固定单投影 checkpoint 的 research-test 入口为 `scripts/eval_m4_linear_fusion.py`，`scripts/run_m4_linear_fusion_test.sh ALLOWLIST GPU_FIRST GPU_SECOND` 两卡分片评价三个 seed，成功后自动与冻结双投影参照汇总并比较 validation/test。授权、来源、命令与验收见 [linear fusion research-test 协议](../docs/experiments/m4_linear_fusion_research_test_v1_20261019.md)；定向测试为 `tests/test_m4_linear_fusion_research_test.py`。
+
+本轮 research-test 与完整跨 split 比较已完成并关闭，三个 seed 的完整对照、受试者及尾部诊断和结构判断见 [linear fusion research-test 结果](../docs/experiments/m4_linear_fusion_research_test_results_20261019.md)。
+
 `scripts/run_m4_cross_time_bias.py` 提供 plan、audit-initialization、audit-references、prepare、smoke、run、status、summarize。A1 仅移除交叉注意力 Δt 时间 bias，A0 引用三个原始 P1-M4 冻结 cell。科学合同、授权和命令见 [执行协议](../docs/experiments/m4_cross_time_bias_v1_protocol_20261018.md)。`scripts/run_m4_cross_time_bias_shard.sh SESSION GPU_INDEX` 在单卡串行三个 seed，成功后自动生成配对指标、0.01 判据、PNG 和中文报告。CPU 定向测试为 `tests/test_m4_cross_time_bias.py`。
 
 该轮 train/validation 与完整参照比较已完成并关闭，0.01 判据和来源见 [validation 结果](../docs/experiments/m4_cross_time_bias_v1_validation_results_20261019.md)。
