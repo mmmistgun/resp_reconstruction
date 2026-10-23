@@ -196,7 +196,14 @@ def _build_patch_aligned_tf_mamba(cfg: Any) -> nn.Module:
     return build_patch_aligned_tf_mamba(cfg)
 
 
+def _build_bcg_cwt_patch_mamba(cfg: Any) -> nn.Module:
+    from resp_train.models.bcg_cwt_patch_mamba import build_bcg_cwt_patch_mamba
+
+    return build_bcg_cwt_patch_mamba(cfg)
+
+
 _REGISTRY: dict[str, ModelFactory] = {
+    "bcg_cwt_patch_mamba_v1": _build_bcg_cwt_patch_mamba,
     "patch_aligned_tf_mamba": _build_patch_aligned_tf_mamba,
     "unet1d_tiny": lambda cfg: UNet1DTiny(
         in_channels=int(cfg.model.in_channels),
