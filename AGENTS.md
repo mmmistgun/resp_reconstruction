@@ -16,6 +16,10 @@
 
 - M4-S1 实验代号：指交叉频率 bias 保留、Δt 时间 bias 移除、单投影残差融合的 L1 配置；用户倾向采用该单投影方向。模型身份及既有三 seed 来源见 `docs/experiments/m4_s1_model_identity_20261020.md`。
 
+- 原始 M4 CWT 表示贡献分析：Full、NoTF、H、L 三 seed 的冻结产物配对分析已完成；全体及 exclude670 敏感性结果、分析口径与来源见 `docs/experiments/m4_cwt_contribution_analysis_20261019.md`。
+
+- THO 完整180秒窗口呼吸波峰计数：全索引及既有准入窗口的描述性计数已完成；口径、分层结果与产物见 `docs/experiments/tho_breath_count_v1_results_20261019.md`。
+
 - M4 linear fusion 固定 checkpoint research-test：三个新增评价、三个双投影历史参照及完整 validation/test 比较均已完成并关闭。窗口加权判据、seed/受试者差异、结构判断与冻结来源见 `docs/experiments/m4_linear_fusion_research_test_results_20261019.md`。
 
 - M4 linear fusion 消融：单投影三 seed train/validation 及与冻结双投影基线的完整六 cell 汇总均已完成并关闭。窗口加权结论、受试者差异与冻结来源见 `docs/experiments/m4_linear_fusion_v1_validation_results_20261019.md`。
@@ -36,7 +40,7 @@
 
 - RespDiff-BCG 训练诊断与 DDPM/DDIM/N 最终评定：统一推进入口为 `docs/experiments/respdiff_bcg_training_and_sampling_plan_v1_20261010.md`；历史已关闭实验按该计划链接读取。
 
-- M4/SP双选点重训：六组从头训练，RR早停及最低validation总loss独立保存，入口为 `docs/experiments/m4_dual_selector_v1_protocol_20261013.md`。
+- M4/SP双选点重训：六组训练及两种validation选点已完成；训练合同见 `docs/experiments/m4_dual_selector_v1_protocol_20261013.md`，完整固定checkpoint结果由下方research-test条目路由。
 
 - M4/SP双选点固定12-checkpoint research-test：评价及完整汇总已完成并关闭，结果、选点差异与来源见 `docs/experiments/m4_dual_selector_research_test_results_20261013.md`。
 

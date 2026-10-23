@@ -2226,7 +2226,7 @@ CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json
 
 定向CPU测试为 `tests/test_m4_s1_cwt_parameters_model.py` 和 `tests/test_m4_s1_cwt_parameters_runtime.py`，覆盖原生L1基准等价、可变时频网格、模块/位置路径、独立缓存、不可覆盖生命周期、恢复和完整矩阵效应统计。主机路径与JSON兼容测试见 `tests/test_m4_s1_host.py` 和 `tests/test_m4_s1_receipt_compatibility.py`；既有测试与正式阶段的验收结果由收尾索引汇集。
 
-## M4 交叉注意力时间 bias 消融
+## M4 linear fusion 单／双投影消融
 
 后续 linear fusion 单/双投影对照入口为 `scripts/run_m4_linear_fusion.py`。`scripts/run_m4_linear_fusion_parallel.sh SESSION GPU_FIRST GPU_SECOND` 将 seed 20260811/20260813 与 seed 20260812 分配到不同 GPU，等待两组均成功后自动汇总。L0 复用冻结简化基线，L1 新训练；配置与验收见 [linear fusion 协议](../docs/experiments/m4_linear_fusion_v1_protocol_20261019.md)，定向测试为 `tests/test_m4_linear_fusion.py`。
 
@@ -2235,6 +2235,8 @@ CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json
 固定单投影 checkpoint 的 research-test 入口为 `scripts/eval_m4_linear_fusion.py`，`scripts/run_m4_linear_fusion_test.sh ALLOWLIST GPU_FIRST GPU_SECOND` 两卡分片评价三个 seed，成功后自动与冻结双投影参照汇总并比较 validation/test。授权、来源、命令与验收见 [linear fusion research-test 协议](../docs/experiments/m4_linear_fusion_research_test_v1_20261019.md)；定向测试为 `tests/test_m4_linear_fusion_research_test.py`。
 
 本轮 research-test 与完整跨 split 比较已完成并关闭，三个 seed 的完整对照、受试者及尾部诊断和结构判断见 [linear fusion research-test 结果](../docs/experiments/m4_linear_fusion_research_test_results_20261019.md)。
+
+## M4 交叉注意力时间 bias 消融
 
 `scripts/run_m4_cross_time_bias.py` 提供 plan、audit-initialization、audit-references、prepare、smoke、run、status、summarize。A1 仅移除交叉注意力 Δt 时间 bias，A0 引用三个原始 P1-M4 冻结 cell。科学合同、授权和命令见 [执行协议](../docs/experiments/m4_cross_time_bias_v1_protocol_20261018.md)。`scripts/run_m4_cross_time_bias_shard.sh SESSION GPU_INDEX` 在单卡串行三个 seed，成功后自动生成配对指标、0.01 判据、PNG 和中文报告。CPU 定向测试为 `tests/test_m4_cross_time_bias.py`。
 
@@ -2275,3 +2277,13 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 M
 另存最低validation总loss checkpoint。`completed.json` 中的 `best_loss_checkpoint`
 给出对应完整模型文件；两种选点各有完整validation评价与配对汇总。
 启动与恢复命令见[双选点协议](../docs/experiments/m4_dual_selector_v1_protocol_20261013.md)。
+
+六组训练及固定12-checkpoint research-test、完整汇总已完成并关闭。评价入口为 `scripts/eval_m4_dual_selector.py`；固定清单与证据边界见[评价协议](../docs/experiments/m4_dual_selector_research_test_v1_20261013.md)，两种选点的三seed比较及来源见[结果汇总](../docs/experiments/m4_dual_selector_research_test_results_20261013.md)。
+
+## 原始 M4 CWT 表示贡献分析
+
+`scripts/analyze_m4_cwt_contribution_20261019.py` 对原始 M4 组件实验的冻结逐受试者指标作 Full／NoTF／H／L 配对分析。本轮已完成，全体与 exclude670 敏感性结果、统计口径及产物入口见[分析记录](../docs/experiments/m4_cwt_contribution_analysis_20261019.md)。
+
+## THO 180秒窗口呼吸波峰计数
+
+`scripts/count_tho_window_breaths.py` 统计完整 THO 窗口的正峰数，保存逐窗口、split和受试者汇总及来源清单。本轮全索引计数已完成，[计数协议](../docs/experiments/tho_breath_count_v1_20261019.md)定义算法及证据范围，[结果记录](../docs/experiments/tho_breath_count_v1_results_20261019.md)给出全索引与既有准入窗口统计。合成CPU检查为 `tests/test_tho_window_breath_count.py`；已完成输出按原identity保留。
