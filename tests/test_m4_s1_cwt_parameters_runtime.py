@@ -365,11 +365,31 @@ def test_read_only_legacy_cache_import_and_provenance_rejection(disposable_data,
         data_ops.cache_receipt(session,"C_0p8")
 
 
-def test_reviewed_dataset_source_pair_raw_path_equivalence(disposable_data, tmp_path):
+def test_reviewed_dataset_source_pair_raw_path_equivalence(disposable_data, tmp_path, monkeypatch):
     import hashlib
     source = tmp_path/"reviewed_source"
     relative = data_ops.REVIEWED_DATA_SOURCE["path"]
     current = (spec.ROOT/relative).read_text()
+    # 还原已审阅的历史字节对；BCG-CWT合入后的公共加载器不能自动取得旧缓存准入。
+    bcg_guard = '''        if (str(cfg.get("model", {}).get("name", "")) == "bcg_cwt_patch_mamba_v1"
+                and bool(cfg.data.get("drop_nonfinite_windows", False))):
+            raise ValueError("BCG-CWT 要求 drop_nonfinite_windows=false，非有限样本必须显式失败")
+'''
+    bcg_config = '''        bcg_cwt = str(model_cfg.get("name", "")) == "bcg_cwt_patch_mamba_v1"
+        if bcg_cwt and (not tf_cache_path or list(representations) != ["w"]):
+            raise ValueError("BCG-CWT 数据要求 tf_cache_path 和 tf_representations=[w]")
+'''
+    bcg_branch = '''            if bcg_cwt:
+                from resp_train.data.bcg_cwt import FrozenWCWTReader
+
+                self._tf_v1_cache = FrozenWCWTReader(str(tf_cache_path), split=split)
+            elif patch_tf:
+'''
+    for block, replacement in ((bcg_guard, ""), (bcg_config, ""),
+                               (bcg_branch, "            if patch_tf:\n")):
+        assert current.count(block) == 1
+        current = current.replace(block, replacement)
+    assert hashlib.sha256(current.encode()).hexdigest() == data_ops.REVIEWED_DATA_SOURCE["current_sha256"]
     added = '''        patch_tf = str(model_cfg.get("name", "")) == "patch_aligned_tf_mamba"
         if patch_tf and (not tf_cache_path or list(representations) != ["w"]):
             raise ValueError("Patch-aligned TF 数据要求冻结 tf_cache_path 和 tf_representations=[w]")
@@ -390,8 +410,26 @@ def test_reviewed_dataset_source_pair_raw_path_equivalence(disposable_data, tmp_
         "resp_train/paper_evidence/cwt_time_frequency_v1/features.py","resp_train/crd/tf_v1_features.py")}
     files[relative] = io.identity(path)
     cfg = data_ops.raw_config(tmp_path/"unused")
-    changes = data_ops.verify_preprocessing_sources(source,files,cfg)
-    assert changes == [data_ops.REVIEWED_DATA_SOURCE]
+    with pytest.raises(ValueError,match="身份"):
+        data_ops.verify_preprocessing_sources(source,files,cfg)
+    # 生产校验在一次性历史源码根上运行，哈希常量和核验实现均保持原样。
+    reviewed_root = tmp_path/"reviewed_current"
+    for name in files:
+        destination = reviewed_root/name
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        destination.write_bytes(current.encode() if name == relative else (spec.ROOT/name).read_bytes())
+    with monkeypatch.context() as patch:
+        patch.setattr(spec,"ROOT",reviewed_root)
+        changes = data_ops.verify_preprocessing_sources(source,files,cfg)
+        assert changes == [data_ops.REVIEWED_DATA_SOURCE]
+        bad_cfg = deepcopy(cfg)
+        bad_cfg.model.name = "patch_aligned_tf_mamba"
+        with pytest.raises(ValueError,match="原始波形"):
+            data_ops.verify_preprocessing_sources(source,files,bad_cfg)
+        bad = deepcopy(files)
+        bad[relative]["sha256"] = "unreviewed"
+        with pytest.raises(ValueError,match="身份"):
+            data_ops.verify_preprocessing_sources(source,bad,cfg)
     namespace = {"__name__":"reviewed_dataset_fixture"}
     exec(compile(previous,str(path),"exec"),namespace)
     bundles = build_tho_data(cfg)
@@ -409,14 +447,6 @@ def test_reviewed_dataset_source_pair_raw_path_equivalence(disposable_data, tmp_
                     assert np.isnan(new)
                 else:
                     assert value == new
-    bad_cfg = deepcopy(cfg)
-    bad_cfg.model.name = "patch_aligned_tf_mamba"
-    with pytest.raises(ValueError,match="原始波形"):
-        data_ops.verify_preprocessing_sources(source,files,bad_cfg)
-    bad = deepcopy(files)
-    bad[relative]["sha256"] = "unreviewed"
-    with pytest.raises(ValueError,match="身份"):
-        data_ops.verify_preprocessing_sources(source,bad,cfg)
 
 
 def test_training_failure_is_preserved_and_resume_explicit(sessions, monkeypatch):

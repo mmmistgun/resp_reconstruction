@@ -2226,6 +2226,8 @@ CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json
 
 定向CPU测试为 `tests/test_m4_s1_cwt_parameters_model.py` 和 `tests/test_m4_s1_cwt_parameters_runtime.py`，覆盖原生L1基准等价、可变时频网格、模块/位置路径、独立缓存、不可覆盖生命周期、恢复和完整矩阵效应统计。主机路径与JSON兼容测试见 `tests/test_m4_s1_host.py` 和 `tests/test_m4_s1_receipt_compatibility.py`；既有测试与正式阶段的验收结果由收尾索引汇集。
 
+2026-10-23主分支归并加入BCG-CWT专用数据加载分支。M4-S1历史缓存的确切源码哈希准入保持冻结；合成测试分别检查原审阅字节对、合并版本的原始波形等价性及新源码身份的拒绝。既有实验的worktree和源码快照继续保留，历史session须使用其匹配来源。
+
 ## M4 linear fusion 单／双投影消融
 
 后续 linear fusion 单/双投影对照入口为 `scripts/run_m4_linear_fusion.py`。`scripts/run_m4_linear_fusion_parallel.sh SESSION GPU_FIRST GPU_SECOND` 将 seed 20260811/20260813 与 seed 20260812 分配到不同 GPU，等待两组均成功后自动汇总。L0 复用冻结简化基线，L1 新训练；配置与验收见 [linear fusion 协议](../docs/experiments/m4_linear_fusion_v1_protocol_20261019.md)，定向测试为 `tests/test_m4_linear_fusion.py`。
