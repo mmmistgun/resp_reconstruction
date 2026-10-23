@@ -6,11 +6,21 @@
 
 本文件只保留稳定的仓库边界和协议路由。阶段状态、运行命令、冻结哈希与实验结果以对应协议和产物 manifest 为准，不在此重复维护。
 
+## 训练服务器
+
+- `ubuntu186`（系统主机名 `Ubuntu186`）：连接、双GPU、项目Python环境与数据路径实测信息见 `configs/hosts/ubuntu186.yaml`。本机名称解析失败，使用 `ssh -F /mnt/disk_code/marques/resp_reconstruction/configs/hosts/ssh_config Ubuntu186` 通过项目别名连接。远端项目根为 `/data/disk2/marques/marques/resp_reconstruction`，该机项目产物存放在其项目根内；训练明确使用其 `.venv/bin/python`。M4-S1代码已于2026-10-21同步到该根目录下的 `.worktrees/m4-s1-cwt-parameters-v1`，1106份文件SHA256、84-cell计划、入口导入及兼容层测试通过；同步回执与数据核验范围见配置记录。
+
 ## 协议路由
 
-- M4 linear fusion 消融：基于已采用的简化基线，新增单投影三 seed train/validation，分配两张空闲 GPU 并发执行，与冻结双投影基线比较。协议、命令与来源见 `docs/experiments/m4_linear_fusion_v1_protocol_20261019.md`。
+- M4-S1 CWT 参数与模块消融：完整84-cell train/validation及固定84-checkpoint research-test、完整汇总与核验均已完成并关闭。跨split五指标、CWT参数、模块/位置交互、seed和受试者差异及冻结来源见 `.worktrees/m4-s1-cwt-parameters-v1/docs/experiments/m4_s1_research_test_results_20261022.md`；validation独立结果见 `.worktrees/m4-s1-cwt-parameters-v1/docs/experiments/m4_s1_cwt_parameters_v1_validation_results_20261022.md`。默认模型未改变。
 
-- M4 当前简化基线：采用交叉频率 bias 保留、Δt 时间 bias 移除的配置；窗口加权 0.01 选择口径、基线身份及后续融合消融目标见 `docs/experiments/m4_simplified_baseline_decision_20261019.md`。
+- M4-S1 实验代号：指交叉频率 bias 保留、Δt 时间 bias 移除、单投影残差融合的 L1 配置；用户倾向采用该单投影方向。模型身份及既有三 seed 来源见 `docs/experiments/m4_s1_model_identity_20261020.md`。
+
+- M4 linear fusion 固定 checkpoint research-test：三个新增评价、三个双投影历史参照及完整 validation/test 比较均已完成并关闭。窗口加权判据、seed/受试者差异、结构判断与冻结来源见 `docs/experiments/m4_linear_fusion_research_test_results_20261019.md`。
+
+- M4 linear fusion 消融：单投影三 seed train/validation 及与冻结双投影基线的完整六 cell 汇总均已完成并关闭。窗口加权结论、受试者差异与冻结来源见 `docs/experiments/m4_linear_fusion_v1_validation_results_20261019.md`。
+
+- M4 简化消融的双投影参照：采用交叉频率 bias 保留、Δt 时间 bias 移除的配置；窗口加权 0.01 选择口径、参照身份及融合消融目标见 `docs/experiments/m4_simplified_baseline_decision_20261019.md`。当前单投影方向的实验代号见上方 M4-S1 条目。
 
 - M4 交叉注意力 Δt 时间 bias 固定 checkpoint research-test：三个新评价、原始 M4 历史参照及 validation/test 完整对照均已完成并关闭。0.01 判据、受试者差异及冻结来源见 `docs/experiments/m4_cross_time_bias_research_test_results_20261019.md`。
 

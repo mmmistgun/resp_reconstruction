@@ -1,0 +1,124 @@
+# 2026-10-21实测：IP直连正常，系统名称解析失败；使用项目SSH配置连接。
+host_id: ubuntu186
+purpose: parallel_training
+recorded_on: "2026-10-21"
+information_source: user_reported_and_remote_verified
+ssh:
+  hostname: Ubuntu186
+  lan_ip: 192.168.199.186
+  username: marques
+  # 此路径位于发起SSH连接的本机，仅记录路径。
+  identity_file: /home/marques/.ssh/ubuntu186
+  hostname_resolution: unavailable_on_current_client
+  project_ssh_config: /mnt/disk_code/marques/resp_reconstruction/configs/hosts/ssh_config
+  command: "ssh -F /mnt/disk_code/marques/resp_reconstruction/configs/hosts/ssh_config Ubuntu186"
+  ip_fallback_command: "ssh -i /home/marques/.ssh/ubuntu186 -o IdentitiesOnly=yes marques@192.168.199.186"
+remote:
+  project_root: /data/disk2/marques/marques/resp_reconstruction
+  dataset_root: /data/disk2/marques/marques/resp_prepare
+  dataset_symlink: /mnt/disk_code/marques/resp_prepare
+  dataset_symlink_target: /data/disk2/marques/marques/resp_prepare
+  code_present: true
+  dataset_copied: true
+  environment_configured: true
+  python_executable: /data/disk2/marques/marques/resp_reconstruction/.venv/bin/python
+  python_version: "3.12.13"
+  # 非交互SSH默认python指向Anaconda，训练应明确使用上方项目解释器。
+  default_shell_python: /opt/anaconda3/bin/python
+  project_compatibility_path: /mnt/disk_code/marques/resp_reconstruction
+  project_compatibility_path_exists: false
+  git_commit: d64849e5e60e1ea25dc7dad4a4d8964490bda50b
+  git_untracked_files: [requirements-base.txt]
+  local_main_checkout_commit_at_verification: 8d575be6ee32b7d40d3809e0e94569e48dfaebb1
+  root_checkout_missing_current_experiment_entries:
+    - scripts/run_m4_s1_cwt_parameters.py
+    - scripts/run_m4_s1_receipt_compatibility.py
+    - scripts/m4_linear_fusion_model.py
+  free_disk_gib_approx_at_verification: 749
+  experiment_checkout: /data/disk2/marques/marques/resp_reconstruction/.worktrees/m4-s1-cwt-parameters-v1
+  experiment_base_commit: 8d575be6ee32b7d40d3809e0e94569e48dfaebb1
+  experiment_checkout_detached: true
+code_sync:
+  synced_on: "2026-10-21"
+  source_root: /mnt/disk_code/marques/resp_reconstruction/.worktrees/m4-s1-cwt-parameters-v1
+  local_receipt_directory: /mnt/disk_code/marques/resp_reconstruction/runs/host_sync/ubuntu186_m4_s1_20261021
+  remote_receipt_directory: /data/disk2/marques/marques/resp_reconstruction/runs/host_sync/ubuntu186_m4_s1_20261021
+  manifest_sha256: 656ea8598a9f4c9591bfd469d47d875038c279ddc8a6e57da1e89aa019ffe4f9
+  files_sha256_verified: 1106
+  uncommitted_overlay_files: 19
+  remote_original_checkout_preserved: true
+  plan_configurations: 28
+  plan_cells: 84
+  runtime_and_model_imports: passed
+  receipt_compatibility_tests: "3 passed in 0.06s"
+  remote_training_session_prepared: false
+environment:
+  unset_before_python: [LD_LIBRARY_PATH, LD_PRELOAD]
+  packages:
+    torch: "2.12.0+cu130"
+    numpy: "1.26.4"
+    scipy: "1.17.1"
+    pandas: "3.0.3"
+    ssqueezepy: "0.6.6"
+    mamba-ssm: "2.3.2.post1"
+    causal-conv1d: "1.6.2.post1"
+    omegaconf: "2.3.0"
+    einops: "0.8.2"
+  imports_verified: [torch, mamba_ssm, causal_conv1d, ssqueezepy, resp_train]
+  listed_package_versions_match_local: true
+  cuda_available: true
+  torch_cuda_version: "13.0"
+  cuda_compute_tested: false  # 本次检查导入和设备发现，未运行计算验收。
+hardware:
+  description: "双RTX 4070 Ti SUPER；核验时两卡均空闲。"
+  gpu_model: NVIDIA GeForce RTX 4070 Ti SUPER
+  gpu_count: 2
+  gpu_memory_mib_each: 16376
+  gpu_driver_version: "595.99.02"
+  gpu_uuids:
+    - GPU-af50acdd-f869-2d15-bc19-f37d2e8e75a1
+    - GPU-dfba2d18-05e6-3609-fe7d-6488b931f335
+  system_memory_gib_approx: 93
+verification:
+  verified_on: "2026-10-21"
+  ssh_connection_tested: true
+  ssh_ip_authentication: passed
+  ssh_native_hostname_attempts: [ubuntu186, Ubuntu186]
+  ssh_native_hostname_result: name_resolution_failed
+  ssh_project_alias_tested: true
+  identity_file_mode: "0600"
+  environment_inspected: true
+  project_and_dataset_paths_verified: true
+  dataset_symlink_verified: true
+  dataset_index_relative_path: dataset/20260620_research_v2_resp_reconstruction_stage2_1_segrobustz_bcgstagee_log1psoftz_robustconf/training/dataset_index.csv
+  dataset_index_sha256: f65ae6524632187c7c2795bd7b5e25434afb649b5a04fe39084b70cc59f9b04f
+  dataset_index_matches_local: true
+  train_val_index_referenced_files: 80
+  train_val_index_referenced_bytes: 8745325277
+  train_val_missing_files: 0
+  train_val_path_size_inventory_matches_local: true
+  train_val_path_size_inventory_sha256: 8403f039d05f0555ae9c56c40d3daa41556775104adc31d76cbf1324c5d6cd81
+  dataset_full_content_hash_verified: false  # 索引SHA与引用文件路径/大小已核对；未全量读取波形。
+  current_m4_s1_source_synced: true
+  current_m4_s1_entry_imports_passed: true
+
+m4_s1_execution:
+  recorded_on: "2026-10-21"
+  protocol: m4-s1-cwt-parameters-v1-20261020
+  local_execution_record: /mnt/disk_code/marques/resp_reconstruction/.worktrees/m4-s1-cwt-parameters-v1/docs/experiments/m4_s1_cwt_parameters_v1_distributed_execution_20261021.md
+  remote_session: /data/disk2/marques/marques/resp_reconstruction/runs/m4_s1_cwt_parameters_v1/acceptance_v1_20261020
+  session_sha256: 87b201abb30dea105ca8c9ada5c2f48a33e1f5ebd47b78af11276f67e93740cc
+  remote_dispatch: /data/disk2/marques/marques/resp_reconstruction/runs/m4_s1_cwt_parameters_v1/distributed_v1_20261021
+  local_dispatch: /mnt/disk_code/marques/resp_reconstruction/runs/m4_s1_cwt_parameters_v1/distributed_v1_20261021
+  workers: {ubuntu186_gpu0: 15, ubuntu186_gpu1: 15}
+  train_val_source_content_hashes_verified: 78
+  cwt_representations_content_verified: 10
+  path_adapter: scripts/run_m4_s1_host.py
+  physical_project_root: /data/disk2/marques/marques/resp_reconstruction
+  canonical_project_root: /mnt/disk_code/marques/resp_reconstruction
+  research_test_authorized: false
+  status_source: "remote_dispatch下各worker的started/completed/failed记录及console.log"
+  train_validation_closeout_on: "2026-10-22"
+  remote_cells_completed_and_collected: 30
+  local_closeout: /mnt/disk_code/marques/resp_reconstruction/runs/m4_s1_cwt_parameters_v1/closeout_v1_20261022
+  local_results_record: /mnt/disk_code/marques/resp_reconstruction/.worktrees/m4-s1-cwt-parameters-v1/docs/experiments/m4_s1_cwt_parameters_v1_validation_results_20261022.md
