@@ -2208,6 +2208,24 @@ CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json
 
 不再生成或解释旧 `checkpoint.pt`、`checkpoint_best_rr.pt`、`checkpoint_best_task.pt`、`checkpoint_topN.pt`、`epoch_metrics.csv`、旧 target-feature cache 或旧指标 summary。
 
+## M4-S1 CWT 参数与模块消融
+
+完整84项train/validation和固定84-checkpoint research-test、自动汇总及核验已完成并关闭。当前状态、源码/主机配置、各阶段结果和冻结来源统一见 [收尾索引](../docs/experiments/m4_s1_cwt_parameters_v1_closeout_20261023.md)；跨split分析见 [research-test结果及validation对照](../docs/experiments/m4_s1_research_test_results_20261022.md)。以下命令保留作追溯，成功阶段不重跑；默认模型未改变。
+
+完整84-checkpoint research-test于2026-10-22获当次授权，独立入口为 `scripts/eval_m4_s1_research_test.py`，按 [专项协议](../docs/experiments/m4_s1_research_test_v1_protocol_20261022.md) 先 `prepare --training TRAIN_SESSION --root TEST_ROOT` 冻结清单，再 `prepare-data --root TEST_ROOT --confirm-research-test`。两卡分别执行 `worker --root TEST_ROOT --device cuda:0 --shard 0 --shards 2 --confirm-research-test` 和 `worker --root TEST_ROOT --device cuda:1 --shard 1 --shards 2 --confirm-research-test`；全部成功后 `summarize --root TEST_ROOT --confirm-research-test` 输出完整test及validation对照。`status --root TEST_ROOT` 查看数量；成功阶段不重跑，失败须保留记录并显式 `--retry-failed`。定向合成检查：`tests/test_eval_m4_s1_research_test.py`。默认模型暂不改变。
+
+入口：`scripts/run_m4_s1_cwt_parameters.py`。固定28配置×seeds 20260812/20260813/20260814，共84次从头训练；包括完整M4-S1、20份CWT表示、核心模块与池化评分/值位置2×2。协议、缓存来源核验、CPU测试及后续用户执行命令见 [实验设计与实施合同](../docs/experiments/m4_s1_cwt_parameters_v1_design_20261020.md)。
+
+完整84-cell train/validation、远端回收与全矩阵汇总已完成并关闭，当前指标、配对效应、受试者诊断及冻结来源见 [完整validation结果](../docs/experiments/m4_s1_cwt_parameters_v1_validation_results_20261022.md)。前序产物见 [验收结果](../docs/experiments/m4_s1_cwt_parameters_v1_acceptance_results_20261020.md)，初始执行合同见 [正式执行记录](../docs/experiments/m4_s1_cwt_parameters_v1_formal_execution_20261020.md)。训练成功阶段只读复用；research-test使用上方独立入口与专项协议。
+
+正式启动发现阶段绑定中元组/列表JSON往返误判，当前session操作使用 `scripts/run_m4_s1_receipt_compatibility.py` 兼容入口（参数与原入口相同），见 [执行增量修订](../docs/experiments/m4_s1_cwt_parameters_v1_execution_amendment_20261020.md)。该入口规范化期待绑定后调用原完整校验，冻结源码与成功回执继续保留。
+
+2026-10-21按用户授权完成进度核验与不可恢复失败残留清理，随后由本机加Ubuntu186四卡完成固定剩余cell清单；恢复边界、清理清单、跨主机只读缓存与执行适配见 [四卡执行记录](../docs/experiments/m4_s1_cwt_parameters_v1_distributed_execution_20261021.md)。远端使用 `scripts/run_m4_s1_host.py --host-project-root /data/disk2/marques/marques/resp_reconstruction`，随后接原入口参数；该适配只翻译项目物理路径，并保留原绑定和字节身份检查。cell归属记录为 `distributed_v1_20261021/assignment.json`，收尾回收记录位于 `closeout_v1_20261022`；不重复启动已完成矩阵。
+
+`plan --summary`只列矩阵；`prepare`冻结独立session，随后依次 `calibrate`、`prepare-data`、`import-cache`或`cache`、`smoke`、`run`、`summarize`。`prepare-data`/缓存入口要求`--confirm-data`，GPU合成验收要求`--confirm-synthetic`，训练要求`--confirm-training`。默认合成session不允许真实数据；训练只允许train/validation。`run --resume`按完整epoch恢复，单cell选择与固定分片均受检查；失败产物保留。
+
+定向CPU测试为 `tests/test_m4_s1_cwt_parameters_model.py` 和 `tests/test_m4_s1_cwt_parameters_runtime.py`，覆盖原生L1基准等价、可变时频网格、模块/位置路径、独立缓存、不可覆盖生命周期、恢复和完整矩阵效应统计。主机路径与JSON兼容测试见 `tests/test_m4_s1_host.py` 和 `tests/test_m4_s1_receipt_compatibility.py`；既有测试与正式阶段的验收结果由收尾索引汇集。
+
 ## M4 交叉注意力时间 bias 消融
 
 后续 linear fusion 单/双投影对照入口为 `scripts/run_m4_linear_fusion.py`。`scripts/run_m4_linear_fusion_parallel.sh SESSION GPU_FIRST GPU_SECOND` 将 seed 20260811/20260813 与 seed 20260812 分配到不同 GPU，等待两组均成功后自动汇总。L0 复用冻结简化基线，L1 新训练；配置与验收见 [linear fusion 协议](../docs/experiments/m4_linear_fusion_v1_protocol_20261019.md)，定向测试为 `tests/test_m4_linear_fusion.py`。
