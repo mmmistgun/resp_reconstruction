@@ -1,0 +1,128 @@
+{
+  "base_commit": "d6b85b2679499507e1034e375dfe547dd0bc54ae",
+  "historical_branch": "origin/codex/patch-aligned-tf-mamba",
+  "historical_tip": "d45d16c553313b3f3a5673e497c183ede402e2d6",
+  "sessions": {
+    "p1": {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/home_storage_migration_20261010/preserved_worktrees/worktrees_20261010/model-architecture-review/runs/p1_components_v1/formal_v1_20261006",
+      "session_sha256": "34d0c62cb64adae16fca4db512687d28bb96e74e89857c049a506d66c4e71fb6",
+      "git_commit": "ea7106f9f3f4dd4742b052e974d59903d676f377",
+      "source_count": 268,
+      "source_mismatches": {},
+      "relevant_sources": {
+        "resp_train/crd/training.py": "c574daeb565fd1974ab88a0cc08e3bacc1540858b0a5da1c1355276a7895ab72",
+        "resp_train/models/patch_aligned_tf_mamba.py": "3b83c0c7f4d2b77660c5ab9cf9494f537ca46a56b97d7effb5eafc627cfb875c",
+        "resp_train/patch_aligned_tf_training.py": "dd131d0cd71ac34848d526efbf3261570a7b4dc4348084e140a7e31ac972ee8a",
+        "scripts/run_patch_aligned_tf_mamba.py": "690856b0e04bc3da9887c586f5fc3b9f840da44ed6fdf9f17e0df025f31be71d",
+        "scripts/p1_components_runtime.py": "fb83e2d88a0cb858454c1aff3fde4ff9b8789d2b8097b343b42b8d119043d0de",
+        "scripts/p1_components_model.py": "5867b09513ca769c5bb8da24787a6445129ea5753d4ab8d5d73b0767c1fcca82",
+        "scripts/run_p1_components.py": "8873cf1367e7371d66637d9e7f26611e638705af17c21679d12400607854e42d",
+        "scripts/run_p1_components_shard.sh": "39ca29d2d78814093151dc19f51cb005165793c6eab763934dd58c14c1e30191"
+      }
+    },
+    "v2": {
+      "path": "/mnt/disk_code/marques/resp_reconstruction/runs/home_storage_migration_20261010/preserved_worktrees/worktrees_20261010/model-architecture-review/runs/m4_residual_v2/formal_v1_20261007",
+      "session_sha256": "eeb7d56625a3a8a15a9d83745e30204de936ca939d8f280ee2df371aba3ecb5d",
+      "git_commit": "06184f46cd00060dfd1841f8cb809e4a2f8b34e2",
+      "source_count": 269,
+      "source_mismatches": {},
+      "relevant_sources": {
+        "resp_train/crd/training.py": "c574daeb565fd1974ab88a0cc08e3bacc1540858b0a5da1c1355276a7895ab72",
+        "resp_train/models/patch_aligned_tf_mamba.py": "3b83c0c7f4d2b77660c5ab9cf9494f537ca46a56b97d7effb5eafc627cfb875c",
+        "resp_train/patch_aligned_tf_training.py": "dd131d0cd71ac34848d526efbf3261570a7b4dc4348084e140a7e31ac972ee8a",
+        "scripts/run_patch_aligned_tf_mamba.py": "690856b0e04bc3da9887c586f5fc3b9f840da44ed6fdf9f17e0df025f31be71d",
+        "scripts/m4_residual_runtime.py": "73708e2c74cbd2dbef9cfcc641afc57324213a93a8e1805d00067156cfebc2c1",
+        "scripts/m4_residual_model.py": "f95c68b4ca10c1390f0a1796183595ed8607ff602915ff91100a18e3dbccf11c",
+        "scripts/run_m4_residual.py": "ac4cffd9d7c743ca5a331c6eeaaf05160dd0145bab79ee5b43182e2facae73cb",
+        "scripts/run_m4_residual_shard.sh": "ac2a60022ebe323e7559287edbd680f1da1bfcafb9fdbfd92586a9a7e49d584a",
+        "scripts/p1_components_model.py": "5867b09513ca769c5bb8da24787a6445129ea5753d4ab8d5d73b0767c1fcca82"
+      }
+    }
+  },
+  "config_comparison": {
+    "20260811": {
+      "sections_equal_except_device": {
+        "data": true,
+        "window": true,
+        "loss": true,
+        "evaluation": true,
+        "training": true,
+        "architecture": true
+      },
+      "config_sha256": "8ca7ae864722284113f1bead4f0db61754298931cfdd25ceab7cc81a35cb2082",
+      "environment": {
+        "torch": "2.12.0+cu130",
+        "cuda": "13.0",
+        "packages": {
+          "mamba-ssm": "2.3.2.post1",
+          "causal-conv1d": "1.6.2.post1"
+        },
+        "device": "cuda:0",
+        "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "LD_LIBRARY_PATH_unset": true,
+        "LD_PRELOAD_unset": true
+      },
+      "environment_sha256": "be7ee6d4563eaa1b37daa0c56613fed31136b389481a37d1cbfa368b33286d46"
+    },
+    "20260812": {
+      "sections_equal_except_device": {
+        "data": true,
+        "window": true,
+        "loss": true,
+        "evaluation": true,
+        "training": true,
+        "architecture": true
+      },
+      "config_sha256": "e5e1b8aeac649330447fc860af149bcbb5bef78b3a246bf3d617d7a847f4583e",
+      "environment": {
+        "torch": "2.12.0+cu130",
+        "cuda": "13.0",
+        "packages": {
+          "mamba-ssm": "2.3.2.post1",
+          "causal-conv1d": "1.6.2.post1"
+        },
+        "device": "cuda:0",
+        "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "LD_LIBRARY_PATH_unset": true,
+        "LD_PRELOAD_unset": true
+      },
+      "environment_sha256": "be7ee6d4563eaa1b37daa0c56613fed31136b389481a37d1cbfa368b33286d46"
+    },
+    "20260813": {
+      "sections_equal_except_device": {
+        "data": true,
+        "window": true,
+        "loss": true,
+        "evaluation": true,
+        "training": true,
+        "architecture": true
+      },
+      "config_sha256": "a895a1255b8e0364446069f4dfe480749a2c8428cbfda81f11ec4c57cf1196cc",
+      "environment": {
+        "torch": "2.12.0+cu130",
+        "cuda": "13.0",
+        "packages": {
+          "mamba-ssm": "2.3.2.post1",
+          "causal-conv1d": "1.6.2.post1"
+        },
+        "device": "cuda:0",
+        "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "LD_LIBRARY_PATH_unset": true,
+        "LD_PRELOAD_unset": true
+      },
+      "environment_sha256": "be7ee6d4563eaa1b37daa0c56613fed31136b389481a37d1cbfa368b33286d46"
+    }
+  },
+  "current_cpu_environment": {
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "packages": {
+      "mamba-ssm": "2.3.2.post1",
+      "causal-conv1d": "1.6.2.post1"
+    },
+    "device": "cpu",
+    "gpu": "cpu_fixture",
+    "LD_LIBRARY_PATH_unset": true,
+    "LD_PRELOAD_unset": true
+  }
+}

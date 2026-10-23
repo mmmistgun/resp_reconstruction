@@ -2243,3 +2243,17 @@ r3 的正式 `run` 按固定 A/B 矩阵执行描述性比较；阈值为空时�
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 PYTHONPATH=. .venv/bin/python -m pytest -q tests/test_m4_pool_position.py
 ```
+
+## 原始 P1-M4 单投影配对对照
+
+入口 `scripts/run_m4_single_projection.py` 支持 prepare、reuse-m4、run、status、summarize。
+固定 M4/SP × 三 seed；默认可只读引用来源和环境匹配的历史 M4，运行 SP 三组。
+完整启动、同期六组替代方案、产物和 CPU 检查命令见
+[`m4_single_projection_v1_protocol_20261012.md`](../docs/experiments/m4_single_projection_v1_protocol_20261012.md)。
+
+## M4/SP双选点重训
+
+`scripts/run_m4_dual_selector.py` 固定两臂×三seed从头训练，RR负责early stopping，
+另存最低validation总loss checkpoint。`completed.json` 中的 `best_loss_checkpoint`
+给出对应完整模型文件；两种选点各有完整validation评价与配对汇总。
+启动与恢复命令见[双选点协议](../docs/experiments/m4_dual_selector_v1_protocol_20261013.md)。
