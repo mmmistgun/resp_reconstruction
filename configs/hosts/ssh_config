@@ -1,0 +1,9 @@
+# 项目内训练服务器别名；通过 ssh -F <本文件绝对路径> Ubuntu186 使用。
+Host Ubuntu186 ubuntu186
+    HostName 192.168.199.186
+    User marques
+    IdentityFile /home/marques/.ssh/ubuntu186
+    IdentitiesOnly yes
+    BatchMode yes
+    ConnectTimeout 10
+    StrictHostKeyChecking yes

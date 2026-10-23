@@ -1,0 +1,143 @@
+# M4-S1实验合同；独立入口逐项校验矩阵、读取方式、训练与统计定义。
+design_id: m4-s1-cwt-parameters-v1-20261020
+status: data_cache_gpu_acceptance_authorized
+base_commit: 8d575be6ee32b7d40d3809e0e94569e48dfaebb1
+model:
+  name: M4-S1
+  source_class: scripts.m4_linear_fusion_model.LinearFusionModel
+  source_arm: L1
+  parameters: 1046945
+  frequency_bias: true
+  time_bias: false
+  output_projections: 1
+  output_initialization: zero
+seeds: [20260812, 20260813, 20260814]
+baseline_arm: B
+training_identity:
+  policy: all_cells_from_scratch_in_new_session
+  historical_reference_cells: 0
+architecture_source:
+  session: /mnt/disk_code/marques/resp_reconstruction/runs/m4_linear_fusion_v1/formal_v1_20261019
+  session_sha256: f84949530ceb877a9a1e9e58460dca533f2231b10cccae29ace2e1f76fb0bb7c
+  source_arm: L1
+budget:
+  cwt_configurations: 20
+  core_module_configurations: 7
+  core_module_cells: 21
+  supplementary_position_configurations: 2
+  supplementary_position_cells: 6
+  module_comparison_configurations: 11
+  shared_configurations: 3
+  unique_configurations: 28
+  scientific_cells: 84
+  historical_reference_cells: 0
+  new_training_cells: 84
+representation:
+  wavelet: morlet
+  library: ssqueezepy==0.6.6
+  sample_rate: 100
+  window_samples: 18000
+  feature: mean_pool_log1p_abs
+  padtype: reflect
+  frequency_grid: preserve_8hz_base_extend_scales_geometrically_select_actual_centers
+  frequency_sort: stable_ascending_keep_duplicates
+readout:
+  patch_samples: 100
+  hop_samples: 50
+  patch_count: 359
+  anchor_offsets_samples: [24.5, 74.5]
+  stage: encoded_features_before_key_value
+  interpolation: linear_float32_weights_accumulation
+  boundary: nearest_endpoint
+  pool50_path: exact_integer_gather
+arms:
+  - {id: Q_mu6_v4, mu: 6, voices: 4, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu6_v8, mu: 6, voices: 8, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu6_v12, mu: 6, voices: 12, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu6_v24, mu: 6, voices: 24, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu13p4_v4, mu: 13.4, voices: 4, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu13p4_v8, mu: 13.4, voices: 8, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: B, mu: 13.4, voices: 12, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu13p4_v24, mu: 13.4, voices: 24, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu20_v4, mu: 20, voices: 4, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu20_v8, mu: 20, voices: 8, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu20_v12, mu: 20, voices: 12, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: Q_mu20_v24, mu: 20, voices: 24, pool_samples: 50, high_hz: 8, high_only: false}
+  - {id: P_025, mu: 13.4, voices: 12, pool_samples: 25, high_hz: 8, high_only: false}
+  - {id: P_100, mu: 13.4, voices: 12, pool_samples: 100, high_hz: 8, high_only: false}
+  - {id: C_0p8, mu: 13.4, voices: 12, pool_samples: 50, high_hz: 0.8, high_only: false}
+  - {id: C_2, mu: 13.4, voices: 12, pool_samples: 50, high_hz: 2, high_only: false}
+  - {id: C_4, mu: 13.4, voices: 12, pool_samples: 50, high_hz: 4, high_only: false}
+  - {id: C_12, mu: 13.4, voices: 12, pool_samples: 50, high_hz: 12, high_only: false}
+  - {id: C_20, mu: 13.4, voices: 12, pool_samples: 50, high_hz: 20, high_only: false}
+  - {id: H, mu: 13.4, voices: 12, pool_samples: 50, high_hz: 8, high_only: true}
+module_arms:
+  - {id: A_NoTF, representation: none, change: remove_condition_branch}
+  - {id: A_UniformTFReadout, representation: B, change: uniform_Fx2_weights_keep_encoder_value_output}
+  - {id: A_NoFrequencyBias, representation: B, change: remove_frequency_bias}
+  - {id: A_NoMamba, representation: B, change: replace_bimamba2_with_identity}
+  - {id: A_UniformPatchPool, representation: B, change: uniform_pool_keep_position_values}
+  - {id: A_NoPoolPosition, representation: B, change: remove_pool_score_and_value_position_keep_content_attention}
+  - {id: A_ScorePositionOnly, representation: B, change: keep_score_position_remove_value_position}
+  - {id: A_ValuePositionOnly, representation: B, change: keep_value_position_remove_score_position}
+core_module_arms: [B, A_NoTF, A_UniformTFReadout, A_NoFrequencyBias, A_NoMamba, A_UniformPatchPool, A_NoPoolPosition]
+supplementary_position_arms: [A_ScorePositionOnly, A_ValuePositionOnly]
+module_comparison_arms: [B, A_NoTF, A_UniformTFReadout, A_NoFrequencyBias, A_NoMamba, A_UniformPatchPool, A_NoPoolPosition, A_ScorePositionOnly, A_ValuePositionOnly, H, C_0p8]
+uniform_tf_readout:
+  weights: one_over_F_times_2_per_head
+  retained: [encoder, value, output]
+  inactive_modules: remove_query_key_and_coordinate_bias_after_baseline_initialization
+  output_initialization: baseline_zero
+  accumulation_dtype: float32
+pool_position_ablation:
+  content_attention: true
+  retained: [stem, score, project]
+  factorial:
+    - {arm: B, score_position: true, value_position: true}
+    - {arm: A_NoPoolPosition, score_position: false, value_position: false}
+    - {arm: A_ScorePositionOnly, score_position: true, value_position: false}
+    - {arm: A_ValuePositionOnly, score_position: false, value_position: true}
+training:
+  source: configs/m4_linear_fusion_v1/experiment.yaml
+  batch_size: 32
+  gradient_accumulation_steps: 4
+  amp_dtype: bfloat16
+  epochs: 80
+  updates_per_epoch: 80
+  planned_updates: 6400
+  early_stopping_min_epoch: 30
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.0
+  selector: full_validation_local_rr_strict_minimum_earliest_tie
+analysis:
+  primary_aggregation: window_weighted
+  diagnostic_aggregation: subject_macro
+  paired_against: B
+  main_pair_count: 27
+  mean_delta_threshold: 0.01
+  additional_comparisons: [mu_voices_interaction, adjacent_frequency_caps, full_L_H, P_025_vs_P_100]
+  module_additional_pairs:
+    - [A_UniformTFReadout, A_NoTF]
+    - [A_NoFrequencyBias, A_UniformTFReadout]
+    - [B, A_UniformTFReadout]
+    - [B, A_NoPoolPosition]
+    - [B, A_NoFrequencyBias]
+    - [B, A_NoTF]
+    - [H, A_NoTF]
+    - [C_0p8, A_NoTF]
+  pool_position_conditional_pairs:
+    score_given_value_off: [A_ScorePositionOnly, A_NoPoolPosition]
+    score_given_value_on: [B, A_ValuePositionOnly]
+    value_given_score_off: [A_ValuePositionOnly, A_NoPoolPosition]
+    value_given_score_on: [B, A_ScorePositionOnly]
+  pool_position_effect_coefficients:
+    score_main: {B: 0.5, A_ScorePositionOnly: 0.5, A_ValuePositionOnly: -0.5, A_NoPoolPosition: -0.5}
+    value_main: {B: 0.5, A_ScorePositionOnly: -0.5, A_ValuePositionOnly: 0.5, A_NoPoolPosition: -0.5}
+    interaction: {B: 1, A_ScorePositionOnly: -1, A_ValuePositionOnly: -1, A_NoPoolPosition: 1}
+  automatic_default_change: false
+execution:
+  implementation_ready: true
+  current_scope: train_validation_data_cache_and_synthetic_gpu_acceptance
+  intended_training_splits: [train, val]
+  research_test_authorized: false
+  output_root: /mnt/disk_code/marques/resp_reconstruction/runs/m4_s1_cwt_parameters_v1

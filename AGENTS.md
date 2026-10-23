@@ -8,6 +8,8 @@
 
 ## 协议路由
 
+- M4-S1 CWT 参数与模块消融：完整28配置×3seed的84-cell train/validation及固定84-checkpoint research-test、完整汇总与核验均已完成并关闭。当前状态、源码/主机配置、阶段结果与冻结产物统一由 `docs/experiments/m4_s1_cwt_parameters_v1_closeout_20261023.md` 路由；跨split分析见 `docs/experiments/m4_s1_research_test_results_20261022.md`。默认模型未改变。
+
 - M4 linear fusion 消融：基于已采用的简化基线，新增单投影三 seed train/validation，分配两张空闲 GPU 并发执行，与冻结双投影基线比较。协议、命令与来源见 `docs/experiments/m4_linear_fusion_v1_protocol_20261019.md`。
 
 - M4 当前简化基线：采用交叉频率 bias 保留、Δt 时间 bias 移除的配置；窗口加权 0.01 选择口径、基线身份及后续融合消融目标见 `docs/experiments/m4_simplified_baseline_decision_20261019.md`。
