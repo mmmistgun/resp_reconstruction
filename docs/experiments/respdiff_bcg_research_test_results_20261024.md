@@ -86,7 +86,7 @@ seed20260812 的迁移阶段历时约 22.11 小时，包含并行采样、分片
 
 本地工作树：`/mnt/disk_code/marques/resp_reconstruction/.worktrees/respdiff-research-test-v1`。以下路径相对其 `runs/respdiff_bcg_research_test_v1/`：
 
-Git 源码分支为 `codex/respdiff-research-test-v1`，包含正式入口、test 准入与采样实现、定向测试及冻结执行版协议。三卡控制器、恢复、双卡分片及只读复核的八份原始 Python 源码另以逐字节副本保存在该分支的 `reproducibility/respdiff_bcg_p6/`，原位置及 SHA256 见其中 README。主分支维护当前结果与状态索引；运行身份仍以原 manifest 和 receipt 为准。
+`main` 已合入正式入口、完整 RespDiff 基础依赖、test 准入与采样实现、定向测试，以及 `reproducibility/respdiff_bcg_p6/` 中的八份控制器/恢复/分片/复核源码副本。原执行版本保留在 `codex/respdiff-research-test-v1` 的提交 `5b58598e248e2aaaea13567889d479ed94374be3`；原位置及 SHA256 见源码副本目录的 README。历史结果的源码身份核验使用该冻结版本及原 manifest、receipt；主分支维护当前结果与状态索引。
 
 - 完整回收副本：`collected_20261024_v1/`，保留远端原目录名称与全部文件。
 - 三模型正式结果：回收目录中的 `test_s20260811_v2/`、`test_s20260812_v3/`、`test_s20260813_v2/`。

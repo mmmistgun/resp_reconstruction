@@ -1,0 +1,20 @@
+protocol: respdiff-bcg-epsilon-inference-v2-20261007
+sampler:
+  type: ddim
+  nfe: 6
+  timesteps: [49, 39, 29, 19, 9, 0]
+  n_trajectories: 16
+  noise_seed: 20261003
+  eta: 0
+ensemble:
+  nested_noise: true
+  counts: [1, 2, 4, 8, 16]
+postprocessing:
+  lowpass_hz: 1.0
+  parent_fs: 100
+  order: 8
+  operator: sosfiltfilt
+diagnostic_subset:
+  uniform_parents: 64
+  forced_rows: [10382, 12226]
+batch_size: 64

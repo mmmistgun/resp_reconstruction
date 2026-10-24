@@ -153,6 +153,45 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD \
 `runs/patch_apor_v1/`，包含源码/配置快照、GPU验收、各cell checkpoint/history/metrics及完整配对汇总。
 `status --session ...`查看矩阵状态；`summarize --session ...`读取完整39-cell的冻结validation指标。
 
+## RespDiff-BCG v1
+
+P5 validation 与 P6 固定三模型 × 三配置 research-test 均已完成并关闭，当前结果、跨 split 对照与冻结来源见 [P6 完整结果](../docs/experiments/respdiff_bcg_research_test_results_20261024.md)。以下列出保留的阶段入口。
+
+P6 独立 research-test 使用 `scripts/run_respdiff_bcg_research_test_v1.py` 的 `freeze/preflight/gpu-check/run/summarize` 阶段。真实数据阶段要求 `--confirm-research-test`，三卡 synthetic 验收要求 `--confirm-gpu-check`。协议、T630 部署目录、三 seed 映射及完整九项汇总见 `docs/experiments/respdiff_bcg_research_test_v1_protocol_20261019.md`。
+
+P5 扩展配置全量入口为 `scripts/run_respdiff_bcg_full_validation_v1.py`：`freeze` 绑定三个已完成的 `long_stretched` final16000 模型与 P4-N2 选择；`run --confirm-data-access` 执行完整 validation 的 DDIM6/N64、DDPM50/N16、DDIM6/N16 参照；`summarize` 校验并汇总九项结果。DDIM 共享 N16/N64 前缀，各配置独立计时。GPU0 单卡串行执行、命令和预算见训练与采样计划第 32 节。
+
+P4-N2 额外噪声入口为 `scripts/run_respdiff_bcg_extension_noise_v1.py`：固定 N64/N16、sampling seeds20261013/20261014，同 seed 旧 N 前缀核验及显存记录，两臂结束后复用主 seed 与历史参照生成九项敏感性汇总，保持原选择。合同与执行范围见训练与采样计划第 28 节。
+
+P4-N2 扩展入口为 `scripts/run_respdiff_bcg_extension_v1.py`：独立支持 DDIM6/N64、DDPM50/N16，保持首轮入口上限；同一采样 seed 下核对旧 N 前缀、记录真实显存峰值，并只读合并为 24 点。固定合同和执行范围见训练与采样计划第 26 节。
+
+P2-A2 学习率降档入口为 `scripts/run_respdiff_bcg_cooldown_v1.py`：固定从 P2 update1600 完整恢复，仅将后续 lr 改为 `1e-5`，继续到 update3200。具体授权、来源 hash、序列核验与评价合同见训练与采样计划第 18 节；需要 `--confirm-data-access --confirm-training`。
+
+[训练与采样推进计划](../docs/experiments/respdiff_bcg_training_and_sampling_plan_v1_20261010.md)由 `scripts/run_respdiff_bcg_study_v1.py` 提供诊断、可恢复训练及 DDIM6/10/20/50、DDPM50 的 N 网格与三 seed 最终评价，各阶段状态及证据入口见计划。P2-A1 定向审计入口为 `scripts/audit_respdiff_bcg_training_sampling_v1.py`：固定三个 checkpoint 和八个 parent，测量分 t 原始参数梯度、训练/评价与串行/缓存采样一致性，以及 batch 上下文效应，优化器更新次数为零；参数、预算、容差和来源锁定见计划第 16 节。
+
+[单 GPU 缓存与 trajectory 分组加速说明](../docs/experiments/respdiff_bcg_sampling_acceleration_v1_20261007.md)：独立路径支持 G=1/2/4/8，condition 按原 B 编码，维持 ε-v2 数学/噪声/保幅合同。`scripts/benchmark_respdiff_bcg_sampling_acceleration.py` 提供 native checkpoint 的短时 warmup/时间/显存/误差比较，`scripts/run_respdiff_bcg_epsilon_accelerated_v1.py` 是独立推理入口。历史验收与执行记录见说明；P6 的 G1 独立采样成本见上方完整结果。
+
+固定 source-equivalent checkpoint 的 [ε 推理 v2 结果](../docs/experiments/respdiff_bcg_epsilon_inference_v2_results_20261007.md)已完成：DDIM6 nested N={1,2,4,8,16}、DDPM50 N={1,2,4} 的固定子集及一次全量 DDIM6 N16 validation 均已关闭。N16 尚未满足 plateau，作为预算上限使用；完整 validation Local RR=0.9628、PCC=0.6513，残余幅值异常仍存在。入口 `scripts/run_respdiff_bcg_epsilon_inference_v2.py` 的 `synthetic-smoke`、`subset`、`full-validation` 合同见[协议](../docs/experiments/respdiff_bcg_epsilon_inference_v2_protocol_20261007.md)，已有运行不重跑。
+
+当前 [双 1 Hz 呼吸基带三臂结果](../docs/experiments/respdiff_bcg_baseband_v1_results_20261007.md)已完成：`epsilon_only`、`source_equivalent`、`snr_resp_spectral` 的 B64 GPU 检查及 seed=20260811、6400-update train/validation 均已结束。source-equivalent 五指标最佳，三臂原始输出均残留尖峰。入口 `scripts/run_respdiff_bcg_baseband_v1.py`，历史执行合同见[协议](../docs/experiments/respdiff_bcg_baseband_v1_protocol_20261006.md)；已有运行不重跑。
+
+早期 BCG 适配与修复阶段的来源见 [RespDiff-BCG 实验索引](../docs/experiments/respdiff_bcg_progress_20261005.md)。
+
+当前修复结果见 [loss 修复验证协议](../docs/experiments/respdiff_bcg_loss_repair_v1_protocol_20261004.md)：SNR 加权 FFT 与 epsilon-only 两项 seed=20260811、batch=64、6400-update train/validation 均已完成。指标明显改善，原始幅值/尖峰仍有问题；同 seed 比较与产物核对见协议，已有运行不重跑。
+
+用户确认的 A–H 适配见 [RespDiff-BCG 协议](../docs/experiments/respdiff_bcg_v1_protocol_20261003.md)：20 Hz、30 秒片段、15 秒 hop、六步 DDIM、固定 6400 updates。
+`scripts/run_respdiff_bcg_v1.py` 提供 `synthetic-smoke`、`gpu-check`、`train --confirm-training`，均要求 `--output <新目录>`。
+基础配置为 `configs/respdiff_bcg_v1/experiment.yaml`；该阶段使用 batch=64 的配置，三个 seed 的 6400-update train/validation 均已完成。结果和产物核对见上述协议，已有运行不重跑。终端显示阶段、步数、loss 与 ETA，同时保存 `run.log`；基础开发入口仅访问 train/validation，P6 使用上方专项入口。
+定向测试：`PYTHONPATH=. <项目解释器> -m pytest tests/test_respdiff_bcg.py -q`。
+
+## RespDiff-THO 开发入口
+
+核心模型与CPU合成流程见[实现与验收记录](../docs/experiments/respdiff_tho_implementation_20260929.md)。
+`scripts/run_respdiff_tho_v1.py` 当前提供 `check-source` 和 `synthetic-smoke --output <新目录>`，
+只核验参考源码或运行短时CPU合成fixture。正式训练与真实test入口尚未开放。
+定向测试为 `PYTHONPATH=. <项目解释器> -m pytest tests/test_respdiff.py -q`。
+配置见 `configs/respdiff_tho_v1/experiment.yaml`；worktree与现有环境的完整命令见上述验收记录。
+
 ## 当前固定口径
 
 - 数据：2026-06-20 research v2 soft-z。
