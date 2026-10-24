@@ -38,7 +38,7 @@
 
 - BCG–CWT patch Mamba v1：单 seed train/validation 与两个固定 checkpoint research-test 已完成并关闭；结果、历史参照和来源由 `docs/experiments/bcg_cwt_patch_mamba_v1_results_20261015.md` 路由。
 
-- RespDiff-BCG 训练诊断与 DDPM/DDIM/N 最终评定：统一推进入口为 `docs/experiments/respdiff_bcg_training_and_sampling_plan_v1_20261010.md`；历史已关闭实验按该计划链接读取。
+- RespDiff-BCG 训练诊断与 DDPM/DDIM/N 最终评定：P5 三模型全量 validation 与九项汇总已完成并关闭，结果见 `docs/experiments/respdiff_bcg_p5_validation_results_20261019.md`。P6 固定三配置 × 三模型独立 research-test、完整汇总、产物回收及核验均已完成并关闭，五指标、跨 split 对照、seed/受试者差异与冻结来源见 `docs/experiments/respdiff_bcg_research_test_results_20261024.md`；统一阶段入口仍为 `docs/experiments/respdiff_bcg_training_and_sampling_plan_v1_20261010.md`。
 
 - M4/SP双选点重训：六组训练及两种validation选点已完成；训练合同见 `docs/experiments/m4_dual_selector_v1_protocol_20261013.md`，完整固定checkpoint结果由下方research-test条目路由。
 

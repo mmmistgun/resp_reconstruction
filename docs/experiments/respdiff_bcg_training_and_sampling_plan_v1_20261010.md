@@ -2,13 +2,13 @@
 
 计划 ID：`respdiff-bcg-training-and-sampling-v1-20261010`。
 
-当前状态（2026-10-13）：三个训练 seed 已完成并关闭，结果见第 31 节。用户已授权推进 P5 三模型全量 validation，沿用 GPU0 单卡串行；新入口、冻结清单、队列与预算见第 32 节。配置固定为 DDIM6/N64、DDPM50/N16 及 DDIM6/N16 参照，N 尚未稳定的结论不变。独立 research-test 尚未开放。
+当前状态（2026-10-24）：P5 三模型 × 三配置全量 validation、九项汇总与复核已完成并关闭，结果见 [P5 validation 结果](respdiff_bcg_p5_validation_results_20261019.md)，中断恢复见 [恢复记录](respdiff_bcg_p5_recovery_20261014.md)。P6 固定三模型 × 三配置独立 research-test、完整汇总、产物回收与复核亦已完成并关闭，结果与 validation/test 对照见 [P6 结果](respdiff_bcg_research_test_results_20261024.md)，执行合同见 [P6 专项协议](respdiff_bcg_research_test_v1_protocol_20261019.md)。N 尚未稳定的结论不变。
 
 **最终交付必须回到固定模型上的 DDPM／DDIM、采样步数与独立轨迹数 N 的比较，并完成两类 sampler 所选配置的全量 validation。训练 loss 或小样本过拟合结果不作为最终评定结果。** 独立 research-test 是配置冻结后的单独阶段，按匹配协议和当次授权开放。
 
 ## 1. 文件位置与证据入口
 
-本计划在主工作区与实施工作树的 `docs/experiments/` 同步保存。本轮实现位于项目内独立工作树 `/mnt/disk_code/marques/resp_reconstruction/.worktrees/respdiff-training-sampling-v1`，分支 `codex/respdiff-training-sampling-v1`，基于已核对的 RespDiff 提交 `df37b3d4437489694f08a6b7817aa3fe37d1b4e8`。下文新增代码和输出相对路径均相对于该工作树。
+本计划的执行版保存在实施工作树的 `docs/experiments/`，作为 P5 manifest 绑定的冻结来源继续保留；主工作区本文件维护当前状态和结果路由。本轮实现位于项目内独立工作树 `/mnt/disk_code/marques/resp_reconstruction/.worktrees/respdiff-training-sampling-v1`，分支 `codex/respdiff-training-sampling-v1`，基于已核对的 RespDiff 提交 `df37b3d4437489694f08a6b7817aa3fe37d1b4e8`。下文新增代码和输出相对路径均相对于该工作树。
 
 2026-10-10 实施期间主工作区更新了项目内存储规则。本轮使用上述新位置；GPU 启动前已确认历史来源的实体位置为 `/mnt/disk_code/marques/resp_reconstruction/.worktrees/respdiff-paper`，原 `/home/marques/.codex/worktrees/respdiff-paper/resp_reconstruction` 路径已映射到该位置。新增运行直接使用项目内路径，历史 checkpoint 按文件 hash 核对。
 
