@@ -75,10 +75,11 @@ def restore_parent(predictions, *, chunk_indices):
     return float32("重组prediction", array("重组prediction", result, (18000,)))
 
 
-def validate_rows(rows):
+def validate_rows(rows, *, allow_research_test=False):
     if rows.empty or any(key not in rows or rows[key].isna().any() for key in REQUIRED):
         raise ValueError("父窗口缺少完整身份")
-    if not set(rows.split).issubset({"train", "val"}):
+    allowed = {"train", "val", "test"} if allow_research_test else {"train", "val"}
+    if not set(rows.split).issubset(allowed):
         raise ValueError("RespDiff开发入口仅允许train/val，test未开放")
     if rows.dataset_row_id.duplicated().any():
         raise ValueError("父窗口row ID重复")

@@ -27,8 +27,9 @@ def chunks_from_parent(values):
     return float32("chunks", np.stack([padded[s:s + 600] for s in STARTS])[:, None])
 
 
-def parent_noise(*, split, row_id, seed):
-    if split not in {"train", "val", "synthetic"} or type(seed) is not int or seed < 0:
+def parent_noise(*, split, row_id, seed, allow_research_test=False):
+    allowed = {"train", "val", "synthetic"} | ({"test"} if allow_research_test else set())
+    if split not in allowed or type(seed) is not int or seed < 0:
         raise ValueError("噪声 split/seed 非法")
     identity = json.dumps(["respdiff-bcg-noise-v1", split, int(row_id), seed])
     value = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], "little") % (2**63)

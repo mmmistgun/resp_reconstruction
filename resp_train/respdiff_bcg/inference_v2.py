@@ -214,7 +214,13 @@ def output_diagnostics(predictions, targets, rows):
     return pd.DataFrame(records)
 
 
-def evaluate_setting(chunks, dataset, cfg, output, spec, count, *, method_prefix="RespDiff-epsilon-inference-v2"):
+def evaluate_setting(chunks, dataset, cfg, output, spec, count, *, method_prefix="RespDiff-epsilon-inference-v2",
+                     output_prefix="validation"):
+    if output_prefix not in {"validation", "research_test"}:
+        raise ValueError("未知评价输出身份")
+    if "test" in set(dataset.rows.split) and (output_prefix != "research_test"
+            or not getattr(spec, "research_test", False) or set(dataset.rows.split) != {"test"}):
+        raise ValueError("test 评价需要专项 spec 和 research_test 输出身份")
     output.mkdir(parents=True, exist_ok=False)
     started = time.perf_counter()
     raw, filtered, targets = [], [], []
@@ -226,14 +232,14 @@ def evaluate_setting(chunks, dataset, cfg, output, spec, count, *, method_prefix
     raw, filtered, targets = map(np.stack, (raw, filtered, targets))
     identifiers = {"split": dataset.rows.split.to_numpy(dtype=str),
         **{key: dataset.rows[key].to_numpy(dtype=np.int64) for key in ("dataset_row_id", "samp_id")}}
-    np.savez(output / "validation_raw_waveforms.npz", prediction_raw=raw, tho_ref=targets, **identifiers)
-    np.savez(output / "validation_postfiltered_waveforms.npz", prediction_postfiltered=filtered,
+    np.savez(output / f"{output_prefix}_raw_waveforms.npz", prediction_raw=raw, tho_ref=targets, **identifiers)
+    np.savez(output / f"{output_prefix}_postfiltered_waveforms.npz", prediction_postfiltered=filtered,
              tho_ref=targets, **identifiers)
     curve = {"sampler": spec.sampler, "N": count, "nfe_per_trajectory": spec.nfe,
              "denoiser_calls_per_chunk": count * spec.nfe, "n_parents": len(dataset.rows)}
     for view, values in (("raw", raw), ("postfiltered", filtered)):
         diagnostics = output_diagnostics(values, targets, dataset.rows)
-        diagnostics.to_csv(output / f"validation_{view}_diagnostics.csv", index=False)
+        diagnostics.to_csv(output / f"{output_prefix}_{view}_diagnostics.csv", index=False)
         payload = {"r_tho_hat": values, "tho_ref": targets, **identifiers}
         metric_parts = []
         for start in range(0, len(dataset.rows), 64):
@@ -242,10 +248,10 @@ def evaluate_setting(chunks, dataset, cfg, output, spec, count, *, method_prefix
                 method=f"{method_prefix}/{spec.sampler}/N{count}/{view}", include_test_only=False))
         metrics = pd.concat(metric_parts, ignore_index=True)
         check_primary_metrics(metrics)
-        metrics.to_csv(output / f"validation_{view}_per_parent.csv", index=False)
+        metrics.to_csv(output / f"{output_prefix}_{view}_per_parent.csv", index=False)
         summary = summarize_task_metrics(metrics)
-        summary.to_csv(output / ("validation_summary.csv" if view == "postfiltered"
-                                else "validation_raw_summary.csv"), index=False)
+        summary.to_csv(output / (f"{output_prefix}_summary.csv" if view == "postfiltered"
+                                else f"{output_prefix}_raw_summary.csv"), index=False)
         for metric in ("whole_rr_abs_error_bpm", "local_rr_mae_bpm", "envelope_trajectory_mae",
                        "global_envelope_modulation_error", "lag_aware_signed_pcc"):
             curve[f"{view}_{metric}"] = float(summary.iloc[0][f"{metric}_mean"])

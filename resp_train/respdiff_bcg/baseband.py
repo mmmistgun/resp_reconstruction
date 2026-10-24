@@ -51,8 +51,8 @@ class LowpassParents(Dataset):
         return item
 
 
-def baseband_dataset(parents, rows):
-    return ChunkDataset(LowpassParents(parents), rows)
+def baseband_dataset(parents, rows, *, allow_research_test=False):
+    return ChunkDataset(LowpassParents(parents), rows, allow_research_test=allow_research_test)
 
 
 def absolute_stats(values):

@@ -37,16 +37,19 @@ class SamplerSpec:
         return TIMESTEPS if self.sampler == "ddim" else tuple(range(49, -1, -1))
 
 
-def trajectory_parent_noise(*, split, row_id, trajectory_id, noise_seed, reverse_step=None):
+def trajectory_parent_noise(*, split, row_id, trajectory_id, noise_seed, reverse_step=None,
+                            allow_research_test=False):
     """4200 点共享 Gaussian 场；初始 trajectory=0 精确保留历史噪声身份。"""
     if type(trajectory_id) is not int or trajectory_id < 0:
         raise ValueError("trajectory_id 须为非负整数")
-    if type(noise_seed) is not int or noise_seed < 0 or split not in {"train", "val", "synthetic"}:
+    allowed = {"train", "val", "synthetic"} | ({"test"} if allow_research_test else set())
+    if type(noise_seed) is not int or noise_seed < 0 or split not in allowed:
         raise ValueError("非法 split/noise_seed")
     if reverse_step is not None and (type(reverse_step) is not int or not 1 <= reverse_step <= 49):
         raise ValueError("DDPM reverse noise 只在 step 1…49 生成")
     if trajectory_id == 0 and reverse_step is None:
-        return parent_noise(split=split, row_id=row_id, seed=noise_seed)
+        return parent_noise(split=split, row_id=row_id, seed=noise_seed,
+                            allow_research_test=allow_research_test)
     identity = json.dumps(["respdiff-bcg-trajectory-noise-v2", split, int(row_id),
                            trajectory_id, noise_seed, "initial" if reverse_step is None else reverse_step])
     seed = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], "little") % (2**63)
@@ -55,7 +58,8 @@ def trajectory_parent_noise(*, split, row_id, trajectory_id, noise_seed, reverse
     return torch.stack([field[start:start + 600] for start in STARTS])[:, None]
 
 
-def batch_trajectory_noise(keys, *, trajectory_id, noise_seed, device, reverse_step=None):
+def batch_trajectory_noise(keys, *, trajectory_id, noise_seed, device, reverse_step=None,
+                           allow_research_test=False):
     """keys 为 (split,parent_row_id,chunk_index)；逐 parent 缓存本次单个噪声场。"""
     if not keys or len(set(keys)) != len(keys):
         raise ValueError("batch noise keys 必须非空且无重复")
@@ -66,7 +70,8 @@ def batch_trajectory_noise(keys, *, trajectory_id, noise_seed, device, reverse_s
         parent = (split, row_id)
         if parent not in fields:
             fields[parent] = trajectory_parent_noise(split=split, row_id=row_id,
-                trajectory_id=trajectory_id, noise_seed=noise_seed, reverse_step=reverse_step)
+                trajectory_id=trajectory_id, noise_seed=noise_seed, reverse_step=reverse_step,
+                allow_research_test=allow_research_test)
         chunks.append(fields[parent][chunk])
     return torch.stack(chunks).to(device)
 
@@ -79,7 +84,8 @@ def sample_trajectory(model, condition, keys, spec, trajectory_id):
     if not 0 <= trajectory_id < spec.n_trajectories:
         raise ValueError("trajectory_id 超出当前预算")
     current = batch_trajectory_noise(keys, trajectory_id=trajectory_id,
-                                     noise_seed=spec.noise_seed, device=condition.device)
+                                     noise_seed=spec.noise_seed, device=condition.device,
+                                     allow_research_test=getattr(spec, "research_test", False))
     for index, step in enumerate(spec.timesteps):
         steps = torch.full((len(condition),), step, dtype=torch.long, device=condition.device)
         predicted = model.diffusion_model(condition, current, steps)
@@ -92,7 +98,8 @@ def sample_trajectory(model, condition, keys, spec, trajectory_id):
             current = following.sqrt() * x0 + (1 - following).sqrt() * predicted
         else:
             noise = (batch_trajectory_noise(keys, trajectory_id=trajectory_id, noise_seed=spec.noise_seed,
-                                           device=condition.device, reverse_step=step)
+                                           device=condition.device, reverse_step=step,
+                                           allow_research_test=getattr(spec, "research_test", False))
                      if step else torch.zeros_like(current))
             current = model.reverse_step(current, predicted, step=step, noise=noise)
         finite(f"{spec.sampler} trajectory={trajectory_id} t={step}", current)

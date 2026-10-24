@@ -6,6 +6,8 @@
 
 ## RespDiff-BCG v1
 
+P6 独立 research-test 使用 `scripts/run_respdiff_bcg_research_test_v1.py` 的 `freeze/preflight/gpu-check/run/summarize` 阶段。真实数据阶段要求 `--confirm-research-test`，三卡 synthetic 验收要求 `--confirm-gpu-check`。协议、T630 部署目录、三 seed 映射及完整九项汇总见 `docs/experiments/respdiff_bcg_research_test_v1_protocol_20261019.md`。
+
 P5 扩展配置全量入口为 `scripts/run_respdiff_bcg_full_validation_v1.py`：`freeze` 绑定三个已完成的 `long_stretched` final16000 模型与 P4-N2 选择；`run --confirm-data-access` 执行完整 validation 的 DDIM6/N64、DDPM50/N16、DDIM6/N16 参照；`summarize` 校验并汇总九项结果。DDIM 共享 N16/N64 前缀，各配置独立计时。GPU0 单卡串行执行、命令和预算见训练与采样计划第 32 节。
 
 P4-N2 额外噪声入口为 `scripts/run_respdiff_bcg_extension_noise_v1.py`：固定 N64/N16、sampling seeds20261013/20261014，同 seed 旧 N 前缀核验及显存记录，两臂结束后复用主 seed 与历史参照生成九项敏感性汇总，保持原选择。合同与执行范围见训练与采样计划第 28 节。

@@ -12,7 +12,7 @@ from .signal import chunks_from_parent, prepare_parent
 
 
 class ChunkDataset(Dataset):
-    def __init__(self, parents, rows):
+    def __init__(self, parents, rows, *, allow_research_test=False):
         def canonical(frame):
             frame = frame.reset_index(drop=True).copy()
             base = Path(getattr(parents, "index_csv_path", "/")).parent
@@ -21,7 +21,7 @@ class ChunkDataset(Dataset):
             return frame
 
         rows = canonical(rows)
-        validate_rows(rows)
+        validate_rows(rows, allow_research_test=allow_research_test)
         if len(parents) != len(rows):
             raise ValueError("父窗口数与 rows 不匹配")
         self.parents, self.rows = parents, rows.reset_index(drop=True).copy()

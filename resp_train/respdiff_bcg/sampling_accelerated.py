@@ -97,7 +97,8 @@ def forward_cached(denoiser, condition, cache, noisy_target, step):
 def grouped_noise(keys, trajectory_ids, spec, device, *, reverse_step=None):
     """trajectory-major 排列；逐条调用历史噪声函数，G 不进入噪声身份。"""
     return torch.stack([batch_trajectory_noise(keys, trajectory_id=trajectory,
-        noise_seed=spec.noise_seed, device=device, reverse_step=reverse_step) for trajectory in trajectory_ids])
+        noise_seed=spec.noise_seed, device=device, reverse_step=reverse_step,
+        allow_research_test=getattr(spec, "research_test", False)) for trajectory in trajectory_ids])
 
 
 @torch.inference_mode()
