@@ -2249,6 +2249,10 @@ CRD run 额外保存 `optimizer_parameter_groups.json` 与 `runtime_summary.json
 
 ## M4-S1 CWT 参数与模块消融
 
+validation总loss选点的完整84项research-test、自动汇总与逐项对照核验已完成并关闭，统一见 [loss选点收尾索引](../docs/experiments/m4_s1_loss_selected_test_closeout_20261024.md)；五指标与逐项对照见 [loss选点结果](../docs/experiments/m4_s1_loss_selected_research_test_results_20261024.md)。核验源码入口 `scripts/audit_m4_s1_loss_selected_test.py` 的使用边界与执行来源见收尾索引。复用项的原始方向计数采用收尾目录内 `selector_*_verified.csv` 与 `subject_macro_selector_*_verified.csv`，原因及来源见 [浮点精度修订](../docs/experiments/m4_s1_loss_selected_test_precision_note_20261024.md)。以下执行命令用于历史追溯，成功阶段不重跑。
+
+2026-10-24新增完整84项validation总loss选点research-test，见 [专项协议](../docs/experiments/m4_s1_loss_selected_research_test_v1_20261024.md)。入口 `scripts/eval_m4_s1_loss_selected_test.py`：`prepare --root NEW_ROOT --previous OLD_TEST_ROOT` 恢复冻结runtime并固定84checkpoint；`prepare-inputs --root NEW_ROOT --confirm-research-test` 核验复用原数据及20缓存；双卡分别 `worker --root NEW_ROOT --device cuda:0 --shard 0 --shards 2 --confirm-research-test` 和 `cuda:1 --shard 1`；完整成功后 `summarize --root NEW_ROOT --confirm-research-test` 输出全部test指标及与原Local RR选点的配对差。同checkpoint只读复用已有结果。定向合成测试：`tests/test_m4_s1_loss_selected_test.py`。本轮输出独立，以下原阶段保持关闭。
+
 完整84项train/validation和固定84-checkpoint research-test、自动汇总及核验已完成并关闭。当前状态、源码/主机配置、各阶段结果和冻结来源统一见 [收尾索引](../docs/experiments/m4_s1_cwt_parameters_v1_closeout_20261023.md)；跨split分析见 [research-test结果及validation对照](../docs/experiments/m4_s1_research_test_results_20261022.md)。以下命令保留作追溯，成功阶段不重跑；默认模型未改变。
 
 完整84-checkpoint research-test于2026-10-22获当次授权，独立入口为 `scripts/eval_m4_s1_research_test.py`，按 [专项协议](../docs/experiments/m4_s1_research_test_v1_protocol_20261022.md) 先 `prepare --training TRAIN_SESSION --root TEST_ROOT` 冻结清单，再 `prepare-data --root TEST_ROOT --confirm-research-test`。两卡分别执行 `worker --root TEST_ROOT --device cuda:0 --shard 0 --shards 2 --confirm-research-test` 和 `worker --root TEST_ROOT --device cuda:1 --shard 1 --shards 2 --confirm-research-test`；全部成功后 `summarize --root TEST_ROOT --confirm-research-test` 输出完整test及validation对照。`status --root TEST_ROOT` 查看数量；成功阶段不重跑，失败须保留记录并显式 `--retry-failed`。定向合成检查：`tests/test_eval_m4_s1_research_test.py`。默认模型暂不改变。
